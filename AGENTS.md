@@ -50,6 +50,53 @@ C:\Users\Mateo\Desktop\Claude\
 
 ---
 
+## FETCHING SOURCE MATERIAL FROM THE MOJANG CDN
+
+The Mojang CDN is open to `curl` (no auth) and is the canonical way to obtain
+the inputs above on a fresh/ephemeral machine (e.g. a cloud session). Everything
+lands under the git-ignored `26.1.2/` directory, so nothing proprietary is ever
+committed. The version manifest pins `26.1.2` as the current release; its client
+classes are Java 25 bytecode (v69) and libraries are downloaded separately.
+
+```bash
+# 1. Manifest -> version json -> client.jar (verify sha1) + asset index
+curl -s https://piston-meta.mojang.com/mc/game/version_manifest_v2.json -o /tmp/vm.json
+VJSON=$(jq -r '.versions[]|select(.id=="26.1.2").url' /tmp/vm.json)
+curl -s "$VJSON" -o 26.1.2/26.1.2.json
+mkdir -p 26.1.2
+curl -s "$(jq -r .downloads.client.url 26.1.2/26.1.2.json)" -o 26.1.2/client.jar   # sha1 in json
+
+# 2. Worldgen DATA json (authoritative 1:1 values) lives INSIDE client.jar
+unzip -o -q 26.1.2/client.jar 'data/minecraft/worldgen/*' -d 26.1.2
+#   -> noise_settings/, density_function/, biome/, noise/,
+#      multi_noise_biome_source_parameter_list/ (just {"preset":...}), etc.
+
+# 3. Decompiled Java source (read-only reference) via Vineflower
+curl -s https://repo1.maven.org/maven2/org/vineflower/vineflower/1.12.0/vineflower-1.12.0.jar -o vineflower-1.12.0.jar
+mkdir -p 26.1.2/classes_stage
+unzip -o -q 26.1.2/client.jar 'net/minecraft/world/level/*' 'net/minecraft/world/level/biome/*' \
+   'net/minecraft/util/*' 'net/minecraft/core/*' -d 26.1.2/classes_stage
+java -jar vineflower-1.12.0.jar -e=26.1.2/client.jar 26.1.2/classes_stage 26.1.2/src
+
+# 4. (Only to RUN the real code for parity ground truth) JDK 25 + libraries
+curl -sL "https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jdk/hotspot/normal/eclipse" -o /tmp/jdk25.tgz
+mkdir -p 26.1.2/jdk25 && tar -xzf /tmp/jdk25.tgz -C 26.1.2/jdk25 --strip-components=1
+mkdir -p 26.1.2/libs
+for u in $(jq -r '.libraries[].downloads.artifact.url' 26.1.2/26.1.2.json); do
+  curl -s "$u" -o "26.1.2/libs/$(basename "$u")"; done
+```
+
+Notes:
+- Game *assets* (textures/sounds) come from the asset index
+  (`.assetIndex.url`, id `30`) and `https://resources.download.minecraft.net/<2hex>/<hash>`.
+  They are not needed for terrain generation and are large (~450 MB), so skip
+  unless a task requires them.
+- In 26.x, `ResourceLocation` was renamed `Identifier` and
+  `ResourceKey.location()` is now `ResourceKey.identifier()`. The C++ port keys
+  biomes by their string id (`"minecraft:plains"`) so this rename is transparent.
+
+---
+
 ## C++ PROJECT STRUCTURE
 
 ```
@@ -185,6 +232,9 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - [x] Mob AI system (`world/entity/ai/Goal.h/.cpp`) — Base class, GoalSelector, and RandomStrollGoal implemented.
 - [x] Inventory management (`world/inventory/`) — Container interface, SimpleContainer, and Slot implemented.
 - [x] World generation foundations (`world/level/levelgen/`) — ImprovedNoise (Perlin) implemented.
+- [x] Overworld biome climate selection is now 1:1: `Climate::RTree` ported (the
+      production `findValue` search) and `OverworldBiomeBuilder` verified
+      byte-identical to real Java (7593 entries) — see "biome selection" below.
 - [ ] Port remaining ~277 mob goals.
 - [ ] Implement Crafting and Smelting logic.
 - [ ] Full noise-based terrain generation (Biomes, Caves, Structures).
@@ -198,16 +248,22 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 29 (PerlinSimplex frozen-ocean surface parity)
+**Last updated**: Session 30 (Climate.RTree biome-selection 1:1 + Mojang CDN fetch workflow)
 **Current phase**: PHASE 15 (Game Logic) in progress
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
 **Next action**: PHASE 15 — Game Logic
-1. Audit `OverworldBiomeBuilder.cpp` line-by-line against `OverworldBiomeBuilder.java` for any translation mistakes.
+1. ~~Audit `OverworldBiomeBuilder.cpp` line-by-line against `OverworldBiomeBuilder.java`.~~
+   DONE (Session 30): proven byte-identical to the real Java output (7593 entries,
+   all quantized longs + biome ids + order match exactly). See `overworld_biome_parity`.
 2. Split/rename `BiomeSource` into the Java-shaped roles (`BiomeSource`, `MultiNoiseBiomeSource`, parameter-list preset provider) instead of leaving the current combined wrapper.
-3. Continue adding parity tests for biome selection against Java outputs that include real `MultiNoiseBiomeSource` samples once the Java-side harness can instantiate the full preset/noise router.
-3. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
-4. Port placed/configured features and structures only from Java/data definitions. The approximate tree/ore/surface-decoration/structure generators added by another LLM were removed from the build and must not be re-enabled as-is.
+3. Biome *selection* parity is now covered for the overworld preset (Session 30:
+   `Climate::RTree` ported and verified against the real Java RTree over 300k
+   targets incl. all 4155 distance-tie cases). Still TODO: wire the real noise
+   router so the *sampled* climate (temperature/humidity/... density functions)
+   is also verified end-to-end, and add the same coverage for nether/end presets.
+4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
+5. Port placed/configured features and structures only from Java/data definitions. The approximate tree/ore/surface-decoration/structure generators added by another LLM were removed from the build and must not be re-enabled as-is.
 
 **Known issues / limitations:**
 - Online mode auth not implemented.
@@ -229,6 +285,32 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - Session 26 mechanically split the Overworld preset builder out of `BiomeSource.cpp` into `OverworldBiomeBuilder.h/.cpp`. `BiomeSource.cpp` is now only the router-sampling wrapper that builds the preset and calls `Climate::ParameterList::findValue()`. Build and quick singleplayer smoke passed after the split.
 - Session 27 added `BiomeManager.h/.cpp`, porting Java's block-position biome zoom: subtract-2 block offset, parent quart cell selection, 8-corner fiddled distance, `LinearCongruentialGenerator.next`, and `getFiddle`. `BiomeManager::obfuscateSeed()` uses Windows BCrypt SHA-256 over little-endian seed bytes and reads the first 8 digest bytes little-endian to match Guava `Hashing.sha256().hashLong(seed).asLong()`. `NoiseBasedChunkGenerator::buildSurface()` now asks `BiomeManager::getBiome(blockX, blockY, blockZ)` instead of directly sampling `BiomeSource`.
 - Session 28 added `tools/BiomeManagerExpected.java` to generate independent Java reference values and `biome_manager_parity` CMake target (`BiomeManagerParityTest.cpp`). The test verifies `obfuscateSeed`, `getFiddle`, one fiddled-distance sample, and selected quart coordinates for several block positions against Java output. Harnessed target build and run passed, followed by full Release build and quick singleplayer smoke.
+- Session 30 fetched the real `26.1.2` `client.jar` from the Mojang CDN (sha1
+  verified), extracted the worldgen DATA json, and decompiled the worldgen Java
+  with Vineflower (see "FETCHING SOURCE MATERIAL"). Two terrain-gen facts were
+  established against that ground truth:
+  - `OverworldBiomeBuilder.cpp` is a verified 1:1 port: its parameter list is
+    byte-for-byte identical to the real Java `OverworldBiomeBuilder` (7593
+    entries, same order, same quantized longs, same biome ids). Float
+    quantization (`(long)(coord*10000f)`) matches exactly.
+  - `Climate::ParameterList::findValue` previously used a brute-force linear
+    scan, but Java production uses `Climate.RTree` (an exact branch-and-bound
+    6-ary tree with a `lastResult` seed). These disagree at distance ties: over
+    300k sampled targets the two diverged on 4155 (~1.4%), i.e. the old C++ picked
+    the wrong biome there. `Climate.RTree` is now ported into `Climate.h`
+    (build/bucketize/sort with `std::stable_sort` to match Java `List.sort`,
+    branch-and-bound `search`, `lastResult` seed). Verified: C++ matches the real
+    Java RTree on all 300k targets, including every tie case.
+  - New: `tools/OverworldBiomeParity.java` (reference generator that runs the
+    real decompiled code) and the `overworld_biome_parity` CMake target
+    (`OverworldBiomeParityTest.cpp`). The test is pure standard C++ (no bcrypt),
+    so it builds and runs on Linux too; `--cases <tsv>` does the full jar-backed
+    comparison, default mode does self-contained invariant checks.
+  - CAVEAT: the C++ `RTree` `lastResult` is a plain `mutable` pointer (single
+    instance), matching Java's per-thread `ThreadLocal` only for single-threaded
+    sampling. If biome sampling is ever parallelised, make `lastResult`
+    thread-local to avoid a data race and to match Java's per-thread semantics.
+    `lastResult` only affects which leaf is returned among exact distance ties.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.
