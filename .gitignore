@@ -1,0 +1,63 @@
+# Local agent/editor state
+.claude/
+.codex/
+.vscode/
+.idea/
+
+# Build outputs and generated logs
+build/
+cmake-build-*/
+out/
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.dll
+*.exe
+*.exp
+*.log
+*.tmp
+*.cache
+
+# Project build outputs/logs
+mcpp/build/
+mcpp/cmake-build-*/
+mcpp/mcpp_err.txt
+mcpp/mcpp_log.txt
+mcpp/output.txt
+mcpp/assets.txt
+mcpp/test_align.cpp
+mcpp/*.log
+
+# Java/class outputs from local parity helpers
+*.class
+__pycache__/
+*.pyc
+
+# Mojang / Minecraft proprietary inputs and derived asset packs.
+# Keep these local; do not publish them to GitHub.
+26.1.2/
+assets/
+mcpp/src/assets/assets.bin
+mcpp/src/assets/block_atlas.png
+mcpp/src/assets/block_atlas.json
+mcpp/src/assets/block_states.json
+
+# Decompiled/download helper artifacts
+decompile_log.txt
+download_log.txt
+download_minecraft.py
+vineflower-*.jar
+
+# Vendored dependency noise not needed to build this Windows port
+mcpp/vendor/**/.git/
+mcpp/vendor/glslang/glslang/gtests/
+mcpp/vendor/glslang/glslang/kokoro/
+mcpp/vendor/glslang/glslang/ndk_test/
+mcpp/vendor/glslang/glslang/Test/
+mcpp/vendor/glslang/glslang/known_good*.json
+mcpp/vendor/glslang/glslang/standalone.gclient
+
+# OS noise
+Thumbs.db
+Desktop.ini

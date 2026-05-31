@@ -1,0 +1,166 @@
+set(MC_SOURCES
+    main.cpp
+    # Platform
+    platform/Window.cpp
+    # Assets
+    assets/AssetPack.cpp
+    assets/AssetManager.cpp
+    assets/TextureAtlas.cpp
+    assets/assets.rc
+    # Core
+    core/StbImpl.cpp
+    core/ThreadPool.cpp
+
+    # NBT
+    nbt/Tag.cpp
+    nbt/NbtIo.cpp
+    # World — Block / Chunk
+    world/level/block/Blocks.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/chunk/LevelChunk.cpp
+    # World — Levelgen
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    # World — Item
+    world/item/Item.cpp
+    world/item/Items.cpp
+    # World — Inventory
+    world/inventory/SimpleContainer.cpp
+    world/inventory/Slot.cpp
+    # World — Entity
+    world/entity/Entity.cpp
+    world/entity/Entities.cpp
+    world/entity/Mob.cpp
+    world/entity/player/Player.cpp
+    world/entity/ai/Goal.cpp
+    world/entity/ai/GoalSelector.cpp
+    world/entity/ai/RandomStrollGoal.cpp
+    # World — Physics
+    world/phys/AABB.cpp
+    # Network
+    network/PacketBuffer.cpp
+    network/Connection.cpp
+    network/protocol/game/PlayPackets.cpp
+    # Client
+    client/Minecraft.cpp
+    client/KeyMapping.cpp
+    client/player/LocalPlayer.cpp
+    gui/Gui.cpp
+    gui/components/Button.cpp
+    gui/screens/TitleScreen.cpp
+    # Render — Common
+    render/RenderBackend.cpp
+    # Render — OpenGL
+    render/opengl/DeviceGL.cpp
+    render/opengl/CommandListGL.cpp
+    # Render — Vulkan
+    render/vulkan/DeviceVK.cpp
+    render/vulkan/SwapchainVK.cpp
+    render/vulkan/BufferVK.cpp
+    render/vulkan/TextureVK.cpp
+    render/vulkan/PipelineVK.cpp
+    render/vulkan/CommandListVK.cpp
+    # Render — DirectX 12
+    render/dx12/DeviceDX12.cpp
+    render/dx12/SwapchainDX12.cpp
+    render/dx12/BufferDX12.cpp
+    render/dx12/TextureDX12.cpp
+    render/dx12/PipelineDX12.cpp
+    render/dx12/CommandListDX12.cpp
+    # Render — World
+    render/entity/EntityRenderDispatcher.cpp
+    render/gui/GuiGraphics.cpp
+    render/gui/Font.cpp
+    render/level/ChunkMesh.cpp
+    render/level/LevelRenderer.cpp
+    # Audio
+    audio/OggDecoder.cpp
+    audio/SoundEngine.cpp
+    audio/SoundManager.cpp
+    ../vendor/stb/stb_vorbis.c
+)
+
+add_executable(mcpp WIN32 ${MC_SOURCES})
+
+if(MSVC)
+    target_link_options(mcpp PRIVATE "/ENTRY:mainCRTStartup")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_link_options(mcpp PRIVATE "-Xlinker" "/ENTRY:mainCRTStartup")
+endif()
+
+
+target_include_directories(mcpp PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/render/vulkan
+    ${CMAKE_CURRENT_SOURCE_DIR}/render/dx12
+    ../vendor/vma
+    ../vendor/d3d12ma
+)
+
+target_link_libraries(mcpp PRIVATE
+    glm
+    nlohmann_json
+    stb
+    glad
+    miniz
+    volk
+    glslang
+    glslang-default-resource-limits
+    SPIRV
+    MachineIndependent
+    GenericCodeGen
+    OSDependent
+    d3d12ma
+)
+
+target_link_libraries(mcpp PRIVATE
+    user32 gdi32 kernel32 opengl32
+    ws2_32 bcrypt
+    xaudio2 ole32
+    d3d12 dxgi d3dcompiler
+)
+
+target_compile_definitions(mcpp PRIVATE
+    NLOHMANN_JSON_NOEXCEPTION=0
+)
+
+set_target_properties(mcpp PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(debug_test WIN32 debug_main.cpp)
+set_target_properties(debug_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(biome_manager_parity
+    world/level/levelgen/BiomeManagerParityTest.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+)
+target_include_directories(biome_manager_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(biome_manager_parity PRIVATE bcrypt)
+set_target_properties(biome_manager_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
