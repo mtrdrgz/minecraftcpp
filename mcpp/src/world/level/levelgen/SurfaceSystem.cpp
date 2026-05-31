@@ -13,6 +13,44 @@ namespace {
 // Sentinel value from Java's DimensionType.WAY_BELOW_MIN_Y
 static constexpr int WAY_BELOW_MIN_Y = -4064;
 
+const PerlinSimplexNoise& frozenTemperatureNoise() {
+    static const PerlinSimplexNoise noise = [] {
+        LegacyRandomSource random(3456L);
+        return PerlinSimplexNoise(random, { -2, -1, 0 });
+    }();
+    return noise;
+}
+
+const PerlinSimplexNoise& biomeInfoNoise() {
+    static const PerlinSimplexNoise noise = [] {
+        LegacyRandomSource random(2345L);
+        return PerlinSimplexNoise(random, { 0 });
+    }();
+    return noise;
+}
+
+float frozenTemperatureModifier(int blockX, int blockZ, float baseTemperature) {
+    const double groundValueLargeVariation = frozenTemperatureNoise().getValue(blockX * 0.05, blockZ * 0.05, false) * 7.0;
+    const double groundValueEdgeVariation = biomeInfoNoise().getValue(blockX * 0.2, blockZ * 0.2, false);
+    const double icePatches = groundValueLargeVariation + groundValueEdgeVariation;
+    if (icePatches < 0.3) {
+        const double groundValueSmallVariation = biomeInfoNoise().getValue(blockX * 0.09, blockZ * 0.09, false);
+        if (groundValueSmallVariation < 0.8) {
+            return 0.2f;
+        }
+    }
+
+    return baseTemperature;
+}
+
+float frozenOceanBaseTemperature(const std::string& biome) {
+    return biome == "minecraft:deep_frozen_ocean" ? 0.5f : 0.0f;
+}
+
+bool shouldMeltFrozenOceanIcebergSlightly(const std::string& biome, int blockX, int blockZ) {
+    return frozenTemperatureModifier(blockX, blockZ, frozenOceanBaseTemperature(biome)) > 0.1f;
+}
+
 } // anonymous namespace
 
 SurfaceSystem::SurfaceSystem(RandomState& randomState,
@@ -135,7 +173,7 @@ void SurfaceSystem::buildSurface(
             }
 
             if (biome == "minecraft:frozen_ocean" || biome == "minecraft:deep_frozen_ocean") {
-                frozenOceanExtension(ctx.getMinSurfaceLevel(), chunk, blockX, blockZ, startingHeight);
+                frozenOceanExtension(ctx.getMinSurfaceLevel(), biome, chunk, blockX, blockZ, startingHeight);
             }
         }
     }
@@ -194,7 +232,7 @@ void SurfaceSystem::erodedBadlandsExtension(LevelChunk& chunk, int blockX, int b
 // ---------- frozenOceanExtension ----------
 // Port of SurfaceSystem.frozenOceanExtension
 
-void SurfaceSystem::frozenOceanExtension(int minSurfaceLevel, LevelChunk& chunk,
+void SurfaceSystem::frozenOceanExtension(int minSurfaceLevel, const std::string& biome, LevelChunk& chunk,
                                           int blockX, int blockZ, int height) {
     double iceberg = std::min(
         std::abs(m_icebergSurfaceNoise->getValue(blockX, 0.0, blockZ) * 8.25),
@@ -204,7 +242,9 @@ void SurfaceSystem::frozenOceanExtension(int minSurfaceLevel, LevelChunk& chunk,
 
     double icebergRoof = std::abs(m_icebergPillarRoofNoise->getValue(blockX * 1.17, 0.0, blockZ * 1.17) * 1.5);
     double top         = std::min(iceberg * iceberg * 1.2, std::ceil(icebergRoof * 40.0) + 14.0);
-    // shouldMeltFrozenOceanIcebergSlightly: false (no biome temperature data available)
+    if (shouldMeltFrozenOceanIcebergSlightly(biome, blockX, blockZ)) {
+        top -= 2.0;
+    }
     double extensionBottom;
     if (top > 2.0) {
         extensionBottom = m_seaLevel - top - 7.0;

@@ -50,6 +50,19 @@ private:
     double getCornerNoise3D(int32_t index, double x, double y, double z, double base) const;
 };
 
+// Port of net.minecraft.world.level.levelgen.synth.PerlinSimplexNoise.
+class PerlinSimplexNoise {
+public:
+    PerlinSimplexNoise(RandomSource& random, std::vector<int32_t> octaveSet);
+
+    double getValue(double x, double y, bool useNoiseStart) const;
+
+private:
+    std::vector<std::unique_ptr<SimplexNoise>> m_noiseLevels;
+    double m_highestFreqValueFactor = 0.0;
+    double m_highestFreqInputFactor = 0.0;
+};
+
 // Port of net.minecraft.world.level.levelgen.synth.ImprovedNoise.
 class ImprovedNoise {
 public:

@@ -198,7 +198,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 28 (BiomeManager parity tests)
+**Last updated**: Session 29 (PerlinSimplex frozen-ocean surface parity)
 **Current phase**: PHASE 15 (Game Logic) in progress
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
@@ -217,7 +217,8 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - The current local singleplayer terrain now runs through a Java-shaped `NoiseRouter.finalDensity` path using ported Java RNG, `BlendedNoise`, Java `TerrainProvider` offset/factor/jaggedness splines, and the Java overworld caves/noodle/pillars density composition. `NoiseChunk` marker semantics now include `interpolated`, `cacheOnce`, `cacheAllInCell`, `cache2D`, and `flatCache` via the C++ cell resolver; blend wrappers remain identity because old-chunk blending is not ported yet.
 - Use `--quickPlaySingleplayer` to auto-enter the local generated world for harnessed smoke tests.
 - `Blocks` now exposes all loaded block names and default state IDs from embedded `block_states.json` (`16,584` states). This is the required base for Java-faithful `Blocks.X.defaultBlockState()` usage.
-- Ported terrain-generation records/foundations now include `NoiseSettings`, `NoiseGeneratorSettings`, `RandomSource` (`LegacyRandomSource`, `SingleThreadedRandomSource`, `XoroshiroRandomSource`, positional factories), `SimplexNoise`, `ImprovedNoise`, `PerlinNoise`, `NormalNoise`, `BlendedNoise`, `Noises`/`NoiseData` parameters, `RandomState`, `CubicSpline`, `TerrainProvider`, Java overworld cave/noodle/pillar density helpers, `DensityFunction`, core/noise-backed `DensityFunctions` nodes, `EndIslandDensityFunction`, `FindTopSurface`, `NoiseRouter`, `OreVeinifier`, and partial `NoiseRouterData` routers.
+- Ported terrain-generation records/foundations now include `NoiseSettings`, `NoiseGeneratorSettings`, `RandomSource` (`LegacyRandomSource`, `SingleThreadedRandomSource`, `XoroshiroRandomSource`, positional factories), `SimplexNoise`, `PerlinSimplexNoise`, `ImprovedNoise`, `PerlinNoise`, `NormalNoise`, `BlendedNoise`, `Noises`/`NoiseData` parameters, `RandomState`, `CubicSpline`, `TerrainProvider`, Java overworld cave/noodle/pillar density helpers, `DensityFunction`, core/noise-backed `DensityFunctions` nodes, `EndIslandDensityFunction`, `FindTopSurface`, `NoiseRouter`, `OreVeinifier`, and partial `NoiseRouterData` routers.
+- `SurfaceSystem::frozenOceanExtension()` now ports `Biome.shouldMeltFrozenOceanIcebergSlightly()` for frozen/deep-frozen ocean using Java's `TemperatureModifier.FROZEN` logic and the `FROZEN_TEMPERATURE_NOISE`/`BIOME_INFO_NOISE` seeds, replacing the earlier hardcoded no-melt approximation.
 - `Aquifer` is now ported as its own C++ module with Java's global fluid picker, disabled aquifer path, and noise-based aquifer sampling/pressure/fluid-level logic. `NoiseBasedChunkGenerator::fillFromNoise()` now uses `aquifer.computeSubstance(context, density)` and falls back to `defaultBlock` when Java would return `null`.
 - `OreVeinifier` is now ported and wired after Aquifer, matching Java's `NoiseChunk` material rule order when `settings.oreVeinsEnabled()` is true.
 - `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` exist but are not certified complete. Treat them as partial until each condition/rule is checked against Java source.

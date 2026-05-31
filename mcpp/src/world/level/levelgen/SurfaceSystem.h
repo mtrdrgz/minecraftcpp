@@ -47,7 +47,7 @@ private:
     bool isStone(uint32_t stateId) const noexcept;
 
     void erodedBadlandsExtension(LevelChunk& chunk, int blockX, int blockZ, int height);
-    void frozenOceanExtension(int minSurfaceLevel, LevelChunk& chunk,
+    void frozenOceanExtension(int minSurfaceLevel, const std::string& biome, LevelChunk& chunk,
                                int blockX, int blockZ, int height);
 
     static std::array<uint32_t, 192> generateBands(RandomSource& random);

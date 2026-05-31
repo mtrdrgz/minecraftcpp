@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -61,6 +62,19 @@ namespace {
             values.push_back(i);
         }
         return values;
+    }
+
+    int64_t doubleToJavaLong(double value) {
+        if (std::isnan(value)) {
+            return 0;
+        }
+        if (value >= static_cast<double>(std::numeric_limits<int64_t>::max())) {
+            return std::numeric_limits<int64_t>::max();
+        }
+        if (value <= static_cast<double>(std::numeric_limits<int64_t>::min())) {
+            return std::numeric_limits<int64_t>::min();
+        }
+        return static_cast<int64_t>(value);
     }
 }
 
@@ -177,6 +191,77 @@ double SimplexNoise::getValue(double xin, double yin, double zin) const {
     double n2 = getCornerNoise3D(gi2, x2, y2, z2, 0.6);
     double n3 = getCornerNoise3D(gi3, x3, y3, z3, 0.6);
     return 32.0 * (n0 + n1 + n2 + n3);
+}
+
+PerlinSimplexNoise::PerlinSimplexNoise(RandomSource& random, std::vector<int32_t> octaveSet) {
+    if (octaveSet.empty()) {
+        throw std::invalid_argument("Need some octaves!");
+    }
+
+    std::sort(octaveSet.begin(), octaveSet.end());
+    octaveSet.erase(std::unique(octaveSet.begin(), octaveSet.end()), octaveSet.end());
+
+    const int32_t lowFreqOctaves = -octaveSet.front();
+    const int32_t highFreqOctaves = octaveSet.back();
+    const int32_t octaves = lowFreqOctaves + highFreqOctaves + 1;
+    if (octaves < 1) {
+        throw std::invalid_argument("Total number of octaves needs to be >= 1");
+    }
+
+    auto containsOctave = [&octaveSet](int32_t octave) {
+        return std::binary_search(octaveSet.begin(), octaveSet.end(), octave);
+    };
+
+    SimplexNoise zeroOctave(random);
+    const int32_t zeroOctaveIndex = highFreqOctaves;
+    m_noiseLevels.resize(static_cast<size_t>(octaves));
+    if (zeroOctaveIndex >= 0 && zeroOctaveIndex < octaves && containsOctave(0)) {
+        m_noiseLevels[static_cast<size_t>(zeroOctaveIndex)] = std::make_unique<SimplexNoise>(zeroOctave);
+    }
+
+    for (int32_t i = zeroOctaveIndex + 1; i < octaves; ++i) {
+        if (i >= 0 && containsOctave(zeroOctaveIndex - i)) {
+            m_noiseLevels[static_cast<size_t>(i)] = std::make_unique<SimplexNoise>(random);
+        } else {
+            random.consumeCount(262);
+        }
+    }
+
+    if (highFreqOctaves > 0) {
+        const double seedValue = zeroOctave.getValue(zeroOctave.xo, zeroOctave.yo, zeroOctave.zo) *
+            static_cast<double>(9.223372e18f);
+        LegacyRandomSource highFreqRandom(doubleToJavaLong(seedValue));
+
+        for (int32_t i = zeroOctaveIndex - 1; i >= 0; --i) {
+            if (i < octaves && containsOctave(zeroOctaveIndex - i)) {
+                m_noiseLevels[static_cast<size_t>(i)] = std::make_unique<SimplexNoise>(highFreqRandom);
+            } else {
+                highFreqRandom.consumeCount(262);
+            }
+        }
+    }
+
+    m_highestFreqInputFactor = std::pow(2.0, highFreqOctaves);
+    m_highestFreqValueFactor = 1.0 / (std::pow(2.0, octaves) - 1.0);
+}
+
+double PerlinSimplexNoise::getValue(double x, double y, bool useNoiseStart) const {
+    double value = 0.0;
+    double factor = m_highestFreqInputFactor;
+    double valueFactor = m_highestFreqValueFactor;
+
+    for (const auto& noiseLevel : m_noiseLevels) {
+        if (noiseLevel) {
+            value += noiseLevel->getValue(
+                x * factor + (useNoiseStart ? noiseLevel->xo : 0.0),
+                y * factor + (useNoiseStart ? noiseLevel->yo : 0.0)) * valueFactor;
+        }
+
+        factor /= 2.0;
+        valueFactor *= 2.0;
+    }
+
+    return value;
 }
 
 ImprovedNoise::ImprovedNoise(RandomSource& random) {
