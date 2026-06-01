@@ -245,6 +245,22 @@ set_target_properties(world_placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# BlockStateProvider parity (Simple / Weighted). `--cases <tsv>` compares against
+# tools/BlockStateProviderParity.java (the real decompiled providers).
+add_executable(block_state_provider_parity
+    world/level/levelgen/feature/stateproviders/BlockStateProviderParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(block_state_provider_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_state_provider_parity PRIVATE glm)
+if(WIN32)
+    target_link_libraries(block_state_provider_parity PRIVATE bcrypt)
+endif()
+set_target_properties(block_state_provider_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
 # from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
 # 26.1.2/data/...). `--dump` emits a normalised view cross-checked against

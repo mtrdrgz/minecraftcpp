@@ -9,19 +9,31 @@
 #include "../WorldGenerationContext.h"
 #include "../../../../core/Math.h"
 
+#include <stdexcept>
+#include <string>
+
 namespace mc::levelgen::placement {
 
 using mc::BlockPos;
 using mc::levelgen::Heightmap;
 using mc::levelgen::WorldGenerationContext;
 
-// The world-access surface used during decoration. Only the methods needed so
-// far are declared; getBlockState/setBlock/etc. are added with the features.
+// The world-access surface used during decoration. Placement modifiers only
+// need getHeight/getMinY; features additionally read/write blocks. The
+// block-read/write/survival methods have throwing defaults so placement-only
+// stubs need not implement them. `canSurvive` is the boundary to the (separate)
+// block-behaviour subsystem; a BlockState here is its canonical id string.
 class WorldGenLevel {
 public:
     virtual ~WorldGenLevel() = default;
     virtual int getHeight(Heightmap::Types type, int x, int z) const = 0;
     virtual int getMinY() const = 0;
+
+    virtual std::string getBlockState(BlockPos pos) const { (void)pos; throw std::logic_error("getBlockState not implemented"); }
+    virtual void setBlock(BlockPos pos, const std::string& state, int flags) { (void)pos; (void)state; (void)flags; throw std::logic_error("setBlock not implemented"); }
+    virtual bool isEmptyBlock(BlockPos pos) const { (void)pos; throw std::logic_error("isEmptyBlock not implemented"); }
+    // BlockState.canSurvive(level, pos): delegates to the block-behaviour subsystem.
+    virtual bool canSurvive(const std::string& state, BlockPos pos) const { (void)state; (void)pos; throw std::logic_error("canSurvive not implemented"); }
 };
 
 class PlacementContext : public WorldGenerationContext {
