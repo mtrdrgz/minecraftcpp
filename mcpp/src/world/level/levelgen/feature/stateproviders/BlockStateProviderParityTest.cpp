@@ -4,9 +4,13 @@
 //   default        -> hardcoded self-checks
 //   --cases <tsv>  -> verify every generated line
 
+#include "../../Noise.h"
 #include "../../RandomSource.h"
 #include "BlockStateProvider.h"
+#include "NoiseBasedStateProviders.h"
 
+#include <bit>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -19,6 +23,20 @@ using namespace mc::levelgen;
 using namespace mc::levelgen::feature::stateproviders;
 
 namespace {
+
+NormalNoise makeFlowerNoise() {
+    auto src = std::make_shared<LegacyRandomSource>(2345);
+    WorldgenRandom wr(src);
+    return NormalNoise::create(wr, NoiseParameters{ 0, { 1.0 } });
+}
+
+const NormalNoise g_noise = makeFlowerNoise();
+const double kScale = 0.005f; // (double)(0.005f)
+
+const NoiseThresholdProvider g_flowers(
+    2345, NoiseParameters{ 0, { 1.0 } }, 0.005f, -0.8f, 0.33333334f, "minecraft:dandelion",
+    { "minecraft:orange_tulip", "minecraft:red_tulip", "minecraft:pink_tulip", "minecraft:white_tulip" },
+    { "minecraft:poppy", "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:cornflower" });
 
 BlockStateProviderPtr weighted(std::vector<WeightedStateProvider::Entry> e) {
     return std::make_shared<WeightedStateProvider>(std::move(e));
@@ -39,6 +57,31 @@ bool verifyLine(const std::string& line, std::string& err) {
     std::istringstream in(line);
     std::string kind;
     in >> kind;
+    if (kind == "NOISE") {
+        long long px, py, pz, expectedBits;
+        in >> px >> py >> pz >> expectedBits;
+        const double v = g_noise.getValue(px * kScale, py * kScale, pz * kScale);
+        const long long got = std::bit_cast<std::int64_t>(v);
+        if (got != expectedBits) {
+            err = "NOISE " + std::to_string(px) + "," + std::to_string(py) + "," + std::to_string(pz) +
+                  " bits " + std::to_string(got) + "!=" + std::to_string(expectedBits);
+            return false;
+        }
+        return true;
+    }
+    if (kind == "BSPN") {
+        long long px, py, pz, seed;
+        std::string expected;
+        in >> px >> py >> pz >> seed >> expected;
+        LegacyRandomSource r(seed);
+        const std::string got = g_flowers.getState(r, BlockPos{ static_cast<int>(px), static_cast<int>(py), static_cast<int>(pz) });
+        if (got != expected) {
+            err = "BSPN " + std::to_string(px) + "," + std::to_string(pz) + " seed " + std::to_string(seed) +
+                  " " + got + "!=" + expected;
+            return false;
+        }
+        return true;
+    }
     if (kind != "BSP") return true;
     std::string name;
     long long seed;

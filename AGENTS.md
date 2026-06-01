@@ -253,23 +253,22 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 36 (BlockStateProvider 1:1 + SimpleBlockFeature scaffold; found NormalNoise parity gap)
+**Last updated**: Session 37 (FIXED NormalNoise parity via the nextLong eval-order bug; flowers verified)
 
-**!!! NormalNoise parity gap (HIGH PRIORITY, affects terrain) !!!**: The C++
-`NormalNoise::getValue` does NOT match Java bit-for-bit. Repro:
-`NormalNoise::create(WorldgenRandom(LegacyRandomSource(2345)), {firstOctave:0,
-amplitudes:[1.0]})`, then `getValue(x*0.005, y*0.005, z*0.005)` for various
-block positions diverges structurally from Java (different values, not just low
-bits). Java path: `create` -> `new NormalNoise(random, params, true)` ->
-`PerlinNoise.create(random, firstOctave, amplitudes)` twice; `getValue` mixes
-`first.getValue(x,y,z)` + `second.getValue(x*1.0181268882175227, ...)` *
-`valueFactor`. The discrepancy is almost certainly in the C++
-`PerlinNoise/ImprovedNoise` construction (RNG consumption / permutation /
-offsets) since the values are wholly different. This affects ALL terrain noise
-and every noise-based worldgen provider/modifier. Add a NormalNoise/PerlinNoise
-parity target (mirror the BlockStateProvider harness: emit
-`Double.doubleToRawLongBits(noise.getValue(...))` from Java) and fix the C++
-noise to match before certifying terrain or noise-driven vegetation.
+**NormalNoise parity gap — FIXED (Session 37)**: root cause was a C++
+undefined-behaviour bug in `LegacyRandomSource::nextLong()` /
+`SingleThreadedRandomSource::nextLong()`: they did
+`composeJavaNextLong(next(32), next(32))`, but C++ leaves function-argument
+evaluation order unspecified, and gcc evaluated the two `next(32)` right-to-left
+— swapping the long's halves vs java.util.Random (upper-then-lower). This was
+invisible to the earlier parity tests because they never exercised legacy
+`nextLong` directly (WorldgenRandom has its own explicit nextLong). It corrupted
+`forkPositional()` (which seeds via `nextLong`), hence every PerlinNoise octave
+seed (`positional.fromHashOf("octave_N")`), hence all NormalNoise — i.e. ALL
+terrain noise. Fixed by evaluating the two `next(32)` into ordered locals.
+Now verified: `NormalNoise.getValue` matches Java bit-for-bit and the
+NoiseThresholdProvider (flower_plain) state selection matches 1:1
+(`block_state_provider_parity` NOISE + BSPN cases).
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 

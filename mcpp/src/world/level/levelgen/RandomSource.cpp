@@ -223,7 +223,11 @@ int32_t LegacyRandomSource::nextInt(int32_t bound) {
 }
 
 int64_t LegacyRandomSource::nextLong() {
-    return composeJavaNextLong(next(32), next(32));
+    // Evaluate the two next(32) calls in order: C++ leaves function-argument
+    // evaluation order unspecified, but java.util.Random is upper-then-lower.
+    const int32_t upper = next(32);
+    const int32_t lower = next(32);
+    return composeJavaNextLong(upper, lower);
 }
 
 bool LegacyRandomSource::nextBoolean() {
@@ -297,7 +301,11 @@ int32_t SingleThreadedRandomSource::nextInt(int32_t bound) {
 }
 
 int64_t SingleThreadedRandomSource::nextLong() {
-    return composeJavaNextLong(next(32), next(32));
+    // Evaluate the two next(32) calls in order: C++ leaves function-argument
+    // evaluation order unspecified, but java.util.Random is upper-then-lower.
+    const int32_t upper = next(32);
+    const int32_t lower = next(32);
+    return composeJavaNextLong(upper, lower);
 }
 
 bool SingleThreadedRandomSource::nextBoolean() {

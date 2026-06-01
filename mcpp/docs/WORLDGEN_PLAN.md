@@ -78,17 +78,17 @@ The engine that turns a biome's placed-feature lists into block placements.
   `noise_threshold_count`, `noise_based_count`,
   `surface_relative_threshold_filter`, `fixed_placement`, `biome`.
 - 🚧 **BlockStateProvider** types (~12): ✅ `simple_state_provider`,
-  `weighted_state_provider` verified 1:1 (`block_state_provider_parity`).
-  🚧 `noise_threshold_provider` ported but BLOCKED by the NormalNoise parity gap
-  (see below). ⬜ `noise_provider`, `dual_noise_provider`,
-  `randomized_int_state_provider`, `rotated_block_provider`, etc.
+  `weighted_state_provider`, `noise_threshold_provider` verified 1:1
+  (`block_state_provider_parity`; the last also verifies NormalNoise). ⬜
+  `noise_provider`, `dual_noise_provider`, `randomized_int_state_provider`,
+  `rotated_block_provider`, etc.
 
-> **Two gates remain for *visible* surface vegetation** (the
-> positions+state-selection pipeline is built and verified): (1) **NormalNoise
-> parity** — the C++ noise doesn't match Java bit-for-bit yet, blocking all
-> noise-driven providers/modifiers and terrain; (2) the **block-behaviour
-> subsystem** (`BlockState.canSurvive`, block classes, block tags) that
-> `SimpleBlockFeature` gates on. Both are large and tracked in AGENTS.md.
+> **NormalNoise parity: FIXED** (Session 37 — a `nextLong` eval-order UB bug that
+> corrupted all noise octave seeds; terrain noise is now 1:1). The remaining gate
+> for *visible* surface vegetation is the **block-behaviour subsystem**
+> (`BlockState.canSurvive`, block classes, block tags) that `SimpleBlockFeature`
+> gates on; the positions + state-selection pipeline is otherwise built and
+> verified. Both tracked in AGENTS.md.
 - ⬜ `BlockPredicate` types (for `block_predicate_filter`).
 - ✅ value providers: `IntProvider` (constant/uniform/biased_to_bottom/clamped/
   weighted_list), `FloatProvider` (constant/uniform/clamped_normal/trapezoid),

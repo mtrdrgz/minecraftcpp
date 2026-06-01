@@ -3,12 +3,8 @@
 // Port of the noise-based BlockStateProviders (NoiseThresholdProvider, ...),
 // used by e.g. flower_plain. The noise is a NormalNoise built from
 // WorldgenRandom(LegacyRandomSource(seed)) exactly as Java's
-// NoiseBasedStateProvider does.
-//
-// UNVERIFIED: this is a faithful structural port, but the underlying C++
-// NormalNoise does NOT yet match Java bit-for-bit (found via the noise provider
-// work — see AGENTS.md "NormalNoise parity gap"). So the noise-driven branch of
-// getState is not yet certified 1:1. The RNG list-picking around it is correct.
+// NoiseBasedStateProvider does. Verified 1:1 (block_state_provider_parity, the
+// NOISE/BSPN cases) once the nextLong eval-order bug was fixed.
 
 #include "../../Noise.h"
 #include "../../RandomSource.h"

@@ -245,11 +245,15 @@ set_target_properties(world_placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
-# BlockStateProvider parity (Simple / Weighted). `--cases <tsv>` compares against
+# BlockStateProvider parity (Simple / Weighted / NoiseThreshold). Also covers
+# raw NormalNoise.getValue (the NOISE cases). `--cases <tsv>` compares against
 # tools/BlockStateProviderParity.java (the real decompiled providers).
 add_executable(block_state_provider_parity
     world/level/levelgen/feature/stateproviders/BlockStateProviderParityTest.cpp
     world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
 )
 target_include_directories(block_state_provider_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(block_state_provider_parity PRIVATE glm)
