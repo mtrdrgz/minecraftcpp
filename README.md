@@ -100,6 +100,20 @@ java  -cp "26.1.2/parity/out:26.1.2/client.jar:26.1.2/libs/*" PlacementParity 26
 ./placement_parity --cases 26.1.2/parity/placement_cases.tsv
 ```
 
+Height/Float provider test (VerticalAnchor + HeightProvider + FloatProvider).
+Pure standard C++:
+
+```bash
+g++ -std=c++23 -O2 -I src/world/level/levelgen \
+  src/world/level/levelgen/heightproviders/HeightFloatProviderParityTest.cpp \
+  src/world/level/levelgen/RandomSource.cpp -o height_float_provider_parity
+./height_float_provider_parity                              # self-checks
+# full check vs the real decompiled classes (needs the local jar + libs):
+javac -cp "26.1.2/client.jar:26.1.2/libs/*" -d 26.1.2/parity/out tools/HeightFloatProviderParity.java
+java  -cp "26.1.2/parity/out:26.1.2/client.jar:26.1.2/libs/*" HeightFloatProviderParity 26.1.2/parity/height_float_cases.tsv
+./height_float_provider_parity --cases 26.1.2/parity/height_float_cases.tsv
+```
+
 See `docs/WORLDGEN_PLAN.md` for the full 1:1 worldgen port roadmap.
 
 Singleplayer smoke:

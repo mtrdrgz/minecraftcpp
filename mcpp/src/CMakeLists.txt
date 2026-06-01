@@ -212,6 +212,22 @@ set_target_properties(placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# VerticalAnchor / HeightProvider / FloatProvider parity. Pure standard C++;
+# `--cases <tsv>` compares against tools/HeightFloatProviderParity.java (the real
+# decompiled value/height providers).
+add_executable(height_float_provider_parity
+    world/level/levelgen/heightproviders/HeightFloatProviderParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(height_float_provider_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+if(WIN32)
+    target_link_libraries(height_float_provider_parity PRIVATE bcrypt)
+endif()
+set_target_properties(height_float_provider_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
 # from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
 # 26.1.2/data/...). `--dump` emits a normalised view cross-checked against

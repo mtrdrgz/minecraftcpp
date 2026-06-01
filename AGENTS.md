@@ -253,7 +253,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 33 (IntProvider + pure placement modifiers 1:1 — vegetation track)
+**Last updated**: Session 34 (FloatProvider/HeightProvider/VerticalAnchor 1:1 — vegetation track)
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
@@ -371,6 +371,20 @@ the removed hand-authored approximate generators — port from Java + data only.
   WorldGenLevel + the world-dependent modifiers (heightmap, height_range,
   filters), BlockStateProvider, then the feature types (random_patch,
   simple_block, …) and TreeFeature.
+- Session 34 (Phase B cont. — vegetation track): completed the value-provider
+  layer. Added `FloatProvider.h` (Constant/Uniform/ClampedNormal/Trapezoid),
+  `heightproviders/HeightProvider.h` (Constant/Uniform/BiasedToBottom/
+  VeryBiasedToBottom/Trapezoid), `VerticalAnchor.h` (Absolute/AboveBottom/
+  BelowTop) and `WorldGenerationContext.h`. Verified 1:1 over 60 cases via
+  `tools/HeightFloatProviderParity.java` + `height_float_provider_parity` target;
+  the ClampedNormalFloat cases also validate `nextGaussian` end-to-end. The Java
+  generator builds a `WorldGenerationContext` with `sun.misc.Unsafe`
+  (allocateInstance + putInt on the two final int fields) since its only ctor
+  needs a ChunkGenerator. These are header-only (`mc::valueproviders` /
+  `mc::levelgen` / `mc::levelgen::heightproviders`), not yet in the main `mcpp`
+  build — pulled in as features/placements that use them are wired.
+  STILL THE GATE for visible vegetation: PlacementContext/WorldGenLevel + the
+  heightmap placement + a feature (random_patch/simple_block) + BlockStateProvider.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.

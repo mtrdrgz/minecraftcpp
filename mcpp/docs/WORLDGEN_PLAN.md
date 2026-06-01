@@ -82,8 +82,11 @@ The engine that turns a biome's placed-feature lists into block placements.
   `dual_noise_provider`, `randomized_int_state_provider`,
   `rotated_block_provider`, etc.
 - ⬜ `BlockPredicate` types (for `block_predicate_filter`).
-- 🚧 value providers: ✅ `IntProvider` (constant/uniform/biased_to_bottom/
-  clamped/weighted_list) verified 1:1; ⬜ `FloatProvider` / `HeightProvider`.
+- ✅ value providers: `IntProvider` (constant/uniform/biased_to_bottom/clamped/
+  weighted_list), `FloatProvider` (constant/uniform/clamped_normal/trapezoid),
+  `HeightProvider` (constant/uniform/biased_to_bottom/very_biased_to_bottom/
+  trapezoid) + `VerticalAnchor` + `WorldGenerationContext` — all verified 1:1
+  (`placement_parity`, `height_float_provider_parity`).
 
 ---
 
