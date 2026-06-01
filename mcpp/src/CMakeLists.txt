@@ -178,3 +178,18 @@ set_target_properties(overworld_biome_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
+# from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
+# 26.1.2/data/...). `--dump` emits a normalised view cross-checked against
+# tools/biome_registry_reference.py. Pure standard C++ + nlohmann/json.
+add_executable(biome_registry_parity
+    world/level/biome/BiomeRegistryParityTest.cpp
+    world/level/biome/BiomeRegistry.cpp
+)
+target_include_directories(biome_registry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/biome)
+target_link_libraries(biome_registry_parity PRIVATE nlohmann_json)
+set_target_properties(biome_registry_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)

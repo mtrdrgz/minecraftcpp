@@ -59,6 +59,21 @@ java  -cp "26.1.2/parity/out:26.1.2/client.jar:26.1.2/libs/*" OverworldBiomePari
 ./overworld_biome_parity --cases 26.1.2/parity/climate_cases.tsv   # expects 0 mismatches
 ```
 
+Biome registry loader test (loads all 65 biomes from the worldgen data; needs
+the extracted `26.1.2/data/...`). Pure standard C++ + nlohmann/json:
+
+```bash
+g++ -std=c++23 -O2 -I vendor -I src/world/level/biome \
+  src/world/level/biome/BiomeRegistryParityTest.cpp \
+  src/world/level/biome/BiomeRegistry.cpp -o biome_registry_parity
+./biome_registry_parity 26.1.2/data/minecraft/worldgen/biome        # spot-checks
+# full field-for-field cross-check against an independent parser:
+diff <(./biome_registry_parity --dump 26.1.2/data/minecraft/worldgen/biome) \
+     <(python3 tools/biome_registry_reference.py 26.1.2/data/minecraft/worldgen/biome)
+```
+
+See `docs/WORLDGEN_PLAN.md` for the full 1:1 worldgen port roadmap.
+
 Singleplayer smoke:
 
 ```powershell

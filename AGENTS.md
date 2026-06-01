@@ -235,9 +235,14 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - [x] Overworld biome climate selection is now 1:1: `Climate::RTree` ported (the
       production `findValue` search) and `OverworldBiomeBuilder` verified
       byte-identical to real Java (7593 entries) — see "biome selection" below.
+- [x] Biome registry data: all 65 biomes loaded 1:1 from `worldgen/biome/*.json`
+      (`world/level/biome/Biome.h` + `BiomeRegistry`), verified field-for-field
+      against an independent parser. This is the data hub for biome-specific
+      blocks/trees/colours/carvers/spawns.
+- [ ] Full worldgen feature/structure pipeline — see `mcpp/docs/WORLDGEN_PLAN.md`
+      for the complete phased checklist (features, trees, carvers, structures).
 - [ ] Port remaining ~277 mob goals.
 - [ ] Implement Crafting and Smelting logic.
-- [ ] Full noise-based terrain generation (Biomes, Caves, Structures).
 
 ### PHASE 16 — Integration & Optimization
 - [ ] Multi-threaded chunk loading & meshing (thread pool).
@@ -248,9 +253,15 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 30 (Climate.RTree biome-selection 1:1 + Mojang CDN fetch workflow)
-**Current phase**: PHASE 15 (Game Logic) in progress
+**Last updated**: Session 31 (Biome registry data layer — all 65 biomes 1:1 + WORLDGEN_PLAN.md)
+**Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
+
+**Worldgen roadmap**: `mcpp/docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
+the full feature/tree/structure port (Phases A–G, with real data counts). Phase A
+(biome registry) is done; Phases B–G (decoration framework, feature types, trees,
+carvers, structures, engine integration) are the remaining work. Do NOT reintroduce
+the removed hand-authored approximate generators — port from Java + data only.
 
 **Next action**: PHASE 15 — Game Logic
 1. ~~Audit `OverworldBiomeBuilder.cpp` line-by-line against `OverworldBiomeBuilder.java`.~~
@@ -311,6 +322,20 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
     sampling. If biome sampling is ever parallelised, make `lastResult`
     thread-local to avoid a data race and to match Java's per-thread semantics.
     `lastResult` only affects which leaf is returned among exact distance ties.
+- Session 31 began the full worldgen feature/structure port (master plan:
+  `mcpp/docs/WORLDGEN_PLAN.md`). Delivered Phase A — the biome registry data
+  layer (`world/level/biome/Biome.h` + `BiomeRegistry.{h,cpp}`): a faithful
+  loader of all 65 `worldgen/biome/*.json` (climate, effects colours, the new
+  26.1.2 `attributes` map incl. value-modifier form for water_fog_end_distance,
+  carvers, the 11 ordered placed-feature steps, 8 spawner categories, spawn
+  costs). Verified by `biome_registry_parity` (CMake target; pure std C++ +
+  nlohmann, builds on Linux) and `tools/biome_registry_reference.py`, which
+  agree on all 65 biomes / 1525 normalised fields (independent parsers). NOTE:
+  the registry is not yet wired into the engine — the runtime needs the
+  `worldgen/*` JSON embedded in the asset pack and `BiomeSource` resolving real
+  `Biome` objects instead of id strings (Phase A "remaining" + Phase G). The
+  loader currently reads a directory; `BiomeRegistry.cpp` is built only by the
+  parity target, not yet added to the main `mcpp` sources.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.
