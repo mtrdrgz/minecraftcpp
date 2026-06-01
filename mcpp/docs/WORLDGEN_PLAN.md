@@ -70,17 +70,20 @@ The engine that turns a biome's placed-feature lists into block placements.
 - ⬜ `ConfiguredFeature` + `PlacedFeature` data model + JSON loaders.
 - ⬜ `PlacementContext` + the per-chunk decoration loop
   (`ChunkGenerator.applyBiomeDecoration`) using the population seed above.
-- ⬜ **PlacementModifier** types (15): `count`, `rarity_filter`, `in_square`,
-  `height_range`, `heightmap`, `random_offset`, `block_predicate_filter`,
-  `surface_water_depth_filter`, `environment_scan`, `count_on_every_layer`,
-  `noise_threshold_count`, `noise_based_count`,
-  `surface_relative_threshold_filter`, `fixed_placement`, `biome`.
+- 🚧 **PlacementModifier** types (15): ✅ the world-independent ones —
+  `count`, `rarity_filter`, `in_square`, `random_offset` — ported and verified
+  1:1 (`placement_parity`). ⬜ world-dependent: `height_range`, `heightmap`,
+  `block_predicate_filter`, `surface_water_depth_filter`, `environment_scan`,
+  `count_on_every_layer`, `noise_threshold_count`, `noise_based_count`,
+  `surface_relative_threshold_filter`, `fixed_placement`, `biome` (need
+  PlacementContext / WorldGenLevel).
 - ⬜ **BlockStateProvider** types (~12): `simple_state_provider`,
   `weighted_state_provider`, `noise_threshold_provider`, `noise_provider`,
   `dual_noise_provider`, `randomized_int_state_provider`,
   `rotated_block_provider`, etc.
 - ⬜ `BlockPredicate` types (for `block_predicate_filter`).
-- ⬜ `IntProvider` / `FloatProvider` / `HeightProvider` value providers.
+- 🚧 value providers: ✅ `IntProvider` (constant/uniform/biased_to_bottom/
+  clamped/weighted_list) verified 1:1; ⬜ `FloatProvider` / `HeightProvider`.
 
 ---
 

@@ -195,6 +195,23 @@ set_target_properties(worldgen_random_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# IntProvider + pure placement-modifier parity. Pure standard C++; `--cases
+# <tsv>` compares against ground truth from tools/PlacementParity.java (the real
+# decompiled value providers + placement modifiers).
+add_executable(placement_parity
+    world/level/levelgen/placement/PlacementParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(placement_parity PRIVATE glm)
+if(WIN32)
+    target_link_libraries(placement_parity PRIVATE bcrypt)
+endif()
+set_target_properties(placement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
 # from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
 # 26.1.2/data/...). `--dump` emits a normalised view cross-checked against

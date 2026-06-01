@@ -61,3 +61,6 @@ mcpp/vendor/glslang/glslang/standalone.gclient
 # OS noise
 Thumbs.db
 Desktop.ini
+
+# Log4j output from Bootstrap-based parity generators
+logs/

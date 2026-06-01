@@ -253,7 +253,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 32 (WorldgenRandom population RNG 1:1 + shared nextDouble precision fix)
+**Last updated**: Session 33 (IntProvider + pure placement modifiers 1:1 — vegetation track)
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
@@ -353,6 +353,24 @@ the removed hand-authored approximate generators — port from Java + data only.
   PRE-EXISTING ISSUE noted: `md5Bytes` in RandomSource.cpp is an FNV placeholder,
   not real MD5, so Xoroshiro positional `fromHashOf` does not match Java's
   `Hashing.md5()`; port real MD5 when doing noise seed parity.
+- Session 33 (Phase B cont. — vegetation track): ported the value samplers and
+  the world-independent placement modifiers, the "how many / where" core of
+  feature decoration:
+  - `world/level/levelgen/IntProvider.h` (`mc::valueproviders`): ConstantInt,
+    UniformInt, BiasedToBottomInt, ClampedInt, WeightedListInt (cumulative-weight
+    walk; matches WeightedList.Flat and .Compact).
+  - `world/level/levelgen/placement/PlacementModifier.h` (`mc::levelgen::placement`):
+    InSquarePlacement, CountPlacement (RepeatingPlacement), RarityFilter
+    (PlacementFilter), RandomOffsetPlacement. `getPositions` returns
+    `vector<BlockPos>`; takes a forward-declared `PlacementContext*` that the
+    pure modifiers ignore (world-dependent modifiers will flesh it out).
+  Verified 1:1 over 75 cases via `tools/PlacementParity.java` (runs the real
+  decompiled classes; needs `Bootstrap.bootStrap()` and writes to a file because
+  bootstrap reroutes System.out through Log4j) and the `placement_parity` target
+  (pure std C++; links `glm` only for BlockPos/Math.h). Next: PlacementContext/
+  WorldGenLevel + the world-dependent modifiers (heightmap, height_range,
+  filters), BlockStateProvider, then the feature types (random_patch,
+  simple_block, …) and TreeFeature.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.
