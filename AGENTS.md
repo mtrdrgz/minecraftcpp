@@ -253,7 +253,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 34 (FloatProvider/HeightProvider/VerticalAnchor 1:1 — vegetation track)
+**Last updated**: Session 35 (Heightmap/HeightRange placement + PlacementContext/WorldGenLevel 1:1)
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
@@ -385,6 +385,21 @@ the removed hand-authored approximate generators — port from Java + data only.
   build — pulled in as features/placements that use them are wired.
   STILL THE GATE for visible vegetation: PlacementContext/WorldGenLevel + the
   heightmap placement + a feature (random_patch/simple_block) + BlockStateProvider.
+- Session 35 (Phase B cont. — vegetation track): ported the placement *surface*
+  and the first world-dependent modifiers. Added `Heightmap.h` (Types enum),
+  `placement/PlacementContext.h` (the `WorldGenLevel` query interface +
+  `PlacementContext : WorldGenerationContext`), and `placement/HeightmapPlacement.h`
+  (`HeightmapPlacement` + `HeightRangePlacement`). Verified 1:1 over 126 cases
+  via `tools/WorldPlacementParity.java` and the `world_placement_parity` target.
+  The Java harness implements `WorldGenLevel` (an interface) with a dynamic
+  `Proxy` whose `getHeight(type,x,z)` is a deterministic stub, and builds
+  `PlacementContext` with `Unsafe` (its only ctor needs a ChunkGenerator). The
+  stub heightmap range includes height==minY so the empty branch is exercised.
+  With this + the pure modifiers, the full XZ-scatter→surface position stream for
+  a vegetation placed_feature is now computable (minus the `biome`/
+  `block_predicate_filter` modifiers). NEXT: the feature *execution* side —
+  `BlockStateProvider` + a feature (simple_block/random_patch) that writes blocks
+  via WorldGenLevel.setBlock, verified by capturing setBlock on a Proxy level.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.

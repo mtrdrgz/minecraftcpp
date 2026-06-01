@@ -114,6 +114,20 @@ java  -cp "26.1.2/parity/out:26.1.2/client.jar:26.1.2/libs/*" HeightFloatProvide
 ./height_float_provider_parity --cases 26.1.2/parity/height_float_cases.tsv
 ```
 
+World placement test (HeightmapPlacement + HeightRangePlacement vs a stub
+WorldGenLevel). Needs `glm` headers (BlockPos):
+
+```bash
+g++ -std=c++23 -O2 -DGLM_ENABLE_EXPERIMENTAL -I src -I vendor \
+  src/world/level/levelgen/placement/WorldPlacementParityTest.cpp \
+  src/world/level/levelgen/RandomSource.cpp -o world_placement_parity
+./world_placement_parity                                    # self-checks
+# full check vs the real decompiled modifiers (needs the local jar + libs):
+javac -cp "26.1.2/client.jar:26.1.2/libs/*" -d 26.1.2/parity/out tools/WorldPlacementParity.java
+java  -cp "26.1.2/parity/out:26.1.2/client.jar:26.1.2/libs/*" WorldPlacementParity 26.1.2/parity/world_placement_cases.tsv
+./world_placement_parity --cases 26.1.2/parity/world_placement_cases.tsv
+```
+
 See `docs/WORLDGEN_PLAN.md` for the full 1:1 worldgen port roadmap.
 
 Singleplayer smoke:

@@ -228,6 +228,23 @@ set_target_properties(height_float_provider_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# HeightmapPlacement / HeightRangePlacement parity (world-dependent modifiers
+# against a stub WorldGenLevel). `--cases <tsv>` compares against
+# tools/WorldPlacementParity.java (real modifiers + a Proxy WorldGenLevel).
+add_executable(world_placement_parity
+    world/level/levelgen/placement/WorldPlacementParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(world_placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(world_placement_parity PRIVATE glm)
+if(WIN32)
+    target_link_libraries(world_placement_parity PRIVATE bcrypt)
+endif()
+set_target_properties(world_placement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
 # from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
 # 26.1.2/data/...). `--dump` emits a normalised view cross-checked against
