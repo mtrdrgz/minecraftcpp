@@ -253,7 +253,23 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 35 (Heightmap/HeightRange placement + PlacementContext/WorldGenLevel 1:1)
+**Last updated**: Session 36 (BlockStateProvider 1:1 + SimpleBlockFeature scaffold; found NormalNoise parity gap)
+
+**!!! NormalNoise parity gap (HIGH PRIORITY, affects terrain) !!!**: The C++
+`NormalNoise::getValue` does NOT match Java bit-for-bit. Repro:
+`NormalNoise::create(WorldgenRandom(LegacyRandomSource(2345)), {firstOctave:0,
+amplitudes:[1.0]})`, then `getValue(x*0.005, y*0.005, z*0.005)` for various
+block positions diverges structurally from Java (different values, not just low
+bits). Java path: `create` -> `new NormalNoise(random, params, true)` ->
+`PerlinNoise.create(random, firstOctave, amplitudes)` twice; `getValue` mixes
+`first.getValue(x,y,z)` + `second.getValue(x*1.0181268882175227, ...)` *
+`valueFactor`. The discrepancy is almost certainly in the C++
+`PerlinNoise/ImprovedNoise` construction (RNG consumption / permutation /
+offsets) since the values are wholly different. This affects ALL terrain noise
+and every noise-based worldgen provider/modifier. Add a NormalNoise/PerlinNoise
+parity target (mirror the BlockStateProvider harness: emit
+`Double.doubleToRawLongBits(noise.getValue(...))` from Java) and fix the C++
+noise to match before certifying terrain or noise-driven vegetation.
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
@@ -400,6 +416,21 @@ the removed hand-authored approximate generators — port from Java + data only.
   `block_predicate_filter` modifiers). NEXT: the feature *execution* side —
   `BlockStateProvider` + a feature (simple_block/random_patch) that writes blocks
   via WorldGenLevel.setBlock, verified by capturing setBlock on a Proxy level.
+- Session 36 (Phase B cont. — vegetation feature execution): ported
+  `BlockStateProvider` (SimpleStateProvider, WeightedStateProvider — verified 1:1,
+  18 cases, `block_state_provider_parity`; state = canonical id string),
+  `SimpleBlockFeature` + `FeaturePlaceContext` (faithful; `canSurvive` delegated
+  to `WorldGenLevel`), and `NoiseBasedStateProviders.h` (NoiseThresholdProvider —
+  faithful but BLOCKED by the NormalNoise gap above, so its noise branch is
+  uncertified). Key findings while wiring the Java harness (a Proxy WorldGenLevel
+  capturing setBlock): (1) `simple_block`'s only world step is
+  `BlockState.canSurvive`, i.e. the block-behaviour subsystem (block classes are
+  not even in our decompiled staging; the `minecraft:dirt` tag shrank to
+  {dirt,coarse_dirt,rooted_dirt} in 26.1.2, so plant survival changed) — this is
+  the boundary, to be backed when block behaviour is ported; (2) the NormalNoise
+  parity gap. So canSurvive-gated end-to-end placement and noise-driven state are
+  the two remaining gates for visible vegetation; the placement+selection pipeline
+  (positions + which state) is otherwise built and verified.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.
