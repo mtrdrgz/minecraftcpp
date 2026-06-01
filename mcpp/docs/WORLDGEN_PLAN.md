@@ -52,18 +52,24 @@ directory; the runtime path/embedding is a deliberate integration step).
 
 ---
 
-## Phase B — Feature / decoration framework ⬜
+## Phase B — Feature / decoration framework 🚧
 
 The engine that turns a biome's placed-feature lists into block placements.
 
+- ✅ `WorldgenRandom` population RNG (`setDecorationSeed` / `setFeatureSeed` /
+  `setLargeFeatureSeed` / `setLargeFeatureWithSalt`) — verified 1:1 against the
+  real decompiled code over 540 cases (`worldgen_random_parity`). This also
+  fixed a pre-existing `nextDouble` precision bug shared by all RandomSources
+  (Java multiplies by a `double`-field-from-`float`-literal `1.110223E-16F`),
+  which feeds the noise system too.
 - ⬜ `GenerationStep.Decoration` (11) + `Carving` (2) enums.
+- ⬜ `FeatureSorter` — global per-step feature ordering (the index passed to
+  `setFeatureSeed`); pure logic over the biome registry.
 - ⬜ `WorldGenLevel` / `WorldGenRegion` placement surface over `LevelChunk`
   (getBlockState/setBlockState/getHeight within the 3×3 chunk region).
 - ⬜ `ConfiguredFeature` + `PlacedFeature` data model + JSON loaders.
 - ⬜ `PlacementContext` + the per-chunk decoration loop
-  (`ChunkGenerator.applyBiomeDecoration`) with the **exact population seed**
-  (`WorldgenRandom.setDecorationSeed` / `setFeatureSeed`) — pure logic,
-  parity-testable against Java.
+  (`ChunkGenerator.applyBiomeDecoration`) using the population seed above.
 - ⬜ **PlacementModifier** types (15): `count`, `rarity_filter`, `in_square`,
   `height_range`, `heightmap`, `random_offset`, `block_predicate_filter`,
   `surface_water_depth_filter`, `environment_scan`, `count_on_every_layer`,

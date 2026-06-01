@@ -7,11 +7,13 @@
 #include <stdexcept>
 #include <vector>
 
+#if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 #include <bcrypt.h>
+#endif
 
 namespace mc::levelgen {
 
@@ -20,7 +22,12 @@ namespace {
     static constexpr uint64_t LEGACY_MULTIPLIER = 25214903917ULL;
     static constexpr uint64_t LEGACY_INCREMENT = 11ULL;
     static constexpr float FLOAT_MULTIPLIER = 5.9604645E-8F;
-    static constexpr double DOUBLE_MULTIPLIER = 1.110223E-16;
+    // Java's BitRandomSource/Xoroshiro multiply by the field
+    // `double DOUBLE_MULTIPLIER = 1.110223E-16F;` — a double initialised from a
+    // FLOAT literal, i.e. (double)(1.110223e-16f), which differs from the double
+    // literal 1.110223E-16. The multiply itself is double precision. Initialise
+    // from the float literal here to reproduce Java's exact bits.
+    static constexpr double DOUBLE_MULTIPLIER = 1.110223E-16F;
 
     uint64_t rotl64(uint64_t value, int bits) {
         return (value << bits) | (value >> (64 - bits));
@@ -453,6 +460,100 @@ uint64_t XoroshiroRandomSource::nextBits(int32_t bits) {
 
 void XoroshiroRandomSource::resetGaussian() {
     m_haveNextNextGaussian = false;
+}
+
+// ── WorldgenRandom ────────────────────────────────────────────────────────────
+WorldgenRandom::WorldgenRandom(std::shared_ptr<RandomSource> source) : m_source(std::move(source)) {}
+
+std::shared_ptr<RandomSource> WorldgenRandom::fork() { return m_source->fork(); }
+std::shared_ptr<PositionalRandomFactory> WorldgenRandom::forkPositional() { return m_source->forkPositional(); }
+
+void WorldgenRandom::setSeed(int64_t seed) {
+    if (m_source) {
+        m_source->setSeed(seed);
+    }
+}
+
+int32_t WorldgenRandom::next(int32_t bits) {
+    ++m_count;
+    if (auto* legacy = dynamic_cast<LegacyRandomSource*>(m_source.get())) {
+        return legacy->next(bits);
+    }
+    return static_cast<int32_t>(static_cast<uint64_t>(m_source->nextLong()) >> (64 - bits));
+}
+
+int32_t WorldgenRandom::nextInt() { return next(32); }
+
+int32_t WorldgenRandom::nextInt(int32_t bound) {
+    if (bound <= 0) {
+        throw std::invalid_argument("Bound must be positive");
+    }
+    if (isPowerOfTwo(bound)) {
+        return static_cast<int32_t>((static_cast<int64_t>(bound) * static_cast<int64_t>(next(31))) >> 31);
+    }
+    int32_t sample;
+    int32_t modulo;
+    do {
+        sample = next(31);
+        modulo = sample % bound;
+        uint32_t wrapped = static_cast<uint32_t>(sample) - static_cast<uint32_t>(modulo) + static_cast<uint32_t>(bound - 1);
+        if (static_cast<int32_t>(wrapped) >= 0) {
+            return modulo;
+        }
+    } while (true);
+}
+
+int64_t WorldgenRandom::nextLong() {
+    // java.util.Random: ((long)next(32) << 32) + next(32), evaluated left to right.
+    const int32_t upper = next(32);
+    const int32_t lower = next(32);
+    return composeJavaNextLong(upper, lower);
+}
+
+bool WorldgenRandom::nextBoolean() { return next(1) != 0; }
+float WorldgenRandom::nextFloat() { return next(24) * FLOAT_MULTIPLIER; }
+
+double WorldgenRandom::nextDouble() {
+    uint64_t combined = (static_cast<uint64_t>(next(26)) << 27) + static_cast<uint64_t>(next(27));
+    return static_cast<double>(combined) * DOUBLE_MULTIPLIER;
+}
+
+double WorldgenRandom::nextGaussian() { return gaussian(*this, m_nextNextGaussian, m_haveNextNextGaussian); }
+
+int64_t WorldgenRandom::setDecorationSeed(int64_t seed, int32_t blockX, int32_t blockZ) {
+    setSeed(seed);
+    const int64_t xScale = nextLong() | 1LL;
+    const int64_t zScale = nextLong() | 1LL;
+    const int64_t result = javaLongXor(
+        javaLongAdd(javaLongMul(static_cast<int64_t>(blockX), xScale), javaLongMul(static_cast<int64_t>(blockZ), zScale)),
+        seed);
+    setSeed(result);
+    return result;
+}
+
+void WorldgenRandom::setFeatureSeed(int64_t seed, int32_t index, int32_t step) {
+    const int64_t result = javaLongAdd(javaLongAdd(seed, static_cast<int64_t>(index)),
+                                       static_cast<int64_t>(10000 * step));
+    setSeed(result);
+}
+
+void WorldgenRandom::setLargeFeatureSeed(int64_t seed, int32_t chunkX, int32_t chunkZ) {
+    setSeed(seed);
+    const int64_t xScale = nextLong();
+    const int64_t zScale = nextLong();
+    const int64_t result = javaLongXor(
+        javaLongXor(javaLongMul(static_cast<int64_t>(chunkX), xScale), javaLongMul(static_cast<int64_t>(chunkZ), zScale)),
+        seed);
+    setSeed(result);
+}
+
+void WorldgenRandom::setLargeFeatureWithSalt(int64_t seed, int32_t x, int32_t z, int32_t salt) {
+    const int64_t result = javaLongAdd(
+        javaLongAdd(javaLongAdd(javaLongMul(static_cast<int64_t>(x), 341873128712LL),
+                                javaLongMul(static_cast<int64_t>(z), 132897987541LL)),
+                    seed),
+        static_cast<int64_t>(salt));
+    setSeed(result);
 }
 
 int64_t getMthSeed(int32_t x, int32_t y, int32_t z) {

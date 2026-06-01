@@ -72,6 +72,20 @@ diff <(./biome_registry_parity --dump 26.1.2/data/minecraft/worldgen/biome) \
      <(python3 tools/biome_registry_reference.py 26.1.2/data/minecraft/worldgen/biome)
 ```
 
+WorldgenRandom test (the decoration/feature population RNG). Pure standard C++:
+
+```bash
+g++ -std=c++23 -O2 -I src/world/level/levelgen \
+  src/world/level/levelgen/WorldgenRandomParityTest.cpp \
+  src/world/level/levelgen/RandomSource.cpp -o worldgen_random_parity
+./worldgen_random_parity                                    # self-checks
+# full check vs the real decompiled WorldgenRandom (needs the local jar):
+javac -cp 26.1.2/client.jar -d 26.1.2/parity/out tools/WorldgenRandomParity.java
+java  -cp "26.1.2/parity/out:26.1.2/client.jar:26.1.2/libs/*" WorldgenRandomParity \
+      > 26.1.2/parity/worldgen_random_cases.tsv
+./worldgen_random_parity --cases 26.1.2/parity/worldgen_random_cases.tsv
+```
+
 See `docs/WORLDGEN_PLAN.md` for the full 1:1 worldgen port roadmap.
 
 Singleplayer smoke:

@@ -179,6 +179,22 @@ set_target_properties(overworld_biome_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# WorldgenRandom parity (the decoration/feature population RNG). Pure standard
+# C++; `--cases <tsv>` compares against ground truth from
+# tools/WorldgenRandomParity.java (the real decompiled WorldgenRandom).
+add_executable(worldgen_random_parity
+    world/level/levelgen/WorldgenRandomParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(worldgen_random_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+if(WIN32)
+    target_link_libraries(worldgen_random_parity PRIVATE bcrypt)
+endif()
+set_target_properties(worldgen_random_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
 # from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
 # 26.1.2/data/...). `--dump` emits a normalised view cross-checked against

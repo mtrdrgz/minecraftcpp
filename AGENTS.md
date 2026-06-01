@@ -253,7 +253,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 31 (Biome registry data layer — all 65 biomes 1:1 + WORLDGEN_PLAN.md)
+**Last updated**: Session 32 (WorldgenRandom population RNG 1:1 + shared nextDouble precision fix)
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
 
@@ -336,6 +336,23 @@ the removed hand-authored approximate generators — port from Java + data only.
   `Biome` objects instead of id strings (Phase A "remaining" + Phase G). The
   loader currently reads a directory; `BiomeRegistry.cpp` is built only by the
   parity target, not yet added to the main `mcpp` sources.
+- Session 32 (Phase B start — trees/vegetation track): ported `WorldgenRandom`
+  in `world/level/levelgen/RandomSource.{h,cpp}` — the population RNG that
+  `ChunkGenerator.applyBiomeDecoration` uses to seed every feature
+  (`setDecorationSeed`/`setFeatureSeed`/`setLargeFeatureSeed`/
+  `setLargeFeatureWithSalt`). Verified 1:1 over 540 cases via
+  `tools/WorldgenRandomParity.java` and the new `worldgen_random_parity` target
+  (pure std C++; RandomSource.cpp's unused `<windows.h>`/`<bcrypt.h>` are now
+  `#ifdef _WIN32`, so it builds on Linux). IMPORTANT FIX: every `nextDouble` was
+  slightly off — Java multiplies by `double DOUBLE_MULTIPLIER = 1.110223E-16F`
+  (a double initialised from a FLOAT literal, i.e. (double)(1.110223e-16f)) in
+  double precision; the C++ used the plain double literal `1.110223E-16`.
+  Corrected for Legacy/SingleThreaded/Xoroshiro/WorldgenRandom; this nudges
+  noise/density output toward Java-correctness, so add a `noise`/
+  `density_function` parity target to confirm the sampler now matches bit-for-bit.
+  PRE-EXISTING ISSUE noted: `md5Bytes` in RandomSource.cpp is an FNV placeholder,
+  not real MD5, so Xoroshiro positional `fromHashOf` does not match Java's
+  `Hashing.md5()`; port real MD5 when doing noise seed parity.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.
