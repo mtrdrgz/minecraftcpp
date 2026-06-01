@@ -20,6 +20,8 @@ import net.minecraft.world.level.levelgen.heightproviders.TrapezoidHeight;
 import net.minecraft.world.level.levelgen.heightproviders.UniformHeight;
 import net.minecraft.world.level.levelgen.placement.HeightRangePlacement;
 import net.minecraft.world.level.levelgen.placement.HeightmapPlacement;
+import net.minecraft.world.level.levelgen.placement.NoiseBasedCountPlacement;
+import net.minecraft.world.level.levelgen.placement.NoiseThresholdCountPlacement;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
 import net.minecraft.world.level.levelgen.placement.PlacementModifier;
 
@@ -114,6 +116,20 @@ public class WorldPlacementParity {
                         out.println("HRANGE\t" + e.getKey() + "\t" + seed + "\t" + o[0] + "\t64\t" + o[1] + "\t"
                                 + posList(m, ctx, r, new BlockPos(o[0], 64, o[1])));
                     }
+                }
+            }
+
+            // Noise-count modifiers (sample Biome.BIOME_INFO_NOISE; no RNG). Emit the
+            // resulting count over a grid of XZ so the noise drives different counts.
+            Map<String, PlacementModifier> noiseCounts = new LinkedHashMap<>();
+            noiseCounts.put("ntc_flower", NoiseThresholdCountPlacement.of(-0.8, 15, 4)); // flower_plains
+            noiseCounts.put("nbc", NoiseBasedCountPlacement.of(160, 80.0, 0.3));
+            int[][] grid = { {0, 0}, {200, 200}, {-200, 400}, {123, -456}, {1000, 2000}, {37, 37}, {-13, -29}, {800, -800} };
+            RandomSource unused = new LegacyRandomSource(0L);
+            for (Map.Entry<String, PlacementModifier> e : noiseCounts.entrySet()) {
+                for (int[] o : grid) {
+                    long count = e.getValue().getPositions(ctx, unused, new BlockPos(o[0], 64, o[1])).count();
+                    out.println("NCOUNT\t" + e.getKey() + "\t" + o[0] + "\t" + o[1] + "\t" + count);
                 }
             }
         }

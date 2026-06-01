@@ -234,6 +234,9 @@ set_target_properties(height_float_provider_parity PROPERTIES
 add_executable(world_placement_parity
     world/level/levelgen/placement/WorldPlacementParityTest.cpp
     world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
 )
 target_include_directories(world_placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(world_placement_parity PRIVATE glm)

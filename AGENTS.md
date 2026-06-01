@@ -253,7 +253,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 37 (FIXED NormalNoise parity via the nextLong eval-order bug; flowers verified)
+**Last updated**: Session 37 (FIXED NormalNoise via nextLong eval-order; flowers + noise-count modifiers verified)
 
 **NormalNoise parity gap — FIXED (Session 37)**: root cause was a C++
 undefined-behaviour bug in `LegacyRandomSource::nextLong()` /
