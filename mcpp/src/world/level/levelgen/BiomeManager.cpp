@@ -1,13 +1,6 @@
 #include "BiomeManager.h"
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
-#include <bcrypt.h>
+#include "../../../core/Sha256.h"
 
 #include <array>
 #include <cmath>
@@ -68,31 +61,10 @@ BiomeManager::BiomeManager(const BiomeSource& noiseBiomeSource, int64_t seed)
 }
 
 int64_t BiomeManager::obfuscateSeed(int64_t seed) {
-    BCRYPT_ALG_HANDLE algorithm = nullptr;
-    BCRYPT_HASH_HANDLE hash = nullptr;
-    std::array<unsigned char, 32> digest{};
+    // Java: Hashing.sha256().hashLong(seed) over the little-endian seed bytes,
+    // then read the first 8 digest bytes little-endian.
     auto input = littleEndianBytes(seed);
-
-    NTSTATUS status = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
-    if (status < 0) {
-        throw std::runtime_error("BCryptOpenAlgorithmProvider(SHA256) failed");
-    }
-    status = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0);
-    if (status >= 0) {
-        status = BCryptHashData(hash, input.data(), static_cast<ULONG>(input.size()), 0);
-    }
-    if (status >= 0) {
-        status = BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0);
-    }
-    if (hash) {
-        BCryptDestroyHash(hash);
-    }
-    if (algorithm) {
-        BCryptCloseAlgorithmProvider(algorithm, 0);
-    }
-    if (status < 0) {
-        throw std::runtime_error("BCrypt SHA256 hash failed");
-    }
+    std::array<uint8_t, 32> digest = mc::core::sha256(input.data(), input.size());
     return littleEndianLong(digest.data());
 }
 

@@ -1,8 +1,13 @@
 #include "Blocks.h"
 #include "../../../core/Log.h"
-#include "../../../assets/resource_ids.h"
 #include <nlohmann/json.hpp>
+#if defined(_WIN32)
+#include "../../../assets/resource_ids.h"
 #include <windows.h>
+#endif
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <unordered_map>
 #include <string>
 
@@ -125,17 +130,35 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
 void initBlocks() {
     std::unordered_map<std::string, Block*> byName;
 
+    const char* raw = nullptr;
+    std::size_t sz = 0;
+    std::string fileData;
+#if defined(_WIN32)
     HMODULE hmod = GetModuleHandleW(nullptr);
     HRSRC   hres = FindResourceW(hmod, MAKEINTRESOURCEW(IDR_BLOCK_STATES), RT_RCDATA);
-    if (!hres) {
-        MC_LOG_WARN("Blocks: block_states.json not embedded — using 11-block fallback");
+    if (hres) {
+        HGLOBAL hg = LoadResource(hmod, hres);
+        raw = static_cast<const char*>(LockResource(hg));
+        sz = SizeofResource(hmod, hres);
+    }
+#else
+    // Non-Windows: load block_states.json from $MCPP_BLOCK_STATES if provided.
+    if (const char* path = std::getenv("MCPP_BLOCK_STATES")) {
+        std::ifstream in(path, std::ios::binary);
+        if (in) {
+            std::stringstream ss;
+            ss << in.rdbuf();
+            fileData = ss.str();
+            raw = fileData.data();
+            sz = fileData.size();
+        }
+    }
+#endif
+    if (!raw) {
+        MC_LOG_WARN("Blocks: block_states.json not available — using fallback registry");
         initFallback(byName);
         return;
     }
-
-    HGLOBAL hg   = LoadResource(hmod, hres);
-    const char* raw = static_cast<const char*>(LockResource(hg));
-    DWORD sz     = SizeofResource(hmod, hres);
 
     try {
         auto j = nlohmann::json::parse(raw, raw + sz);

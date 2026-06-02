@@ -3,7 +3,9 @@
 #include <string_view>
 #include <format>
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif
 
 namespace mc::log {
 
@@ -24,7 +26,9 @@ inline void print(Level level, std::string_view fmt, Args&&... args) {
     std::string msg = std::vformat(fmt, std::make_format_args(args...));
     std::string line = std::format("[{}] {}\n", levelStr(level), msg);
     fputs(line.c_str(), level == Level::Error ? stderr : stdout);
+#if defined(_WIN32)
     OutputDebugStringA(line.c_str());  // visible in VS debugger output
+#endif
 }
 
 } // namespace mc::log
