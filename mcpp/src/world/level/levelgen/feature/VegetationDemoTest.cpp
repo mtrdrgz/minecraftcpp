@@ -46,9 +46,9 @@ public:
         return pos.y < kSurface ? "minecraft:grass_block" : "minecraft:air";
     }
     bool isEmptyBlock(BlockPos pos) const override { return getBlockState(pos) == "minecraft:air"; }
-    bool canSurvive(const std::string& /*state*/, BlockPos pos) const override {
-        // VegetationBlock family (grass/flowers): below in SUPPORTS_VEGETATION.
-        return mc::block::vegetationBlockCanSurvive(getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z }), m_tags);
+    bool canSurvive(const std::string& state, BlockPos pos) const override {
+        // Dispatch by plant family (VegetationBlock/DoublePlant/DryVegetation).
+        return mc::block::canSurvive(state, getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z }), m_tags);
     }
     void setBlock(BlockPos pos, const std::string& state, int) override { writes.push_back({ pos, state }); }
 
@@ -118,10 +118,36 @@ int main(int argc, char** argv) {
         const auto& w = world.writes.front();
         std::cout << "  e.g. " << w.state << " @ " << w.pos.x << "," << w.pos.y << "," << w.pos.z << '\n';
     }
+    // --- Double plant (tall_grass): each placement writes two blocks (lower+upper) ---
+    SimpleBlockConfiguration tallGrassConfig{ SimpleStateProvider::of("minecraft:tall_grass"), false };
+    PlacedFeature::FeaturePlacer tallGrassFeature = [&tallGrassConfig](WorldGenLevel& lvl, RandomSource& rnd, BlockPos pos) {
+        SimpleBlockFeature feature;
+        FeaturePlaceContext<SimpleBlockConfiguration> ctx{ &lvl, &rnd, pos, &tallGrassConfig };
+        return feature.place(ctx);
+    };
+    PlacedFeature tallGrass(tallGrassFeature, placement);
+
+    FlatWorld tgWorld(tags);
+    WorldgenRandom tgRandom(std::make_shared<XoroshiroRandomSource>(0));
+    const long long tgSeed = tgRandom.setDecorationSeed(42LL, origin.x, origin.z);
+    tgRandom.setFeatureSeed(tgSeed, 1, 9);
+    const bool tgPlaced = tallGrass.place(tgWorld, tgRandom, origin, -64, 384);
+
+    int lower = 0, upper = 0, tgBad = 0;
+    for (const auto& w : tgWorld.writes) {
+        if (w.state == "minecraft:tall_grass[half=lower]" && w.pos.y == kSurface) ++lower;
+        else if (w.state == "minecraft:tall_grass[half=upper]" && w.pos.y == kSurface + 1) ++upper;
+        else ++tgBad;
+    }
+    const bool tgOk = tgPlaced && lower > 0 && lower == upper && tgBad == 0;
+    std::cout << "patch_tall_grass demo: placed=" << (tgPlaced ? "true" : "false")
+              << " lower=" << lower << " upper=" << upper << " bad=" << tgBad << '\n';
+
+    ok = ok && tgOk;
     if (!ok) {
         std::cerr << "Vegetation demo FAILED\n";
         return 1;
     }
-    std::cout << "Vegetation demo passed: grass generated on the surface\n";
+    std::cout << "Vegetation demo passed: grass + tall_grass (double plant) generated on the surface\n";
     return 0;
 }

@@ -9,6 +9,7 @@
 #include "../RandomSource.h"
 #include "../placement/PlacementContext.h"
 #include "stateproviders/BlockStateProvider.h"
+#include "../../block/BlockBehaviour.h"
 
 namespace mc::levelgen::feature {
 
@@ -39,9 +40,19 @@ public:
         const std::string state = config.toPlace->getState(*context.random, origin); // getOptionalState (never null here)
 
         if (level.canSurvive(state, origin)) {
-            // NOTE: DoublePlantBlock / MossyCarpetBlock branches are deferred until
-            // those block behaviours are ported; single-block plants use setBlock.
-            level.setBlock(origin, state, 2);
+            if (mc::block::isDoublePlant(state)) {
+                // DoublePlantBlock: needs space above, then placeAt sets the lower
+                // half here and the upper half above (NOTE: MossyCarpetBlock and
+                // scheduleTick branches are still deferred).
+                const BlockPos above{ origin.x, origin.y + 1, origin.z };
+                if (!level.isEmptyBlock(above)) {
+                    return false;
+                }
+                level.setBlock(origin, mc::block::setProperty(state, "half", "lower"), 2);
+                level.setBlock(above, mc::block::setProperty(state, "half", "upper"), 2);
+            } else {
+                level.setBlock(origin, state, 2);
+            }
             return true;
         }
         return false;

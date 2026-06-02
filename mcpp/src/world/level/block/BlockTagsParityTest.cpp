@@ -80,6 +80,27 @@ int main(int argc, char** argv) {
     for (const auto& c : cases) {
         check(vegetationBlockCanSurvive(c.below, tags) == c.expected,
               std::string("vegetationBlockCanSurvive(") + c.below + ") == " + (c.expected ? "true" : "false"));
+        // DoublePlant (tall_grass) shares the VegetationBlock ground rule.
+        check(canSurvive("minecraft:tall_grass", c.below, tags) == c.expected,
+              std::string("canSurvive(tall_grass, ") + c.below + ")");
+    }
+    check(isDoublePlant("minecraft:tall_grass") && isDoublePlant("minecraft:large_fern") &&
+              isDoublePlant("minecraft:sunflower") && !isDoublePlant("minecraft:short_grass"),
+          "isDoublePlant set");
+
+    // DryVegetationBlock (dead_bush / dry grass): below in SUPPORTS_DRY_VEGETATION
+    // (sand, red_sand, terracotta family, + the SUPPORTS_VEGETATION grounds).
+    const Case dryCases[] = {
+        { "minecraft:sand", true }, { "minecraft:red_sand", true }, { "minecraft:terracotta", true },
+        { "minecraft:white_terracotta", true }, { "minecraft:grass_block", true }, { "minecraft:dirt", true },
+        { "minecraft:stone", false }, { "minecraft:gravel", false }, { "minecraft:water", false },
+        { "minecraft:moss_block", true },
+    };
+    for (const auto& c : dryCases) {
+        check(dryVegetationBlockCanSurvive(c.below, tags) == c.expected,
+              std::string("dryVegetationBlockCanSurvive(") + c.below + ") == " + (c.expected ? "true" : "false"));
+        check(canSurvive("minecraft:dead_bush", c.below, tags) == c.expected,
+              std::string("canSurvive(dead_bush, ") + c.below + ")");
     }
 
     if (!g_ok) {

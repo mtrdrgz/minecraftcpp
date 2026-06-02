@@ -253,7 +253,20 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 38 (vegetation generates end-to-end — patch_grass_plain demo; all pieces 1:1)
+**Last updated**: Session 39 (surface vegetation breadth: double plants + dry vegetation + canSurvive dispatch)
+
+**Session 39**: extended surface vegetation coverage. `world/level/block/BlockStates.h`
+(canonical state-id property helpers: blockName / setProperty, sorted like Java).
+`BlockBehaviour.h` now dispatches `canSurvive` by plant family —
+VegetationBlock/DoublePlant -> SUPPORTS_VEGETATION, DryVegetationBlock (dead_bush,
+short/tall_dry_grass) -> SUPPORTS_DRY_VEGETATION (sand/red_sand/terracotta family +
+the veg grounds), 30 blocks. `SimpleBlockFeature` now handles DoublePlantBlock
+(tall_grass/large_fern/sunflower/lilac/rose_bush/peony): checks the space above and
+places both halves (state[half=lower] + [half=upper]). vegetation_demo now also
+generates tall_grass (69 lower + 69 upper) and block_tags_parity verifies the
+dry-veg + double-plant canSurvive matrices. Remaining surface plants with bespoke
+rules/feature types: sugar cane, cactus, pumpkin/melon, mushrooms, bamboo, berry/
+firefly bush; plus engine integration (applyBiomeDecoration + biome registry).
 
 **Session 38 end-to-end**: `PlacedFeature.place` composition ported (the flatMap
 modifier chain + per-position feature call) plus `TrapezoidInt`, and small
