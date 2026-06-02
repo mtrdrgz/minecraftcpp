@@ -90,6 +90,36 @@ private:
     int32_t m_min, m_max;
 };
 
+class TrapezoidInt final : public IntProvider {
+public:
+    TrapezoidInt(int32_t minInclusive, int32_t maxInclusive, int32_t plateau)
+        : m_min(minInclusive), m_max(maxInclusive), m_plateau(plateau) {}
+    static IntProviderPtr of(int32_t lo, int32_t hi, int32_t plateau) {
+        return std::make_shared<TrapezoidInt>(lo, hi, plateau);
+    }
+    int32_t sample(RandomSource& random) const override {
+        if (m_plateau == 0 && m_max == -m_min) {
+            const int32_t a = random.nextInt(m_max + 1);
+            const int32_t b = random.nextInt(m_max + 1);
+            return a - b;
+        }
+        const int32_t range = m_max - m_min;
+        if (m_plateau == range) {
+            return random.nextInt(range + 1) + m_min; // Mth.randomBetweenInclusive(min,max)
+        }
+        const int32_t plateauStart = (range - m_plateau) / 2;
+        const int32_t plateauEnd = range - plateauStart;
+        const int32_t e = random.nextInt(plateauEnd + 1); // randomBetweenInclusive(0, plateauEnd)
+        const int32_t s = random.nextInt(plateauStart + 1); // randomBetweenInclusive(0, plateauStart)
+        return m_min + e + s;
+    }
+    int32_t minInclusive() const override { return m_min; }
+    int32_t maxInclusive() const override { return m_max; }
+
+private:
+    int32_t m_min, m_max, m_plateau;
+};
+
 class WeightedListInt final : public IntProvider {
 public:
     struct Entry {

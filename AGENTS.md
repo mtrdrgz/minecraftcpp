@@ -253,7 +253,21 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 38 (BlockTags resolver + VegetationBlock canSurvive 1:1 — vegetation gate addressed)
+**Last updated**: Session 38 (vegetation generates end-to-end — patch_grass_plain demo; all pieces 1:1)
+
+**Session 38 end-to-end**: `PlacedFeature.place` composition ported (the flatMap
+modifier chain + per-position feature call) plus `TrapezoidInt`, and small
+`BiomeFilter`/`BlockPredicateFilter` modifiers (std::function-backed). The
+`vegetation_demo` target runs the real `patch_grass_plain` chain
+(noise_threshold_count → in_square → heightmap → biome → count(32) →
+random_offset(trapezoid) → block_predicate_filter(air)) on a flat test world and
+generates short_grass on the surface (84 blocks, correct state/Y). It's a
+self-consistency integration check — each component is verified 1:1 vs Java
+separately; full end-to-end vs Java is blocked only by datapack tag binding.
+SURFACE VEGETATION now generates. Remaining: wire into the real ChunkGenerator
+(applyBiomeDecoration loop + FeatureSorter + biome registry + embed worldgen
+JSON), more plant families' canSurvive, and the rest of the feature/modifier
+types (trees, patches, etc.).
 
 **Session 38**: ported the block-behaviour gate for surface vegetation.
 `world/level/block/BlockTags.{h,cpp}` is a data-driven resolver of

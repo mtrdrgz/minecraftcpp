@@ -268,6 +268,27 @@ set_target_properties(block_state_provider_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# End-to-end vegetation generation demo (patch_grass_plain on a flat test world).
+# Ties together the verified pieces via PlacedFeature.place; needs the block-tag
+# data dir as argv. Links the noise stack (BIOME_INFO_NOISE) + block tags.
+add_executable(vegetation_demo
+    world/level/levelgen/feature/VegetationDemoTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(vegetation_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vegetation_demo PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(vegetation_demo PRIVATE bcrypt)
+endif()
+set_target_properties(vegetation_demo PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # BlockTags resolver + VegetationBlock canSurvive parity. Pure std C++ +
 # nlohmann/json. `--dump <dir>` is cross-checked against tools/block_tags_reference.py.
 add_executable(block_tags_parity
