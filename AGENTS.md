@@ -264,9 +264,15 @@ the veg grounds), 30 blocks. `SimpleBlockFeature` now handles DoublePlantBlock
 (tall_grass/large_fern/sunflower/lilac/rose_bush/peony): checks the space above and
 places both halves (state[half=lower] + [half=upper]). vegetation_demo now also
 generates tall_grass (69 lower + 69 upper) and block_tags_parity verifies the
-dry-veg + double-plant canSurvive matrices. Remaining surface plants with bespoke
-rules/feature types: sugar cane, cactus, pumpkin/melon, mushrooms, bamboo, berry/
-firefly bush; plus engine integration (applyBiomeDecoration + biome registry).
+dry-veg + double-plant canSurvive matrices. Also ported `BlockColumnFeature`
+(feature/BlockColumnFeature.h) — the vertical-column feature used by sugar cane
+and cactus (per-layer IntProvider heights, allowedPlacement-gated truncation, no
+canSurvive); vegetation_demo generates a 3-tall sugar_cane column. Surface
+vegetation now covers feature types simple_block, double-plant and block_column,
+and families VegetationBlock / DoublePlantBlock / DryVegetationBlock. Remaining
+tail: bespoke canSurvive for cactus/mushrooms/bamboo/berry+firefly bush, the
+huge-mushroom/bamboo/vegetation_patch feature types, and engine integration
+(applyBiomeDecoration loop + FeatureSorter + biome registry + embed worldgen JSON).
 
 **Session 38 end-to-end**: `PlacedFeature.place` composition ported (the flatMap
 modifier chain + per-position feature call) plus `TrapezoidInt`, and small

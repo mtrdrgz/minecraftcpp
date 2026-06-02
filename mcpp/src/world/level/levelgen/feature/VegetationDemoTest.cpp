@@ -17,6 +17,7 @@
 #include "../placement/PlacementModifier.h"
 #include "../../block/BlockBehaviour.h"
 #include "../../block/BlockTags.h"
+#include "BlockColumnFeature.h"
 #include "Feature.h"
 #include "stateproviders/BlockStateProvider.h"
 
@@ -143,11 +144,38 @@ int main(int argc, char** argv) {
     std::cout << "patch_tall_grass demo: placed=" << (tgPlaced ? "true" : "false")
               << " lower=" << lower << " upper=" << upper << " bad=" << tgBad << '\n';
 
-    ok = ok && tgOk;
+    // --- Sugar cane (block_column): a vertical column of 2-4 sugar_cane ---
+    BlockColumnFeature columnFeature;
+    BlockColumnConfiguration sugarCane;
+    sugarCane.layers.push_back({ mc::valueproviders::BiasedToBottomInt::of(2, 4),
+                                 SimpleStateProvider::of("minecraft:sugar_cane[age=0]") });
+    sugarCane.allowedPlacement = [&tags](WorldGenLevel& lvl, BlockPos pos) {
+        return tags.isInTag(lvl.getBlockState(pos), "minecraft:air");
+    };
+    FlatWorld scWorld(tags);
+    WorldgenRandom scRandom(std::make_shared<XoroshiroRandomSource>(0));
+    const long long scSeed = scRandom.setDecorationSeed(42LL, 0, 0);
+    scRandom.setFeatureSeed(scSeed, 2, 9);
+    const bool scPlaced = columnFeature.place(scWorld, scRandom, BlockPos{ 5, kSurface, 5 }, sugarCane);
+    int cane = 0, caneBad = 0;
+    for (std::size_t i = 0; i < scWorld.writes.size(); ++i) {
+        const auto& w = scWorld.writes[i];
+        if (w.state == "minecraft:sugar_cane[age=0]" && w.pos.x == 5 && w.pos.z == 5 &&
+            w.pos.y == kSurface + static_cast<int>(i)) {
+            ++cane;
+        } else {
+            ++caneBad;
+        }
+    }
+    const bool scOk = scPlaced && cane >= 2 && cane <= 4 && caneBad == 0;
+    std::cout << "sugar_cane (block_column) demo: placed=" << (scPlaced ? "true" : "false")
+              << " stacked_canes=" << cane << " bad=" << caneBad << '\n';
+
+    ok = ok && tgOk && scOk;
     if (!ok) {
         std::cerr << "Vegetation demo FAILED\n";
         return 1;
     }
-    std::cout << "Vegetation demo passed: grass + tall_grass (double plant) generated on the surface\n";
+    std::cout << "Vegetation demo passed: grass + tall_grass + sugar_cane generated on the surface\n";
     return 0;
 }
