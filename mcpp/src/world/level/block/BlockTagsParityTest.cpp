@@ -88,6 +88,16 @@ int main(int argc, char** argv) {
               isDoublePlant("minecraft:sunflower") && !isDoublePlant("minecraft:short_grass"),
           "isDoublePlant set");
 
+    // bush / sweet_berry_bush / firefly_bush are VegetationBlock -> SUPPORTS_VEGETATION.
+    for (const char* plant : { "minecraft:bush", "minecraft:sweet_berry_bush", "minecraft:firefly_bush",
+                               "minecraft:dandelion", "minecraft:poppy", "minecraft:lily_of_the_valley" }) {
+        check(canSurvive(plant, "minecraft:grass_block", tags), std::string(plant) + " survives on grass_block");
+        check(!canSurvive(plant, "minecraft:stone", tags), std::string(plant) + " not on stone");
+    }
+    // pumpkin / melon are full blocks: canSurvive is always true (ground gated by placement).
+    check(canSurvive("minecraft:pumpkin", "minecraft:stone", tags) && canSurvive("minecraft:melon", "minecraft:air", tags),
+          "full-block plants (pumpkin/melon) always canSurvive");
+
     // DryVegetationBlock (dead_bush / dry grass): below in SUPPORTS_DRY_VEGETATION
     // (sand, red_sand, terracotta family, + the SUPPORTS_VEGETATION grounds).
     const Case dryCases[] = {

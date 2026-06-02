@@ -33,18 +33,32 @@ inline const std::set<std::string>& dryVegetationBlocks() {
     return s;
 }
 
+// Full-block "plants" (PumpkinBlock/MelonBlock extend Block): canSurvive is the
+// Block default (true); their ground is gated by the placed-feature's
+// block_predicate_filter, not canSurvive.
+inline const std::set<std::string>& fullBlockPlants() {
+    static const std::set<std::string> s = { "minecraft:pumpkin", "minecraft:melon" };
+    return s;
+}
+
 inline bool isDoublePlant(const std::string& blockOrState) {
     return doublePlantBlocks().count(blockName(blockOrState)) != 0;
 }
 
-// VegetationBlock.canSurvive / DryVegetationBlock.mayPlaceOn etc.: the below
-// block must be in the family's support tag.
+// canSurvive dispatch for the surface-vegetation set. The VegetationBlock family
+// (grass, ferns, all standard flowers, bush, sweet_berry_bush, firefly_bush, the
+// double plants) shares SUPPORTS_VEGETATION; DryVegetationBlock uses
+// SUPPORTS_DRY_VEGETATION; full-block plants survive anywhere.
+// NOTE: mushrooms (light-dependent), cactus (neighbour-dependent, block_column),
+// and wither_rose (netherrack) have bespoke rules and are NOT handled here.
 inline bool canSurvive(const std::string& plantBlockOrState, const std::string& belowBlock, const BlockTags& tags) {
     const std::string block = blockName(plantBlockOrState);
     if (dryVegetationBlocks().count(block) != 0) {
         return tags.isInTag(belowBlock, "minecraft:supports_dry_vegetation");
     }
-    // VegetationBlock + DoublePlantBlock (lower half) family
+    if (fullBlockPlants().count(block) != 0) {
+        return true;
+    }
     return tags.isInTag(belowBlock, "minecraft:supports_vegetation");
 }
 

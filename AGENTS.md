@@ -269,8 +269,13 @@ dry-veg + double-plant canSurvive matrices. Also ported `BlockColumnFeature`
 and cactus (per-layer IntProvider heights, allowedPlacement-gated truncation, no
 canSurvive); vegetation_demo generates a 3-tall sugar_cane column. Surface
 vegetation now covers feature types simple_block, double-plant and block_column,
-and families VegetationBlock / DoublePlantBlock / DryVegetationBlock. Remaining
-tail: bespoke canSurvive for cactus/mushrooms/bamboo/berry+firefly bush, the
+and the canSurvive families: VegetationBlock (grass, ferns, all standard flowers,
+bush, sweet_berry_bush, firefly_bush, lily_of_the_valley) -> SUPPORTS_VEGETATION;
+DoublePlantBlock -> SUPPORTS_VEGETATION; DryVegetationBlock -> SUPPORTS_DRY_VEGETATION;
+full-block plants (pumpkin, melon) -> always true (ground gated by the placement's
+block_predicate_filter). DOCUMENTED EXCEPTIONS not yet handled: mushrooms
+(light-dependent), cactus (horizontal-neighbour-dependent; block_column places the
+column), wither_rose (netherrack/soul soil). Remaining: those bespoke rules, the
 huge-mushroom/bamboo/vegetation_patch feature types, and engine integration
 (applyBiomeDecoration loop + FeatureSorter + biome registry + embed worldgen JSON).
 
