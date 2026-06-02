@@ -84,11 +84,18 @@ The engine that turns a biome's placed-feature lists into block placements.
   `rotated_block_provider`, etc.
 
 > **NormalNoise parity: FIXED** (Session 37 — a `nextLong` eval-order UB bug that
-> corrupted all noise octave seeds; terrain noise is now 1:1). The remaining gate
-> for *visible* surface vegetation is the **block-behaviour subsystem**
-> (`BlockState.canSurvive`, block classes, block tags) that `SimpleBlockFeature`
-> gates on; the positions + state-selection pipeline is otherwise built and
-> verified. Both tracked in AGENTS.md.
+> corrupted all noise octave seeds; terrain noise is now 1:1).
+>
+> **Block-behaviour gate for vegetation: addressed** (Session 38) — ported a
+> data-driven `BlockTags` resolver (`world/level/block/BlockTags`, verified vs an
+> independent parser over all 244 block tags) and `VegetationBlock.canSurvive`
+> (`below ∈ SUPPORTS_VEGETATION`), the rule grass/flowers use in 26.1.2. With
+> this, all the pieces to place grass/flowers (where + which state + survives +
+> write) are ported and verified. Remaining is integration:
+> `PlacedFeature.place` composition, the `applyBiomeDecoration` loop +
+> `FeatureSorter`, and wiring the biome registry + asset embedding. Other plant
+> families' canSurvive (DryVegetationBlock, sugar cane, cactus, …) and the
+> remaining feature types/placement modifiers are added incrementally.
 - ⬜ `BlockPredicate` types (for `block_predicate_filter`).
 - ✅ value providers: `IntProvider` (constant/uniform/biased_to_bottom/clamped/
   weighted_list), `FloatProvider` (constant/uniform/clamped_normal/trapezoid),

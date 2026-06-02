@@ -268,6 +268,19 @@ set_target_properties(block_state_provider_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# BlockTags resolver + VegetationBlock canSurvive parity. Pure std C++ +
+# nlohmann/json. `--dump <dir>` is cross-checked against tools/block_tags_reference.py.
+add_executable(block_tags_parity
+    world/level/block/BlockTagsParityTest.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(block_tags_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/block)
+target_link_libraries(block_tags_parity PRIVATE nlohmann_json)
+set_target_properties(block_tags_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
 # from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
 # 26.1.2/data/...). `--dump` emits a normalised view cross-checked against

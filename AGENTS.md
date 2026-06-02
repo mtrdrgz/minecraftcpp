@@ -253,7 +253,22 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 37 (FIXED NormalNoise via nextLong eval-order; flowers + noise-count modifiers verified)
+**Last updated**: Session 38 (BlockTags resolver + VegetationBlock canSurvive 1:1 — vegetation gate addressed)
+
+**Session 38**: ported the block-behaviour gate for surface vegetation.
+`world/level/block/BlockTags.{h,cpp}` is a data-driven resolver of
+`data/minecraft/tags/block/*.json` (recursively expands `#tag` refs); verified
+vs `tools/block_tags_reference.py` over all 244 tags (`block_tags_parity`).
+`world/level/block/BlockBehaviour.h` ports `VegetationBlock.canSurvive` =
+`below ∈ BlockTags.SUPPORTS_VEGETATION` (the 26.1.2 rule for grass/flowers; the
+DIRT tag shrank, the real ground tag is SUPPORTS_VEGETATION = dirt/mud/moss/
+grass_blocks + farmland, 11 blocks). All vegetation feature pieces are now ported
+and verified: positions (placement modifiers), state (BlockStateProvider, incl.
+noise/flowers), survival (canSurvive), write (SimpleBlockFeature.setBlock). What
+remains is INTEGRATION: PlacedFeature.place composition, the applyBiomeDecoration
+loop + FeatureSorter, and wiring the biome registry + embedding worldgen JSON.
+Other plant families' canSurvive and the rest of the feature/modifier types are
+incremental.
 
 **NormalNoise parity gap — FIXED (Session 37)**: root cause was a C++
 undefined-behaviour bug in `LegacyRandomSource::nextLong()` /
