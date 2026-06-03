@@ -1,8 +1,13 @@
 #include "Blocks.h"
 #include "../../../core/Log.h"
-#include "../../../assets/resource_ids.h"
 #include <nlohmann/json.hpp>
+#if defined(_WIN32)
+#include "../../../assets/resource_ids.h"
 #include <windows.h>
+#endif
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <unordered_map>
 #include <string>
 
@@ -108,10 +113,57 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LEAVES = registerBlock("minecraft:oak_leaves", leaves_p, byName);
     blocks::OAK_LEAVES->textures.all = "oak_leaves";
 
+    // Tree woods for the decoration step's tree configs (oak above; the rest here)
+    // so they resolve to real states on the fallback registry.
+    for (const char* wood : { "birch", "spruce", "jungle", "acacia", "dark_oak", "cherry", "mangrove", "pale_oak" }) {
+        registerBlock(("minecraft:" + std::string(wood) + "_log"), solid, byName)
+            ->textures.all = wood + std::string("_log");
+        registerBlock(("minecraft:" + std::string(wood) + "_leaves"), leaves_p, byName)
+            ->textures.all = wood + std::string("_leaves");
+    }
+    // Solid decoration blocks (huge mushroom caps/stem, moss, chorus) — rendered as voxels.
+    for (const char* b : { "minecraft:red_mushroom_block", "minecraft:brown_mushroom_block", "minecraft:mushroom_stem",
+                           "minecraft:moss_block", "minecraft:pale_moss_block", "minecraft:nether_wart_block",
+                           "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower",
+                           "minecraft:mangrove_roots", "minecraft:muddy_mangrove_roots", "minecraft:mud", "minecraft:moss_carpet",
+                           "minecraft:crimson_stem", "minecraft:warped_stem", "minecraft:sculk", "minecraft:rooted_dirt",
+                           "minecraft:tube_coral_block", "minecraft:brain_coral_block", "minecraft:bubble_coral_block",
+                           "minecraft:fire_coral_block", "minecraft:horn_coral_block" }) {
+        registerBlock(b, solid, byName)->textures.all = std::string(b).substr(10);
+    }
+
     auto glass_p = solid;
     glass_p.isOpaque = false; glass_p.noOcclusion = true;
     blocks::GLASS = registerBlock("minecraft:glass", glass_p, byName);
     blocks::GLASS->textures.all = "glass";
+
+    // Surface vegetation (non-collidable, non-opaque plants). Required so the
+    // biome-decoration step can actually place them when running on the fallback
+    // registry (no block_states.json); the full table supersedes this on Windows.
+    auto plant_p = Block::Properties{};
+    plant_p.hasCollision = false; plant_p.isOpaque = false; plant_p.isSolid = false;
+    plant_p.noOcclusion = true;
+    for (const char* plant : {
+             "minecraft:short_grass", "minecraft:fern", "minecraft:tall_grass", "minecraft:large_fern",
+             "minecraft:dandelion", "minecraft:poppy", "minecraft:blue_orchid", "minecraft:allium",
+             "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:cornflower", "minecraft:lily_of_the_valley",
+             "minecraft:red_tulip", "minecraft:orange_tulip", "minecraft:white_tulip", "minecraft:pink_tulip",
+             "minecraft:dead_bush", "minecraft:sugar_cane", "minecraft:lily_pad", "minecraft:sweet_berry_bush",
+             // wider surface vegetation referenced by the data-driven decoration features
+             "minecraft:brown_mushroom", "minecraft:red_mushroom", "minecraft:sunflower", "minecraft:lilac",
+             "minecraft:rose_bush", "minecraft:peony", "minecraft:wither_rose", "minecraft:torchflower",
+             "minecraft:pink_petals", "minecraft:wildflowers", "minecraft:bush", "minecraft:firefly_bush",
+             "minecraft:leaf_litter", "minecraft:short_dry_grass", "minecraft:tall_dry_grass", "minecraft:cactus",
+             "minecraft:bamboo", "minecraft:melon", "minecraft:pumpkin", "minecraft:spore_blossom",
+             "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom", "minecraft:pitcher_plant", "minecraft:seagrass",
+             // underwater / nether / cave vegetation placed by the data-driven features
+             "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:kelp_plant", "minecraft:sea_pickle",
+             "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:hanging_roots", "minecraft:glow_lichen",
+             "minecraft:nether_sprouts", "minecraft:crimson_roots", "minecraft:warped_roots", "minecraft:crimson_fungus",
+             "minecraft:warped_fungus", "minecraft:twisting_vines", "minecraft:twisting_vines_plant", "minecraft:weeping_vines",
+             "minecraft:weeping_vines_plant", "minecraft:vine", "minecraft:big_dripleaf", "minecraft:small_dripleaf" }) {
+        registerBlock(plant, plant_p, byName);
+    }
 
     // Build minimal state table: one state per block, state 0 = air
     g_blockStates.resize(g_blockRegistry.size());
@@ -125,17 +177,35 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
 void initBlocks() {
     std::unordered_map<std::string, Block*> byName;
 
+    const char* raw = nullptr;
+    std::size_t sz = 0;
+    std::string fileData;
+#if defined(_WIN32)
     HMODULE hmod = GetModuleHandleW(nullptr);
     HRSRC   hres = FindResourceW(hmod, MAKEINTRESOURCEW(IDR_BLOCK_STATES), RT_RCDATA);
-    if (!hres) {
-        MC_LOG_WARN("Blocks: block_states.json not embedded — using 11-block fallback");
+    if (hres) {
+        HGLOBAL hg = LoadResource(hmod, hres);
+        raw = static_cast<const char*>(LockResource(hg));
+        sz = SizeofResource(hmod, hres);
+    }
+#else
+    // Non-Windows: load block_states.json from $MCPP_BLOCK_STATES if provided.
+    if (const char* path = std::getenv("MCPP_BLOCK_STATES")) {
+        std::ifstream in(path, std::ios::binary);
+        if (in) {
+            std::stringstream ss;
+            ss << in.rdbuf();
+            fileData = ss.str();
+            raw = fileData.data();
+            sz = fileData.size();
+        }
+    }
+#endif
+    if (!raw) {
+        MC_LOG_WARN("Blocks: block_states.json not available — using fallback registry");
         initFallback(byName);
         return;
     }
-
-    HGLOBAL hg   = LoadResource(hmod, hres);
-    const char* raw = static_cast<const char*>(LockResource(hg));
-    DWORD sz     = SizeofResource(hmod, hres);
 
     try {
         auto j = nlohmann::json::parse(raw, raw + sz);

@@ -145,6 +145,44 @@ private:
     void resetGaussian();
 };
 
+// Port of net.minecraft.world.level.levelgen.WorldgenRandom. Wraps a base
+// RandomSource and adds the decoration / feature / large-feature population
+// seeds used by ChunkGenerator.applyBiomeDecoration. The number methods follow
+// java.util.Random (routed through next(bits)) exactly, matching Java's
+// `WorldgenRandom extends LegacyRandomSource`. Decoration wraps a
+// XoroshiroRandomSource, so next(bits) takes the `nextLong() >>> (64-bits)` path.
+class WorldgenRandom final : public RandomSource {
+public:
+    explicit WorldgenRandom(std::shared_ptr<RandomSource> source);
+
+    int32_t getCount() const { return m_count; }
+
+    std::shared_ptr<RandomSource> fork() override;
+    std::shared_ptr<PositionalRandomFactory> forkPositional() override;
+    void setSeed(int64_t seed) override;
+    int32_t nextInt() override;
+    int32_t nextInt(int32_t bound) override;
+    int64_t nextLong() override;
+    bool nextBoolean() override;
+    float nextFloat() override;
+    double nextDouble() override;
+    double nextGaussian() override;
+
+    int32_t next(int32_t bits);
+
+    // Returns the population (decoration) seed and re-seeds the generator with it.
+    int64_t setDecorationSeed(int64_t seed, int32_t blockX, int32_t blockZ);
+    void setFeatureSeed(int64_t seed, int32_t index, int32_t step);
+    void setLargeFeatureSeed(int64_t seed, int32_t chunkX, int32_t chunkZ);
+    void setLargeFeatureWithSalt(int64_t seed, int32_t x, int32_t z, int32_t salt);
+
+private:
+    std::shared_ptr<RandomSource> m_source;
+    int32_t m_count = 0;
+    double m_nextNextGaussian = 0.0;
+    bool m_haveNextNextGaussian = false;
+};
+
 int64_t getMthSeed(int32_t x, int32_t y, int32_t z);
 int32_t javaStringHashCode(const std::string& value);
 

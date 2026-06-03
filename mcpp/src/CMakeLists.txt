@@ -38,6 +38,12 @@ set(MC_SOURCES
     world/level/levelgen/BiomeManager.cpp
     world/level/levelgen/OverworldBiomeBuilder.cpp
     world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    # World — Levelgen / feature decoration
+    world/level/block/BlockTags.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/levelgen/feature/BiomeDecorator.cpp
+    world/level/levelgen/feature/TreeGen.cpp
+    world/level/levelgen/feature/OreGen.cpp
     # World — Item
     world/item/Item.cpp
     world/item/Items.cpp
@@ -175,6 +181,171 @@ add_executable(overworld_biome_parity
 )
 target_include_directories(overworld_biome_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
 set_target_properties(overworld_biome_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# WorldgenRandom parity (the decoration/feature population RNG). Pure standard
+# C++; `--cases <tsv>` compares against ground truth from
+# tools/WorldgenRandomParity.java (the real decompiled WorldgenRandom).
+add_executable(worldgen_random_parity
+    world/level/levelgen/WorldgenRandomParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(worldgen_random_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+if(WIN32)
+    target_link_libraries(worldgen_random_parity PRIVATE bcrypt)
+endif()
+set_target_properties(worldgen_random_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# IntProvider + pure placement-modifier parity. Pure standard C++; `--cases
+# <tsv>` compares against ground truth from tools/PlacementParity.java (the real
+# decompiled value providers + placement modifiers).
+add_executable(placement_parity
+    world/level/levelgen/placement/PlacementParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(placement_parity PRIVATE glm)
+if(WIN32)
+    target_link_libraries(placement_parity PRIVATE bcrypt)
+endif()
+set_target_properties(placement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# VerticalAnchor / HeightProvider / FloatProvider parity. Pure standard C++;
+# `--cases <tsv>` compares against tools/HeightFloatProviderParity.java (the real
+# decompiled value/height providers).
+add_executable(height_float_provider_parity
+    world/level/levelgen/heightproviders/HeightFloatProviderParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(height_float_provider_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+if(WIN32)
+    target_link_libraries(height_float_provider_parity PRIVATE bcrypt)
+endif()
+set_target_properties(height_float_provider_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# HeightmapPlacement / HeightRangePlacement parity (world-dependent modifiers
+# against a stub WorldGenLevel). `--cases <tsv>` compares against
+# tools/WorldPlacementParity.java (real modifiers + a Proxy WorldGenLevel).
+add_executable(world_placement_parity
+    world/level/levelgen/placement/WorldPlacementParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+)
+target_include_directories(world_placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(world_placement_parity PRIVATE glm)
+if(WIN32)
+    target_link_libraries(world_placement_parity PRIVATE bcrypt)
+endif()
+set_target_properties(world_placement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# BlockStateProvider parity (Simple / Weighted / NoiseThreshold). Also covers
+# raw NormalNoise.getValue (the NOISE cases). `--cases <tsv>` compares against
+# tools/BlockStateProviderParity.java (the real decompiled providers).
+add_executable(block_state_provider_parity
+    world/level/levelgen/feature/stateproviders/BlockStateProviderParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+)
+target_include_directories(block_state_provider_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_state_provider_parity PRIVATE glm)
+if(WIN32)
+    target_link_libraries(block_state_provider_parity PRIVATE bcrypt)
+endif()
+set_target_properties(block_state_provider_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# End-to-end vegetation generation demo (patch_grass_plain on a flat test world).
+# Ties together the verified pieces via PlacedFeature.place; needs the block-tag
+# data dir as argv. Links the noise stack (BIOME_INFO_NOISE) + block tags.
+add_executable(vegetation_demo
+    world/level/levelgen/feature/VegetationDemoTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(vegetation_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vegetation_demo PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(vegetation_demo PRIVATE bcrypt)
+endif()
+set_target_properties(vegetation_demo PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Faithful applyBiomeDecoration() driver: real decoration RNG + GenerationStep
+# ordering + per-biome feature lists + PlacedFeature pipeline (vs the old heuristic).
+add_executable(biome_decorator_test
+    world/level/levelgen/feature/BiomeDecoratorTest.cpp
+    world/level/levelgen/feature/BiomeDecorator.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/levelgen/feature/TreeGen.cpp
+    world/level/levelgen/feature/OreGen.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+)
+target_include_directories(biome_decorator_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(biome_decorator_test PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(biome_decorator_test PRIVATE bcrypt)
+endif()
+set_target_properties(biome_decorator_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# BlockTags resolver + VegetationBlock canSurvive parity. Pure std C++ +
+# nlohmann/json. `--dump <dir>` is cross-checked against tools/block_tags_reference.py.
+add_executable(block_tags_parity
+    world/level/block/BlockTagsParityTest.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(block_tags_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/block)
+target_link_libraries(block_tags_parity PRIVATE nlohmann_json)
+set_target_properties(block_tags_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Biome registry loader parity (mc::biome::BiomeRegistry). Loads all 65 biomes
+# from data/minecraft/worldgen/biome/*.json (pass the dir as arg; defaults to
+# 26.1.2/data/...). `--dump` emits a normalised view cross-checked against
+# tools/biome_registry_reference.py. Pure standard C++ + nlohmann/json.
+add_executable(biome_registry_parity
+    world/level/biome/BiomeRegistryParityTest.cpp
+    world/level/biome/BiomeRegistry.cpp
+)
+target_include_directories(biome_registry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/biome)
+target_link_libraries(biome_registry_parity PRIVATE nlohmann_json)
+set_target_properties(biome_registry_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

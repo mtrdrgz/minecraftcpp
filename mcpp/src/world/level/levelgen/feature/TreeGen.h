@@ -291,6 +291,106 @@ protected:
 };
 
 // ---------------------------------------------------------------------------
+// DarkOakFoliagePlacer — flat wide canopy over a 2×2 trunk (dark oak, pale oak)
+// ---------------------------------------------------------------------------
+
+class DarkOakFoliagePlacer final : public FoliagePlacer {
+public:
+    DarkOakFoliagePlacer(IntVal radius, IntVal offset) : FoliagePlacer(radius, offset) {}
+    int foliageHeight(RandomSource&, int, const TreeConfig&) override { return 4; }
+
+protected:
+    void createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+                        int treeHeight, const FoliageAttachment& att,
+                        int foliageHeight, int leafRadius, int offsetSample) override;
+    bool shouldSkipLocation(RandomSource& rng, int dx, int y, int dz,
+                             int currentRadius, bool doubleTrunk) override {
+        return (dx == currentRadius && dz == currentRadius)
+               && (rng.nextInt(2) == 0 || y == 0);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// MegaPineFoliagePlacer — tall crown along a giant trunk (mega spruce / pine)
+// ---------------------------------------------------------------------------
+
+class MegaPineFoliagePlacer final : public FoliagePlacer {
+public:
+    IntVal crownHeight;
+    MegaPineFoliagePlacer(IntVal radius, IntVal offset, IntVal crown)
+        : FoliagePlacer(radius, offset), crownHeight(crown) {}
+    int foliageHeight(RandomSource& rng, int, const TreeConfig&) override { return crownHeight.sample(rng); }
+
+protected:
+    void createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+                        int treeHeight, const FoliageAttachment& att,
+                        int foliageHeight, int leafRadius, int offsetSample) override;
+    bool shouldSkipLocation(RandomSource& rng, int dx, int y, int dz,
+                             int currentRadius, bool doubleTrunk) override {
+        return dx + dz >= 7 ? true : (dx * dx + dz * dz > currentRadius * currentRadius);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// JungleFoliagePlacer — small blob at the top of a mega jungle tree
+// ---------------------------------------------------------------------------
+
+class JungleFoliagePlacer final : public FoliagePlacer {
+public:
+    int height;
+    JungleFoliagePlacer(IntVal radius, IntVal offset, int h) : FoliagePlacer(radius, offset), height(h) {}
+    int foliageHeight(RandomSource&, int, const TreeConfig&) override { return height; }
+
+protected:
+    void createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+                        int treeHeight, const FoliageAttachment& att,
+                        int foliageHeight, int leafRadius, int offsetSample) override;
+    bool shouldSkipLocation(RandomSource& rng, int dx, int y, int dz,
+                             int currentRadius, bool doubleTrunk) override {
+        if (dx == currentRadius && dz == currentRadius && currentRadius > 0) return rng.nextInt(2) == 0;
+        return false;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// CherryFoliagePlacer — wide rounded canopy (cherry grove)
+// ---------------------------------------------------------------------------
+
+class CherryFoliagePlacer final : public FoliagePlacer {
+public:
+    int height;
+    CherryFoliagePlacer(IntVal radius, IntVal offset, int h) : FoliagePlacer(radius, offset), height(h) {}
+    int foliageHeight(RandomSource&, int, const TreeConfig&) override { return height; }
+
+protected:
+    void createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+                        int treeHeight, const FoliageAttachment& att,
+                        int foliageHeight, int leafRadius, int offsetSample) override;
+    bool shouldSkipLocation(RandomSource& rng, int dx, int y, int dz,
+                             int currentRadius, bool doubleTrunk) override {
+        return dx * dx + dz * dz > (currentRadius + 1) * (currentRadius + 1);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// RandomSpreadFoliagePlacer — scattered leaf cloud (mangrove)
+// ---------------------------------------------------------------------------
+
+class RandomSpreadFoliagePlacer final : public FoliagePlacer {
+public:
+    int foliageHeightVal, attempts;
+    RandomSpreadFoliagePlacer(IntVal radius, IntVal offset, int fh, int att)
+        : FoliagePlacer(radius, offset), foliageHeightVal(fh), attempts(att) {}
+    int foliageHeight(RandomSource&, int, const TreeConfig&) override { return foliageHeightVal; }
+
+protected:
+    void createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+                        int treeHeight, const FoliageAttachment& att,
+                        int foliageHeight, int leafRadius, int offsetSample) override;
+    bool shouldSkipLocation(RandomSource&, int, int, int, int, bool) override { return false; }
+};
+
+// ---------------------------------------------------------------------------
 // TrunkPlacer — abstract base
 // ---------------------------------------------------------------------------
 
@@ -387,6 +487,64 @@ private:
 
     static float treeShape(int height, int y);
     bool trimBranches(int height, int localY) const { return localY >= height * 0.2; }
+};
+
+// ---------------------------------------------------------------------------
+// DarkOakTrunkPlacer — 2×2 leaning trunk with random branches (dark/pale oak)
+// ---------------------------------------------------------------------------
+
+class DarkOakTrunkPlacer final : public TrunkPlacer {
+public:
+    using TrunkPlacer::TrunkPlacer;
+    std::vector<FoliageAttachment> placeTrunk(TreeWorld&, RandomSource&, int, int, int, int, const TreeConfig&) override;
+};
+
+// ---------------------------------------------------------------------------
+// GiantTrunkPlacer — straight 2×2 giant trunk (mega spruce / pine)
+// ---------------------------------------------------------------------------
+
+class GiantTrunkPlacer : public TrunkPlacer {
+public:
+    using TrunkPlacer::TrunkPlacer;
+    std::vector<FoliageAttachment> placeTrunk(TreeWorld&, RandomSource&, int, int, int, int, const TreeConfig&) override;
+protected:
+    void placeFourLogs(TreeWorld&, RandomSource&, int wy, int ox, int oz, const TreeConfig&);
+};
+
+// ---------------------------------------------------------------------------
+// MegaJungleTrunkPlacer — giant 2×2 trunk with side branches (mega jungle)
+// ---------------------------------------------------------------------------
+
+class MegaJungleTrunkPlacer final : public GiantTrunkPlacer {
+public:
+    using GiantTrunkPlacer::GiantTrunkPlacer;
+    std::vector<FoliageAttachment> placeTrunk(TreeWorld&, RandomSource&, int, int, int, int, const TreeConfig&) override;
+};
+
+// ---------------------------------------------------------------------------
+// CherryTrunkPlacer — vertical trunk with curving upward branches (cherry)
+// ---------------------------------------------------------------------------
+
+class CherryTrunkPlacer final : public TrunkPlacer {
+public:
+    IntVal branchCount, branchHorizontalLength, branchStartOffset, branchEndOffset;
+    CherryTrunkPlacer(int bh, int ra, int rb, IntVal bc, IntVal bhl, IntVal bso, IntVal beo)
+        : TrunkPlacer(bh, ra, rb), branchCount(bc), branchHorizontalLength(bhl),
+          branchStartOffset(bso), branchEndOffset(beo) {}
+    std::vector<FoliageAttachment> placeTrunk(TreeWorld&, RandomSource&, int, int, int, int, const TreeConfig&) override;
+};
+
+// ---------------------------------------------------------------------------
+// UpwardsBranchingTrunkPlacer — trunk sprouting upward branches (mangrove)
+// ---------------------------------------------------------------------------
+
+class UpwardsBranchingTrunkPlacer final : public TrunkPlacer {
+public:
+    IntVal extraBranchSteps, extraBranchLength;
+    double branchProb;
+    UpwardsBranchingTrunkPlacer(int bh, int ra, int rb, IntVal ebs, IntVal ebl, double bp)
+        : TrunkPlacer(bh, ra, rb), extraBranchSteps(ebs), extraBranchLength(ebl), branchProb(bp) {}
+    std::vector<FoliageAttachment> placeTrunk(TreeWorld&, RandomSource&, int, int, int, int, const TreeConfig&) override;
 };
 
 // ---------------------------------------------------------------------------

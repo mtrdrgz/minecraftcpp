@@ -45,7 +45,15 @@ private:
     uint32_t getRaw(int index) const;
     void     setRaw(int index, uint32_t value);
     void     resize(int newBits);
-    static int calcLongsNeeded(int bits) { return (SECTION_SIZE * bits + 63) / 64; }
+    // Longs needed for SECTION_SIZE entries. Palette mode (bits < 15) packs an
+    // integral number of values per long with no spanning (vanilla layout, matching
+    // getRaw/setRaw); direct mode (15 bits) spans values across longs.
+    static int calcLongsNeeded(int bits) {
+        if (bits <= 0) return 0;
+        if (bits >= 15) return (SECTION_SIZE * 15 + 63) / 64;
+        const int valuesPerLong = 64 / bits;
+        return (SECTION_SIZE + valuesPerLong - 1) / valuesPerLong;
+    }
 };
 
 } // namespace mc

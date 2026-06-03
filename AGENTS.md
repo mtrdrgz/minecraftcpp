@@ -235,9 +235,14 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - [x] Overworld biome climate selection is now 1:1: `Climate::RTree` ported (the
       production `findValue` search) and `OverworldBiomeBuilder` verified
       byte-identical to real Java (7593 entries) — see "biome selection" below.
+- [x] Biome registry data: all 65 biomes loaded 1:1 from `worldgen/biome/*.json`
+      (`world/level/biome/Biome.h` + `BiomeRegistry`), verified field-for-field
+      against an independent parser. This is the data hub for biome-specific
+      blocks/trees/colours/carvers/spawns.
+- [ ] Full worldgen feature/structure pipeline — see `mcpp/docs/WORLDGEN_PLAN.md`
+      for the complete phased checklist (features, trees, carvers, structures).
 - [ ] Port remaining ~277 mob goals.
 - [ ] Implement Crafting and Smelting logic.
-- [ ] Full noise-based terrain generation (Biomes, Caves, Structures).
 
 ### PHASE 16 — Integration & Optimization
 - [ ] Multi-threaded chunk loading & meshing (thread pool).
@@ -248,9 +253,83 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 30 (Climate.RTree biome-selection 1:1 + Mojang CDN fetch workflow)
-**Current phase**: PHASE 15 (Game Logic) in progress
+**Last updated**: Session 39 (surface vegetation breadth: double plants + dry vegetation + canSurvive dispatch)
+
+**Session 39**: extended surface vegetation coverage. `world/level/block/BlockStates.h`
+(canonical state-id property helpers: blockName / setProperty, sorted like Java).
+`BlockBehaviour.h` now dispatches `canSurvive` by plant family —
+VegetationBlock/DoublePlant -> SUPPORTS_VEGETATION, DryVegetationBlock (dead_bush,
+short/tall_dry_grass) -> SUPPORTS_DRY_VEGETATION (sand/red_sand/terracotta family +
+the veg grounds), 30 blocks. `SimpleBlockFeature` now handles DoublePlantBlock
+(tall_grass/large_fern/sunflower/lilac/rose_bush/peony): checks the space above and
+places both halves (state[half=lower] + [half=upper]). vegetation_demo now also
+generates tall_grass (69 lower + 69 upper) and block_tags_parity verifies the
+dry-veg + double-plant canSurvive matrices. Also ported `BlockColumnFeature`
+(feature/BlockColumnFeature.h) — the vertical-column feature used by sugar cane
+and cactus (per-layer IntProvider heights, allowedPlacement-gated truncation, no
+canSurvive); vegetation_demo generates a 3-tall sugar_cane column. Surface
+vegetation now covers feature types simple_block, double-plant and block_column,
+and the canSurvive families: VegetationBlock (grass, ferns, all standard flowers,
+bush, sweet_berry_bush, firefly_bush, lily_of_the_valley) -> SUPPORTS_VEGETATION;
+DoublePlantBlock -> SUPPORTS_VEGETATION; DryVegetationBlock -> SUPPORTS_DRY_VEGETATION;
+full-block plants (pumpkin, melon) -> always true (ground gated by the placement's
+block_predicate_filter). DOCUMENTED EXCEPTIONS not yet handled: mushrooms
+(light-dependent), cactus (horizontal-neighbour-dependent; block_column places the
+column), wither_rose (netherrack/soul soil). Remaining: those bespoke rules, the
+huge-mushroom/bamboo/vegetation_patch feature types, and engine integration
+(applyBiomeDecoration loop + FeatureSorter + biome registry + embed worldgen JSON).
+
+**Session 38 end-to-end**: `PlacedFeature.place` composition ported (the flatMap
+modifier chain + per-position feature call) plus `TrapezoidInt`, and small
+`BiomeFilter`/`BlockPredicateFilter` modifiers (std::function-backed). The
+`vegetation_demo` target runs the real `patch_grass_plain` chain
+(noise_threshold_count → in_square → heightmap → biome → count(32) →
+random_offset(trapezoid) → block_predicate_filter(air)) on a flat test world and
+generates short_grass on the surface (84 blocks, correct state/Y). It's a
+self-consistency integration check — each component is verified 1:1 vs Java
+separately; full end-to-end vs Java is blocked only by datapack tag binding.
+SURFACE VEGETATION now generates. Remaining: wire into the real ChunkGenerator
+(applyBiomeDecoration loop + FeatureSorter + biome registry + embed worldgen
+JSON), more plant families' canSurvive, and the rest of the feature/modifier
+types (trees, patches, etc.).
+
+**Session 38**: ported the block-behaviour gate for surface vegetation.
+`world/level/block/BlockTags.{h,cpp}` is a data-driven resolver of
+`data/minecraft/tags/block/*.json` (recursively expands `#tag` refs); verified
+vs `tools/block_tags_reference.py` over all 244 tags (`block_tags_parity`).
+`world/level/block/BlockBehaviour.h` ports `VegetationBlock.canSurvive` =
+`below ∈ BlockTags.SUPPORTS_VEGETATION` (the 26.1.2 rule for grass/flowers; the
+DIRT tag shrank, the real ground tag is SUPPORTS_VEGETATION = dirt/mud/moss/
+grass_blocks + farmland, 11 blocks). All vegetation feature pieces are now ported
+and verified: positions (placement modifiers), state (BlockStateProvider, incl.
+noise/flowers), survival (canSurvive), write (SimpleBlockFeature.setBlock). What
+remains is INTEGRATION: PlacedFeature.place composition, the applyBiomeDecoration
+loop + FeatureSorter, and wiring the biome registry + embedding worldgen JSON.
+Other plant families' canSurvive and the rest of the feature/modifier types are
+incremental.
+
+**NormalNoise parity gap — FIXED (Session 37)**: root cause was a C++
+undefined-behaviour bug in `LegacyRandomSource::nextLong()` /
+`SingleThreadedRandomSource::nextLong()`: they did
+`composeJavaNextLong(next(32), next(32))`, but C++ leaves function-argument
+evaluation order unspecified, and gcc evaluated the two `next(32)` right-to-left
+— swapping the long's halves vs java.util.Random (upper-then-lower). This was
+invisible to the earlier parity tests because they never exercised legacy
+`nextLong` directly (WorldgenRandom has its own explicit nextLong). It corrupted
+`forkPositional()` (which seeds via `nextLong`), hence every PerlinNoise octave
+seed (`positional.fromHashOf("octave_N")`), hence all NormalNoise — i.e. ALL
+terrain noise. Fixed by evaluating the two `next(32)` into ordered locals.
+Now verified: `NormalNoise.getValue` matches Java bit-for-bit and the
+NoiseThresholdProvider (flower_plain) state selection matches 1:1
+(`block_state_provider_parity` NOISE + BSPN cases).
+**Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
 **Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
+
+**Worldgen roadmap**: `mcpp/docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
+the full feature/tree/structure port (Phases A–G, with real data counts). Phase A
+(biome registry) is done; Phases B–G (decoration framework, feature types, trees,
+carvers, structures, engine integration) are the remaining work. Do NOT reintroduce
+the removed hand-authored approximate generators — port from Java + data only.
 
 **Next action**: PHASE 15 — Game Logic
 1. ~~Audit `OverworldBiomeBuilder.cpp` line-by-line against `OverworldBiomeBuilder.java`.~~
@@ -311,6 +390,99 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
     sampling. If biome sampling is ever parallelised, make `lastResult`
     thread-local to avoid a data race and to match Java's per-thread semantics.
     `lastResult` only affects which leaf is returned among exact distance ties.
+- Session 31 began the full worldgen feature/structure port (master plan:
+  `mcpp/docs/WORLDGEN_PLAN.md`). Delivered Phase A — the biome registry data
+  layer (`world/level/biome/Biome.h` + `BiomeRegistry.{h,cpp}`): a faithful
+  loader of all 65 `worldgen/biome/*.json` (climate, effects colours, the new
+  26.1.2 `attributes` map incl. value-modifier form for water_fog_end_distance,
+  carvers, the 11 ordered placed-feature steps, 8 spawner categories, spawn
+  costs). Verified by `biome_registry_parity` (CMake target; pure std C++ +
+  nlohmann, builds on Linux) and `tools/biome_registry_reference.py`, which
+  agree on all 65 biomes / 1525 normalised fields (independent parsers). NOTE:
+  the registry is not yet wired into the engine — the runtime needs the
+  `worldgen/*` JSON embedded in the asset pack and `BiomeSource` resolving real
+  `Biome` objects instead of id strings (Phase A "remaining" + Phase G). The
+  loader currently reads a directory; `BiomeRegistry.cpp` is built only by the
+  parity target, not yet added to the main `mcpp` sources.
+- Session 32 (Phase B start — trees/vegetation track): ported `WorldgenRandom`
+  in `world/level/levelgen/RandomSource.{h,cpp}` — the population RNG that
+  `ChunkGenerator.applyBiomeDecoration` uses to seed every feature
+  (`setDecorationSeed`/`setFeatureSeed`/`setLargeFeatureSeed`/
+  `setLargeFeatureWithSalt`). Verified 1:1 over 540 cases via
+  `tools/WorldgenRandomParity.java` and the new `worldgen_random_parity` target
+  (pure std C++; RandomSource.cpp's unused `<windows.h>`/`<bcrypt.h>` are now
+  `#ifdef _WIN32`, so it builds on Linux). IMPORTANT FIX: every `nextDouble` was
+  slightly off — Java multiplies by `double DOUBLE_MULTIPLIER = 1.110223E-16F`
+  (a double initialised from a FLOAT literal, i.e. (double)(1.110223e-16f)) in
+  double precision; the C++ used the plain double literal `1.110223E-16`.
+  Corrected for Legacy/SingleThreaded/Xoroshiro/WorldgenRandom; this nudges
+  noise/density output toward Java-correctness, so add a `noise`/
+  `density_function` parity target to confirm the sampler now matches bit-for-bit.
+  PRE-EXISTING ISSUE noted: `md5Bytes` in RandomSource.cpp is an FNV placeholder,
+  not real MD5, so Xoroshiro positional `fromHashOf` does not match Java's
+  `Hashing.md5()`; port real MD5 when doing noise seed parity.
+- Session 33 (Phase B cont. — vegetation track): ported the value samplers and
+  the world-independent placement modifiers, the "how many / where" core of
+  feature decoration:
+  - `world/level/levelgen/IntProvider.h` (`mc::valueproviders`): ConstantInt,
+    UniformInt, BiasedToBottomInt, ClampedInt, WeightedListInt (cumulative-weight
+    walk; matches WeightedList.Flat and .Compact).
+  - `world/level/levelgen/placement/PlacementModifier.h` (`mc::levelgen::placement`):
+    InSquarePlacement, CountPlacement (RepeatingPlacement), RarityFilter
+    (PlacementFilter), RandomOffsetPlacement. `getPositions` returns
+    `vector<BlockPos>`; takes a forward-declared `PlacementContext*` that the
+    pure modifiers ignore (world-dependent modifiers will flesh it out).
+  Verified 1:1 over 75 cases via `tools/PlacementParity.java` (runs the real
+  decompiled classes; needs `Bootstrap.bootStrap()` and writes to a file because
+  bootstrap reroutes System.out through Log4j) and the `placement_parity` target
+  (pure std C++; links `glm` only for BlockPos/Math.h). Next: PlacementContext/
+  WorldGenLevel + the world-dependent modifiers (heightmap, height_range,
+  filters), BlockStateProvider, then the feature types (random_patch,
+  simple_block, …) and TreeFeature.
+- Session 34 (Phase B cont. — vegetation track): completed the value-provider
+  layer. Added `FloatProvider.h` (Constant/Uniform/ClampedNormal/Trapezoid),
+  `heightproviders/HeightProvider.h` (Constant/Uniform/BiasedToBottom/
+  VeryBiasedToBottom/Trapezoid), `VerticalAnchor.h` (Absolute/AboveBottom/
+  BelowTop) and `WorldGenerationContext.h`. Verified 1:1 over 60 cases via
+  `tools/HeightFloatProviderParity.java` + `height_float_provider_parity` target;
+  the ClampedNormalFloat cases also validate `nextGaussian` end-to-end. The Java
+  generator builds a `WorldGenerationContext` with `sun.misc.Unsafe`
+  (allocateInstance + putInt on the two final int fields) since its only ctor
+  needs a ChunkGenerator. These are header-only (`mc::valueproviders` /
+  `mc::levelgen` / `mc::levelgen::heightproviders`), not yet in the main `mcpp`
+  build — pulled in as features/placements that use them are wired.
+  STILL THE GATE for visible vegetation: PlacementContext/WorldGenLevel + the
+  heightmap placement + a feature (random_patch/simple_block) + BlockStateProvider.
+- Session 35 (Phase B cont. — vegetation track): ported the placement *surface*
+  and the first world-dependent modifiers. Added `Heightmap.h` (Types enum),
+  `placement/PlacementContext.h` (the `WorldGenLevel` query interface +
+  `PlacementContext : WorldGenerationContext`), and `placement/HeightmapPlacement.h`
+  (`HeightmapPlacement` + `HeightRangePlacement`). Verified 1:1 over 126 cases
+  via `tools/WorldPlacementParity.java` and the `world_placement_parity` target.
+  The Java harness implements `WorldGenLevel` (an interface) with a dynamic
+  `Proxy` whose `getHeight(type,x,z)` is a deterministic stub, and builds
+  `PlacementContext` with `Unsafe` (its only ctor needs a ChunkGenerator). The
+  stub heightmap range includes height==minY so the empty branch is exercised.
+  With this + the pure modifiers, the full XZ-scatter→surface position stream for
+  a vegetation placed_feature is now computable (minus the `biome`/
+  `block_predicate_filter` modifiers). NEXT: the feature *execution* side —
+  `BlockStateProvider` + a feature (simple_block/random_patch) that writes blocks
+  via WorldGenLevel.setBlock, verified by capturing setBlock on a Proxy level.
+- Session 36 (Phase B cont. — vegetation feature execution): ported
+  `BlockStateProvider` (SimpleStateProvider, WeightedStateProvider — verified 1:1,
+  18 cases, `block_state_provider_parity`; state = canonical id string),
+  `SimpleBlockFeature` + `FeaturePlaceContext` (faithful; `canSurvive` delegated
+  to `WorldGenLevel`), and `NoiseBasedStateProviders.h` (NoiseThresholdProvider —
+  faithful but BLOCKED by the NormalNoise gap above, so its noise branch is
+  uncertified). Key findings while wiring the Java harness (a Proxy WorldGenLevel
+  capturing setBlock): (1) `simple_block`'s only world step is
+  `BlockState.canSurvive`, i.e. the block-behaviour subsystem (block classes are
+  not even in our decompiled staging; the `minecraft:dirt` tag shrank to
+  {dirt,coarse_dirt,rooted_dirt} in 26.1.2, so plant survival changed) — this is
+  the boundary, to be backed when block behaviour is ported; (2) the NormalNoise
+  parity gap. So canSurvive-gated end-to-end placement and noise-driven state are
+  the two remaining gates for visible vegetation; the placement+selection pipeline
+  (positions + which state) is otherwise built and verified.
 
 **Decisions made:**
 - AI goals are executed client-side for the port's prototype to simulate living behavior in offline mode.

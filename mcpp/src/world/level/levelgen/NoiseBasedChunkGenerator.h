@@ -27,6 +27,10 @@ public:
     void fillFromNoise(LevelChunk& chunk) const;
     void buildSurface(LevelChunk& chunk) const;
 
+    // Block-resolution biome at a world position (BiomeManager zoomer), as used by
+    // the decoration step (applyBiomeDecoration) and gameplay biome queries.
+    std::string getBiome(int blockX, int blockY, int blockZ) const;
+
     int getSeaLevel()  const { return m_settings.seaLevel; }
     int getMinY()      const { return m_settings.noiseSettings.minY; }
     int getGenDepth()  const { return m_settings.noiseSettings.height; }

@@ -413,6 +413,210 @@ std::vector<FoliageAttachment> FancyTrunkPlacer::placeTrunk(
 // Built-in tree configs
 // ==========================================================================
 
+// ==========================================================================
+// DarkOakFoliagePlacer — flat wide canopy (radii 2/3/2 around a 2×2 attachment)
+// ==========================================================================
+
+void DarkOakFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int /*foliageHeight*/, int leafRadius, int offsetSample) {
+    const bool dt = att.doubleTrunk;
+    const int ox = att.x, oy = att.y + offsetSample, oz = att.z, lr = leafRadius;
+    if (dt) {
+        placeLeavesRow(world, rng, config, ox, oy, oz, lr + 2, -1, dt);
+        placeLeavesRow(world, rng, config, ox, oy, oz, lr + 3, 0, dt);
+        placeLeavesRow(world, rng, config, ox, oy, oz, lr + 2, 1, dt);
+        if (rng.nextBoolean()) placeLeavesRow(world, rng, config, ox, oy, oz, lr, 2, dt);
+    } else {
+        placeLeavesRow(world, rng, config, ox, oy, oz, lr + 2, -1, dt);
+        placeLeavesRow(world, rng, config, ox, oy, oz, lr + 1, 0, dt);
+    }
+}
+
+// ==========================================================================
+// MegaPineFoliagePlacer — cone crown widening downward (mega spruce / pine)
+// ==========================================================================
+
+void MegaPineFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int foliageHeight, int leafRadius, int offsetSample) {
+    const int ox = att.x, oy = att.y, oz = att.z;
+    for (int k = 0; k <= foliageHeight; ++k) {
+        const int yo = offsetSample - k;
+        int radius = std::min(1 + k / 2, leafRadius + att.radiusOffset + 4);
+        if (k == foliageHeight) radius = std::max(radius - 1, 0);
+        placeLeavesRow(world, rng, config, ox, oy, oz, radius, yo, att.doubleTrunk);
+    }
+}
+
+// ==========================================================================
+// JungleFoliagePlacer — small rounded blob at the top of a mega jungle tree
+// ==========================================================================
+
+void JungleFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int foliageHeight, int leafRadius, int offsetSample) {
+    for (int yo = offsetSample; yo >= offsetSample - foliageHeight; --yo) {
+        const bool edge = yo == offsetSample || yo == offsetSample - foliageHeight;
+        const int r = std::max(leafRadius + att.radiusOffset - (edge ? 1 : 0), 0);
+        placeLeavesRow(world, rng, config, att.x, att.y, att.z, r, yo, att.doubleTrunk);
+    }
+}
+
+// ==========================================================================
+// DarkOakTrunkPlacer — 2×2 leaning trunk with random branches
+// ==========================================================================
+
+namespace { const int kDirs[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }; }
+
+std::vector<FoliageAttachment> DarkOakTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    for (int dx = 0; dx <= 1; ++dx)
+        for (int dz = 0; dz <= 1; ++dz) world.setBlock(ox + dx, oy - 1, oz + dz, config.dirtStateId);
+
+    const int d = rng.nextInt(4);
+    const int ddx = kDirs[d][0], ddz = kDirs[d][1];
+    int bend = treeHeight - rng.nextInt(4);
+    int steps = 2 - rng.nextInt(3);
+    int cx = ox, cz = oz;
+    const int topY = oy + treeHeight - 1;
+    for (int yo = 0; yo < treeHeight; ++yo) {
+        if (yo >= bend && steps > 0) { cx += ddx; cz += ddz; --steps; }
+        const int yy = oy + yo;
+        if (world.validTreePos(cx, yy, cz)) {
+            placeLog(world, rng, cx, yy, cz, config);
+            placeLog(world, rng, cx + 1, yy, cz, config);
+            placeLog(world, rng, cx, yy, cz + 1, config);
+            placeLog(world, rng, cx + 1, yy, cz + 1, config);
+        }
+    }
+    std::vector<FoliageAttachment> atts;
+    atts.push_back({ cx, topY, cz, 0, true });
+    for (int bx = -1; bx <= 2; ++bx)
+        for (int bz = -1; bz <= 2; ++bz) {
+            if ((bx < 0 || bx > 1 || bz < 0 || bz > 1) && rng.nextInt(3) == 0) {
+                const int len = rng.nextInt(3) + 2;
+                for (int k = 0; k < len; ++k) placeLog(world, rng, cx + bx, topY - k - 1, cz + bz, config);
+                atts.push_back({ cx + bx, topY, cz + bz, 0, false });
+            }
+        }
+    return atts;
+}
+
+// ==========================================================================
+// GiantTrunkPlacer / MegaJungleTrunkPlacer — straight 2×2 giant trunk
+// ==========================================================================
+
+void GiantTrunkPlacer::placeFourLogs(TreeWorld& world, RandomSource& rng, int wy, int ox, int oz, const TreeConfig& config) {
+    placeLog(world, rng, ox, wy, oz, config);
+    placeLog(world, rng, ox + 1, wy, oz, config);
+    placeLog(world, rng, ox, wy, oz + 1, config);
+    placeLog(world, rng, ox + 1, wy, oz + 1, config);
+}
+
+std::vector<FoliageAttachment> GiantTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    for (int dx = 0; dx <= 1; ++dx)
+        for (int dz = 0; dz <= 1; ++dz) world.setBlock(ox + dx, oy - 1, oz + dz, config.dirtStateId);
+    for (int yo = 0; yo < treeHeight; ++yo) placeFourLogs(world, rng, oy + yo, ox, oz, config);
+    return { { ox, oy + treeHeight, oz, 0, true } };
+}
+
+std::vector<FoliageAttachment> MegaJungleTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    std::vector<FoliageAttachment> atts = GiantTrunkPlacer::placeTrunk(world, rng, treeHeight, ox, oy, oz, config);
+    // side branches with their own foliage, in the upper half of the trunk
+    for (int yo = treeHeight - 2 - rng.nextInt(4); yo > treeHeight / 2; yo -= 2 + rng.nextInt(4)) {
+        const int d = rng.nextInt(4);
+        const int ddx = kDirs[d][0], ddz = kDirs[d][1];
+        int bx = ox, bz = oz;
+        const int len = 1 + rng.nextInt(3);
+        for (int k = 0; k < len; ++k) { bx += ddx; bz += ddz; placeLog(world, rng, bx, oy + yo, bz, config); }
+        atts.push_back({ bx, oy + yo, bz, 0, false });
+    }
+    return atts;
+}
+
+// ==========================================================================
+// CherryFoliagePlacer — wide rounded canopy
+// ==========================================================================
+
+void CherryFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int foliageHeight, int leafRadius, int offsetSample) {
+    const int r = leafRadius + att.radiusOffset;
+    for (int yo = offsetSample + 1; yo >= offsetSample - foliageHeight; --yo) {
+        const int dist = offsetSample + 1 - yo;
+        const int rad = std::max((dist == 0 || dist >= foliageHeight) ? r - 2 : r, 0);
+        placeLeavesRow(world, rng, config, att.x, att.y, att.z, rad, yo, att.doubleTrunk);
+    }
+}
+
+// ==========================================================================
+// RandomSpreadFoliagePlacer — scattered leaf cloud (mangrove)
+// ==========================================================================
+
+void RandomSpreadFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int foliageHeight, int leafRadius, int offsetSample) {
+    const int r = leafRadius + att.radiusOffset;
+    const int span = 2 * r + 1;
+    for (int i = 0; i < attempts; ++i) {
+        const int x = att.x + rng.nextInt(span) - r;
+        const int z = att.z + rng.nextInt(span) - r;
+        const int y = att.y + offsetSample + rng.nextInt(foliageHeight + 1);
+        if (world.validTreePos(x, y, z)) world.setBlock(x, y, z, config.leavesStateId);
+    }
+}
+
+// ==========================================================================
+// CherryTrunkPlacer — vertical trunk + curving upward branches
+// ==========================================================================
+
+std::vector<FoliageAttachment> CherryTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    world.setBlock(ox, oy - 1, oz, config.dirtStateId);
+    for (int y = 0; y < treeHeight; ++y) placeLog(world, rng, ox, oy + y, oz, config);
+
+    std::vector<FoliageAttachment> atts;
+    atts.push_back({ ox, oy + treeHeight, oz, 0, false });
+
+    const int bc = branchCount.sample(rng);
+    for (int b = 0; b < bc; ++b) {
+        const int d = rng.nextInt(4), ddx = kDirs[d][0], ddz = kDirs[d][1];
+        const int hlen = std::max(branchHorizontalLength.sample(rng), 1);
+        const int startY = treeHeight + branchStartOffset.sample(rng);
+        const int endY = treeHeight + branchEndOffset.sample(rng);
+        int cx = ox, cz = oz;
+        for (int s = 1; s <= hlen; ++s) {
+            cx += ddx; cz += ddz;
+            const int yy = oy + startY + (endY - startY) * s / hlen;
+            placeLog(world, rng, cx, yy, cz, config);
+        }
+        atts.push_back({ cx, oy + endY + 1, cz, 0, false });
+    }
+    return atts;
+}
+
+// ==========================================================================
+// UpwardsBranchingTrunkPlacer — mangrove (vertical trunk + upward branches)
+// ==========================================================================
+
+std::vector<FoliageAttachment> UpwardsBranchingTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    world.setBlock(ox, oy - 1, oz, config.dirtStateId);
+    std::vector<FoliageAttachment> atts;
+    int cx = ox, cz = oz;
+    for (int yo = 0; yo < treeHeight; ++yo) {
+        const int yy = oy + yo;
+        placeLog(world, rng, cx, yy, cz, config);
+        if (yo > 0 && yo < treeHeight - 1 && rng.nextDouble() < branchProb) {
+            const int d = rng.nextInt(4), ddx = kDirs[d][0], ddz = kDirs[d][1];
+            const int steps = extraBranchSteps.sample(rng);
+            int bx = cx, bz = cz, by = yy;
+            for (int s = 0; s < steps; ++s) { bx += ddx; bz += ddz; ++by; placeLog(world, rng, bx, by, bz, config); }
+            atts.push_back({ bx, by + 1, bz, 0, false });
+        }
+    }
+    atts.push_back({ cx, oy + treeHeight, cz, 0, false });
+    return atts;
+}
+
 static uint32_t logY(const char* name) {
     // States are ordered axis=x, axis=y, axis=z  → default+1 = y-axis
     return getDefaultBlockStateId(name, 0) + 1;
