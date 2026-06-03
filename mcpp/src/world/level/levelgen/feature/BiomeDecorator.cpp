@@ -464,6 +464,126 @@ PlacedFeature::FeaturePlacer kelpPlacer() {
     };
 }
 
+// huge_fungus (crimson / warped): stem column topped by a wart-block hat.
+PlacedFeature::FeaturePlacer hugeFungusPlacer(const json& c) {
+    auto hat = parseProvider(c["hat_state"]);
+    const std::string stem = stateName(c["hat_state"]).find("warped") != std::string::npos ? "minecraft:warped_stem" : "minecraft:crimson_stem";
+    return [hat, stem](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        if (!lv.isEmptyBlock(pos)) return false;
+        const int h = 5 + r.nextInt(9);
+        for (int y = 0; y < h; ++y) lv.setBlock(BlockPos{ pos.x, pos.y + y, pos.z }, stem, 2);
+        const int top = pos.y + h;
+        for (int yy = top - 2; yy <= top; ++yy) {
+            const int rad = yy == top ? 1 : 2;
+            for (int dx = -rad; dx <= rad; ++dx)
+                for (int dz = -rad; dz <= rad; ++dz)
+                    if (!(std::abs(dx) == rad && std::abs(dz) == rad)) lv.setBlock(BlockPos{ pos.x + dx, yy, pos.z + dz }, hat->getState(r, BlockPos{}), 2);
+        }
+        return true;
+    };
+}
+
+// fallen_tree: a horizontal log resting on the ground, plus a one-block stump.
+PlacedFeature::FeaturePlacer fallenTreePlacer(const json& c) {
+    auto trunk = parseProvider(c["trunk_provider"]);
+    auto len = parseIntProvider(c.value("log_length", json(5)));
+    return [trunk, len](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        const int L = std::max(len->sample(r), 2);
+        static const int D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        const int d = r.nextInt(4);
+        lv.setBlock(pos, trunk->getState(r, pos), 2);
+        BlockPos cur = pos;
+        for (int i = 1; i <= L; ++i) { cur.x += D[d][0]; cur.z += D[d][1]; if (!lv.isEmptyBlock(cur)) break; lv.setBlock(cur, trunk->getState(r, cur), 2); }
+        return true;
+    };
+}
+
+// twisting_vines (up) / weeping_vines (down): scattered vine columns (nether).
+PlacedFeature::FeaturePlacer vineColumnPlacer(const json& c, int dy, const char* tip, const char* body) {
+    const int maxH = c.value("max_height", 8), w = c.value("spread_width", 8), sh = c.value("spread_height", 4);
+    return [maxH, w, sh, dy, tip, body](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        bool placed = false;
+        for (int i = 0; i < w * w / 4; ++i) {
+            BlockPos p{ pos.x + r.nextInt(w) - r.nextInt(w), pos.y + r.nextInt(sh) - r.nextInt(sh), pos.z + r.nextInt(w) - r.nextInt(w) };
+            const int h = 1 + r.nextInt(maxH);
+            for (int k = 0; k < h; ++k) { BlockPos q{ p.x, p.y + dy * k, p.z }; if (!lv.isEmptyBlock(q)) break; lv.setBlock(q, k == h - 1 ? tip : body, 2); placed = true; }
+        }
+        return placed;
+    };
+}
+
+// chorus_plant (end): a short stalk capped by a chorus flower.
+PlacedFeature::FeaturePlacer chorusPlacer() {
+    return [](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        if (!lv.isEmptyBlock(pos)) return false;
+        const int h = 1 + r.nextInt(4); BlockPos c = pos;
+        for (int k = 0; k < h; ++k) { if (!lv.isEmptyBlock(c)) break; lv.setBlock(c, "minecraft:chorus_plant", 2); c.y++; }
+        lv.setBlock(c, "minecraft:chorus_flower", 2);
+        return true;
+    };
+}
+
+// sculk_patch (deep dark): scatter sculk over the floor.
+PlacedFeature::FeaturePlacer sculkPatchPlacer(const json& c) {
+    const int attempts = c.value("spread_attempts", 64);
+    return [attempts](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        bool placed = false;
+        for (int i = 0; i < attempts; ++i) {
+            BlockPos g{ pos.x + r.nextInt(9) - r.nextInt(9), pos.y - 1, pos.z + r.nextInt(9) - r.nextInt(9) };
+            if (!lv.isEmptyBlock(g)) { lv.setBlock(g, "minecraft:sculk", 2); placed = true; }
+        }
+        return placed;
+    };
+}
+
+// vines (jungle): coat air faces adjacent to solid blocks with vine.
+PlacedFeature::FeaturePlacer vinesPlacer() {
+    return [](WorldGenLevel& lv, RandomSource&, BlockPos pos) -> bool {
+        bool placed = false;
+        static const int D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        for (int dy = 0; dy < 12; ++dy) {
+            BlockPos p{ pos.x, pos.y + dy, pos.z };
+            if (!lv.isEmptyBlock(p)) continue;
+            for (auto& d : D)
+                if (!lv.isEmptyBlock(BlockPos{ p.x + d[0], p.y, p.z + d[1] })) { lv.setBlock(p, "minecraft:vine", 2); placed = true; break; }
+        }
+        return placed;
+    };
+}
+
+// multiface_growth (glow_lichen / sculk_vein): coat a nearby cave surface.
+PlacedFeature::FeaturePlacer multifacePlacer(const json& c) {
+    const std::string block = c.value("block", std::string("minecraft:glow_lichen"));
+    return [block](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        for (int i = 0; i < 16; ++i) {
+            BlockPos p{ pos.x + r.nextInt(8) - 4, pos.y + r.nextInt(8) - 4, pos.z + r.nextInt(8) - 4 };
+            if (lv.isEmptyBlock(p) && (!lv.isEmptyBlock(BlockPos{ p.x, p.y - 1, p.z }) || !lv.isEmptyBlock(BlockPos{ p.x, p.y + 1, p.z }))) { lv.setBlock(p, block, 2); return true; }
+        }
+        return false;
+    };
+}
+
+// bamboo: a tall bamboo stalk (jungle).
+PlacedFeature::FeaturePlacer bambooPlacer() {
+    return [](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        if (!lv.isEmptyBlock(pos)) return false;
+        const int h = 12 + r.nextInt(5);
+        for (int y = 0; y < h; ++y) { BlockPos p{ pos.x, pos.y + y, pos.z }; if (!lv.isEmptyBlock(p)) break; lv.setBlock(p, "minecraft:bamboo", 2); }
+        return true;
+    };
+}
+
+// coral_tree / coral_claw / coral_mushroom: a small coral clump (warm ocean).
+PlacedFeature::FeaturePlacer coralPlacer() {
+    return [](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        static const char* coral[] = { "minecraft:tube_coral_block", "minecraft:brain_coral_block", "minecraft:bubble_coral_block", "minecraft:fire_coral_block", "minecraft:horn_coral_block" };
+        const char* col = coral[r.nextInt(5)];
+        const int h = 1 + r.nextInt(3); BlockPos c = pos;
+        for (int k = 0; k < h; ++k) { if (!lv.isEmptyBlock(c)) break; lv.setBlock(c, col, 2); c.y++; }
+        return true;
+    };
+}
+
 struct Resolved { PlacedFeature::FeaturePlacer placer; bool ok = false; };
 Resolved noop() { return { [](WorldGenLevel&, RandomSource&, BlockPos) { return false; }, false }; }
 
@@ -491,6 +611,24 @@ Resolved resolveConfigured(const std::string& dir, const json& cf) {
     if (t == "seagrass") return { seagrassPlacer(cfg), true };
     if (t == "sea_pickle") return { seaPicklePlacer(cfg), true };
     if (t == "kelp") return { kelpPlacer(), true };
+    if (t == "bamboo") return { bambooPlacer(), true };
+    if (t == "huge_fungus") return { hugeFungusPlacer(cfg), true };
+    if (t == "fallen_tree") return { fallenTreePlacer(cfg), true };
+    if (t == "twisting_vines") return { vineColumnPlacer(cfg, 1, "minecraft:twisting_vines", "minecraft:twisting_vines_plant"), true };
+    if (t == "weeping_vines") return { vineColumnPlacer(cfg, -1, "minecraft:weeping_vines", "minecraft:weeping_vines_plant"), true };
+    if (t == "chorus_plant") return { chorusPlacer(), true };
+    if (t == "sculk_patch") return { sculkPatchPlacer(cfg), true };
+    if (t == "vines") return { vinesPlacer(), true };
+    if (t == "multiface_growth") return { multifacePlacer(cfg), true };
+    if (t == "coral_tree" || t == "coral_claw" || t == "coral_mushroom") return { coralPlacer(), true };
+    if (t == "root_system") {
+        auto inner = std::make_shared<Resolved>(resolveByName(dir, featureRef(cfg.value("feature", json()))));
+        auto rootProv = parseProvider(cfg.value("root_state_provider", json::object()));
+        return { [inner, rootProv](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+            for (int y = 0; y < 3; ++y) { BlockPos p{ pos.x, pos.y - 1 - y, pos.z }; if (!lv.isEmptyBlock(p)) lv.setBlock(p, rootProv->getState(r, p), 2); }
+            return inner->ok && inner->placer(lv, r, pos);
+        }, true };
+    }
     if (t == "vegetation_patch" || t == "waterlogged_vegetation_patch") {
         auto ground = parseProvider(cfg["ground_state"]);
         const double vegChance = cfg.value("vegetation_chance", 0.0);

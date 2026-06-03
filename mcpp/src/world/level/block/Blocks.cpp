@@ -125,7 +125,10 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     for (const char* b : { "minecraft:red_mushroom_block", "minecraft:brown_mushroom_block", "minecraft:mushroom_stem",
                            "minecraft:moss_block", "minecraft:pale_moss_block", "minecraft:nether_wart_block",
                            "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower",
-                           "minecraft:mangrove_roots", "minecraft:muddy_mangrove_roots", "minecraft:mud", "minecraft:moss_carpet" }) {
+                           "minecraft:mangrove_roots", "minecraft:muddy_mangrove_roots", "minecraft:mud", "minecraft:moss_carpet",
+                           "minecraft:crimson_stem", "minecraft:warped_stem", "minecraft:sculk", "minecraft:rooted_dirt",
+                           "minecraft:tube_coral_block", "minecraft:brain_coral_block", "minecraft:bubble_coral_block",
+                           "minecraft:fire_coral_block", "minecraft:horn_coral_block" }) {
         registerBlock(b, solid, byName)->textures.all = std::string(b).substr(10);
     }
 
