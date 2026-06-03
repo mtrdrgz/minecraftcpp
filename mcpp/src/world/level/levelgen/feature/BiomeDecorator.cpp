@@ -17,6 +17,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -342,6 +345,104 @@ std::optional<TreeConfig> parseTreeConfig(const json& c) {
     return TreeConfig{ logId, logId, logId, leafId, dirtId, trunk, foliage, size, true };
 }
 
+// ── Non-tree feature placers (one universal function per configured-feature type,
+//    each invoked at the placement-positioned origin via the WorldGenLevel) ──────
+
+// block_column: cactus / sugar_cane / cave_vine — a vertical run per layer.
+PlacedFeature::FeaturePlacer blockColumnPlacer(const json& c) {
+    const int dy = c.value("direction", std::string("up")) == "down" ? -1 : 1;
+    auto pred = parsePredicate(c.value("allowed_placement", json::object()));
+    struct Layer { IntProviderPtr h; BlockStateProviderPtr p; };
+    auto layers = std::make_shared<std::vector<Layer>>();
+    for (const auto& l : c.value("layers", json::array())) layers->push_back({ parseIntProvider(l["height"]), parseProvider(l["provider"]) });
+    return [dy, pred, layers](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        BlockPos cur = pos; bool placed = false;
+        for (auto& L : *layers) {
+            const int h = L.h->sample(r);
+            for (int i = 0; i < h; ++i) {
+                if (!pred(lv, cur)) return placed;
+                lv.setBlock(cur, L.p->getState(r, cur), 2);
+                placed = true; cur.y += dy;
+            }
+        }
+        return placed;
+    };
+}
+
+// huge_red_mushroom / huge_brown_mushroom: a stem column topped by a cap.
+PlacedFeature::FeaturePlacer hugeMushroomPlacer(const json& c, bool red) {
+    auto stem = parseProvider(c["stem_provider"]);
+    auto cap = parseProvider(c["cap_provider"]);
+    const int radius = c.value("foliage_radius", red ? 2 : 3);
+    return [stem, cap, radius, red](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        if (!lv.isEmptyBlock(pos)) return false;
+        const int height = 4 + r.nextInt(3) + (red ? r.nextInt(2) : 0);
+        for (int y = 0; y < height; ++y) { BlockPos s{ pos.x, pos.y + y, pos.z }; lv.setBlock(s, stem->getState(r, s), 2); }
+        if (red) { // rounded dome over the top layers
+            for (int yy = height - 3; yy <= height; ++yy) {
+                const int rad = std::max(0, yy < height ? radius : radius - 1);
+                for (int dx = -rad; dx <= rad; ++dx)
+                    for (int dz = -rad; dz <= rad; ++dz) {
+                        const bool ex = dx == -rad || dx == rad, ez = dz == -rad || dz == rad;
+                        if (yy == height || ex || ez) { BlockPos cp{ pos.x + dx, pos.y + yy, pos.z + dz }; lv.setBlock(cp, cap->getState(r, cp), 2); }
+                    }
+            }
+        } else { // flat square cap with cut corners
+            const int yy = pos.y + height;
+            for (int dx = -radius; dx <= radius; ++dx)
+                for (int dz = -radius; dz <= radius; ++dz) {
+                    if (std::abs(dx) == radius && std::abs(dz) == radius) continue;
+                    BlockPos cp{ pos.x + dx, yy, pos.z + dz }; lv.setBlock(cp, cap->getState(r, cp), 2);
+                }
+        }
+        return true;
+    };
+}
+
+// nether_forest_vegetation: scatter roots/fungi over a spread area on the floor.
+PlacedFeature::FeaturePlacer netherVegPlacer(const json& c) {
+    const int w = c.value("spread_width", 8), h = c.value("spread_height", 4);
+    auto prov = parseProvider(c["state_provider"]);
+    return [w, h, prov](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        bool placed = false;
+        for (int i = 0; i < w * w; ++i) {
+            BlockPos p{ pos.x + r.nextInt(w) - r.nextInt(w), pos.y + r.nextInt(h) - r.nextInt(h), pos.z + r.nextInt(w) - r.nextInt(w) };
+            if (lv.isEmptyBlock(p) && !lv.isEmptyBlock(BlockPos{ p.x, p.y - 1, p.z })) { lv.setBlock(p, prov->getState(r, p), 2); placed = true; }
+        }
+        return placed;
+    };
+}
+
+// Simple underwater placers (barely visible in a dry vista, but functionally present).
+PlacedFeature::FeaturePlacer seagrassPlacer(const json& c) {
+    const double prob = c.value("probability", 0.0);
+    return [prob](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        if (!lv.isEmptyBlock(pos)) return false;
+        const bool tall = r.nextDouble() < prob;
+        lv.setBlock(pos, "minecraft:seagrass", 2);
+        if (tall) lv.setBlock(BlockPos{ pos.x, pos.y + 1, pos.z }, "minecraft:tall_seagrass", 2);
+        return true;
+    };
+}
+PlacedFeature::FeaturePlacer seaPicklePlacer(const json& c) {
+    auto count = parseIntProvider(c.value("count", json(20)));
+    return [count](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        const int n = count->sample(r); bool placed = false;
+        for (int i = 0; i < n; ++i) {
+            BlockPos p{ pos.x + r.nextInt(8) - r.nextInt(8), pos.y, pos.z + r.nextInt(8) - r.nextInt(8) };
+            if (lv.isEmptyBlock(p) && !lv.isEmptyBlock(BlockPos{ p.x, p.y - 1, p.z })) { lv.setBlock(p, "minecraft:sea_pickle", 2); placed = true; }
+        }
+        return placed;
+    };
+}
+PlacedFeature::FeaturePlacer kelpPlacer() {
+    return [](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+        const int h = 1 + r.nextInt(10);
+        for (int y = 0; y < h; ++y) { BlockPos p{ pos.x, pos.y + y, pos.z }; if (!lv.isEmptyBlock(p)) return y > 0; lv.setBlock(p, y == h - 1 ? "minecraft:kelp" : "minecraft:kelp_plant", 2); }
+        return true;
+    };
+}
+
 struct Resolved { PlacedFeature::FeaturePlacer placer; bool ok = false; };
 Resolved noop() { return { [](WorldGenLevel&, RandomSource&, BlockPos) { return false; }, false }; }
 
@@ -361,6 +462,32 @@ Resolved resolveConfigured(const std::string& dir, const json& cf) {
     if (t == "tree") {
         auto tc = parseTreeConfig(cfg);
         return tc ? Resolved{ treePlacer(*tc), true } : noop();
+    }
+    if (t == "block_column") return { blockColumnPlacer(cfg), true };
+    if (t == "huge_red_mushroom") return { hugeMushroomPlacer(cfg, true), true };
+    if (t == "huge_brown_mushroom") return { hugeMushroomPlacer(cfg, false), true };
+    if (t == "nether_forest_vegetation") return { netherVegPlacer(cfg), true };
+    if (t == "seagrass") return { seagrassPlacer(cfg), true };
+    if (t == "sea_pickle") return { seaPicklePlacer(cfg), true };
+    if (t == "kelp") return { kelpPlacer(), true };
+    if (t == "vegetation_patch" || t == "waterlogged_vegetation_patch") {
+        auto ground = parseProvider(cfg["ground_state"]);
+        const double vegChance = cfg.value("vegetation_chance", 0.0);
+        auto veg = std::make_shared<Resolved>(resolveByName(dir, featureRef(cfg.value("vegetation_feature", json()))));
+        IntProviderPtr xz = parseIntProvider(cfg.value("xz_radius", json(1)));
+        return { [ground, vegChance, veg, xz](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
+            const int rad = xz->sample(r); bool placed = false;
+            for (int dx = -rad; dx <= rad; ++dx)
+                for (int dz = -rad; dz <= rad; ++dz) {
+                    if (dx * dx + dz * dz > rad * rad + 1) continue;
+                    BlockPos g{ pos.x + dx, pos.y - 1, pos.z + dz };
+                    if (lv.isEmptyBlock(g)) continue;
+                    lv.setBlock(g, ground->getState(r, g), 2); placed = true;
+                    BlockPos up{ g.x, g.y + 1, g.z };
+                    if (veg->ok && lv.isEmptyBlock(up) && r.nextFloat() < vegChance) veg->placer(lv, r, up);
+                }
+            return placed;
+        }, true };
     }
     if (t == "random_selector") {
         struct E { float chance; Resolved r; };

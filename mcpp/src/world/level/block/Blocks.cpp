@@ -121,6 +121,12 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
         registerBlock(("minecraft:" + std::string(wood) + "_leaves"), leaves_p, byName)
             ->textures.all = wood + std::string("_leaves");
     }
+    // Solid decoration blocks (huge mushroom caps/stem, moss, chorus) — rendered as voxels.
+    for (const char* b : { "minecraft:red_mushroom_block", "minecraft:brown_mushroom_block", "minecraft:mushroom_stem",
+                           "minecraft:moss_block", "minecraft:pale_moss_block", "minecraft:nether_wart_block",
+                           "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower" }) {
+        registerBlock(b, solid, byName)->textures.all = std::string(b).substr(10);
+    }
 
     auto glass_p = solid;
     glass_p.isOpaque = false; glass_p.noOcclusion = true;
@@ -145,7 +151,13 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
              "minecraft:pink_petals", "minecraft:wildflowers", "minecraft:bush", "minecraft:firefly_bush",
              "minecraft:leaf_litter", "minecraft:short_dry_grass", "minecraft:tall_dry_grass", "minecraft:cactus",
              "minecraft:bamboo", "minecraft:melon", "minecraft:pumpkin", "minecraft:spore_blossom",
-             "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom", "minecraft:pitcher_plant", "minecraft:seagrass" }) {
+             "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom", "minecraft:pitcher_plant", "minecraft:seagrass",
+             // underwater / nether / cave vegetation placed by the data-driven features
+             "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:kelp_plant", "minecraft:sea_pickle",
+             "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:hanging_roots", "minecraft:glow_lichen",
+             "minecraft:nether_sprouts", "minecraft:crimson_roots", "minecraft:warped_roots", "minecraft:crimson_fungus",
+             "minecraft:warped_fungus", "minecraft:twisting_vines", "minecraft:twisting_vines_plant", "minecraft:weeping_vines",
+             "minecraft:weeping_vines_plant", "minecraft:vine", "minecraft:big_dripleaf", "minecraft:small_dripleaf" }) {
         registerBlock(plant, plant_p, byName);
     }
 
