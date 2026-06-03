@@ -312,6 +312,10 @@ uint32_t NoiseBasedChunkGenerator::stateIdFor(const char* blockName, uint32_t fa
     return getDefaultBlockStateId(blockName, fallback);
 }
 
+std::string NoiseBasedChunkGenerator::getBiome(int blockX, int blockY, int blockZ) const {
+    return m_biomeManager ? m_biomeManager->getBiome(blockX, blockY, blockZ) : "";
+}
+
 double NoiseBasedChunkGenerator::sampleFinalDensity(int blockX, int blockY, int blockZ) const {
     return m_router.finalDensity->compute(DensityFunctionContext{ blockX, blockY, blockZ });
 }

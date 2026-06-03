@@ -1,0 +1,34 @@
+#pragma once
+
+// Faithful port of net.minecraft.world.level.chunk.ChunkGenerator.applyBiomeDecoration
+// for a single chunk. Unlike the older heuristic decorateSurface(), this drives the
+// REAL pipeline end-to-end:
+//   * WorldgenRandom decoration RNG: setDecorationSeed(seed, minX, minZ) then,
+//     per feature, setFeatureSeed(decorationSeed, indexWithinStep, step);
+//   * Java GenerationStep.Decoration ordering and per-biome feature lists
+//     (BiomeFeatures, from the biome JSON) so each feature's seed index is exact;
+//   * the ported PlacedFeature -> Feature placement, writing through a WorldGenLevel
+//     view of the chunk, gated by the real minecraft:biome filter and canSurvive.
+//
+// Scope note: features whose C++ port doesn't exist yet still consume their seed
+// index (so the ported features' seeds match vanilla) but are skipped. Placement
+// is clamped to the single chunk (no neighbour WorldGenRegion yet). This header is
+// kept free of the placement/heightprovider headers on purpose, so it can be
+// included alongside the surface generator without the VerticalAnchor clash.
+
+#include "../../block/BlockTags.h"
+#include "../../chunk/LevelChunk.h"
+#include "BiomeFeatures.h"
+
+#include <cstdint>
+#include <functional>
+#include <string>
+
+namespace mc::levelgen::feature {
+
+void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
+                          const std::function<std::string(int, int, int)>& biomeGetter,
+                          const BiomeFeatures& biomeFeatures,
+                          const mc::block::BlockTags& tags);
+
+} // namespace mc::levelgen::feature

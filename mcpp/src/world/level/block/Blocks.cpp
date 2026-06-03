@@ -118,6 +118,21 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::GLASS = registerBlock("minecraft:glass", glass_p, byName);
     blocks::GLASS->textures.all = "glass";
 
+    // Surface vegetation (non-collidable, non-opaque plants). Required so the
+    // biome-decoration step can actually place them when running on the fallback
+    // registry (no block_states.json); the full table supersedes this on Windows.
+    auto plant_p = Block::Properties{};
+    plant_p.hasCollision = false; plant_p.isOpaque = false; plant_p.isSolid = false;
+    plant_p.noOcclusion = true;
+    for (const char* plant : {
+             "minecraft:short_grass", "minecraft:fern", "minecraft:tall_grass", "minecraft:large_fern",
+             "minecraft:dandelion", "minecraft:poppy", "minecraft:blue_orchid", "minecraft:allium",
+             "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:cornflower", "minecraft:lily_of_the_valley",
+             "minecraft:red_tulip", "minecraft:orange_tulip", "minecraft:white_tulip", "minecraft:pink_tulip",
+             "minecraft:dead_bush", "minecraft:sugar_cane", "minecraft:lily_pad", "minecraft:sweet_berry_bush" }) {
+        registerBlock(plant, plant_p, byName);
+    }
+
     // Build minimal state table: one state per block, state 0 = air
     g_blockStates.resize(g_blockRegistry.size());
     for (uint32_t i = 0; i < g_blockRegistry.size(); ++i) {

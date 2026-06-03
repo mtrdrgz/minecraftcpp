@@ -38,6 +38,10 @@ set(MC_SOURCES
     world/level/levelgen/BiomeManager.cpp
     world/level/levelgen/OverworldBiomeBuilder.cpp
     world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    # World — Levelgen / feature decoration
+    world/level/block/BlockTags.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/levelgen/feature/BiomeDecorator.cpp
     # World — Item
     world/item/Item.cpp
     world/item/Items.cpp
@@ -285,6 +289,31 @@ if(WIN32)
     target_link_libraries(vegetation_demo PRIVATE bcrypt)
 endif()
 set_target_properties(vegetation_demo PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Faithful applyBiomeDecoration() driver: real decoration RNG + GenerationStep
+# ordering + per-biome feature lists + PlacedFeature pipeline (vs the old heuristic).
+add_executable(biome_decorator_test
+    world/level/levelgen/feature/BiomeDecoratorTest.cpp
+    world/level/levelgen/feature/BiomeDecorator.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+)
+target_include_directories(biome_decorator_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(biome_decorator_test PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(biome_decorator_test PRIVATE bcrypt)
+endif()
+set_target_properties(biome_decorator_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
