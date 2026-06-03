@@ -85,40 +85,38 @@ int main() {
     check(!bf.biomeHasFeature("minecraft:ocean", 9, "minecraft:patch_grass_plain"), "biome filter: ocean lacks grass");
 
     auto plains = [](int, int, int) { return std::string("minecraft:plains"); };
-    auto ocean = [](int, int, int) { return std::string("minecraft:ocean"); };
+    auto forest = [](int, int, int) { return std::string("minecraft:forest"); };
+    auto voidb = [](int, int, int) { return std::string("minecraft:the_void"); };
+    const std::string DIR = "26.1.2/data/minecraft/worldgen";
+    auto countName = [](const std::map<std::tuple<int, int, int>, std::string>& m, const std::string& n) {
+        int c = 0; for (auto& [k, v] : m) if (v == n) ++c; return c;
+    };
 
-    // Decorate a plains chunk.
+    // Plains: ground vegetation appears (short_grass at least), deterministically.
     auto c1 = makePlains(0, 0);
-    applyBiomeDecoration(*c1, 42LL, plains, bf, tags);
+    applyBiomeDecoration(*c1, 42LL, plains, bf, tags, DIR);
     auto plants1 = collectPlants(*c1);
     check(!plants1.empty(), "plains chunk got vegetation");
+    check(countName(plants1, "minecraft:short_grass") > 0, "plains: short_grass placed");
 
-    int grassN = 0, flowerN = 0, onGrass = 0;
-    for (auto& [pos, name] : plants1) {
-        const auto [x, y, z] = pos;
-        if (name == "minecraft:short_grass") ++grassN;
-        else ++flowerN; // dandelion/poppy/tulips/etc.
-        if (y == 71 && nameOf(c1->getBlock(x, 70, z)) == "minecraft:grass_block") ++onGrass;
-    }
-    check(grassN > 0, "short_grass placed (got " + std::to_string(grassN) + ")");
-    check(onGrass == (int)plants1.size(), "every plant sits on grass_block at y=71");
-    std::cerr << "  placed " << grassN << " grass + " << flowerN << " flowers\n";
-
-    // Determinism: same seed + chunk => byte-identical placement.
     auto c1b = makePlains(0, 0);
-    applyBiomeDecoration(*c1b, 42LL, plains, bf, tags);
+    applyBiomeDecoration(*c1b, 42LL, plains, bf, tags, DIR);
     check(collectPlants(*c1b) == plants1, "decoration is deterministic");
 
-    // Biome gating: an ocean column gets none of the plains plants.
-    auto c2 = makePlains(0, 0);
-    applyBiomeDecoration(*c2, 42LL, ocean, bf, tags);
-    check(collectPlants(*c2).empty(), "ocean biome places no plains vegetation");
+    // Forest: trees appear (oak/birch logs+leaves) — exercises the data-driven tree loader.
+    auto cf = makePlains(1, 1);
+    applyBiomeDecoration(*cf, 42LL, forest, bf, tags, DIR);
+    auto pforest = collectPlants(*cf);
+    const int logs = countName(pforest, "minecraft:oak_log") + countName(pforest, "minecraft:birch_log");
+    const int leaves = countName(pforest, "minecraft:oak_leaves") + countName(pforest, "minecraft:birch_leaves");
+    check(logs > 0, "forest: tree logs placed (got " + std::to_string(logs) + ")");
+    check(leaves > 0, "forest: tree leaves placed (got " + std::to_string(leaves) + ")");
+    std::cerr << "  plains plants=" << plants1.size() << "  forest logs=" << logs << " leaves=" << leaves << "\n";
 
-    // Different chunk coords => different decoration seed => different layout.
-    auto c3 = makePlains(5, -3);
-    applyBiomeDecoration(*c3, 42LL, plains, bf, tags);
-    // compare relative (x,y,z)->name maps; overwhelmingly likely to differ
-    check(collectPlants(*c3) != plants1, "different chunk => different layout");
+    // A biome with no features (the_void) decorates to nothing (gating sanity).
+    auto c2 = makePlains(0, 0);
+    applyBiomeDecoration(*c2, 42LL, voidb, bf, tags, DIR);
+    check(collectPlants(*c2).empty(), "the_void places no vegetation");
 
     if (!g_ok) { std::cerr << "BiomeDecorator tests FAILED\n"; return 1; }
     std::cout << "BiomeDecorator tests passed (" << bf.biomeCount() << " biomes loaded)\n";

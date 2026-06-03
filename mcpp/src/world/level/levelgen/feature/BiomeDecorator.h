@@ -26,9 +26,12 @@
 
 namespace mc::levelgen::feature {
 
+// worldgenDir is the data/minecraft/worldgen root (holding placed_feature/ and
+// configured_feature/); features are loaded from it data-drivenly and cached.
 void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
                           const std::function<std::string(int, int, int)>& biomeGetter,
                           const BiomeFeatures& biomeFeatures,
-                          const mc::block::BlockTags& tags);
+                          const mc::block::BlockTags& tags,
+                          const std::string& worldgenDir);
 
 } // namespace mc::levelgen::feature

@@ -113,10 +113,14 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LEAVES = registerBlock("minecraft:oak_leaves", leaves_p, byName);
     blocks::OAK_LEAVES->textures.all = "oak_leaves";
 
-    // Birch wood (forest trees) — needed so the decoration step's birch config
-    // resolves to real states on the fallback registry.
-    registerBlock("minecraft:birch_log", solid, byName)->textures.all = "birch_log";
-    registerBlock("minecraft:birch_leaves", leaves_p, byName)->textures.all = "birch_leaves";
+    // Tree woods for the decoration step's tree configs (oak above; the rest here)
+    // so they resolve to real states on the fallback registry.
+    for (const char* wood : { "birch", "spruce", "jungle", "acacia", "dark_oak", "cherry", "mangrove", "pale_oak" }) {
+        registerBlock(("minecraft:" + std::string(wood) + "_log"), solid, byName)
+            ->textures.all = wood + std::string("_log");
+        registerBlock(("minecraft:" + std::string(wood) + "_leaves"), leaves_p, byName)
+            ->textures.all = wood + std::string("_leaves");
+    }
 
     auto glass_p = solid;
     glass_p.isOpaque = false; glass_p.noOcclusion = true;
@@ -134,7 +138,14 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
              "minecraft:dandelion", "minecraft:poppy", "minecraft:blue_orchid", "minecraft:allium",
              "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:cornflower", "minecraft:lily_of_the_valley",
              "minecraft:red_tulip", "minecraft:orange_tulip", "minecraft:white_tulip", "minecraft:pink_tulip",
-             "minecraft:dead_bush", "minecraft:sugar_cane", "minecraft:lily_pad", "minecraft:sweet_berry_bush" }) {
+             "minecraft:dead_bush", "minecraft:sugar_cane", "minecraft:lily_pad", "minecraft:sweet_berry_bush",
+             // wider surface vegetation referenced by the data-driven decoration features
+             "minecraft:brown_mushroom", "minecraft:red_mushroom", "minecraft:sunflower", "minecraft:lilac",
+             "minecraft:rose_bush", "minecraft:peony", "minecraft:wither_rose", "minecraft:torchflower",
+             "minecraft:pink_petals", "minecraft:wildflowers", "minecraft:bush", "minecraft:firefly_bush",
+             "minecraft:leaf_litter", "minecraft:short_dry_grass", "minecraft:tall_dry_grass", "minecraft:cactus",
+             "minecraft:bamboo", "minecraft:melon", "minecraft:pumpkin", "minecraft:spore_blossom",
+             "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom", "minecraft:pitcher_plant", "minecraft:seagrass" }) {
         registerBlock(plant, plant_p, byName);
     }
 
