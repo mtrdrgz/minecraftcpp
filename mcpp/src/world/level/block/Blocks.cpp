@@ -113,6 +113,11 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LEAVES = registerBlock("minecraft:oak_leaves", leaves_p, byName);
     blocks::OAK_LEAVES->textures.all = "oak_leaves";
 
+    // Birch wood (forest trees) — needed so the decoration step's birch config
+    // resolves to real states on the fallback registry.
+    registerBlock("minecraft:birch_log", solid, byName)->textures.all = "birch_log";
+    registerBlock("minecraft:birch_leaves", leaves_p, byName)->textures.all = "birch_leaves";
+
     auto glass_p = solid;
     glass_p.isOpaque = false; glass_p.noOcclusion = true;
     blocks::GLASS = registerBlock("minecraft:glass", glass_p, byName);

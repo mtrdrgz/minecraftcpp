@@ -42,6 +42,8 @@ set(MC_SOURCES
     world/level/block/BlockTags.cpp
     world/level/levelgen/feature/BiomeFeatures.cpp
     world/level/levelgen/feature/BiomeDecorator.cpp
+    world/level/levelgen/feature/TreeGen.cpp
+    world/level/levelgen/feature/OreGen.cpp
     # World — Item
     world/item/Item.cpp
     world/item/Items.cpp
@@ -299,6 +301,8 @@ add_executable(biome_decorator_test
     world/level/levelgen/feature/BiomeDecoratorTest.cpp
     world/level/levelgen/feature/BiomeDecorator.cpp
     world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/levelgen/feature/TreeGen.cpp
+    world/level/levelgen/feature/OreGen.cpp
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp

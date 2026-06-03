@@ -7,6 +7,7 @@
 #include "../placement/NoiseCountPlacement.h"
 #include "../placement/PlacedFeature.h"
 #include "Feature.h"
+#include "TreeGen.h"
 #include "stateproviders/BlockStateProvider.h"
 #include "stateproviders/NoiseBasedStateProviders.h"
 #include "../../block/BlockBehaviour.h"
@@ -93,6 +94,63 @@ bool airFilter(WorldGenLevel& level, BlockPos p) {
     return w.tags->isInTag(level.getBlockState(p), "minecraft:air");
 }
 
+// minecraft:count with a weighted_list IntProvider (e.g. trees: {10:w9},{11:w1}).
+// Mirrors SimpleWeightedRandomList.getRandomValue: nextInt(total), walk cumulative.
+class WeightedCountPlacement final : public PlacementModifier {
+public:
+    explicit WeightedCountPlacement(std::vector<std::pair<int, int>> dist)
+        : m_dist(std::move(dist)) {
+        for (auto& d : m_dist) m_total += d.second;
+    }
+    std::vector<BlockPos> getPositions(PlacementContext*, RandomSource& r, BlockPos o) const override {
+        int n = m_dist.empty() ? 0 : m_dist.back().first;
+        if (m_total > 0) {
+            int x = r.nextInt(m_total), cum = 0;
+            for (auto& d : m_dist) { cum += d.second; if (x < cum) { n = d.first; break; } }
+        }
+        return std::vector<BlockPos>(n < 0 ? 0 : static_cast<std::size_t>(n), o);
+    }
+private:
+    std::vector<std::pair<int, int>> m_dist;
+    int m_total = 0;
+};
+
+// minecraft:surface_water_depth_filter — keep origin iff (surface - ocean_floor)
+// water depth <= max. With the single-heightmap chunk view this is 0 on land.
+class SurfaceWaterDepthFilter final : public PlacementModifier {
+public:
+    explicit SurfaceWaterDepthFilter(int maxDepth) : m_max(maxDepth) {}
+    std::vector<BlockPos> getPositions(PlacementContext* ctx, RandomSource&, BlockPos o) const override {
+        WorldGenLevel* l = ctx->getLevel();
+        const int depth = l->getHeight(Heightmap::Types::WORLD_SURFACE_WG, o.x, o.z)
+                          - l->getHeight(Heightmap::Types::OCEAN_FLOOR_WG, o.x, o.z);
+        return depth <= m_max ? std::vector<BlockPos>{ o } : std::vector<BlockPos>{};
+    }
+private:
+    int m_max;
+};
+
+// Tree placer for trees_birch_and_oak_leaf_litter: the vanilla random_selector
+// (oak default / birch 20% / fancy oak 10% / rare fallen logs), placing one tree
+// at the position via the ported TreeFeature (placeTree) over the chunk.
+PlacedFeature::FeaturePlacer birchAndOakTreePlacer() {
+    return [](WorldGenLevel& l, RandomSource& r, BlockPos p) -> bool {
+        static const TreeConfig oak = makeOakConfig();
+        static const TreeConfig birch = makeBirchConfig();
+        static const TreeConfig fancy = makeFancyOakConfig();
+        const TreeConfig* cfg;
+        if (r.nextFloat() < 0.0025f) return false;        // fallen_birch_tree (not modelled)
+        else if (r.nextFloat() < 0.2f) cfg = &birch;
+        else if (r.nextFloat() < 0.1f) cfg = &fancy;
+        else if (r.nextFloat() < 0.0125f) return false;   // fallen_oak_tree (not modelled)
+        else cfg = &oak;
+        auto& w = static_cast<ChunkWGL&>(l);
+        const ChunkPos cp = w.chunk->pos();
+        TreeWorld tw{ *w.chunk, cp.x * 16, cp.z * 16 };
+        return placeTree(tw, r, p.x, p.y, p.z, *cfg);
+    };
+}
+
 // Build a SimpleBlock feature placer for a given state provider.
 PlacedFeature::FeaturePlacer simpleBlockPlacer(stateproviders::BlockStateProviderPtr provider) {
     return [cfg = std::make_shared<SimpleBlockConfiguration>(SimpleBlockConfiguration{ std::move(provider), false })](
@@ -137,6 +195,48 @@ std::map<std::string, std::shared_ptr<PlacedFeature>> buildRegistry() {
             std::make_shared<CountPlacement>(ConstantInt::of(64)),
             std::make_shared<RandomOffsetPlacement>(TrapezoidInt::of(-6, 6, 0), TrapezoidInt::of(-2, 2, 0)),
             std::make_shared<BlockPredicateFilter>(airFilter),
+        });
+
+    // ── Forest features (the region is mostly forest) ───────────────────────
+
+    // trees_birch_and_oak_leaf_litter: ~10 trees/chunk (weighted 9:1 -> 10/11),
+    // chain from placed_feature JSON (no would_survive in the leaf-litter variant).
+    reg["minecraft:trees_birch_and_oak_leaf_litter"] = std::make_shared<PlacedFeature>(
+        birchAndOakTreePlacer(),
+        std::vector<std::shared_ptr<const PlacementModifier>>{
+            std::make_shared<WeightedCountPlacement>(std::vector<std::pair<int, int>>{ { 10, 9 }, { 11, 1 } }),
+            std::make_shared<InSquarePlacement>(),
+            std::make_shared<SurfaceWaterDepthFilter>(0),
+            std::make_shared<HeightmapPlacement>(Heightmap::Types::OCEAN_FLOOR),
+            std::make_shared<BiomeFilter>(biomeAllows),
+        });
+
+    // patch_grass_forest -> configured "grass" (short_grass); count 2 then count 32.
+    reg["minecraft:patch_grass_forest"] = std::make_shared<PlacedFeature>(
+        simpleBlockPlacer(SP::of("minecraft:short_grass")),
+        std::vector<std::shared_ptr<const PlacementModifier>>{
+            std::make_shared<CountPlacement>(ConstantInt::of(2)),
+            std::make_shared<InSquarePlacement>(),
+            std::make_shared<HeightmapPlacement>(Heightmap::Types::WORLD_SURFACE_WG),
+            std::make_shared<BiomeFilter>(biomeAllows),
+            std::make_shared<CountPlacement>(ConstantInt::of(32)),
+            std::make_shared<RandomOffsetPlacement>(TrapezoidInt::of(-7, 7, 0), TrapezoidInt::of(-3, 3, 0)),
+            std::make_shared<BlockPredicateFilter>(airFilter),
+        });
+
+    // flower_default: rarity_filter 32, in_square, heightmap, biome. Reuses the
+    // standard overworld flower provider (dandelion/poppy/tulips/...).
+    auto flowerProvider2 = std::make_shared<NTP>(
+        2345LL, NoiseParameters{ 0, { 1.0 } }, 0.005f, -0.8f, 0.33333334f, "minecraft:dandelion",
+        std::vector<std::string>{ "minecraft:orange_tulip", "minecraft:red_tulip", "minecraft:pink_tulip", "minecraft:white_tulip" },
+        std::vector<std::string>{ "minecraft:poppy", "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:cornflower" });
+    reg["minecraft:flower_default"] = std::make_shared<PlacedFeature>(
+        simpleBlockPlacer(flowerProvider2),
+        std::vector<std::shared_ptr<const PlacementModifier>>{
+            std::make_shared<RarityFilter>(32),
+            std::make_shared<InSquarePlacement>(),
+            std::make_shared<HeightmapPlacement>(Heightmap::Types::MOTION_BLOCKING),
+            std::make_shared<BiomeFilter>(biomeAllows),
         });
 
     return reg;
