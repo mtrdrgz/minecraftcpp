@@ -534,6 +534,89 @@ std::vector<FoliageAttachment> MegaJungleTrunkPlacer::placeTrunk(
     return atts;
 }
 
+// ==========================================================================
+// CherryFoliagePlacer — wide rounded canopy
+// ==========================================================================
+
+void CherryFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int foliageHeight, int leafRadius, int offsetSample) {
+    const int r = leafRadius + att.radiusOffset;
+    for (int yo = offsetSample + 1; yo >= offsetSample - foliageHeight; --yo) {
+        const int dist = offsetSample + 1 - yo;
+        const int rad = std::max((dist == 0 || dist >= foliageHeight) ? r - 2 : r, 0);
+        placeLeavesRow(world, rng, config, att.x, att.y, att.z, rad, yo, att.doubleTrunk);
+    }
+}
+
+// ==========================================================================
+// RandomSpreadFoliagePlacer — scattered leaf cloud (mangrove)
+// ==========================================================================
+
+void RandomSpreadFoliagePlacer::createFoliage(TreeWorld& world, RandomSource& rng, const TreeConfig& config,
+        int /*treeHeight*/, const FoliageAttachment& att, int foliageHeight, int leafRadius, int offsetSample) {
+    const int r = leafRadius + att.radiusOffset;
+    const int span = 2 * r + 1;
+    for (int i = 0; i < attempts; ++i) {
+        const int x = att.x + rng.nextInt(span) - r;
+        const int z = att.z + rng.nextInt(span) - r;
+        const int y = att.y + offsetSample + rng.nextInt(foliageHeight + 1);
+        if (world.validTreePos(x, y, z)) world.setBlock(x, y, z, config.leavesStateId);
+    }
+}
+
+// ==========================================================================
+// CherryTrunkPlacer — vertical trunk + curving upward branches
+// ==========================================================================
+
+std::vector<FoliageAttachment> CherryTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    world.setBlock(ox, oy - 1, oz, config.dirtStateId);
+    for (int y = 0; y < treeHeight; ++y) placeLog(world, rng, ox, oy + y, oz, config);
+
+    std::vector<FoliageAttachment> atts;
+    atts.push_back({ ox, oy + treeHeight, oz, 0, false });
+
+    const int bc = branchCount.sample(rng);
+    for (int b = 0; b < bc; ++b) {
+        const int d = rng.nextInt(4), ddx = kDirs[d][0], ddz = kDirs[d][1];
+        const int hlen = std::max(branchHorizontalLength.sample(rng), 1);
+        const int startY = treeHeight + branchStartOffset.sample(rng);
+        const int endY = treeHeight + branchEndOffset.sample(rng);
+        int cx = ox, cz = oz;
+        for (int s = 1; s <= hlen; ++s) {
+            cx += ddx; cz += ddz;
+            const int yy = oy + startY + (endY - startY) * s / hlen;
+            placeLog(world, rng, cx, yy, cz, config);
+        }
+        atts.push_back({ cx, oy + endY + 1, cz, 0, false });
+    }
+    return atts;
+}
+
+// ==========================================================================
+// UpwardsBranchingTrunkPlacer — mangrove (vertical trunk + upward branches)
+// ==========================================================================
+
+std::vector<FoliageAttachment> UpwardsBranchingTrunkPlacer::placeTrunk(
+        TreeWorld& world, RandomSource& rng, int treeHeight, int ox, int oy, int oz, const TreeConfig& config) {
+    world.setBlock(ox, oy - 1, oz, config.dirtStateId);
+    std::vector<FoliageAttachment> atts;
+    int cx = ox, cz = oz;
+    for (int yo = 0; yo < treeHeight; ++yo) {
+        const int yy = oy + yo;
+        placeLog(world, rng, cx, yy, cz, config);
+        if (yo > 0 && yo < treeHeight - 1 && rng.nextDouble() < branchProb) {
+            const int d = rng.nextInt(4), ddx = kDirs[d][0], ddz = kDirs[d][1];
+            const int steps = extraBranchSteps.sample(rng);
+            int bx = cx, bz = cz, by = yy;
+            for (int s = 0; s < steps; ++s) { bx += ddx; bz += ddz; ++by; placeLog(world, rng, bx, by, bz, config); }
+            atts.push_back({ bx, by + 1, bz, 0, false });
+        }
+    }
+    atts.push_back({ cx, oy + treeHeight, cz, 0, false });
+    return atts;
+}
+
 static uint32_t logY(const char* name) {
     // States are ordered axis=x, axis=y, axis=z  → default+1 = y-axis
     return getDefaultBlockStateId(name, 0) + 1;

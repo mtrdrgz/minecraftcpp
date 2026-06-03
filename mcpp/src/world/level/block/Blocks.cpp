@@ -124,7 +124,8 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     // Solid decoration blocks (huge mushroom caps/stem, moss, chorus) — rendered as voxels.
     for (const char* b : { "minecraft:red_mushroom_block", "minecraft:brown_mushroom_block", "minecraft:mushroom_stem",
                            "minecraft:moss_block", "minecraft:pale_moss_block", "minecraft:nether_wart_block",
-                           "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower" }) {
+                           "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower",
+                           "minecraft:mangrove_roots", "minecraft:muddy_mangrove_roots", "minecraft:mud", "minecraft:moss_carpet" }) {
         registerBlock(b, solid, byName)->textures.all = std::string(b).substr(10);
     }
 

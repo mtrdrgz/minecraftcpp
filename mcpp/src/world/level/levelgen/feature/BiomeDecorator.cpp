@@ -238,8 +238,15 @@ IntVal parseIntVal(const json& j) {
     if (j.is_number_integer()) return IntVal::constant(j.get<int>());
     if (j.is_object()) {
         const std::string t = typeOf(j);
-        if (t == "uniform") return IntVal::uniform(j.value("min_inclusive", 0), j.value("max_inclusive", 0));
+        if (t == "uniform" || (t.empty() && j.contains("min_inclusive")))
+            return IntVal::uniform(j.value("min_inclusive", 0), j.value("max_inclusive", 0));
         if (t == "constant") return IntVal::constant(j.value("value", 0));
+        if (t == "weighted_list") { // approximate by a uniform over the value range
+            int lo = 1 << 30, hi = -(1 << 30);
+            for (const auto& e : j.value("distribution", json::array()))
+                if (e["data"].is_number_integer()) { const int d = e["data"].get<int>(); lo = std::min(lo, d); hi = std::max(hi, d); }
+            return hi >= lo ? IntVal::uniform(lo, hi) : IntVal::constant(0);
+        }
     }
     return IntVal::constant(0);
 }
@@ -325,7 +332,13 @@ std::optional<TreeConfig> parseTreeConfig(const json& c) {
     else if (tt == "dark_oak_trunk_placer") trunk = std::make_shared<DarkOakTrunkPlacer>(bh, ra, rb);
     else if (tt == "giant_trunk_placer") trunk = std::make_shared<GiantTrunkPlacer>(bh, ra, rb);
     else if (tt == "mega_jungle_trunk_placer") trunk = std::make_shared<MegaJungleTrunkPlacer>(bh, ra, rb);
-    else return std::nullopt; // upwards_branching (mangrove) / cherry — not ported yet
+    else if (tt == "cherry_trunk_placer") trunk = std::make_shared<CherryTrunkPlacer>(bh, ra, rb,
+        parseIntVal(tp.value("branch_count", json(1))), parseIntVal(tp.value("branch_horizontal_length", json(2))),
+        parseIntVal(tp.value("branch_start_offset_from_top", json(-3))), parseIntVal(tp.value("branch_end_offset_from_top", json(0))));
+    else if (tt == "upwards_branching_trunk_placer") trunk = std::make_shared<UpwardsBranchingTrunkPlacer>(bh, ra, rb,
+        parseIntVal(tp.value("extra_branch_steps", json(1))), parseIntVal(tp.value("extra_branch_length", json(0))),
+        tp.value("place_branch_per_log_probability", 0.5));
+    else return std::nullopt; // bending / pale-specific placers — not ported
 
     const IntVal rad = parseIntVal(fp.value("radius", json(0))), off = parseIntVal(fp.value("offset", json(0)));
     std::shared_ptr<FoliagePlacer> foliage;
@@ -337,6 +350,8 @@ std::optional<TreeConfig> parseTreeConfig(const json& c) {
     else if (ft == "dark_oak_foliage_placer") foliage = std::make_shared<DarkOakFoliagePlacer>(rad, off);
     else if (ft == "mega_pine_foliage_placer") foliage = std::make_shared<MegaPineFoliagePlacer>(rad, off, parseIntVal(fp["crown_height"]));
     else if (ft == "jungle_foliage_placer") foliage = std::make_shared<JungleFoliagePlacer>(rad, off, fp.value("height", 2));
+    else if (ft == "cherry_foliage_placer") foliage = std::make_shared<CherryFoliagePlacer>(rad, off, fp.value("height", 5));
+    else if (ft == "random_spread_foliage_placer") foliage = std::make_shared<RandomSpreadFoliagePlacer>(rad, off, fp.value("foliage_height", 2), fp.value("leaf_placement_attempts", 70));
     else return std::nullopt;
 
     const json& ms = c.value("minimum_size", json::object());
