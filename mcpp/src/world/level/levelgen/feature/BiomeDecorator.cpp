@@ -322,7 +322,10 @@ std::optional<TreeConfig> parseTreeConfig(const json& c) {
     if (tt == "straight_trunk_placer") trunk = std::make_shared<StraightTrunkPlacer>(bh, ra, rb);
     else if (tt == "forking_trunk_placer") trunk = std::make_shared<ForkingTrunkPlacer>(bh, ra, rb);
     else if (tt == "fancy_trunk_placer") trunk = std::make_shared<FancyTrunkPlacer>(bh, ra, rb);
-    else return std::nullopt; // dark_oak / giant / mega / mangrove / cherry / bending / pale — not ported
+    else if (tt == "dark_oak_trunk_placer") trunk = std::make_shared<DarkOakTrunkPlacer>(bh, ra, rb);
+    else if (tt == "giant_trunk_placer") trunk = std::make_shared<GiantTrunkPlacer>(bh, ra, rb);
+    else if (tt == "mega_jungle_trunk_placer") trunk = std::make_shared<MegaJungleTrunkPlacer>(bh, ra, rb);
+    else return std::nullopt; // upwards_branching (mangrove) / cherry — not ported yet
 
     const IntVal rad = parseIntVal(fp.value("radius", json(0))), off = parseIntVal(fp.value("offset", json(0)));
     std::shared_ptr<FoliagePlacer> foliage;
@@ -331,6 +334,9 @@ std::optional<TreeConfig> parseTreeConfig(const json& c) {
     else if (ft == "spruce_foliage_placer") foliage = std::make_shared<SpruceFoliagePlacer>(rad, off, parseIntVal(fp["trunk_height"]));
     else if (ft == "pine_foliage_placer") foliage = std::make_shared<PineFoliagePlacer>(rad, off, parseIntVal(fp["height"]));
     else if (ft == "acacia_foliage_placer") foliage = std::make_shared<AcaciaFoliagePlacer>(rad, off);
+    else if (ft == "dark_oak_foliage_placer") foliage = std::make_shared<DarkOakFoliagePlacer>(rad, off);
+    else if (ft == "mega_pine_foliage_placer") foliage = std::make_shared<MegaPineFoliagePlacer>(rad, off, parseIntVal(fp["crown_height"]));
+    else if (ft == "jungle_foliage_placer") foliage = std::make_shared<JungleFoliagePlacer>(rad, off, fp.value("height", 2));
     else return std::nullopt;
 
     const json& ms = c.value("minimum_size", json::object());
