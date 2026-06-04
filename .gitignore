@@ -42,6 +42,10 @@ mcpp/src/assets/assets.bin
 mcpp/src/assets/block_atlas.png
 mcpp/src/assets/block_atlas.json
 mcpp/src/assets/block_states.json
+mcpp/src/assets/ascii.png
+mcpp/src/assets/gui_logo.png
+mcpp/src/assets/gui_button.png
+mcpp/src/assets/gui_button_hl.png
 
 # Decompiled/download helper artifacts
 decompile_log.txt

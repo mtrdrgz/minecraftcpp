@@ -12,7 +12,9 @@
 #include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
+#include "../assets/resource_ids.h"
 #include <stb_image.h>
+#include <windows.h>
 #include <cmath>
 #include <filesystem>
 #include <exception>
@@ -20,23 +22,40 @@
 namespace mc {
 
 namespace {
+    // Decode a 4-channel texture from already-read PNG bytes.
+    render::ITexture* decodeTex(render::IRenderDevice* dev, render::ICommandList* cmd, const uint8_t* bytes, int len) {
+        if (!bytes || len <= 0) return nullptr;
+        int w, h, ch;
+        stbi_set_flip_vertically_on_load(false);
+        uint8_t* p = stbi_load_from_memory(bytes, len, &w, &h, &ch, 4);
+        if (!p) return nullptr;
+        render::TextureDesc d;
+        d.width = (uint32_t)w; d.height = (uint32_t)h; d.format = render::TextureFormat::RGBA8;
+        d.filter = render::FilterMode::Nearest;
+        render::ITexture* t = dev->createTexture(d);
+        cmd->uploadTexture(t, p);
+        stbi_image_free(p);
+        return t;
+    }
+
     render::ITexture* loadAssetTex(render::IRenderDevice* dev, render::ICommandList* cmd, std::string_view path) {
         auto b = AssetManager::instance().readRaw(path);
         if (b.empty()) {
             MC_LOG_WARN("Asset not found: {}", path);
             return nullptr;
         }
-        int w, h, ch;
-        stbi_set_flip_vertically_on_load(false);
-        uint8_t* p = stbi_load_from_memory(b.data(), (int)b.size(), &w, &h, &ch, 4);
-        if (!p) return nullptr;
-        render::TextureDesc d;
-        d.width = w; d.height = h; d.format = render::TextureFormat::RGBA8;
-        d.filter = render::FilterMode::Nearest;
-        render::ITexture* t = dev->createTexture(d);
-        cmd->uploadTexture(t, p);
-        stbi_image_free(p);
-        return t;
+        return decodeTex(dev, cmd, b.data(), (int)b.size());
+    }
+
+    // Load a PNG embedded as an RCDATA resource (font / GUI textures from client.jar).
+    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+        if (!hres) return nullptr;
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return decodeTex(dev, cmd, data, (int)size);
     }
 }
 
@@ -556,10 +575,10 @@ void Minecraft::render(float pt) {
     if (!guiInit) {
         auto* cmd = m_device->beginFrame(m_window->width(), m_window->height());
         
-        // fontTex is typically null: the GUI/font textures live in client.jar, not
-        // assets.bin (which only holds asset-index objects). Build the Font anyway so
-        // font() is never null — Font tolerates a null texture (text just won't draw).
-        render::ITexture* fontTex = loadAssetTex(m_device, cmd, "minecraft/textures/font/ascii.png");
+        // Font + GUI textures are embedded as Windows resources (extracted from
+        // client.jar — they aren't in assets.bin). This is what makes the menu show
+        // real text/logo/buttons instead of an all-gray screen.
+        render::ITexture* fontTex = loadResourceTex(m_device, cmd, IDR_FONT_ASCII);
         m_font = std::make_unique<render::Font>(m_device, fontTex);
 
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
@@ -569,10 +588,10 @@ void Minecraft::render(float pt) {
         m_gui->setFoodTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
 
         auto ts = std::make_unique<gui::screens::TitleScreen>();
-        ts->setLogoTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/title/minecraft.png"));
+        ts->setLogoTexture(loadResourceTex(m_device, cmd, IDR_GUI_LOGO));
         ts->setButtonTextures(
-            loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/button.png"),
-            loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/button_highlighted.png")
+            loadResourceTex(m_device, cmd, IDR_GUI_BUTTON),
+            loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL)
         );
         setScreen(std::move(ts));
 

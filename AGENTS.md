@@ -303,8 +303,52 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 42 (tree clipping really fixed via deferred decoration +
-cross-chunk TreeWorld; glow_lichen/cave_vines off the surface via ported placements)
+**Last updated**: Session 43 (tree-on-tree + huge-mushroom-on-water fixes; per-tick
+decoration budget; STARTED the menu system — embedded font/logo/button textures)
+
+**DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
+it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
+the CPU generator instead. Current focus order: **(1) MENUS**, then (2) CPU worldgen perf,
+then (3) real structures.
+
+**Session 43:**
+- placeTree now rejects an origin whose block-below is wood/leaves/log/stem (or air/fluid):
+  the chunk heightmap rises onto a neighbour's leaves (cross-chunk decoration), so OCEAN_FLOOR
+  placement could land a tree on another tree's foliage + drop a dirt block on the leaves.
+- hugeMushroomPlacer requires dirt/mycelium below (HugeMushroomFeature ground gate) → no more
+  huge mushrooms on the ocean surface.
+- updateLocalChunks budgets the deferred-decoration pass to a few chunks/tick (nearest-first)
+  to cut the movement stutter (decoration is heavy + main-thread). This is a stopgap; the real
+  perf work (focus #2) is to reuse generators, make the feature caches thread-safe so decoration
+  can run on workers, and stop re-reading worldgen JSON.
+
+## MENU SYSTEM ROADMAP (focus #1 — port 1:1 from net.minecraft.client.gui.screens.*)
+
+Why the menu was "all gray": the font + GUI textures live in client.jar, NOT assets.bin.
+Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
+
+- [x] **Embed + render font/logo/button** (Session 43). `assets/resource_ids.h` +
+  `assets.rc` now carry `ascii.png` (IDR_FONT_ASCII), `gui_logo.png` (IDR_GUI_LOGO),
+  `gui_button.png`/`gui_button_hl.png`. `Minecraft::render` loads them via
+  `loadResourceTex(IDR_*)` (RCDATA → stb). Font/logo/buttons are no longer null.
+  EXTRACTION (gitignored, local only): unzip the four PNGs from client.jar into
+  `mcpp/src/assets/` (see Session 43 PowerShell). NOTE: in 26.1.2's jar the title
+  `panorama_0..5.png` are 1×1 STUBS — the real panorama isn't shippable from this jar,
+  so use the dirt-tile MENU_BACKGROUND fallback (the game's own no-panorama background).
+- [ ] **Font fidelity**: port real glyph advances (`FontManager`/`GlyphProvider` derive
+  widths from the ascii.png non-empty columns; current Font.cpp uses hardcoded widths).
+- [ ] **Background**: dirt-tile `MENU_BACKGROUND` (tiled `block/dirt` darkened) since the
+  panorama is stubbed. Port `PanoramaRenderer`/`CubeMap` only if real panorama art appears.
+- [ ] **Title screen 1:1**: layout from `TitleScreen.java` (logo placement, splash text,
+  button stack: Singleplayer/Multiplayer/Options/Quit, version + copyright strings).
+- [ ] **Widget library**: `Button`/`SpriteIconButton`/`AbstractWidget` with the real
+  9-slice sprite scaling (`button.png` is a NineSlice sprite) + hover/focus.
+- [ ] **Options screens**: `OptionsScreen` + sub-screens (Video/Controls/Sound/Lang/Chat/
+  Accessibility) from the Java, with `OptionInstance`-backed widgets (sliders/cycle buttons).
+- [ ] **Screen framework**: `Screen` base (init/render/widgets/tick), `GuiGraphics` blit/
+  fill/drawString parity, layout helpers (`GridLayout`/`HeaderAndFooterLayout`).
+
+
 
 **Session 42 — finish the tree-clipping fix + cave plants on surface:**
 
