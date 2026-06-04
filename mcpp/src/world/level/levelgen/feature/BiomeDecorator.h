@@ -28,10 +28,16 @@ namespace mc::levelgen::feature {
 
 // worldgenDir is the data/minecraft/worldgen root (holding placed_feature/ and
 // configured_feature/); features are loaded from it data-drivenly and cached.
+//
+// chunkAt (optional): resolves a chunk by chunk coords so features (notably trees)
+// can write across the active chunk's borders into loaded neighbours instead of
+// being clipped to a 16×16 box. If empty, decoration is clamped to `chunk` (unit
+// tests). Writes to a position whose owning chunk isn't loaded are dropped.
 void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
                           const std::function<std::string(int, int, int)>& biomeGetter,
                           const BiomeFeatures& biomeFeatures,
                           const mc::block::BlockTags& tags,
-                          const std::string& worldgenDir);
+                          const std::string& worldgenDir,
+                          const std::function<LevelChunk*(int, int)>& chunkAt = {});
 
 } // namespace mc::levelgen::feature

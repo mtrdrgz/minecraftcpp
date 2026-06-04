@@ -5,6 +5,43 @@
 
 ---
 
+## ⛔ RULE #0 — THE ONE RULE THAT MATTERS MOST (READ FIRST, EVERY TIME)
+
+**This is a 1:1 reverse-engineering port. You are translating Java → C++, nothing else.
+NEVER invent, guess, approximate, simplify, tune, or "make it look reasonable".
+EVERY value, constant, formula, ordering, and algorithm MUST come from the decompiled
+Java source (`26.1.2/src/`) or the worldgen data JSON (`26.1.2/data/`).**
+
+If you cannot find the source for something, STOP and go read the Java. Do not fill the
+gap with a plausible-looking number. A wrong-but-plausible value is WORSE than a TODO,
+because it hides the bug and looks done.
+
+Concretely, this means:
+- ❌ NO `rng.nextInt(10)` "≈ 1 tree/chunk for visibility" style density tuning.
+- ❌ NO "chance = 0.05" hardcoded because it looked about right.
+- ❌ NO predicate/condition that `return true;` "for now" — that silently disables the
+  exact gating that makes vanilla worldgen correct (see the predicate bug below).
+- ❌ NO placeholder hashes/curves/noise (an FNV in place of MD5, a lerp in place of a
+  spline). These corrupt EVERYTHING downstream and are nearly invisible until you see
+  the world.
+- ✅ Port the real class. Read `<Feature>.java`, `<Placement>.java`, the data JSON.
+  Copy the constants verbatim. Match the RNG call order exactly.
+- ✅ If a feature/predicate/type isn't ported yet, make it a hard no-op that does
+  NOTHING and is logged/listed as unported — never a silent "pass everything".
+- ✅ Prove parity with a `*_parity` test against ground truth from the real jar/data
+  whenever you can. The repo's culture is parity tests, not eyeballing.
+
+**Why this rule exists (real bugs this session, Session 40):** the worldgen "worked"
+visually but was full of disguised approximations that produced absurd results
+(pumpkins piled on beaches, sugar cane everywhere, only ~3 biomes in the whole world,
+every tree a dark spruce). None of these were "a number slightly off" — they were
+omitted algorithms masked by `return true` / placeholder code. The fixes were not
+tuning; they were porting the real Java that had been skipped. See Session 40 below.
+
+If you only read one line of this file: **port it from the source; do not make it up.**
+
+---
+
 ## WHAT THIS PROJECT IS
 
 A faithful **port** of Minecraft Java Edition 26.1.2 to native C++ for Windows.
@@ -24,18 +61,31 @@ If the Java does X, the C++ does X. If you are unsure, read the Java source firs
 
 ## SOURCE MATERIAL LOCATIONS
 
+> NOTE: the repo root on this machine is `C:\Users\Mateo\Desktop\minecraftcpp\`
+> (older docs said `...\Desktop\Claude\` — that path is stale; everything below is
+> relative to the current repo root).
+
 ```
-C:\Users\Mateo\Desktop\Claude\
-├── 26.1.2\
+C:\Users\Mateo\Desktop\minecraftcpp\
+├── 26.1.2\                 ← git-ignored; fetched from Mojang CDN (see below)
 │   ├── client.jar          ← Original JAR (do not modify)
-│   └── src\                ← Decompiled Java source (25,635 files) — READ THIS
-│       ├── net\minecraft\  ← Main game code (6,596 files)
-│       └── com\mojang\     ← Mojang platform libs (286 files)
-├── assets\
-│   ├── indexes\30.json     ← Asset index
-│   └── objects\            ← 4,749 raw asset files (textures, sounds, etc.)
+│   ├── data\               ← Worldgen DATA JSON — THE authoritative 1:1 values
+│   │   └── minecraft\worldgen\{biome,configured_feature,placed_feature,
+│   │       noise_settings,density_function,structure,...}\*.json
+│   └── src\                ← Decompiled Java source — READ THIS before porting
+│       ├── net\minecraft\  ← Main game code
+│       └── com\mojang\     ← Mojang platform libs
+├── mcpp\                   ← the C++ project (build here)
+├── memory\ (per-agent)     ← Claude Code memory (build quirks etc.)
 └── AGENTS.md               ← This file (keep updated)
 ```
+
+**Reading order to port a worldgen feature 1:1:** (1) the biome JSON lists placed
+features per step; (2) `placed_feature/<name>.json` gives the placement modifier chain
+(count/rarity/heightmap/predicates); (3) `configured_feature/<name>.json` gives the
+feature type + config; (4) the Java class for the feature/placement/predicate gives
+the algorithm. Port all four faithfully — the JSON carries the numbers, the Java
+carries the logic.
 
 **Java source package → purpose quick reference:**
 | Java Package | Files | What it does |
@@ -252,6 +302,123 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 ---
 
 ## CURRENT STATE
+
+**Last updated**: Session 41 (cross-chunk tree decoration, ore feature 1:1, more
+cutout plants; see open items for what's still deferred)
+
+**Session 41 — more worldgen ports + fixes (port, don't tune):**
+
+1. **Trees clipped at chunk borders / lone floating dirt — FIXED.** `BiomeDecorator`'s
+   `ChunkWGL` dropped any write outside the active 16×16 chunk, so a tree near a
+   border lost the foliage/trunk that belonged in the neighbour (the "half/quarter
+   sphere of leaves" + a lone dirt block). It now routes reads/writes to the chunk
+   that OWNS each world position via an optional `chunkAt(cx,cz)` resolver
+   (`applyBiomeDecoration(..., chunkAt)`), so features write across borders into
+   already-loaded neighbours and mark them dirty. `Minecraft::decorateChunk` passes
+   `getChunk` (main-thread only). LIMITATION: a neighbour that isn't loaded yet is
+   still skipped — the proper fix is Java's two-phase WorldGenRegion (features for a
+   chunk run only once all chunks in its region reached the prior step). Same
+   best-effort model as structures. Unit tests pass `chunkAt={}` → single-chunk.
+
+2. **Ore generator ported 1:1.** `resolveConfigured` now handles `ore`/`scattered_ore`
+   (`orePlacer`) — a faithful port of `OreFeature.place`+`doPlace`+`canPlaceOre`
+   (ellipsoid vein along a random axis, RuleTest targets tag_match/block_match/
+   blockstate_match/random_*, discard_chance_on_air_exposure, exact RNG order).
+   Also wired the `height_range` placement (was unhandled → identity!) with a
+   `HeightProvider`/`VerticalAnchor` parser (constant/uniform/[very_]biased_to_bottom/
+   trapezoid; absolute/above_bottom/below_top). Verified in-engine: 3285 ore blocks in
+   the spawn 3×3. CAVEAT: `Mth.sin` isn't ported project-wide; `orePlacer` reproduces
+   it bit-exactly inline (SIN[i]=sin(i·2π/65536)); port a shared `Mth` for other users.
+
+3. **More cutout plants don't occlude / aren't cubes.** Added small mushrooms
+   (red/brown_mushroom), glow_lichen, sculk_vein, cave_vines(_plant), hanging_roots,
+   dripleaf, spore_blossom, twisting/weeping vines, vine to `isCrossPlant`
+   (ChunkMesh.cpp). Still a hardcoded list, not the block-model system.
+
+**Open / deferred (next sessions — from the source, never tune):**
+- **Savanna/biome grass+foliage tint.** `ChunkMesh.cpp getTextureTint` hardcodes the
+  plains color for ALL grass/foliage. The 1:1 path: embed `assets/minecraft/textures/
+  colormap/{grass,foliage}.png` (extend tools/build_atlas.py to pull them from
+  client.jar), port `GrassColor.get(temp,downfall)`/`FoliageColor` (index = `((1-temp)*255)`,
+  `((1-temp*downfall)*255)` into the colormap), `BiomeColors`, and the
+  `grass_color_modifier` (none/dark_forest/swamp) + biome `grass_color`/`foliage_color`
+  overrides; feed the per-block biome (temp/downfall from BiomeRegistry) into the mesher.
+- **"Whole chunk surface becomes one block" when moving fast.** Reported as a likely
+  data race during concurrent async chunk gen (4 worker threads). Could NOT reproduce
+  from the info at hand — NEEDS a screenshot + seed/coords. Suspects to check first:
+  any mutable state shared across the per-chunk generators built in the
+  `updateLocalChunks` worker lambda; the `Climate::RTree m_lastResult` (mutable) if a
+  BiomeSource is ever shared across threads; `getOrCreateNoise` if a RandomState is
+  shared. Each worker currently builds its OWN generator, so confirm nothing is static.
+- **`random_patch` feature still unported** (`resolveConfigured` → noop) — port
+  `RandomPatchFeature` (tries / xz_spread / y_spread + inner placed feature). Flowers
+  reaching the world densely (the giant flower diamond) is likely related.
+- Structures: user will request real spawning next; current ones are approximations
+  (see WORLDGEN_PLAN.md / Session structure notes).
+- Certify terrain NormalNoise/DensityFunction parity (MD5 is correct now).
+
+---
+
+### Session 40 (previous)
+**Original Session 40 fixes: real MD5 noise seeding, block predicates, plant rendering
+— the worldgen got wired into the engine and runnable.**
+
+**Session 40 — root-cause fixes for "it generates but it's wrong" (all were skipped
+ports, NOT mis-tuned numbers):**
+
+1. **MD5 noise seeding (the big one).** `RandomSource.cpp` `md5Bytes()` was an FNV
+   placeholder, not MD5. The overworld uses Xoroshiro, whose
+   `XoroshiroPositionalRandomFactory.fromHashOf(name)` seeds EVERY named noise
+   (`Noises::TEMPERATURE/VEGETATION/CONTINENTALNESS/EROSION/RIDGE/SHIFT` + all terrain
+   noises) via `Hashing.md5().hashString(name).asBytes()`. Wrong/correlated seeds →
+   the climate noise collapsed → the whole world was ~3 biomes (taiga/snow/desert,
+   i.e. only temperature varied) and non-1:1 with Java. Replaced with real RFC 1321
+   MD5. Result verified in-engine: biome variety over a 1024×1024 sample went 3 → 12
+   (beach, birch_forest, deep_ocean, forest, jungle, oceans, plains, river, savanna,
+   sparse_jungle, …). MD5 now covered by `worldgen_random_parity` (standard vectors
+   for "" and "abc" via `RandomSupport::seedFromHashOf`). This also makes ALL terrain
+   noise 1:1, so do a NormalNoise/density parity pass next to certify it.
+
+2. **Block predicates (pumpkins & sugar cane).** `BiomeDecorator.cpp parsePredicate`
+   did not implement `matching_blocks` or `matching_fluids` (both fell through to
+   `return true`), and NO predicate applied the `offset` field. Java's
+   `StateTestingPredicate.test(level,origin)` = `test(level.getBlockState(origin.offset(offset)))`.
+   So `patch_pumpkin` ("air here AND grass_block at offset [0,-1,0]") and
+   `patch_sugar_cane` ("air, would_survive, AND water at [±1,-1,0]") had their gating
+   silently disabled → pumpkins/sugar cane scattered onto sand/water in absurd counts.
+   Ported `matching_blocks`, `matching_fluids`, and `offset` for all state-testing
+   predicates + `would_survive`. (Fluids are modeled as the water/lava blocks.)
+
+3. **Plant rendering (`ChunkMesh.cpp`).** Two duplicated hardcoded plant lists
+   (cross-render + cull-bypass) were missing newer cutout blocks, so `leaf_litter`
+   (and bush/firefly_bush/wildflowers/pink_petals/dry grass) rendered as full cubes
+   AND culled neighbour faces (holes in the ground). Unified into one `isCrossPlant()`
+   used by both sites and added the missing blocks. NOTE: this is still a hardcoded
+   list standing in for the real block-model system — a proper port reads block models
+   (JSON) to decide render shape + occlusion. Until then, keep `isCrossPlant` in sync
+   with `Blocks.cpp`.
+
+**Worldgen is now wired into the engine** (Sessions earlier this set): the local world
+(`Minecraft::startLocalGame` + the streaming `updateLocalChunks` integration) runs
+`applyBiomeDecoration` (trees/vegetation) and `generateStructures` on the MAIN thread
+(the BiomeDecorator/feature caches are not thread-safe). `decorateChunk`/`runStructures`
+load the data-driven JSON from the discovered `26.1.2/data` tree. Run from the REPO
+ROOT so that tree resolves; `--quickPlaySingleplayer` enters the world.
+
+**Open / next (attack from the source, do NOT tune):**
+- Certify terrain NormalNoise/DensityFunction parity now that MD5 is correct (add a
+  `noise`/`density_function` parity target vs the real jar). The biome *map* is varied
+  now but full terrain-shape parity is unverified.
+- `random_patch` feature type is still NOT handled in `resolveConfigured` (falls to
+  noop). Grass/flowers currently reach the world via other paths; port `RandomPatchFeature`
+  (tries / xz_spread / y_spread + the inner placed feature) properly.
+- Structures are hand-built approximations, not the template/jigsaw port; dungeons need
+  carvers (no caves yet). See WORLDGEN_PLAN.md.
+- `leaf_litter`/cutout rendering is a hardcoded list, not the block-model system.
+
+---
+
+## PREVIOUS STATE (pre-Session-40)
 
 **Last updated**: Session 39 (surface vegetation breadth: double plants + dry vegetation + canSurvive dispatch)
 

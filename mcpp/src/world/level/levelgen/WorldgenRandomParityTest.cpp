@@ -142,6 +142,28 @@ int main(int argc, char** argv) {
     }
 
     bool ok = true;
+
+    // MD5 / seedFromHashOf parity — the path Xoroshiro uses to seed every named
+    // worldgen noise (fromHashOf = Hashing.md5().hashString(name).asBytes()).
+    // Standard RFC 1321 vectors:
+    //   MD5("")    = d41d8cd9 8f00b204 e9800998 ecf8427e
+    //   MD5("abc") = 90015098 3cd24fb0 d6963f7d 28e17f72
+    // seedFromHashOf reads the 16 digest bytes big-endian as two longs.
+    {
+        struct V { const char* in; uint64_t lo, hi; };
+        const V vecs[] = {
+            { "",    0xd41d8cd98f00b204ull, 0xe9800998ecf8427eull },
+            { "abc", 0x900150983cd24fb0ull, 0xd6963f7d28e17f72ull },
+        };
+        for (const auto& v : vecs) {
+            Seed128bit s = RandomSupport::seedFromHashOf(v.in);
+            if (static_cast<uint64_t>(s.seedLo) != v.lo || static_cast<uint64_t>(s.seedHi) != v.hi) {
+                ok = false;
+                std::cerr << "FAIL: MD5 seedFromHashOf(\"" << v.in << "\")\n";
+            }
+        }
+    }
+
     for (const auto& line : kHardcoded) {
         std::string err;
         if (!verifyLine(line, err)) {

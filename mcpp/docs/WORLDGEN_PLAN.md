@@ -6,6 +6,13 @@
 > Hand-authored "approximate" feature/structure generators were removed in
 > Session 23 and must not be reintroduced.
 >
+> **NEVER tune a frequency/density to "look right."** If output looks wrong (too many
+> pumpkins, sugar cane everywhere, only a few biomes), the cause is a skipped/incorrect
+> port — a placement predicate that `return true`s instead of testing, a placeholder
+> hash (FNV vs real MD5) feeding the noise, or an unhandled feature type falling to
+> noop. Find and port the real algorithm/value from Java+JSON. See AGENTS.md
+> "RULE #0" and the Session 40 notes for worked examples.
+>
 > Status legend: ✅ done & verified · 🚧 in progress · ⬜ not started
 
 This is the master checklist for "all biomes + every naturally-spawning block,

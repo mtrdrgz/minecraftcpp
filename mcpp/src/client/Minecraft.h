@@ -21,6 +21,15 @@
 
 namespace mc {
 
+// Forward declarations — kept out of the header to avoid pulling the worldgen
+// decoration/placement headers (and their VerticalAnchor clash) into every TU
+// that includes Minecraft.h. Stored as unique_ptr, built in Minecraft.cpp.
+namespace levelgen {
+    class NoiseBasedChunkGenerator;
+    namespace feature { class BiomeFeatures; }
+}
+namespace block { class BlockTags; }
+
 struct PlayerInfo {
     UUID profileId{};
     std::string name;
@@ -79,6 +88,18 @@ private:
     void applyPlayerInfoToEntity(const PlayerInfo& info);
     void updateLocalChunks();
 
+    // Worldgen decoration (trees + vegetation). Loads the data-driven biome
+    // feature lists + block tags once from the local 26.1.2/data tree, then runs
+    // the faithful applyBiomeDecoration() pass over a freshly generated chunk.
+    // No-op (logs once) if the data tree can't be located.
+    void ensureWorldgenData();
+    void decorateChunk(LevelChunk& chunk);
+
+    // Structure generation pass for one chunk. Builds a cross-chunk block writer
+    // over the currently loaded chunks and runs the spaced-structure + dungeon
+    // placement. No-op if the local generator / worldgen data isn't ready.
+    void runStructures(ChunkPos active);
+
 
     Window*                m_window  = nullptr;
     render::IRenderDevice* m_device  = nullptr;
@@ -90,6 +111,14 @@ private:
     uint32_t    m_tickCounter = 0;
     uint64_t    m_worldSeed = 0;
 
+
+    // Worldgen decoration state (see ensureWorldgenData / decorateChunk).
+    std::unique_ptr<levelgen::NoiseBasedChunkGenerator> m_localGenerator;
+    std::unique_ptr<levelgen::feature::BiomeFeatures>    m_biomeFeatures;
+    std::unique_ptr<block::BlockTags>                    m_blockTags;
+    std::string m_worldgenDir;
+    bool        m_worldgenReady = false;
+    bool        m_worldgenTried = false;
 
     std::unique_ptr<ThreadPool>          m_threadPool;
     struct ChunkGenTask {

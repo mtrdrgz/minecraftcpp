@@ -10,8 +10,9 @@ import sys
 import os
 from pathlib import Path
 
-JAR = Path(r"C:\Users\Mateo\Desktop\Claude\26.1.2\client.jar")
-OUT_DIR = Path(r"C:\Users\Mateo\Desktop\Claude\mcpp\src\assets")
+ROOT = Path(__file__).resolve().parents[1]
+JAR = Path(os.environ.get("MCPP_CLIENT_JAR", ROOT / "26.1.2" / "client.jar"))
+OUT_DIR = Path(os.environ.get("MCPP_ASSETS_OUT", ROOT / "mcpp" / "src" / "assets"))
 
 # Try to use Pillow for image processing
 try:
@@ -27,6 +28,7 @@ except ImportError:
     HAS_PILLOW = True
 
 def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Reading {JAR}...")
     textures = {}  # name -> PIL.Image
 

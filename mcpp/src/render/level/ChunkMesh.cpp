@@ -4,8 +4,41 @@
 #include "../../core/Log.h"
 #include <array>
 #include <algorithm>
+#include <string>
+#include <unordered_set>
 
 namespace mc::render {
+
+// Blocks the mesher renders as an X-cross (cutout) rather than a full cube. Such
+// blocks must also never occlude a neighbour's face. The real game drives this
+// from block models; until those are ported this is the cutout-vegetation set —
+// keep it in sync with the plant families registered in Blocks.cpp. Newer (1.20+)
+// coast/forest-floor blocks (leaf_litter, bush, dry grass, …) were missing, so
+// they rendered as solid cubes AND culled the dirt/grass faces around them.
+static bool isCrossPlant(const std::string& name) {
+    static const std::unordered_set<std::string> set = {
+        "short_grass", "tall_grass", "fern", "large_fern", "dead_bush",
+        "dandelion", "poppy", "blue_orchid", "allium", "azure_bluet", "oxeye_daisy",
+        "cornflower", "lily_of_the_valley", "red_tulip", "orange_tulip", "white_tulip", "pink_tulip",
+        "torchflower", "wither_rose", "sweet_berry_bush", "sugar_cane",
+        "seagrass", "tall_seagrass", "sea_pickle", "kelp", "kelp_plant", "bamboo", "bamboo_sapling",
+        "leaf_litter", "bush", "firefly_bush", "wildflowers", "pink_petals",
+        "short_dry_grass", "tall_dry_grass", "cactus_flower",
+        "nether_sprouts", "crimson_roots", "warped_roots",
+        // small mushrooms (the huge-mushroom *_block / mushroom_stem stay cubes)
+        "red_mushroom", "brown_mushroom",
+        // cave / lush vegetation that clings to a surface (flat, never occluding)
+        "glow_lichen", "sculk_vein", "cave_vines", "cave_vines_plant", "hanging_roots",
+        "spore_blossom", "big_dripleaf", "big_dripleaf_stem", "small_dripleaf",
+        "pitcher_plant", "twisting_vines", "twisting_vines_plant",
+        "weeping_vines", "weeping_vines_plant", "vine",
+        "oak_sapling", "spruce_sapling", "birch_sapling", "jungle_sapling",
+        "acacia_sapling", "dark_oak_sapling", "cherry_sapling", "pale_oak_sapling", "mangrove_propagule",
+    };
+    if (set.count(name)) return true;
+    if (name.find("coral") != std::string::npos) return true; // coral fans/plants (pre-existing)
+    return false;
+}
 
 // Face directions: +X, -X, +Y, -Y, +Z, -Z
 static constexpr int DX[6] = { 1,-1, 0, 0, 0, 0 };
@@ -138,17 +171,8 @@ bool ChunkMesher::shouldCull(const LevelChunk& chunk, const LevelChunk* neighbor
         }
     }
 
-    // Explicitly bypass culling if the neighboring block is a plant block
-    const std::string& name = nb->block->name;
-    if (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" || name == "dead_bush" ||
-        name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
-        name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
-        name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
-        name == "sweet_berry_bush" || name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
-        name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
-        name.find("coral") != std::string::npos) {
-        return false;
-    }
+    // Cross/cutout plants never occlude an adjacent face.
+    if (isCrossPlant(nb->block->name)) return false;
 
     return nb->isOpaque();
 }
@@ -298,17 +322,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                     else                  light = (uint8_t)(15 - depth);
                 }
 
-                bool isPlant = false;
-                if (bs && bs->block) {
-                    const std::string& name = bs->block->name;
-                    isPlant = (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" || name == "dead_bush" ||
-                               name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
-                               name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
-                               name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
-                               name == "sweet_berry_bush" || name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
-                               name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
-                               name.find("coral") != std::string::npos);
-                }
+                bool isPlant = bs && bs->block && isCrossPlant(bs->block->name);
 
                 if (isPlant) {
                     std::string texOverride = "";
