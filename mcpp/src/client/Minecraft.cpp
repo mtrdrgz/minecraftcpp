@@ -635,15 +635,27 @@ void Minecraft::updateLocalChunks() {
         }
     }
 
-    // 2b. Deferred decoration: decorate any loaded, undecorated chunk whose 8
-    // neighbours are now present. As terrain streams in, interior chunks become
-    // eligible and get trees/ores/structures with full cross-chunk context (no
-    // clipping at borders). Collect keys first (tryDecorate writes into neighbours).
+    // 2b. Deferred decoration: decorate loaded, undecorated chunks whose 8
+    // neighbours are present (so trees/ores/structures get full cross-chunk context,
+    // no border clipping). BUDGETED to a few per tick: decoration is heavy and runs
+    // on the main thread, so doing every eligible chunk at once causes the movement
+    // stutter. Nearest-first so the area around the player fills in before the rim.
     {
         std::vector<ChunkPos> ready;
         for (const auto& [key, chunk] : m_chunks)
             if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
-        for (ChunkPos cp : ready) tryDecorate(cp);
+        std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
+            return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
+                 < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
+        });
+        constexpr int MAX_DECORATE_PER_TICK = 2;
+        int done = 0;
+        for (ChunkPos cp : ready) {
+            LevelChunk* c = getChunk(cp);
+            if (!c || c->decorated) continue;
+            tryDecorate(cp);
+            if (c->decorated && ++done >= MAX_DECORATE_PER_TICK) break;
+        }
     }
 
     // 3. Load/generate chunks inside RADIUS
