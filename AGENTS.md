@@ -303,8 +303,41 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 41 (cross-chunk tree decoration, ore feature 1:1, more
-cutout plants; see open items for what's still deferred)
+**Last updated**: Session 42 (tree clipping really fixed via deferred decoration +
+cross-chunk TreeWorld; glow_lichen/cave_vines off the surface via ported placements)
+
+**Session 42 — finish the tree-clipping fix + cave plants on surface:**
+
+1. **Trees STILL clipped at borders (Session 41 didn't fully fix it).** Root cause:
+   the tree placer writes through `TreeWorld` (TreeGen.h), NOT the ChunkWGL — and
+   TreeWorld clamped to one chunk, so foliage spilling across a border was dropped
+   regardless of the ChunkWGL change. Fixes: (a) `TreeWorld` now routes reads/writes
+   to the owning chunk via the same `chunkAt` resolver (treePlacer sets it from the
+   WGL); (b) **deferred decoration** — `LevelChunk::decorated` flag + `Minecraft::
+   tryDecorate(cp)` which only decorates a chunk once ALL 8 neighbours are loaded, so
+   cross-chunk writes always land. `startLocalGame` now gens a 5×5 and decorates the
+   inner 3×3; `updateLocalChunks` defers decoration to a per-tick pass over loaded
+   chunks. The frontier shows bare terrain (trees appear as you approach) instead of
+   clipped trees — strictly correct. Verified: 2715 leaves in the decorated 3×3.
+
+2. **glow_lichen / cave_vines spawning on the surface everywhere.** Wiring
+   `height_range` (Session 41) spread their Y to 0..256, but their gating placements
+   were unported → pass-through. Ported `surface_relative_threshold_filter`
+   (keeps glow_lichen ≥13 below surface) and `environment_scan` (cave_vines scan up to
+   a ceiling) + a `has_sturdy_face` predicate (approx: full solid+opaque cube).
+   Verified: 0 cave-plants above y60. (They now need real caves to place at all —
+   correct, since carvers aren't ported yet.)
+   NOTE: their RENDER is still a cross (isCrossPlant), not flat-on-wall — the mesher
+   has no block-model/multiface system. They're off the surface now so it's rarely
+   seen; proper flat rendering needs the model port.
+
+**Reminder for unported placement modifiers:** the default in `parseModifier` is to
+SKIP (nullptr → pass-through). For FILTERS that gate cave/underground features this is
+WRONG (it lets them onto the surface). When you wire a new positional modifier
+(height_range, etc.), check whether sibling FILTER modifiers in the same placed_feature
+are still unported — porting one without the other moved glow_lichen to the surface.
+
+
 
 **Session 41 — more worldgen ports + fixes (port, don't tune):**
 

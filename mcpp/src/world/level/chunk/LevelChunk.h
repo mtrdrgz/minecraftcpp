@@ -47,6 +47,11 @@ public:
     // Dirty flag — set when blocks change, cleared after mesh rebuild
     std::atomic<bool> meshDirty{true};
 
+    // Decoration (trees/vegetation/ores/structures) runs once, and only after all 8
+    // neighbours are generated, so features can write across borders without being
+    // clipped. Set by the engine's deferred-decoration pass.
+    bool decorated = false;
+
     // NBT data from block entities (tile entities)
     std::vector<nbt::NbtCompound> blockEntities;
 

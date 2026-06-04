@@ -95,6 +95,11 @@ private:
     void ensureWorldgenData();
     void decorateChunk(LevelChunk& chunk);
 
+    // Decorate + place structures for a chunk, but ONLY once and ONLY after all 8
+    // neighbours are loaded — guarantees cross-chunk feature writes (trees, etc.)
+    // land in real chunks instead of being clipped at the border. No-op otherwise.
+    void tryDecorate(ChunkPos cp);
+
     // Structure generation pass for one chunk. Builds a cross-chunk block writer
     // over the currently loaded chunks and runs the spaced-structure + dungeon
     // placement. No-op if the local generator / worldgen data isn't ready.
