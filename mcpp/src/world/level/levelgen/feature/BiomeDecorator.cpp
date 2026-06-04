@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -174,6 +175,51 @@ private:
     int m_max;
 };
 
+// minecraft:surface_relative_threshold_filter — keep origin iff surface+min <= y <=
+// surface+max (port of SurfaceRelativeThresholdFilter). Keeps cave decorations
+// (e.g. glow_lichen, max=-13) the required distance BELOW the surface; without it
+// they spilled onto the surface once height_range was wired.
+class SurfaceRelativeThresholdFilter final : public PlacementModifier {
+public:
+    SurfaceRelativeThresholdFilter(Heightmap::Types hm, int minIncl, int maxIncl)
+        : m_hm(hm), m_min(minIncl), m_max(maxIncl) {}
+    std::vector<BlockPos> getPositions(PlacementContext* ctx, RandomSource&, BlockPos o) const override {
+        const long long surfaceY = ctx->getLevel()->getHeight(m_hm, o.x, o.z);
+        const long long minY = surfaceY + (long long)m_min;
+        const long long maxY = surfaceY + (long long)m_max;
+        return (minY <= o.y && o.y <= maxY) ? std::vector<BlockPos>{ o } : std::vector<BlockPos>{};
+    }
+private:
+    Heightmap::Types m_hm;
+    int m_min, m_max;
+};
+
+// minecraft:environment_scan — step from origin along a vertical direction while
+// allowed_search_condition holds, until target_condition holds; yields that pos
+// (port of EnvironmentScanPlacement). Used by cave_vines (scan up to a ceiling).
+class EnvironmentScanPlacement final : public PlacementModifier {
+public:
+    using Pred = BlockPredicateFilter::Predicate;
+    EnvironmentScanPlacement(int dy, Pred target, Pred allowed, int maxSteps)
+        : m_dy(dy), m_target(std::move(target)), m_allowed(std::move(allowed)), m_maxSteps(maxSteps) {}
+    std::vector<BlockPos> getPositions(PlacementContext* ctx, RandomSource&, BlockPos o) const override {
+        WorldGenLevel& l = *ctx->getLevel();
+        BlockPos pos = o;
+        if (!m_allowed(l, pos)) return {};
+        for (int i = 0; i < m_maxSteps; ++i) {
+            if (m_target(l, pos)) return { pos };
+            pos.y += m_dy;
+            if (pos.y < CHUNK_MIN_Y || pos.y >= CHUNK_MAX_Y) return {};
+            if (!m_allowed(l, pos)) break;
+        }
+        return m_target(l, pos) ? std::vector<BlockPos>{ pos } : std::vector<BlockPos>{};
+    }
+private:
+    int m_dy;
+    Pred m_target, m_allowed;
+    int m_maxSteps;
+};
+
 // ── A SimpleBlock feature placer for a state provider ────────────────────────
 PlacedFeature::FeaturePlacer simpleBlockPlacer(BlockStateProviderPtr provider) {
     return [cfg = std::make_shared<SimpleBlockConfiguration>(SimpleBlockConfiguration{ std::move(provider), false })](
@@ -190,6 +236,7 @@ PlacedFeature::FeaturePlacer treePlacer(TreeConfig cfg) {
         auto& w = static_cast<ChunkWGL&>(l);
         const ChunkPos cp = w.chunk->pos();
         TreeWorld tw{ *w.chunk, cp.x * 16, cp.z * 16 };
+        tw.chunkAt = w.chunkAt; // write foliage/trunk across chunk borders into loaded neighbours
         return placeTree(tw, r, p.x, p.y, p.z, cfg);
     };
 }
@@ -377,6 +424,18 @@ BlockPredicateFilter::Predicate parsePredicate(const json& p) {
             return l.canSurvive(st, BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z });
         };
     }
+    if (t == "has_sturdy_face") {
+        // Approx: a full solid+opaque cube has a sturdy face on every side. (The real
+        // check is shape-based per `direction`; full blocks are equivalent and that's
+        // what cave ceilings/floors are.) Used by environment_scan (cave_vines).
+        BlockPos off = offsetOf(p);
+        return [off](WorldGenLevel& l, BlockPos pos) {
+            std::string name = l.getBlockState(BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z });
+            if (auto c = name.find(':'); c != std::string::npos) name = name.substr(c + 1);
+            const mc::BlockState* s = mc::getDefaultBlockState(name);
+            return s && s->isSolid() && s->isOpaque();
+        };
+    }
     if (t == "all_of") {
         std::vector<BlockPredicateFilter::Predicate> subs;
         for (const auto& c : p.value("predicates", json::array())) subs.push_back(parsePredicate(c));
@@ -407,6 +466,19 @@ std::shared_ptr<const PlacementModifier> parseModifier(const json& m) {
     if (t == "rarity_filter") return std::make_shared<RarityFilter>(m.value("chance", 1));
     if (t == "heightmap") return std::make_shared<HeightmapPlacement>(hmType(m.value("heightmap", std::string("MOTION_BLOCKING"))));
     if (t == "height_range") return std::make_shared<HeightRangePlacement>(parseHeightProvider(m["height"]));
+    if (t == "surface_relative_threshold_filter")
+        return std::make_shared<SurfaceRelativeThresholdFilter>(
+            hmType(m.value("heightmap", std::string("WORLD_SURFACE_WG"))),
+            m.value("min_inclusive", std::numeric_limits<int>::min()),
+            m.value("max_inclusive", std::numeric_limits<int>::max()));
+    if (t == "environment_scan") {
+        const int dy = (m.value("direction_of_search", std::string("down")) == "up") ? 1 : -1;
+        auto target = parsePredicate(m.at("target_condition"));
+        BlockPredicateFilter::Predicate allowed = m.contains("allowed_search_condition")
+            ? parsePredicate(m["allowed_search_condition"])
+            : [](WorldGenLevel&, BlockPos) { return true; };
+        return std::make_shared<EnvironmentScanPlacement>(dy, std::move(target), std::move(allowed), m.value("max_steps", 1));
+    }
     if (t == "surface_water_depth_filter") return std::make_shared<SurfaceWaterDepthFilter>(m.value("max_water_depth", 0));
     if (t == "block_predicate_filter") return std::make_shared<BlockPredicateFilter>(parsePredicate(m["predicate"]));
     if (t == "random_offset") return std::make_shared<RandomOffsetPlacement>(parseIntProvider(m["xz_spread"]), parseIntProvider(m["y_spread"]));

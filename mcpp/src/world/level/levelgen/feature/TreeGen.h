@@ -92,20 +92,36 @@ struct FoliageAttachment {
 
 struct TreeWorld {
     LevelChunk& chunk;
-    int minX, minZ; // world-space origin of the chunk (chunkX*16, chunkZ*16)
+    int minX, minZ; // world-space origin of the active chunk (chunkX*16, chunkZ*16)
+    // Optional neighbour resolver (chunk coords). When set, foliage/trunk that spill
+    // past the active chunk's 16x16 are written into the loaded neighbour instead of
+    // being clipped — this is THE fix for the "half/quarter sphere of leaves at chunk
+    // borders" bug (the tree writes through TreeWorld, so the ChunkWGL resolver alone
+    // wasn't enough). Java decorates a tree via a WorldGenRegion spanning neighbours.
+    const std::function<LevelChunk*(int, int)>* chunkAt = nullptr;
 
     bool inBounds(int wx, int wz) const noexcept {
         return wx >= minX && wx < minX + 16 && wz >= minZ && wz < minZ + 16;
     }
 
+    // Chunk owning world column (wx,wz): the active chunk or a loaded neighbour.
+    LevelChunk* owning(int wx, int wz) const {
+        const int cx = wx >> 4, cz = wz >> 4; // C++20+: arithmetic shift == floor-div
+        if (cx == chunk.pos().x && cz == chunk.pos().z) return &chunk;
+        if (chunkAt && *chunkAt) return (*chunkAt)(cx, cz);
+        return nullptr;
+    }
+
     uint32_t getBlock(int wx, int wy, int wz) const {
-        if (!inBounds(wx, wz) || wy < CHUNK_MIN_Y || wy >= CHUNK_MAX_Y) return 0;
-        return chunk.getBlock(wx, wy, wz);
+        if (wy < CHUNK_MIN_Y || wy >= CHUNK_MAX_Y) return 0;
+        LevelChunk* c = owning(wx, wz);
+        return c ? c->getBlock(wx, wy, wz) : 0;
     }
 
     void setBlock(int wx, int wy, int wz, uint32_t stateId) {
-        if (!inBounds(wx, wz) || wy < CHUNK_MIN_Y || wy >= CHUNK_MAX_Y) return;
-        chunk.setBlock(wx, wy, wz, stateId);
+        if (wy < CHUNK_MIN_Y || wy >= CHUNK_MAX_Y) return;
+        LevelChunk* c = owning(wx, wz);
+        if (c) { c->setBlock(wx, wy, wz, stateId); c->meshDirty = true; }
     }
 
     // Port of TreeFeature.validTreePos:

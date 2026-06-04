@@ -204,6 +204,24 @@ namespace {
     }
 }
 
+void Minecraft::tryDecorate(ChunkPos cp) {
+    LevelChunk* c = getChunk(cp);
+    if (!c || c->decorated) return;
+    // Require all 8 neighbours loaded so cross-chunk feature writes (tree foliage,
+    // ore veins, structures) land in real chunks rather than being clipped.
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dx = -1; dx <= 1; ++dx)
+            if ((dx || dz) && !getChunk({ cp.x + dx, cp.z + dz })) return;
+
+    c->decorated = true;
+    decorateChunk(*c);
+    runStructures(cp);
+    // Cross-chunk writes can touch the neighbours — re-mesh the 3x3.
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dx = -1; dx <= 1; ++dx)
+            if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz })) n->meshDirty = true;
+}
+
 void Minecraft::runStructures(ChunkPos active) {
     if (!m_localGenerator) return;
 
@@ -249,7 +267,9 @@ void Minecraft::startLocalGame(uint64_t seed) {
     m_worldSeed = seed;
     m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
     ensureWorldgenData();
-    constexpr int RADIUS = 1;
+    // Generate terrain for a 5x5 so the inner 3x3 can be decorated with all
+    // neighbours present (deferred decoration → no trees clipped at chunk borders).
+    constexpr int RADIUS = 2;
 
     for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
         for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
@@ -259,19 +279,12 @@ void Minecraft::startLocalGame(uint64_t seed) {
         }
     }
 
-    // Decoration (trees + vegetation) runs after all base terrain is in, on the
-    // main thread (the feature caches in BiomeDecorator aren't thread-safe).
+    // Decoration + structures run on the main thread (feature caches aren't
+    // thread-safe). tryDecorate only fires for chunks whose 8 neighbours exist, so
+    // cross-chunk features (tree foliage, ore veins) write into real chunks.
     for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
         for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
-            decorateChunk(*getOrCreateChunk({cx, cz}));
-        }
-    }
-
-    // Structures run after decoration so a building's footprint overwrites any
-    // trees/grass placed on it. The cross-chunk writer spans the loaded spawn area.
-    for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
-        for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
-            runStructures({cx, cz});
+            tryDecorate({cx, cz});
         }
     }
 
@@ -599,16 +612,11 @@ void Minecraft::updateLocalChunks() {
                     auto key = chunkKey(cp);
                     if (m_chunks.find(key) == m_chunks.end()) {
                         LevelChunk* ptr = chunk.get();
-                        // Decorate on the main thread (terrain+surface were built
-                        // on the worker; the decoration feature caches aren't
-                        // thread-safe, so trees/vegetation are added here).
-                        decorateChunk(*ptr);
+                        // Store terrain now; decoration is DEFERRED until all 8
+                        // neighbours exist (the tryDecorate pass below) so trees/
+                        // ores/structures write across borders without clipping.
                         m_chunks[key] = std::move(chunk);
                         ptr->meshDirty = true;
-                        // Structures after the chunk is registered, so the
-                        // cross-chunk writer can resolve this chunk too.
-                        runStructures(cp);
-                        
                         // Mark neighboring chunks dirty so seams are updated
                         for (int dz = -1; dz <= 1; ++dz) {
                             for (int dx = -1; dx <= 1; ++dx) {
@@ -626,7 +634,18 @@ void Minecraft::updateLocalChunks() {
             ++it;
         }
     }
-    
+
+    // 2b. Deferred decoration: decorate any loaded, undecorated chunk whose 8
+    // neighbours are now present. As terrain streams in, interior chunks become
+    // eligible and get trees/ores/structures with full cross-chunk context (no
+    // clipping at borders). Collect keys first (tryDecorate writes into neighbours).
+    {
+        std::vector<ChunkPos> ready;
+        for (const auto& [key, chunk] : m_chunks)
+            if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
+        for (ChunkPos cp : ready) tryDecorate(cp);
+    }
+
     // 3. Load/generate chunks inside RADIUS
     struct ChunkCand {
         ChunkPos pos;
