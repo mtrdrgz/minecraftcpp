@@ -6,10 +6,16 @@
 #include "../world/entity/Entities.h"
 #include "../world/entity/player/Player.h"
 #include "../world/level/levelgen/NoiseBasedChunkGenerator.h"
+#include "../world/level/levelgen/feature/BiomeDecorator.h"
+#include "../world/level/levelgen/feature/BiomeFeatures.h"
+#include "../world/level/levelgen/structure/StructureGen.h"
+#include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
 #include <stb_image.h>
 #include <cmath>
+#include <filesystem>
+#include <exception>
 
 namespace mc {
 
@@ -119,6 +125,114 @@ void Minecraft::connectToServer(std::string_view host, uint16_t port,
     MC_LOG_INFO("Login sequence started for '{}'", username);
 }
 
+namespace {
+    // Locate the local "26.1.2/data" tree (the data-driven worldgen JSON). The
+    // exe may be launched from the repo root, mcpp/, or mcpp/build/, so probe a
+    // few parents of both the working dir and the executable dir.
+    std::string discoverDataRoot() {
+        namespace fs = std::filesystem;
+        auto probe = [](fs::path start) -> std::string {
+            std::error_code ec;
+            for (int i = 0; i < 6 && !start.empty(); ++i) {
+                fs::path cand = start / "26.1.2" / "data";
+                if (fs::exists(cand / "minecraft" / "worldgen" / "biome", ec))
+                    return cand.generic_string();
+                if (!start.has_parent_path()) break;
+                start = start.parent_path();
+            }
+            return "";
+        };
+        std::error_code ec;
+        if (auto r = probe(fs::current_path(ec)); !r.empty()) return r;
+        wchar_t buf[MAX_PATH];
+        DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            if (auto r = probe(fs::path(buf).parent_path()); !r.empty()) return r;
+        }
+        return "";
+    }
+}
+
+void Minecraft::ensureWorldgenData() {
+    if (m_worldgenTried) return;
+    m_worldgenTried = true;
+
+    std::string dataRoot = discoverDataRoot();
+    if (dataRoot.empty()) {
+        MC_LOG_WARN("Worldgen data (26.1.2/data) not found near cwd or exe; "
+                    "terrain will generate without trees/vegetation");
+        return;
+    }
+
+    try {
+        m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
+            levelgen::feature::BiomeFeatures::loadFromDirectory(dataRoot + "/minecraft/worldgen/biome"));
+        m_blockTags = std::make_unique<block::BlockTags>(
+            block::BlockTags::loadFromDirectory(dataRoot + "/minecraft/tags/block"));
+        m_worldgenDir = dataRoot + "/minecraft/worldgen";
+        m_worldgenReady = true;
+        MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from {}",
+                    m_biomeFeatures->biomeCount(), dataRoot);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("Failed to load worldgen decoration data: {}", e.what());
+        m_worldgenReady = false;
+    }
+}
+
+void Minecraft::decorateChunk(LevelChunk& chunk) {
+    if (!m_worldgenReady || !m_localGenerator) return;
+    auto biomeGetter = [this](int x, int y, int z) {
+        return m_localGenerator->getBiome(x, y, z);
+    };
+    // Let features write across this chunk's borders into already-loaded neighbours
+    // (fixes trees clipped at chunk edges) — main-thread only, so getChunk is safe.
+    auto chunkAt = [this](int cx, int cz) { return getChunk({ cx, cz }); };
+    try {
+        levelgen::feature::applyBiomeDecoration(
+            chunk, (std::int64_t)m_worldSeed, biomeGetter,
+            *m_biomeFeatures, *m_blockTags, m_worldgenDir, chunkAt);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("decorateChunk failed at ({},{}): {}", chunk.pos().x, chunk.pos().z, e.what());
+    }
+}
+
+namespace {
+    // Floor-divide world block coords to chunk coords (handles negatives).
+    ChunkPos worldToChunk(int wx, int wz) {
+        return { wx >= 0 ? wx / 16 : (wx - 15) / 16,
+                 wz >= 0 ? wz / 16 : (wz - 15) / 16 };
+    }
+}
+
+void Minecraft::runStructures(ChunkPos active) {
+    if (!m_localGenerator) return;
+
+    // Cross-chunk writer over the loaded chunks: a structure whose origin is in
+    // `active` may write into adjacent loaded chunks (writes elsewhere are dropped).
+    levelgen::structure::StructureWorld world;
+    world.getBlock = [this](int x, int y, int z) -> uint32_t {
+        LevelChunk* c = getChunk(worldToChunk(x, z));
+        return c ? c->getBlock(x, y, z) : 0u;
+    };
+    world.setBlock = [this](int x, int y, int z, uint32_t id) {
+        LevelChunk* c = getChunk(worldToChunk(x, z));
+        if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
+    };
+    world.heightAt = [this](int x, int z) -> int {
+        LevelChunk* c = getChunk(worldToChunk(x, z));
+        if (!c) return 0;
+        return c->heightmap(((x % 16) + 16) % 16, ((z % 16) + 16) % 16);
+    };
+    auto biomeGetter = [this](int x, int y, int z) {
+        return m_localGenerator->getBiome(x, y, z);
+    };
+    try {
+        levelgen::structure::generateStructures(active, m_worldSeed, world, biomeGetter);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("runStructures failed at ({},{}): {}", active.x, active.z, e.what());
+    }
+}
+
 void Minecraft::startLocalGame(uint64_t seed) {
     MC_LOG_INFO("Starting local singleplayer prototype world, seed={}", seed);
 
@@ -133,14 +247,31 @@ void Minecraft::startLocalGame(uint64_t seed) {
     m_localPlayer.reset();
 
     m_worldSeed = seed;
-    levelgen::NoiseBasedChunkGenerator generator(seed);
+    m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
+    ensureWorldgenData();
     constexpr int RADIUS = 1;
 
     for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
         for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
             LevelChunk* chunk = getOrCreateChunk({cx, cz});
-            generator.fillFromNoise(*chunk);
-            generator.buildSurface(*chunk);
+            m_localGenerator->fillFromNoise(*chunk);
+            m_localGenerator->buildSurface(*chunk);
+        }
+    }
+
+    // Decoration (trees + vegetation) runs after all base terrain is in, on the
+    // main thread (the feature caches in BiomeDecorator aren't thread-safe).
+    for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
+        for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
+            decorateChunk(*getOrCreateChunk({cx, cz}));
+        }
+    }
+
+    // Structures run after decoration so a building's footprint overwrites any
+    // trees/grass placed on it. The cross-chunk writer spans the loaded spawn area.
+    for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
+        for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
+            runStructures({cx, cz});
         }
     }
 
@@ -150,7 +281,7 @@ void Minecraft::startLocalGame(uint64_t seed) {
     state.gameMode = 1;
     state.x = 0.5;
     state.z = 0.5;
-    state.y = (double)generator.getBaseHeight(0, 0) + 4.0;
+    state.y = (double)m_localGenerator->getBaseHeight(0, 0) + 4.0;
     state.yaw = 0.0f;
     state.pitch = 10.0f;
     state.onGround = false;
@@ -412,8 +543,11 @@ void Minecraft::render(float pt) {
     if (!guiInit) {
         auto* cmd = m_device->beginFrame(m_window->width(), m_window->height());
         
+        // fontTex is typically null: the GUI/font textures live in client.jar, not
+        // assets.bin (which only holds asset-index objects). Build the Font anyway so
+        // font() is never null — Font tolerates a null texture (text just won't draw).
         render::ITexture* fontTex = loadAssetTex(m_device, cmd, "minecraft/textures/font/ascii.png");
-        if (fontTex) m_font = std::make_unique<render::Font>(m_device, fontTex);
+        m_font = std::make_unique<render::Font>(m_device, fontTex);
 
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
@@ -465,8 +599,15 @@ void Minecraft::updateLocalChunks() {
                     auto key = chunkKey(cp);
                     if (m_chunks.find(key) == m_chunks.end()) {
                         LevelChunk* ptr = chunk.get();
+                        // Decorate on the main thread (terrain+surface were built
+                        // on the worker; the decoration feature caches aren't
+                        // thread-safe, so trees/vegetation are added here).
+                        decorateChunk(*ptr);
                         m_chunks[key] = std::move(chunk);
                         ptr->meshDirty = true;
+                        // Structures after the chunk is registered, so the
+                        // cross-chunk writer can resolve this chunk too.
+                        runStructures(cp);
                         
                         // Mark neighboring chunks dirty so seams are updated
                         for (int dz = -1; dz <= 1; ++dz) {

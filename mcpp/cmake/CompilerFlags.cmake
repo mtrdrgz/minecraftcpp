@@ -26,6 +26,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     else()
         add_compile_options(-O0 -g)
     endif()
+    # Link libc++ and libunwind statically so executables run without the
+    # llvm-mingw runtime DLLs in PATH. Two separate -Wl, groups: the inner
+    # -Wl,-Bdynamic must not be nested inside the first group or lld sees a
+    # bare "-Wl" token and errors.
+    add_link_options("-Wl,-Bstatic,-lc++,-lunwind" "-Wl,-Bdynamic")
 else()
     message(FATAL_ERROR "Unsupported compiler: ${CMAKE_CXX_COMPILER_ID}")
 endif()

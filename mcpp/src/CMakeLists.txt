@@ -44,6 +44,7 @@ set(MC_SOURCES
     world/level/levelgen/feature/BiomeDecorator.cpp
     world/level/levelgen/feature/TreeGen.cpp
     world/level/levelgen/feature/OreGen.cpp
+    world/level/levelgen/structure/StructureGen.cpp
     # World — Item
     world/item/Item.cpp
     world/item/Items.cpp
@@ -139,7 +140,7 @@ target_link_libraries(mcpp PRIVATE
 target_link_libraries(mcpp PRIVATE
     user32 gdi32 kernel32 opengl32
     ws2_32 bcrypt
-    xaudio2 ole32
+    xaudio2_9 ole32
     d3d12 dxgi d3dcompiler
 )
 
@@ -328,7 +329,7 @@ add_executable(block_tags_parity
     world/level/block/BlockTagsParityTest.cpp
     world/level/block/BlockTags.cpp
 )
-target_include_directories(block_tags_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/block)
+target_include_directories(block_tags_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/block ${CMAKE_SOURCE_DIR}/vendor)
 target_link_libraries(block_tags_parity PRIVATE nlohmann_json)
 set_target_properties(block_tags_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -343,9 +344,28 @@ add_executable(biome_registry_parity
     world/level/biome/BiomeRegistryParityTest.cpp
     world/level/biome/BiomeRegistry.cpp
 )
-target_include_directories(biome_registry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/biome)
+target_include_directories(biome_registry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/biome ${CMAKE_SOURCE_DIR}/vendor)
 target_link_libraries(biome_registry_parity PRIVATE nlohmann_json)
 set_target_properties(biome_registry_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Structure generation check (spaced structures + cross-chunk writer). Drives
+# generateStructures over a synthetic flat-stone world; needs the real block
+# registry via MCPP_BLOCK_STATES=src/assets/block_states.json.
+add_executable(structure_gen_test
+    world/level/levelgen/structure/StructureGenTest.cpp
+    world/level/levelgen/structure/StructureGen.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(structure_gen_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/vendor)
+target_link_libraries(structure_gen_test PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(structure_gen_test PRIVATE bcrypt)
+endif()
+set_target_properties(structure_gen_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

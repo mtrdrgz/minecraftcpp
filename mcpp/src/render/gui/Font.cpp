@@ -22,6 +22,10 @@ Font::Font(IRenderDevice* device, ITexture* texture) : m_texture(texture) {
 }
 
 void Font::drawString(GuiGraphics& g, const std::string& text, float x, float y, const glm::vec4& color, bool shadow) {
+    // The ascii.png glyph atlas isn't bundled (it ships inside client.jar), so the
+    // font is commonly created with a null texture. Skip drawing rather than crash.
+    if (!m_texture) return;
+
     auto draw = [&](float ox, float oy, const glm::vec4& col) {
         float cx = x + ox;
         for (uint8_t c : text) {
