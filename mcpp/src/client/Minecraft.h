@@ -85,6 +85,8 @@ public:
     // Centralised screen construction (the GUI textures are owned here and reused).
     void openTitleScreen();
     void openOptionsScreen();
+    void openPauseScreen();
+    void resumeGame();
 
     GameOptions& options() { return m_options; }
     int guiScale() const;

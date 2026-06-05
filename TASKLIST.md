@@ -39,7 +39,7 @@
   - [x] Hay que añadir funcionalidad al botón de GUI Scale. (Arreglado aplicando la escala GUI con el algoritmo Java `Window.calculateScale`: Auto respeta el mínimo 320x240, las pantallas se reinicializan con tamaño lógico escalado, el mouse se convierte a coordenadas GUI y el render 2D usa dimensiones lógicas.)
   - [ ] Hay que terminar de añadir todos los botones y opciones dentro de los submenús.
   - [ ] Hay que añadir la interfaz del selector de mundos singleplayer para hacer un port 1:1 de verdad.
-  - [ ] Hay que añadir el menú de pausa (ESC) ingame para poder volver al menú, etc.
+  - [x] Hay que añadir el menú de pausa (ESC) ingame para poder volver al menú, etc. (Añadido `PauseScreen`: ESC abre/cierra pausa en mundo, Back to Game reanuda y recaptura mouse, Disconnect vuelve al TitleScreen; Options desde pausa vuelve a pausa al pulsar Done. También se corrigió que quickplay reabriera el TitleScreen al inicializar texturas GUI.)
 
 ## Menas / minerales
 

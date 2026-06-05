@@ -303,7 +303,24 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 47 (GUI Scale option applies to UI)
+**Last updated**: Session 48 (in-game pause screen)
+
+**Session 48**: fixed the tasklist UI bug requiring an in-game pause menu. Added
+`gui/screens/PauseScreen` and wired ESC as an edge-trigger in `main.cpp`: when no
+screen is open and the local player is in-game, ESC opens pause; when pause is
+open, ESC or `Back to Game` calls `Minecraft::resumeGame()` and recaptures the
+mouse. The pause menu follows the vanilla two-column layout basics from
+`PauseScreen.java`: `Back to Game`, Advancements/Statistics/feedback/reporting
+stub buttons for unported screens, `Options...`, and `Disconnect`. `Disconnect`
+returns to the title screen; `Options...` from pause opens options with a back
+action that returns to pause instead of title. The in-game render path now draws
+an active screen over the world instead of always drawing HUD, which is required
+for pause. Also fixed a pre-existing quickplay bug: GUI texture initialization no
+longer reopens `TitleScreen` after `startLocalGame()` has already set the screen
+to `nullptr`. Verified with short wrapper commands only: built `mcpp` Release and
+ran a 12s `--quickPlaySingleplayer` smoke; logs show TitleScreen -> nullptr ->
+world ready -> main loop, with no TitleScreen reopened after entering the world.
+`TASKLIST.md` now marks only the pause-menu subitem done.
 
 **Session 47**: fixed the tasklist UI bug where the `GUI Scale` option existed
 but did not affect the rendered interface. Ported Java's

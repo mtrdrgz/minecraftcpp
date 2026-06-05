@@ -12,6 +12,7 @@
 #include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
+#include "../gui/screens/PauseScreen.h"
 #include "../gui/screens/options/OptionsScreen.h"
 #include "../render/gui/PanoramaRenderer.h"
 #include "../assets/resource_ids.h"
@@ -734,7 +735,9 @@ void Minecraft::render(float pt) {
         m_gui->setHeartTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/full.png"));
         m_gui->setFoodTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
 
-        openTitleScreen();
+        if (!m_inGame) {
+            openTitleScreen();
+        }
 
         guiInit = true;
         m_device->endFrame();
@@ -757,6 +760,20 @@ void Minecraft::openOptionsScreen() {
     os->setButtonTextures(m_btnTex, m_btnHlTex);
     os->setBackAction([this]() { openTitleScreen(); });
     setScreen(std::move(os));
+}
+
+void Minecraft::openPauseScreen() {
+    if (!m_inGame) return;
+    if (m_window) m_window->captureMouse(false);
+    auto ps = std::make_unique<gui::screens::PauseScreen>();
+    ps->setButtonTextures(m_btnTex, m_btnHlTex);
+    setScreen(std::move(ps));
+}
+
+void Minecraft::resumeGame() {
+    if (!m_inGame) return;
+    setScreen(nullptr);
+    if (m_window) m_window->captureMouse(true);
 }
 
 void Minecraft::updateLocalChunks() {

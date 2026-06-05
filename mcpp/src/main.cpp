@@ -97,8 +97,19 @@ int main() {
     double tickAccum = 0.0;
 
     constexpr float SKY_R = 0.529f, SKY_G = 0.808f, SKY_B = 0.980f;
+    bool escWasDown = false;
 
     while (window.pollEvents()) {
+        const bool escDown = window.isKeyDown(VK_ESCAPE);
+        if (escDown && !escWasDown) {
+            if (mc.screen()) {
+                mc.screen()->keyPressed(VK_ESCAPE, 0, 0);
+            } else if (mc.isInGame()) {
+                mc.openPauseScreen();
+            }
+        }
+        escWasDown = escDown;
+
         if (window.consumeLButtonClicked()) {
             if (mc.screen()) {
                 // A menu is open: route the click to its widgets, cursor stays visible.
@@ -152,7 +163,11 @@ int main() {
                 levelRenderer.renderLevel(cmd, partialTick);
 
                 if (mc.gui() && mc.guiGraphics()) {
-                    mc.gui()->render(*mc.guiGraphics(), partialTick);
+                    if (mc.screen()) {
+                        mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
+                    } else {
+                        mc.gui()->render(*mc.guiGraphics(), partialTick);
+                    }
                     mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
                 }
             } else if (mc.screen()) {
