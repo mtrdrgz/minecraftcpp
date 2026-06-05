@@ -303,8 +303,8 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 43 (tree-on-tree + huge-mushroom-on-water fixes; per-tick
-decoration budget; STARTED the menu system — embedded font/logo/button textures)
+**Last updated**: Session 44 (TitleScreen ported 1:1 from decompiled TitleScreen.java —
+real buttons/layout/strings + dirt background + logo; removed the invented localhost btn)
 
 **DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
 it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
@@ -339,8 +339,22 @@ Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
   widths from the ascii.png non-empty columns; current Font.cpp uses hardcoded widths).
 - [ ] **Background**: dirt-tile `MENU_BACKGROUND` (tiled `block/dirt` darkened) since the
   panorama is stubbed. Port `PanoramaRenderer`/`CubeMap` only if real panorama art appears.
-- [ ] **Title screen 1:1**: layout from `TitleScreen.java` (logo placement, splash text,
-  button stack: Singleplayer/Multiplayer/Options/Quit, version + copyright strings).
+- [x] **Title screen 1:1** (Session 44). Rewrote `gui/screens/TitleScreen.cpp` straight
+  from the decompiled `TitleScreen.java` + `LogoRenderer.java`: Singleplayer /
+  Multiplayer / Minecraft Realms stacked (200x20, topPos=h/4+48, spacing 24), then the
+  row [language 20] [Options... 98] [Quit Game 98] [accessibility 20] at topPos+36, logo
+  256x44@(w/2-128,30), edition subtitle 128x14@(w/2-64,67), version bottom-left +
+  copyright bottom-right, dirt-tile background. REMOVED the invented "Connect to
+  Localhost" button. Unported-screen actions (Multiplayer/Realms/Options/lang/access)
+  are hard no-ops; Singleplayer starts the local world (stand-in for SelectWorldScreen).
+  Strings are the real en_us.json values. NOTE: the client GUI classes are NOT in the
+  pre-decompiled `26.1.2/src` (only world/util/core were). Decompile what you need with
+  Vineflower: extract the `.class` files from `client.jar` into a stage dir and run
+  `jdk25/bin/java -jar vineflower-1.12.0.jar <stage> <out>` (output now in
+  `26.1.2/gui_src/`, gitignored). GUI textures extracted from client.jar and embedded as
+  RCDATA: ascii/logo/edition/button/button_hl/dirt (IDR_* in resource_ids.h).
+  TODO next: real splash text (needs splashes file + diagonal yellow render); 9-slice
+  button sprite; language/accessibility icon sprites.
 - [ ] **Widget library**: `Button`/`SpriteIconButton`/`AbstractWidget` with the real
   9-slice sprite scaling (`button.png` is a NineSlice sprite) + hover/focus.
 - [ ] **Options screens**: `OptionsScreen` + sub-screens (Video/Controls/Sound/Lang/Chat/

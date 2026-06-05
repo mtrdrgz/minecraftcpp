@@ -589,6 +589,8 @@ void Minecraft::render(float pt) {
 
         auto ts = std::make_unique<gui::screens::TitleScreen>();
         ts->setLogoTexture(loadResourceTex(m_device, cmd, IDR_GUI_LOGO));
+        ts->setEditionTexture(loadResourceTex(m_device, cmd, IDR_GUI_EDITION));
+        ts->setDirtTexture(loadResourceTex(m_device, cmd, IDR_GUI_DIRT));
         ts->setButtonTextures(
             loadResourceTex(m_device, cmd, IDR_GUI_BUTTON),
             loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL)
