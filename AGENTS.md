@@ -253,7 +253,22 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 42 (dry/bush vegetation tint and plant meshing)
+**Last updated**: Session 43 (flowerbed/vine special plant meshes)
+
+**Session 43**: improved plant model fidelity using the real 26.1.2 block model
+JSON from `client.jar`. Important parity note: ordinary flowers such as dandelion
+and poppy are still `minecraft:block/cross` in Java and should remain cross
+meshes. The special flat flowerbed blocks `pink_petals`, `wildflowers`, and
+`leaf_litter` now render as a low horizontal double-sided plane instead of cube or
+cross geometry. `vine` now renders as thin wall planes inset on faces that have a
+solid neighboring support, with a north-face fallback when direction data is not
+available; this matches the shape of the Java `vine` model better than the old
+generic block path. `cave_vines` and `cave_vines_plant` were added to the plant
+cross path because their Java models use `minecraft:block/cross`. Neighbor
+face-culling now treats these special plant/vine blocks as non-occluding. Verified
+with wrapper command: `mcpp` target builds. Remaining caveat: full multipart
+state-driven model rendering (e.g. exact `flower_amount`/`facing` for flowerbeds
+and exact vine directional block-state properties) is still not ported.
 
 **Session 42**: fixed the visible gray/cube vegetation class called out in the
 tasklist for the currently ported plant renderer. `ChunkMesh` now treats
