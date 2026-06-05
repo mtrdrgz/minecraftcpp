@@ -1,20 +1,24 @@
 #pragma once
 
-// Faithful port of net.minecraft.world.level.chunk.ChunkGenerator.applyBiomeDecoration
-// for a single chunk. Unlike the older heuristic decorateSurface(), this drives the
-// REAL pipeline end-to-end:
-//   * WorldgenRandom decoration RNG: setDecorationSeed(seed, minX, minZ) then,
-//     per feature, setFeatureSeed(decorationSeed, indexWithinStep, step);
-//   * Java GenerationStep.Decoration ordering and per-biome feature lists
-//     (BiomeFeatures, from the biome JSON) so each feature's seed index is exact;
-//   * the ported PlacedFeature -> Feature placement, writing through a WorldGenLevel
-//     view of the chunk, gated by the real minecraft:biome filter and canSurvive.
+// Biome decoration entry point.
 //
-// Scope note: features whose C++ port doesn't exist yet still consume their seed
-// index (so the ported features' seeds match vanilla) but are skipped. Placement
-// is clamped to the single chunk (no neighbour WorldGenRegion yet). This header is
-// kept free of the placement/heightprovider headers on purpose, so it can be
-// included alongside the surface generator without the VerticalAnchor clash.
+// Strict 1:1 cleanup note:
+// The previous runtime implementation mixed some real source-backed code with
+// heuristic fallbacks for ores, underwater vegetation, cave plants, bamboo,
+// coral, vegetation patches, root systems and other feature types. That made the
+// generated world look fuller, but it also broke the project rule that worldgen
+// must be ported from 26.1.2 source/data instead of approximated.
+//
+// applyBiomeDecoration is intentionally a no-op until the Java-equivalent
+// foundation is restored:
+//   * WorldGenRegion-backed placement instead of single-chunk views;
+//   * Java FeatureSorter / global feature indices;
+//   * exact placed_feature modifiers and block predicates;
+//   * configured_feature ports implemented one by one from 26.1.2/src;
+//   * parity tests for each re-enabled generation step.
+//
+// Keep this API stable so callers can remain wired to the future vanilla-style
+// decoration stage while the runtime stays free of approximate feature output.
 
 #include "../../block/BlockTags.h"
 #include "../../chunk/LevelChunk.h"
@@ -34,8 +38,8 @@ using JsonAssetReader = std::function<std::optional<std::string>(std::string_vie
 // the MCAS asset pack. Filesystem data remains the first choice when present.
 void setJsonAssetReader(JsonAssetReader reader);
 
-// worldgenDir is the data/minecraft/worldgen root (holding placed_feature/ and
-// configured_feature/); features are loaded from it data-drivenly and cached.
+// worldgenDir is the data/minecraft/worldgen root. Currently no-op by design;
+// re-enable only with source-backed, parity-tested Feature / Placement ports.
 void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
                           const std::function<std::string(int, int, int)>& biomeGetter,
                           const BiomeFeatures& biomeFeatures,
