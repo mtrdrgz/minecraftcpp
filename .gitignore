@@ -34,28 +34,23 @@ mcpp/*.log
 __pycache__/
 *.pyc
 
-# Mojang / Minecraft proprietary inputs and derived asset packs.
-# Keep these local; do not publish them to GitHub.
-26.1.2/
-assets/
-!mcpp/src/assets/
-mcpp/src/assets/*
-!mcpp/src/assets/*.cpp
-!mcpp/src/assets/*.h
-!mcpp/src/assets/*.rc
-mcpp/src/assets/assets.bin
-mcpp/src/assets/block_atlas.png
-mcpp/src/assets/block_atlas.json
-mcpp/src/assets/block_states.json
-mcpp/src/assets/ascii.png
-mcpp/src/assets/gui_logo.png
-mcpp/src/assets/gui_button.png
-mcpp/src/assets/gui_button_hl.png
-mcpp/src/assets/gui_dirt.png
-mcpp/src/assets/gui_edition.png
-mcpp/src/assets/splashes.txt
-mcpp/src/assets/gui_lang.png
-mcpp/src/assets/gui_access.png
+# Minecraft local dump: ignorar todo por defecto
+26.1.2/*
+
+# Permitir solo carpetas de source si ahí tienes los .java
+!26.1.2/net/
+!26.1.2/net/**
+!26.1.2/com/
+!26.1.2/com/**
+
+# Pero seguir ignorando binarios/decompilado bruto
+26.1.2/**/*.class
+26.1.2/**/*.jar
+26.1.2/client.jar
+26.1.2/*.json
+26.1.2/data/
+26.1.2/assets/
+26.1.2/classes_stage/
 
 # Decompiled/download helper artifacts
 decompile_log.txt

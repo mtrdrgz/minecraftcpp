@@ -87,13 +87,40 @@ struct ChunkWGL final : WorldGenLevel {
                && p.y >= CHUNK_MIN_Y && p.y < CHUNK_MAX_Y;
     }
 
+    // Chunk owning world column (wx,wz): active chunk, else a loaded neighbour.
+    LevelChunk* owning(int wx, int wz) const {
+        const int cx = wx >> 4, cz = wz >> 4; // C++20+: arithmetic shift == floor-div
+        const ChunkPos cp = chunk->pos();
+        if (cx == cp.x && cz == cp.z) return chunk;
+        if (chunkAt && *chunkAt) return (*chunkAt)(cx, cz);
+        return nullptr;
+    }
+
     int getMinY() const override { return CHUNK_MIN_Y; }
 
-    int getHeight(Heightmap::Types, int x, int z) const override {
-        const ChunkPos cp = chunk->pos();
-        if (x < cp.x * 16 || x >= cp.x * 16 + 16 || z < cp.z * 16 || z >= cp.z * 16 + 16) return CHUNK_MIN_Y;
-        const int h = chunk->heightmap(x & 15, z & 15); // top non-air block
-        return h < CHUNK_MIN_Y ? CHUNK_MIN_Y : h + 1;   // first free space above
+    int getHeight(Heightmap::Types type, int x, int z) const override {
+        LevelChunk* c = owning(x, z);
+        if (!c) return CHUNK_MIN_Y;
+        const int top = c->heightmap(x & 15, z & 15); // top non-air block (incl. water)
+        if (top < CHUNK_MIN_Y) return CHUNK_MIN_Y;
+
+        // OCEAN_FLOOR excludes fluids: scan down from the surface past water/lava to the
+        // first solid, non-fluid block. WORLD_SURFACE / MOTION_BLOCKING keep the fluid
+        // top. With one stored (fluid-inclusive) heightmap, ignoring the type collapsed
+        // them, which disabled surface_water_depth_filter and put seagrass/kelp (and
+        // trees) on the water surface instead of the ocean floor.
+        if (type == Heightmap::Types::OCEAN_FLOOR || type == Heightmap::Types::OCEAN_FLOOR_WG) {
+            int y = top;
+            while (y > CHUNK_MIN_Y) {
+                const mc::BlockState* s = mc::getBlockState(c->getBlock(x, y, z));
+                const bool fluid = s && s->isFluid();
+                const bool air   = !s || s->isAir();
+                if (!fluid && !air) break; // first solid, non-fluid block = ocean floor
+                --y;
+            }
+            return y + 1;
+        }
+        return top + 1; // first free space above the surface
     }
 
     std::string nameAt(BlockPos p) const {
