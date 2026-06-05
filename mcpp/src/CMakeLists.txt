@@ -71,6 +71,7 @@ set(MC_SOURCES
     client/player/LocalPlayer.cpp
     gui/Gui.cpp
     gui/components/Button.cpp
+    gui/components/OptionWidgets.cpp
     gui/screens/TitleScreen.cpp
     gui/screens/options/OptionsScreen.cpp
     # Render — Common

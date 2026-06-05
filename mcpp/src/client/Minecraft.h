@@ -11,6 +11,7 @@
 #include "../gui/screens/Screen.h"
 #include "../audio/SoundManager.h"
 #include "../core/ThreadPool.h"
+#include "Options.h"
 #include <unordered_map>
 #include <memory>
 #include <string>
@@ -84,6 +85,8 @@ public:
     // Centralised screen construction (the GUI textures are owned here and reused).
     void openTitleScreen();
     void openOptionsScreen();
+
+    GameOptions& options() { return m_options; }
 
     // Title panorama background (rotating cubemap). renderPanorama draws it to cmd;
     // panoramaOverlay/panoramaLoaded let the title screen blit the overlay + fall back
@@ -159,6 +162,7 @@ private:
     render::ITexture* m_langTex = nullptr;
     render::ITexture* m_accessTex = nullptr;
     std::string       m_splashText;
+    GameOptions       m_options;
     std::unique_ptr<gui::Gui>           m_gui;
     std::unique_ptr<audio::SoundManager> m_soundManager;
     std::unique_ptr<gui::Screen>        m_currentScreen;

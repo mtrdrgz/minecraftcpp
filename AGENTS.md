@@ -303,8 +303,8 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 46 (rotating panorama background; OptionsScreen navigation —
-Options button now opens the real category grid + sub-screens with Done/back)
+**Last updated**: Session 47 (fixed panorama 180° flip; real option widgets — Slider/
+CycleButton + GameOptions store; Sound/Video/Controls sub-screens populated; FOV slider)
 
 **DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
 it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
@@ -384,11 +384,19 @@ Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
   `openOptionsScreen()` (GUI textures are owned by Minecraft and reused, so screens rebuild
   with their textures). Title "Options..." button → openOptionsScreen; each category opens
   an `OptionsSubScreen` (real title + Done → back); Done → back to title. Navigation works.
-- [ ] **Option WIDGETS (next increment, do NOT invent)**: the sub-screens are currently
-  the real titled screen + Done only. Port the actual `OptionInstance`-backed widgets
-  (FOV/sensitivity sliders, cycle buttons, etc.) per VideoSettingsScreen/ControlsScreen/
-  SoundOptionsScreen/etc. — read each `*.java`, don't fabricate controls. Needs an
-  `Options` value store + slider/cycle-button widgets.
+- [x] **Option widgets** (Session 47). `gui/components/OptionWidgets.{h,cpp}`: AbstractWidget
+  + Slider + CycleButton (+ WidgetButton). `client/Options.h` GameOptions store (owned by
+  Minecraft, `options()`; volumes 0..1, fov 30..110, sensitivity 0..1→0..200%, render
+  distance 2..32, gamma 0..1). `OptionsSubScreen` is now a real base (add*/layout: big=1col
+  310px, small=2col 150px + Done). Ported the option LISTS from the Java:
+  SoundOptionsScreen (master big + 9 source sliders + subtitles/directional toggles, from
+  SoundOptionsScreen.java), VideoSettingsScreen (graphics cycle / render distance / GUI
+  scale / brightness / fullscreen / vsync / view bobbing), ControlsScreen (sensitivity +
+  invert/auto-jump/discrete-scroll/touchscreen). FOV slider in the OptionsScreen subheader.
+  CAVEATS / NEXT: sliders are click-to-set (drag = poll mouse-down each frame — needs a
+  Window `isMouseDown()`); options are NOT persisted to disk; categories without a concrete
+  screen yet (Skin/Language/Chat/Resource Packs/Accessibility/Telemetry/Credits) open the
+  generic titled screen — port each `*.java` option list + the key-binding list (Controls).
 - [ ] **Screen framework polish**: real `GridLayout`/`HeaderAndFooterLayout`, 9-slice
   button sprite, hover tooltips, keyboard/ESC handling.
 

@@ -112,9 +112,10 @@ void PanoramaRenderer::render(ICommandList* cmd, int width, int height, float dt
 
     const float aspect = height > 0 ? (float)width / (float)height : 1.0f;
     glm::mat4 proj = glm::perspective(glm::radians(85.0f), aspect, 0.05f, 10.0f);
-    // CubeMap.render: rotationX(PI) then rotateY(spin). (rotX pitch ≈ 0 here.)
+    // CubeMap.render applies rotationX(PI) for the GL cubemap-sampler convention; our
+    // cube is already built +Y-up with explicit UVs, so adding it flipped the panorama
+    // upside down. Just spin in yaw.
     glm::mat4 view(1.0f);
-    view = glm::rotate(view, glm::radians(180.0f), glm::vec3(1, 0, 0));
     view = glm::rotate(view, glm::radians(m_spin), glm::vec3(0, 1, 0));
     glm::mat4 mvp = proj * view;
 
