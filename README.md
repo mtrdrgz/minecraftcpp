@@ -138,4 +138,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\run_with_timeout.ps1 -
 
 ## GitHub Notes
 
-Do not commit or publish Mojang-owned binaries, decompiled sources, raw assets, or generated asset packs. Keep those local and regenerate derived files on machines that own the required game files.
+~~-Do not commit or publish Mojang-owned binaries, decompiled sources, raw assets, or generated asset packs. Keep those local and regenerate derived files on machines that own the required game files.~~
+We got official permission from mojang to use source 🎉
