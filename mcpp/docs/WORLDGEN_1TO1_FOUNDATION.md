@@ -45,7 +45,7 @@ Next work:
 - wire carvers to use `WorldGenRegion` / carving masks;
 - avoid direct single-chunk clamping in feature code.
 
-### 2. FeatureSorter and global feature indices
+### 2. FeatureSorter, global feature indices and no-op decoration driver
 
 Java decoration uses `FeatureSorter.StepFeatureData` and global feature indices. The RNG call is sensitive to the feature index:
 
@@ -59,13 +59,16 @@ Status: **foundation added** in:
 
 - `mcpp/src/world/level/levelgen/feature/FeatureSorter.h`
 - `mcpp/src/world/level/levelgen/feature/DecorationPlan.h`
+- `mcpp/src/world/level/levelgen/feature/DecorationDriver.h`
+- `mcpp/src/world/level/levelgen/feature/DecorationPlanDump.h`
 
-The new code is data-only and does not place blocks. It prepares the Java-style feature order and the per-step feature indices that future decoration should seed/place.
+The new code is data-only and does not place blocks. It prepares the Java-style feature order, per-step feature indices, decoration seed and feature seed calls that future decoration should execute.
 
 Next work:
 
-- compare feature ordering against Java for a fixed biome set;
-- connect `DecorationPlan` to a no-op decoration driver that logs/records planned calls;
+- add a Java exporter that dumps the same `decoration_seed` / `step` / `index` / `seed` / `feature` rows for fixed biome sets;
+- compare C++ `DecorationDriver` output against that exporter;
+- only after parity, connect the driver to runtime diagnostics;
 - preserve indices for skipped unsupported features once runtime decoration is re-enabled.
 
 ### 3. Placement modifiers and block predicates
