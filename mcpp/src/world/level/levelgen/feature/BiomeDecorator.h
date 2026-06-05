@@ -40,6 +40,7 @@ void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
                           const std::function<std::string(int, int, int)>& biomeGetter,
                           const BiomeFeatures& biomeFeatures,
                           const mc::block::BlockTags& tags,
-                          const std::string& worldgenDir);
+                          const std::string& worldgenDir,
+                          const std::function<LevelChunk*(int, int)>& chunkAt = {});
 
 } // namespace mc::levelgen::feature

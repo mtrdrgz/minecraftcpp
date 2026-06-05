@@ -73,7 +73,8 @@ namespace {
 // region yet). Carries the biome getter + the feature currently being placed so
 // the minecraft:biome filter can check "does the biome at this pos list me".
 struct ChunkWGL final : WorldGenLevel {
-    LevelChunk* chunk = nullptr;
+    LevelChunk* chunk = nullptr;                                  // active chunk (placement origin)
+    const std::function<LevelChunk*(int, int)>* chunkAt = nullptr; // optional neighbour resolver (chunk coords)
     const mc::block::BlockTags* tags = nullptr;
     const BiomeFeatures* biomeFeatures = nullptr;
     const std::function<std::string(int, int, int)>* biomeGetter = nullptr;
@@ -187,6 +188,7 @@ PlacedFeature::FeaturePlacer treePlacer(TreeConfig cfg) {
         auto& w = static_cast<ChunkWGL&>(l);
         const ChunkPos cp = w.chunk->pos();
         TreeWorld tw{ *w.chunk, cp.x * 16, cp.z * 16 };
+        tw.chunkAt = w.chunkAt; // let trunk/foliage spill into loaded neighbour chunks
         return placeTree(tw, r, p.x, p.y, p.z, cfg);
     };
 }
@@ -1029,12 +1031,14 @@ void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
                           const std::function<std::string(int, int, int)>& biomeGetter,
                           const BiomeFeatures& biomeFeatures,
                           const mc::block::BlockTags& tags,
-                          const std::string& worldgenDir) {
+                          const std::string& worldgenDir,
+                          const std::function<LevelChunk*(int, int)>& chunkAt) {
     const ChunkPos cp = chunk.pos();
     const int minX = cp.x * 16, minZ = cp.z * 16;
 
     ChunkWGL level;
     level.chunk = &chunk;
+    level.chunkAt = &chunkAt;
     level.tags = &tags;
     level.biomeFeatures = &biomeFeatures;
     level.biomeGetter = &biomeGetter;
