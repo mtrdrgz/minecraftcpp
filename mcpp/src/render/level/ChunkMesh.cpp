@@ -53,6 +53,38 @@ static TintRGB getTextureTint(const std::string& name) {
     return {255, 255, 255};
 }
 
+static bool isPillarTextureBlock(const std::string& name) {
+    return name.ends_with("_log") || name.ends_with("_wood") ||
+           name.ends_with("_stem") || name.ends_with("_hyphae") ||
+           name == "bamboo_block";
+}
+
+static std::string textureForStateFace(const mc::BlockState& state, int face) {
+    const mc::Block* block = state.block;
+    if (!block) {
+        return "";
+    }
+
+    if (isPillarTextureBlock(block->name)) {
+        std::string axis = state.getProperty("axis");
+        if (axis.empty()) {
+            axis = "y";
+        }
+        const bool endFace =
+            (axis == "x" && (face == 0 || face == 1)) ||
+            (axis == "y" && (face == 2 || face == 3)) ||
+            (axis == "z" && (face == 4 || face == 5));
+        if (endFace && !block->textures.top.empty()) {
+            return block->textures.top;
+        }
+        if (!endFace && !block->textures.side.empty()) {
+            return block->textures.side;
+        }
+    }
+
+    return block->textures.forFace(face);
+}
+
 // Get UV coordinates and biome tint from atlas (or fallback grid if atlas null)
 static void getUV(uint32_t stateId, int face,
                   const mc::TextureAtlas* atlas,
@@ -64,7 +96,7 @@ static void getUV(uint32_t stateId, int face,
     if (atlas && atlas->isLoaded()) {
         const mc::BlockState* bs = mc::getBlockState(stateId);
         if (bs && bs->block) {
-            std::string name = bs->block->textures.forFace(face);
+            std::string name = textureForStateFace(*bs, face);
             if (name.empty()) {
                 if (bs->block->name == "water") {
                     name = "water_still";

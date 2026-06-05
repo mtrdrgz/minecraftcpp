@@ -253,7 +253,31 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 39 (surface vegetation breadth: double plants + dry vegetation + canSurvive dispatch)
+**Last updated**: Session 40 (tasklist pass: fallen-log axis + decoration integration hardening)
+
+**Session 40**: first tasklist bug pass focused on generated decoration/log regressions.
+`Blocks` now exposes `getBlockStateId(serializedState)` for canonical states such
+as `minecraft:oak_log[axis=x]` and `minecraft:tall_grass[half=upper]`, and loaded
+pillar state IDs now carry inferred `axis` properties. `BiomeDecorator` preserves
+JSON `Properties` when resolving providers, writes property-aware state IDs into
+chunks, resolves trunk/leaf states through the new state helper, uses horizontal
+log IDs in tree configs, and makes `FallenTreeFeature` closer to Java's shape:
+stump first, random horizontal direction, 2-3 block gap from the stump, downward
+ground probe, solid-support checks, gap limiting, and horizontal `axis=x/z` logs.
+Feature/config caches in `BiomeDecorator` are now `thread_local` and keyed by data
+directory + feature key to avoid shared-cache races during threaded generation.
+`ChunkMesh` now chooses pillar top/side textures from the block state's `axis`, so
+horizontal fallen logs no longer render as vertical logs. `NoiseBasedChunkGenerator`
+now computes the heightmap after surface creation, loads biome feature lists and
+block tags from local `26.1.2/data/minecraft`, and calls `applyBiomeDecoration`
+before the final heightmap/mesh-dirty pass. Build hygiene fixed during verification:
+`nlohmann_json` exposes the correct vendor include root, MinGW links XAudio2 as
+`xaudio2_9`, DX12 adapter probing uses `IID_PPV_ARGS`, and `AABB.cpp` includes
+`<algorithm>`. Verified with wrapper commands: `mcpp` build, `biome_decorator_test`,
+`block_tags_parity`, and `vegetation_demo` all pass. Remaining important caveat:
+runtime decoration data still comes from sidecar `26.1.2/data/minecraft`; embedding
+worldgen/tags JSON into the executable/asset pack is still required for a moved
+standalone exe to keep trees/decorations.
 
 **Session 39**: extended surface vegetation coverage. `world/level/block/BlockStates.h`
 (canonical state-id property helpers: blockName / setProperty, sorted like Java).
@@ -323,7 +347,7 @@ Now verified: `NormalNoise.getValue` matches Java bit-for-bit and the
 NoiseThresholdProvider (flower_plain) state selection matches 1:1
 (`block_state_provider_parity` NOISE + BSPN cases).
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
-**Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
+**Executable**: `C:\Users\Mateo\Desktop\minecraftcpp\mcpp\build\mcpp.exe` - built 2026-06-05
 
 **Worldgen roadmap**: `mcpp/docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
 the full feature/tree/structure port (Phases A–G, with real data counts). Phase A
@@ -343,6 +367,9 @@ the removed hand-authored approximate generators — port from Java + data only.
    is also verified end-to-end, and add the same coverage for nether/end presets.
 4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
 5. Port placed/configured features and structures only from Java/data definitions. The approximate tree/ore/surface-decoration/structure generators added by another LLM were removed from the build and must not be re-enabled as-is.
+6. Tasklist next: embed `worldgen/*` and `tags/block/*` JSON into the runtime asset
+   pack/loaders so decorations survive moving the exe, then continue the remaining
+   rendering/worldgen/UI items from `C:\Users\Mateo\Desktop\tasklist.txt`.
 
 **Known issues / limitations:**
 - Online mode auth not implemented.

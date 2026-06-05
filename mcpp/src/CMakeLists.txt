@@ -139,9 +139,13 @@ target_link_libraries(mcpp PRIVATE
 target_link_libraries(mcpp PRIVATE
     user32 gdi32 kernel32 opengl32
     ws2_32 bcrypt
-    xaudio2 ole32
     d3d12 dxgi d3dcompiler
 )
+if(MINGW)
+    target_link_libraries(mcpp PRIVATE xaudio2_9 ole32)
+else()
+    target_link_libraries(mcpp PRIVATE xaudio2 ole32)
+endif()
 
 target_compile_definitions(mcpp PRIVATE
     NLOHMANN_JSON_NOEXCEPTION=0

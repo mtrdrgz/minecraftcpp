@@ -6,10 +6,13 @@
 #include "SurfaceSystem.h"
 #include "SurfaceRuleData.h"
 #include "../block/Blocks.h"
+#include "../block/BlockTags.h"
 #include "../block/BlockState.h"
+#include "feature/BiomeDecorator.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -274,6 +277,48 @@ namespace {
         }
         return NoiseRouterData::overworld(randomState, false, false);
     }
+
+    struct DecorationData {
+        feature::BiomeFeatures biomeFeatures;
+        block::BlockTags blockTags;
+        std::string worldgenDir;
+        bool loaded = false;
+    };
+
+    const DecorationData& decorationData() {
+        namespace fs = std::filesystem;
+        static const DecorationData data = [] {
+            DecorationData out;
+            const fs::path candidates[] = {
+                fs::path("26.1.2/data/minecraft"),
+                fs::path("../26.1.2/data/minecraft"),
+                fs::path("../../26.1.2/data/minecraft"),
+            };
+
+            for (const fs::path& root : candidates) {
+                const fs::path worldgen = root / "worldgen";
+                const fs::path biomes = worldgen / "biome";
+                const fs::path tags = root / "tags" / "block";
+                if (!fs::is_directory(biomes) || !fs::is_directory(tags)) {
+                    continue;
+                }
+
+                try {
+                    out.biomeFeatures = feature::BiomeFeatures::loadFromDirectory(biomes.string());
+                    out.blockTags = block::BlockTags::loadFromDirectory(tags.string());
+                    out.worldgenDir = worldgen.string();
+                    out.loaded = out.biomeFeatures.biomeCount() > 0 && out.blockTags.tagCount() > 0;
+                } catch (...) {
+                    out.loaded = false;
+                }
+                if (out.loaded) {
+                    break;
+                }
+            }
+            return out;
+        }();
+        return data;
+    }
 }
 
 NoiseBasedChunkGenerator::NoiseBasedChunkGenerator(uint64_t seed)
@@ -448,9 +493,17 @@ void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
 
     system.buildSurface(randomState, chunk, prelimSurf, biomeGetter, genCtx, m_surfaceRuleSource);
 
-
-    // Vegetation decoration (trees) — called here after surface is final
-
+    chunk.computeHeightmap();
+    const DecorationData& deco = decorationData();
+    if (deco.loaded) {
+        feature::applyBiomeDecoration(
+            chunk,
+            static_cast<std::int64_t>(m_seed),
+            biomeGetter,
+            deco.biomeFeatures,
+            deco.blockTags,
+            deco.worldgenDir);
+    }
 
     chunk.computeHeightmap();
     chunk.setLoaded(true);
