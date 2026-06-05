@@ -6,31 +6,89 @@
 #include "../world/entity/Entities.h"
 #include "../world/entity/player/Player.h"
 #include "../world/level/levelgen/NoiseBasedChunkGenerator.h"
+#include "../world/level/levelgen/feature/BiomeDecorator.h"
+#include "../world/level/levelgen/feature/BiomeFeatures.h"
+#include "../world/level/levelgen/structure/StructureGen.h"
+#include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
+#include "../gui/screens/options/OptionsScreen.h"
+#include "../render/gui/PanoramaRenderer.h"
+#include "../assets/resource_ids.h"
 #include <stb_image.h>
+#include <windows.h>
 #include <cmath>
+#include <filesystem>
+#include <exception>
+#include <sstream>
+#include <random>
+#include <chrono>
+#include <vector>
+#include <string>
 
 namespace mc {
 
 namespace {
+    // Decode a 4-channel texture from already-read PNG bytes.
+    render::ITexture* decodeTex(render::IRenderDevice* dev, render::ICommandList* cmd, const uint8_t* bytes, int len) {
+        if (!bytes || len <= 0) return nullptr;
+        int w, h, ch;
+        stbi_set_flip_vertically_on_load(false);
+        uint8_t* p = stbi_load_from_memory(bytes, len, &w, &h, &ch, 4);
+        if (!p) return nullptr;
+        render::TextureDesc d;
+        d.width = (uint32_t)w; d.height = (uint32_t)h; d.format = render::TextureFormat::RGBA8;
+        d.filter = render::FilterMode::Nearest;
+        render::ITexture* t = dev->createTexture(d);
+        cmd->uploadTexture(t, p);
+        stbi_image_free(p);
+        return t;
+    }
+
     render::ITexture* loadAssetTex(render::IRenderDevice* dev, render::ICommandList* cmd, std::string_view path) {
         auto b = AssetManager::instance().readRaw(path);
         if (b.empty()) {
             MC_LOG_WARN("Asset not found: {}", path);
             return nullptr;
         }
-        int w, h, ch;
-        stbi_set_flip_vertically_on_load(false);
-        uint8_t* p = stbi_load_from_memory(b.data(), (int)b.size(), &w, &h, &ch, 4);
-        if (!p) return nullptr;
-        render::TextureDesc d;
-        d.width = w; d.height = h; d.format = render::TextureFormat::RGBA8;
-        d.filter = render::FilterMode::Nearest;
-        render::ITexture* t = dev->createTexture(d);
-        cmd->uploadTexture(t, p);
-        stbi_image_free(p);
-        return t;
+        return decodeTex(dev, cmd, b.data(), (int)b.size());
+    }
+
+    // Load a PNG embedded as an RCDATA resource (font / GUI textures from client.jar).
+    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+        if (!hres) return nullptr;
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return decodeTex(dev, cmd, data, (int)size);
+    }
+
+    // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
+    std::string loadResourceText(int resourceId) {
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+        if (!hres) return {};
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const char* data = static_cast<const char*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return data ? std::string(data, data + size) : std::string{};
+    }
+
+    // SplashManager: pick a random non-empty line from splashes.txt.
+    std::string pickSplash() {
+        const std::string txt = loadResourceText(IDR_SPLASHES);
+        std::vector<std::string> lines;
+        std::stringstream ss(txt);
+        std::string line;
+        while (std::getline(ss, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();
+            if (!line.empty()) lines.push_back(line);
+        }
+        if (lines.empty()) return {};
+        std::mt19937 rng((unsigned)std::chrono::steady_clock::now().time_since_epoch().count());
+        return lines[rng() % lines.size()];
     }
 }
 
@@ -38,6 +96,7 @@ Minecraft::Minecraft(Window* window, render::IRenderDevice* device)
     : m_window(window), m_device(device) 
 {
     m_guiGraphics = std::make_unique<render::GuiGraphics>(device);
+    m_panorama = std::make_unique<render::PanoramaRenderer>(device);
     m_gui = std::make_unique<gui::Gui>(this);
     m_soundManager = std::make_unique<audio::SoundManager>();
     m_soundManager->init();
@@ -67,6 +126,18 @@ void Minecraft::setScreen(std::unique_ptr<gui::Screen> screen) {
     if (m_currentScreen) {
         m_currentScreen->init(this, m_window->width(), m_window->height());
     }
+}
+
+void Minecraft::renderPanorama(render::ICommandList* cmd, int w, int h, float dtSeconds) {
+    if (m_panorama) m_panorama->render(cmd, w, h, dtSeconds);
+}
+
+render::ITexture* Minecraft::panoramaOverlay() {
+    return m_panorama ? m_panorama->overlay() : nullptr;
+}
+
+bool Minecraft::panoramaLoaded() const {
+    return m_panorama && m_panorama->loaded();
 }
 
 // ── Chunk storage ─────────────────────────────────────────────────────────────
@@ -119,6 +190,132 @@ void Minecraft::connectToServer(std::string_view host, uint16_t port,
     MC_LOG_INFO("Login sequence started for '{}'", username);
 }
 
+namespace {
+    // Locate the local "26.1.2/data" tree (the data-driven worldgen JSON). The
+    // exe may be launched from the repo root, mcpp/, or mcpp/build/, so probe a
+    // few parents of both the working dir and the executable dir.
+    std::string discoverDataRoot() {
+        namespace fs = std::filesystem;
+        auto probe = [](fs::path start) -> std::string {
+            std::error_code ec;
+            for (int i = 0; i < 6 && !start.empty(); ++i) {
+                fs::path cand = start / "26.1.2" / "data";
+                if (fs::exists(cand / "minecraft" / "worldgen" / "biome", ec))
+                    return cand.generic_string();
+                if (!start.has_parent_path()) break;
+                start = start.parent_path();
+            }
+            return "";
+        };
+        std::error_code ec;
+        if (auto r = probe(fs::current_path(ec)); !r.empty()) return r;
+        wchar_t buf[MAX_PATH];
+        DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            if (auto r = probe(fs::path(buf).parent_path()); !r.empty()) return r;
+        }
+        return "";
+    }
+}
+
+void Minecraft::ensureWorldgenData() {
+    if (m_worldgenTried) return;
+    m_worldgenTried = true;
+
+    std::string dataRoot = discoverDataRoot();
+    if (dataRoot.empty()) {
+        MC_LOG_WARN("Worldgen data (26.1.2/data) not found near cwd or exe; "
+                    "terrain will generate without trees/vegetation");
+        return;
+    }
+
+    try {
+        m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
+            levelgen::feature::BiomeFeatures::loadFromDirectory(dataRoot + "/minecraft/worldgen/biome"));
+        m_blockTags = std::make_unique<block::BlockTags>(
+            block::BlockTags::loadFromDirectory(dataRoot + "/minecraft/tags/block"));
+        m_worldgenDir = dataRoot + "/minecraft/worldgen";
+        m_worldgenReady = true;
+        MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from {}",
+                    m_biomeFeatures->biomeCount(), dataRoot);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("Failed to load worldgen decoration data: {}", e.what());
+        m_worldgenReady = false;
+    }
+}
+
+void Minecraft::decorateChunk(LevelChunk& chunk) {
+    if (!m_worldgenReady || !m_localGenerator) return;
+    auto biomeGetter = [this](int x, int y, int z) {
+        return m_localGenerator->getBiome(x, y, z);
+    };
+    // Let features write across this chunk's borders into already-loaded neighbours
+    // (fixes trees clipped at chunk edges) — main-thread only, so getChunk is safe.
+    auto chunkAt = [this](int cx, int cz) { return getChunk({ cx, cz }); };
+    try {
+        levelgen::feature::applyBiomeDecoration(
+            chunk, (std::int64_t)m_worldSeed, biomeGetter,
+            *m_biomeFeatures, *m_blockTags, m_worldgenDir, chunkAt);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("decorateChunk failed at ({},{}): {}", chunk.pos().x, chunk.pos().z, e.what());
+    }
+}
+
+namespace {
+    // Floor-divide world block coords to chunk coords (handles negatives).
+    ChunkPos worldToChunk(int wx, int wz) {
+        return { wx >= 0 ? wx / 16 : (wx - 15) / 16,
+                 wz >= 0 ? wz / 16 : (wz - 15) / 16 };
+    }
+}
+
+void Minecraft::tryDecorate(ChunkPos cp) {
+    LevelChunk* c = getChunk(cp);
+    if (!c || c->decorated) return;
+    // Require all 8 neighbours loaded so cross-chunk feature writes (tree foliage,
+    // ore veins, structures) land in real chunks rather than being clipped.
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dx = -1; dx <= 1; ++dx)
+            if ((dx || dz) && !getChunk({ cp.x + dx, cp.z + dz })) return;
+
+    c->decorated = true;
+    decorateChunk(*c);
+    runStructures(cp);
+    // Cross-chunk writes can touch the neighbours — re-mesh the 3x3.
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dx = -1; dx <= 1; ++dx)
+            if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz })) n->meshDirty = true;
+}
+
+void Minecraft::runStructures(ChunkPos active) {
+    if (!m_localGenerator) return;
+
+    // Cross-chunk writer over the loaded chunks: a structure whose origin is in
+    // `active` may write into adjacent loaded chunks (writes elsewhere are dropped).
+    levelgen::structure::StructureWorld world;
+    world.getBlock = [this](int x, int y, int z) -> uint32_t {
+        LevelChunk* c = getChunk(worldToChunk(x, z));
+        return c ? c->getBlock(x, y, z) : 0u;
+    };
+    world.setBlock = [this](int x, int y, int z, uint32_t id) {
+        LevelChunk* c = getChunk(worldToChunk(x, z));
+        if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
+    };
+    world.heightAt = [this](int x, int z) -> int {
+        LevelChunk* c = getChunk(worldToChunk(x, z));
+        if (!c) return 0;
+        return c->heightmap(((x % 16) + 16) % 16, ((z % 16) + 16) % 16);
+    };
+    auto biomeGetter = [this](int x, int y, int z) {
+        return m_localGenerator->getBiome(x, y, z);
+    };
+    try {
+        levelgen::structure::generateStructures(active, m_worldSeed, world, biomeGetter);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("runStructures failed at ({},{}): {}", active.x, active.z, e.what());
+    }
+}
+
 void Minecraft::startLocalGame(uint64_t seed) {
     MC_LOG_INFO("Starting local singleplayer prototype world, seed={}", seed);
 
@@ -133,14 +330,26 @@ void Minecraft::startLocalGame(uint64_t seed) {
     m_localPlayer.reset();
 
     m_worldSeed = seed;
-    levelgen::NoiseBasedChunkGenerator generator(seed);
-    constexpr int RADIUS = 1;
+    m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
+    ensureWorldgenData();
+    // Generate terrain for a 5x5 so the inner 3x3 can be decorated with all
+    // neighbours present (deferred decoration → no trees clipped at chunk borders).
+    constexpr int RADIUS = 2;
 
     for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
         for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
             LevelChunk* chunk = getOrCreateChunk({cx, cz});
-            generator.fillFromNoise(*chunk);
-            generator.buildSurface(*chunk);
+            m_localGenerator->fillFromNoise(*chunk);
+            m_localGenerator->buildSurface(*chunk);
+        }
+    }
+
+    // Decoration + structures run on the main thread (feature caches aren't
+    // thread-safe). tryDecorate only fires for chunks whose 8 neighbours exist, so
+    // cross-chunk features (tree foliage, ore veins) write into real chunks.
+    for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
+        for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
+            tryDecorate({cx, cz});
         }
     }
 
@@ -150,7 +359,7 @@ void Minecraft::startLocalGame(uint64_t seed) {
     state.gameMode = 1;
     state.x = 0.5;
     state.z = 0.5;
-    state.y = (double)generator.getBaseHeight(0, 0) + 4.0;
+    state.y = (double)m_localGenerator->getBaseHeight(0, 0) + 4.0;
     state.yaw = 0.0f;
     state.pitch = 10.0f;
     state.onGround = false;
@@ -412,8 +621,19 @@ void Minecraft::render(float pt) {
     if (!guiInit) {
         auto* cmd = m_device->beginFrame(m_window->width(), m_window->height());
         
-        render::ITexture* fontTex = loadAssetTex(m_device, cmd, "minecraft/textures/font/ascii.png");
-        if (fontTex) m_font = std::make_unique<render::Font>(m_device, fontTex);
+        // Font + GUI textures are embedded as Windows resources (extracted from
+        // client.jar — they aren't in assets.bin). Loaded ONCE into members and reused
+        // to (re)build screens (so the title rebuilds correctly when you close Options).
+        render::ITexture* fontTex = loadResourceTex(m_device, cmd, IDR_FONT_ASCII);
+        m_font = std::make_unique<render::Font>(m_device, fontTex);
+        m_logoTex    = loadResourceTex(m_device, cmd, IDR_GUI_LOGO);
+        m_editionTex = loadResourceTex(m_device, cmd, IDR_GUI_EDITION);
+        m_dirtTex    = loadResourceTex(m_device, cmd, IDR_GUI_DIRT);
+        m_btnTex     = loadResourceTex(m_device, cmd, IDR_GUI_BUTTON);
+        m_btnHlTex   = loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL);
+        m_langTex    = loadResourceTex(m_device, cmd, IDR_GUI_LANG);
+        m_accessTex  = loadResourceTex(m_device, cmd, IDR_GUI_ACCESS);
+        m_splashText = pickSplash();
 
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
@@ -421,17 +641,29 @@ void Minecraft::render(float pt) {
         m_gui->setHeartTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/full.png"));
         m_gui->setFoodTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
 
-        auto ts = std::make_unique<gui::screens::TitleScreen>();
-        ts->setLogoTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/title/minecraft.png"));
-        ts->setButtonTextures(
-            loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/button.png"),
-            loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/button_highlighted.png")
-        );
-        setScreen(std::move(ts));
+        openTitleScreen();
 
         guiInit = true;
         m_device->endFrame();
     }
+}
+
+void Minecraft::openTitleScreen() {
+    auto ts = std::make_unique<gui::screens::TitleScreen>();
+    ts->setLogoTexture(m_logoTex);
+    ts->setEditionTexture(m_editionTex);
+    ts->setDirtTexture(m_dirtTex);
+    ts->setButtonTextures(m_btnTex, m_btnHlTex);
+    ts->setIconTextures(m_langTex, m_accessTex);
+    ts->setSplash(m_splashText);
+    setScreen(std::move(ts));
+}
+
+void Minecraft::openOptionsScreen() {
+    auto os = std::make_unique<gui::screens::OptionsScreen>();
+    os->setButtonTextures(m_btnTex, m_btnHlTex);
+    os->setBackAction([this]() { openTitleScreen(); });
+    setScreen(std::move(os));
 }
 
 void Minecraft::updateLocalChunks() {
@@ -465,9 +697,11 @@ void Minecraft::updateLocalChunks() {
                     auto key = chunkKey(cp);
                     if (m_chunks.find(key) == m_chunks.end()) {
                         LevelChunk* ptr = chunk.get();
+                        // Store terrain now; decoration is DEFERRED until all 8
+                        // neighbours exist (the tryDecorate pass below) so trees/
+                        // ores/structures write across borders without clipping.
                         m_chunks[key] = std::move(chunk);
                         ptr->meshDirty = true;
-                        
                         // Mark neighboring chunks dirty so seams are updated
                         for (int dz = -1; dz <= 1; ++dz) {
                             for (int dx = -1; dx <= 1; ++dx) {
@@ -485,7 +719,30 @@ void Minecraft::updateLocalChunks() {
             ++it;
         }
     }
-    
+
+    // 2b. Deferred decoration: decorate loaded, undecorated chunks whose 8
+    // neighbours are present (so trees/ores/structures get full cross-chunk context,
+    // no border clipping). BUDGETED to a few per tick: decoration is heavy and runs
+    // on the main thread, so doing every eligible chunk at once causes the movement
+    // stutter. Nearest-first so the area around the player fills in before the rim.
+    {
+        std::vector<ChunkPos> ready;
+        for (const auto& [key, chunk] : m_chunks)
+            if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
+        std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
+            return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
+                 < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
+        });
+        constexpr int MAX_DECORATE_PER_TICK = 2;
+        int done = 0;
+        for (ChunkPos cp : ready) {
+            LevelChunk* c = getChunk(cp);
+            if (!c || c->decorated) continue;
+            tryDecorate(cp);
+            if (c->decorated && ++done >= MAX_DECORATE_PER_TICK) break;
+        }
+    }
+
     // 3. Load/generate chunks inside RADIUS
     struct ChunkCand {
         ChunkPos pos;

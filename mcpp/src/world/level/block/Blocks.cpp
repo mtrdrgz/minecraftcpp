@@ -1,4 +1,4 @@
-#include "Blocks.h"
+﻿#include "Blocks.h"
 #include "../../../core/Log.h"
 #include "BlockStates.h"
 #include <nlohmann/json.hpp>
@@ -105,7 +105,7 @@ const BlockState* getDefaultBlockState(std::string_view name) {
     return getBlockState(id);
 }
 
-// ── Minimal fallback if block_states.json isn't embedded ──────────────────────
+// â”€â”€ Minimal fallback if block_states.json isn't embedded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static Block* registerBlock(std::string_view name, Block::Properties props,
                              std::unordered_map<std::string, Block*>& byName) {
     auto b = std::make_unique<Block>(props);
@@ -188,7 +188,7 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
         registerBlock(("minecraft:" + std::string(wood) + "_leaves"), leaves_p, byName)
             ->textures.all = wood + std::string("_leaves");
     }
-    // Solid decoration blocks (huge mushroom caps/stem, moss, chorus) — rendered as voxels.
+    // Solid decoration blocks (huge mushroom caps/stem, moss, chorus) â€” rendered as voxels.
     for (const char* b : { "minecraft:red_mushroom_block", "minecraft:brown_mushroom_block", "minecraft:mushroom_stem",
                            "minecraft:moss_block", "minecraft:pale_moss_block", "minecraft:nether_wart_block",
                            "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower",
@@ -240,7 +240,7 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     }
 }
 
-// ── Main init — loads full state table from block_states.json ─────────────────
+// â”€â”€ Main init â€” loads full state table from block_states.json â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void initBlocks() {
     std::unordered_map<std::string, Block*> byName;
 
@@ -249,27 +249,29 @@ void initBlocks() {
     std::string fileData;
 #if defined(_WIN32)
     HMODULE hmod = GetModuleHandleW(nullptr);
-    HRSRC   hres = FindResourceW(hmod, MAKEINTRESOURCEW(IDR_BLOCK_STATES), RT_RCDATA);
+    HRSRC   hres = FindResourceW(hmod, MAKEINTRESOURCEW(IDR_BLOCK_STATES), MAKEINTRESOURCEW(10));
     if (hres) {
         HGLOBAL hg = LoadResource(hmod, hres);
         raw = static_cast<const char*>(LockResource(hg));
         sz = SizeofResource(hmod, hres);
     }
-#else
-    // Non-Windows: load block_states.json from $MCPP_BLOCK_STATES if provided.
-    if (const char* path = std::getenv("MCPP_BLOCK_STATES")) {
-        std::ifstream in(path, std::ios::binary);
-        if (in) {
-            std::stringstream ss;
-            ss << in.rdbuf();
-            fileData = ss.str();
-            raw = fileData.data();
-            sz = fileData.size();
+#endif
+    // Test/helper binaries may not link the resource script; allow the generated
+    // JSON to be supplied directly on every platform.
+    if (!raw) {
+        if (const char* path = std::getenv("MCPP_BLOCK_STATES")) {
+            std::ifstream in(path, std::ios::binary);
+            if (in) {
+                std::stringstream ss;
+                ss << in.rdbuf();
+                fileData = ss.str();
+                raw = fileData.data();
+                sz = fileData.size();
+            }
         }
     }
-#endif
     if (!raw) {
-        MC_LOG_WARN("Blocks: block_states.json not available — using fallback registry");
+        MC_LOG_WARN("Blocks: block_states.json not available â€” using fallback registry");
         initFallback(byName);
         return;
     }
@@ -338,7 +340,7 @@ void initBlocks() {
 
         MC_LOG_INFO("Blocks: {} blocks, {} states loaded", byName.size(), total);
     } catch (const std::exception& e) {
-        MC_LOG_ERROR("Blocks: JSON parse error: {} — falling back", e.what());
+        MC_LOG_ERROR("Blocks: JSON parse error: {} â€” falling back", e.what());
         // Clear partial state and use fallback
         g_blockStates.clear();
         g_blockStorage.clear();
@@ -373,3 +375,5 @@ void initBlocks() {
 }
 
 } // namespace mc
+
+

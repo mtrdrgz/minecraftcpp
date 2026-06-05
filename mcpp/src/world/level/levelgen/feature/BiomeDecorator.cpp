@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -67,37 +68,64 @@ void setJsonAssetReader(JsonAssetReader reader) {
 
 namespace {
 
-// ── WorldGenLevel view over a single LevelChunk ──────────────────────────────
-// Reads/writes the chunk as canonical block-state id strings; out-of-chunk
-// positions read as air and drop on write (single-chunk decoration, no neighbour
-// region yet). Carries the biome getter + the feature currently being placed so
+// ── WorldGenLevel view over a chunk + its loaded neighbours ──────────────────
+// Reads/writes by world coords, routing each position to the chunk that owns it
+// (the active chunk or, via `chunkAt`, a loaded neighbour). This lets a tree whose
+// origin is in the active chunk place its full trunk/foliage across the chunk
+// border instead of being clipped to a 16×16 box (the "half/quarter leaves" + lone
+// floating-dirt bug). If `chunkAt` is null (unit tests) it degrades to the single
+// active chunk. Carries the biome getter + the feature currently being placed so
 // the minecraft:biome filter can check "does the biome at this pos list me".
 struct ChunkWGL final : WorldGenLevel {
-    LevelChunk* chunk = nullptr;
+    LevelChunk* chunk = nullptr;                                  // active chunk (placement origin)
+    const std::function<LevelChunk*(int, int)>* chunkAt = nullptr; // optional neighbour resolver (chunk coords)
     const mc::block::BlockTags* tags = nullptr;
     const BiomeFeatures* biomeFeatures = nullptr;
     const std::function<std::string(int, int, int)>* biomeGetter = nullptr;
     int curStep = 0;
     std::string curFeatureKey;
 
-    bool inChunk(BlockPos p) const {
+    // Chunk owning world column (wx,wz): active chunk, else a loaded neighbour.
+    LevelChunk* owning(int wx, int wz) const {
+        const int cx = wx >> 4, cz = wz >> 4; // C++20+: arithmetic shift == floor-div
         const ChunkPos cp = chunk->pos();
-        return p.x >= cp.x * 16 && p.x < cp.x * 16 + 16 && p.z >= cp.z * 16 && p.z < cp.z * 16 + 16
-               && p.y >= CHUNK_MIN_Y && p.y < CHUNK_MAX_Y;
+        if (cx == cp.x && cz == cp.z) return chunk;
+        if (chunkAt && *chunkAt) return (*chunkAt)(cx, cz);
+        return nullptr;
     }
 
     int getMinY() const override { return CHUNK_MIN_Y; }
 
-    int getHeight(Heightmap::Types, int x, int z) const override {
-        const ChunkPos cp = chunk->pos();
-        if (x < cp.x * 16 || x >= cp.x * 16 + 16 || z < cp.z * 16 || z >= cp.z * 16 + 16) return CHUNK_MIN_Y;
-        const int h = chunk->heightmap(x & 15, z & 15); // top non-air block
-        return h < CHUNK_MIN_Y ? CHUNK_MIN_Y : h + 1;   // first free space above
+    int getHeight(Heightmap::Types type, int x, int z) const override {
+        LevelChunk* c = owning(x, z);
+        if (!c) return CHUNK_MIN_Y;
+        const int top = c->heightmap(x & 15, z & 15); // top non-air block (incl. water)
+        if (top < CHUNK_MIN_Y) return CHUNK_MIN_Y;
+
+        // OCEAN_FLOOR excludes fluids: scan down from the surface past water/lava to
+        // the first solid, non-fluid block. WORLD_SURFACE / MOTION_BLOCKING keep the
+        // fluid top. With one stored (fluid-inclusive) heightmap these differed only
+        // by name, which silently disabled surface_water_depth_filter and let trees
+        // generate on the water surface.
+        if (type == Heightmap::Types::OCEAN_FLOOR || type == Heightmap::Types::OCEAN_FLOOR_WG) {
+            int y = top;
+            while (y > CHUNK_MIN_Y) {
+                const mc::BlockState* s = mc::getBlockState(c->getBlock(x, y, z));
+                const bool fluid = s && s->isFluid();
+                const bool air   = !s || s->isAir();
+                if (!fluid && !air) break; // first solid, non-fluid block = ocean floor
+                --y;
+            }
+            return y + 1;
+        }
+        return top + 1; // first free space above the surface
     }
 
     std::string nameAt(BlockPos p) const {
-        if (!inChunk(p)) return "minecraft:air";
-        const mc::BlockState* s = mc::getBlockState(chunk->getBlock(p.x, p.y, p.z));
+        if (p.y < CHUNK_MIN_Y || p.y >= CHUNK_MAX_Y) return "minecraft:air";
+        LevelChunk* c = owning(p.x, p.z);
+        if (!c) return "minecraft:air";
+        const mc::BlockState* s = mc::getBlockState(c->getBlock(p.x, p.y, p.z));
         return (s && s->block) ? ("minecraft:" + s->block->name) : "minecraft:air";
     }
 
@@ -112,6 +140,14 @@ struct ChunkWGL final : WorldGenLevel {
         if (!inChunk(p)) return; // clamp to this chunk
         const uint32_t id = getBlockStateId(state, 0);
         if (id != 0) chunk->setBlock(p.x, p.y, p.z, id);
+        if (p.y < CHUNK_MIN_Y || p.y >= CHUNK_MAX_Y) return;
+        LevelChunk* c = owning(p.x, p.z);
+        if (!c) return; // owning chunk not loaded — drop (no neighbour region here)
+        // canonical state -> bare block name (registry keys carry no namespace).
+        std::string name = mc::block::blockName(state);
+        if (auto colon = name.find(':'); colon != std::string::npos) name = name.substr(colon + 1);
+        const uint32_t id = getDefaultBlockStateId(name, 0);
+        if (id != 0) { c->setBlock(p.x, p.y, p.z, id); c->meshDirty = true; }
     }
 };
 
@@ -171,6 +207,51 @@ private:
     int m_max;
 };
 
+// minecraft:surface_relative_threshold_filter — keep origin iff surface+min <= y <=
+// surface+max (port of SurfaceRelativeThresholdFilter). Keeps cave decorations
+// (e.g. glow_lichen, max=-13) the required distance BELOW the surface; without it
+// they spilled onto the surface once height_range was wired.
+class SurfaceRelativeThresholdFilter final : public PlacementModifier {
+public:
+    SurfaceRelativeThresholdFilter(Heightmap::Types hm, int minIncl, int maxIncl)
+        : m_hm(hm), m_min(minIncl), m_max(maxIncl) {}
+    std::vector<BlockPos> getPositions(PlacementContext* ctx, RandomSource&, BlockPos o) const override {
+        const long long surfaceY = ctx->getLevel()->getHeight(m_hm, o.x, o.z);
+        const long long minY = surfaceY + (long long)m_min;
+        const long long maxY = surfaceY + (long long)m_max;
+        return (minY <= o.y && o.y <= maxY) ? std::vector<BlockPos>{ o } : std::vector<BlockPos>{};
+    }
+private:
+    Heightmap::Types m_hm;
+    int m_min, m_max;
+};
+
+// minecraft:environment_scan — step from origin along a vertical direction while
+// allowed_search_condition holds, until target_condition holds; yields that pos
+// (port of EnvironmentScanPlacement). Used by cave_vines (scan up to a ceiling).
+class EnvironmentScanPlacement final : public PlacementModifier {
+public:
+    using Pred = BlockPredicateFilter::Predicate;
+    EnvironmentScanPlacement(int dy, Pred target, Pred allowed, int maxSteps)
+        : m_dy(dy), m_target(std::move(target)), m_allowed(std::move(allowed)), m_maxSteps(maxSteps) {}
+    std::vector<BlockPos> getPositions(PlacementContext* ctx, RandomSource&, BlockPos o) const override {
+        WorldGenLevel& l = *ctx->getLevel();
+        BlockPos pos = o;
+        if (!m_allowed(l, pos)) return {};
+        for (int i = 0; i < m_maxSteps; ++i) {
+            if (m_target(l, pos)) return { pos };
+            pos.y += m_dy;
+            if (pos.y < CHUNK_MIN_Y || pos.y >= CHUNK_MAX_Y) return {};
+            if (!m_allowed(l, pos)) break;
+        }
+        return m_target(l, pos) ? std::vector<BlockPos>{ pos } : std::vector<BlockPos>{};
+    }
+private:
+    int m_dy;
+    Pred m_target, m_allowed;
+    int m_maxSteps;
+};
+
 // ── A SimpleBlock feature placer for a state provider ────────────────────────
 PlacedFeature::FeaturePlacer simpleBlockPlacer(BlockStateProviderPtr provider) {
     return [cfg = std::make_shared<SimpleBlockConfiguration>(SimpleBlockConfiguration{ std::move(provider), false })](
@@ -187,6 +268,7 @@ PlacedFeature::FeaturePlacer treePlacer(TreeConfig cfg) {
         auto& w = static_cast<ChunkWGL&>(l);
         const ChunkPos cp = w.chunk->pos();
         TreeWorld tw{ *w.chunk, cp.x * 16, cp.z * 16 };
+        tw.chunkAt = w.chunkAt; // write foliage/trunk across chunk borders into loaded neighbours
         return placeTree(tw, r, p.x, p.y, p.z, cfg);
     };
 }
@@ -338,17 +420,105 @@ Heightmap::Types hmType(const std::string& s) {
     return Heightmap::Types::MOTION_BLOCKING;
 }
 
+// VerticalAnchor: {absolute|above_bottom|below_top: N} (port of VerticalAnchor codec).
+mc::levelgen::VerticalAnchorPtr parseVerticalAnchor(const json& j) {
+    using namespace mc::levelgen;
+    if (j.is_object()) {
+        if (j.contains("absolute")) return VerticalAnchors::absolute(j["absolute"].get<int>());
+        if (j.contains("above_bottom")) return VerticalAnchors::aboveBottom(j["above_bottom"].get<int>());
+        if (j.contains("below_top")) return VerticalAnchors::belowTop(j["below_top"].get<int>());
+    }
+    return VerticalAnchors::absolute(0);
+}
+
+// HeightProvider: constant / uniform / [very_]biased_to_bottom / trapezoid
+// (port of HeightProvider codecs). A bare anchor object is shorthand for constant.
+mc::levelgen::heightproviders::HeightProviderPtr parseHeightProvider(const json& j) {
+    using namespace mc::levelgen::heightproviders;
+    using mc::levelgen::VerticalAnchorPtr;
+    if (j.is_object() && (j.contains("absolute") || j.contains("above_bottom") || j.contains("below_top")))
+        return std::make_shared<ConstantHeight>(parseVerticalAnchor(j));
+    const std::string t = typeOf(j);
+    VerticalAnchorPtr mn = parseVerticalAnchor(j.value("min_inclusive", json::object()));
+    VerticalAnchorPtr mx = parseVerticalAnchor(j.value("max_inclusive", json::object()));
+    if (t == "uniform") return std::make_shared<UniformHeight>(mn, mx);
+    if (t == "biased_to_bottom") return std::make_shared<BiasedToBottomHeight>(mn, mx, j.value("inner", 1));
+    if (t == "very_biased_to_bottom") return std::make_shared<VeryBiasedToBottomHeight>(mn, mx, j.value("inner", 1));
+    if (t == "trapezoid") return std::make_shared<TrapezoidHeight>(mn, mx, j.value("plateau", 0));
+    if (t == "constant") return std::make_shared<ConstantHeight>(parseVerticalAnchor(j.value("value", json::object())));
+    return std::make_shared<ConstantHeight>(mc::levelgen::VerticalAnchors::absolute(0));
+}
+
 BlockPredicateFilter::Predicate parsePredicate(const json& p) {
     const std::string t = typeOf(p);
+
+    // Optional offset (Vec3i, default 0,0,0). Java's StateTestingPredicate /
+    // WouldSurvivePredicate test the state at origin.offset(offset) — without this
+    // the pumpkin's "grass_block at [0,-1,0]" and sugar cane's "water at [±1,-1,0]"
+    // checks always passed, scattering them onto sand/water in absurd amounts.
+    auto offsetOf = [](const json& q) -> BlockPos {
+        if (q.contains("offset") && q["offset"].is_array() && q["offset"].size() == 3)
+            return BlockPos{ q["offset"][0].get<int>(), q["offset"][1].get<int>(), q["offset"][2].get<int>() };
+        return BlockPos{ 0, 0, 0 };
+    };
+
     if (t == "matching_block_tag") {
         std::string tag = p.value("tag", std::string("minecraft:air"));
-        return [tag](WorldGenLevel& l, BlockPos pos) {
-            return static_cast<ChunkWGL&>(l).tags->isInTag(l.getBlockState(pos), tag);
+        BlockPos off = offsetOf(p);
+        return [tag, off](WorldGenLevel& l, BlockPos pos) {
+            return static_cast<ChunkWGL&>(l).tags->isInTag(
+                l.getBlockState(BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z }), tag);
+        };
+    }
+    if (t == "matching_blocks") {
+        // state.is(blocks): the block at origin+offset is one of `blocks`.
+        BlockPos off = offsetOf(p);
+        std::vector<std::string> blocks;
+        const json& b = p.contains("blocks") ? p["blocks"] : json();
+        if (b.is_string()) blocks.push_back(b.get<std::string>());
+        else if (b.is_array()) for (const auto& e : b) if (e.is_string()) blocks.push_back(e.get<std::string>());
+        return [off, blocks](WorldGenLevel& l, BlockPos pos) {
+            const std::string name = l.getBlockState(BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z });
+            for (const auto& bn : blocks) if (name == bn) return true;
+            return false;
+        };
+    }
+    if (t == "matching_fluids") {
+        // state.getFluidState().is(fluids): the fluid at origin+offset matches.
+        // This port models fluids as the water/lava blocks themselves.
+        BlockPos off = offsetOf(p);
+        std::vector<std::string> fluids;
+        auto add = [&fluids](const std::string& s) {
+            if (s.find("water") != std::string::npos) fluids.push_back("minecraft:water");
+            else if (s.find("lava") != std::string::npos) fluids.push_back("minecraft:lava");
+        };
+        const json& f = p.contains("fluids") ? p["fluids"] : json();
+        if (f.is_string()) add(f.get<std::string>());
+        else if (f.is_array()) for (const auto& e : f) if (e.is_string()) add(e.get<std::string>());
+        return [off, fluids](WorldGenLevel& l, BlockPos pos) {
+            const std::string name = l.getBlockState(BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z });
+            for (const auto& bn : fluids) if (name == bn) return true;
+            return false;
         };
     }
     if (t == "would_survive") {
         std::string st = stateName(p.contains("state") ? p["state"] : json("minecraft:air"));
-        return [st](WorldGenLevel& l, BlockPos pos) { return l.canSurvive(st, pos); };
+        BlockPos off = offsetOf(p);
+        return [st, off](WorldGenLevel& l, BlockPos pos) {
+            return l.canSurvive(st, BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z });
+        };
+    }
+    if (t == "has_sturdy_face") {
+        // Approx: a full solid+opaque cube has a sturdy face on every side. (The real
+        // check is shape-based per `direction`; full blocks are equivalent and that's
+        // what cave ceilings/floors are.) Used by environment_scan (cave_vines).
+        BlockPos off = offsetOf(p);
+        return [off](WorldGenLevel& l, BlockPos pos) {
+            std::string name = l.getBlockState(BlockPos{ pos.x + off.x, pos.y + off.y, pos.z + off.z });
+            if (auto c = name.find(':'); c != std::string::npos) name = name.substr(c + 1);
+            const mc::BlockState* s = mc::getDefaultBlockState(name);
+            return s && s->isSolid() && s->isOpaque();
+        };
     }
     if (t == "all_of") {
         std::vector<BlockPredicateFilter::Predicate> subs;
@@ -370,7 +540,7 @@ BlockPredicateFilter::Predicate parsePredicate(const json& p) {
         auto sub = parsePredicate(p["predicate"]);
         return [sub](WorldGenLevel& l, BlockPos pos) { return !sub(l, pos); };
     }
-    return [](WorldGenLevel&, BlockPos) { return true; }; // true / matching_blocks / unknown
+    return [](WorldGenLevel&, BlockPos) { return true; }; // true / replaceable / solid / unobstructed / unknown
 }
 
 std::shared_ptr<const PlacementModifier> parseModifier(const json& m) {
@@ -380,6 +550,20 @@ std::shared_ptr<const PlacementModifier> parseModifier(const json& m) {
     if (t == "rarity_filter") return std::make_shared<RarityFilter>(m.value("chance", 1));
     if (t == "height_range") return std::make_shared<HeightRangePlacement>(parseHeightProvider(m["height"]));
     if (t == "heightmap") return std::make_shared<HeightmapPlacement>(hmType(m.value("heightmap", std::string("MOTION_BLOCKING"))));
+    if (t == "height_range") return std::make_shared<HeightRangePlacement>(parseHeightProvider(m["height"]));
+    if (t == "surface_relative_threshold_filter")
+        return std::make_shared<SurfaceRelativeThresholdFilter>(
+            hmType(m.value("heightmap", std::string("WORLD_SURFACE_WG"))),
+            m.value("min_inclusive", std::numeric_limits<int>::min()),
+            m.value("max_inclusive", std::numeric_limits<int>::max()));
+    if (t == "environment_scan") {
+        const int dy = (m.value("direction_of_search", std::string("down")) == "up") ? 1 : -1;
+        auto target = parsePredicate(m.at("target_condition"));
+        BlockPredicateFilter::Predicate allowed = m.contains("allowed_search_condition")
+            ? parsePredicate(m["allowed_search_condition"])
+            : [](WorldGenLevel&, BlockPos) { return true; };
+        return std::make_shared<EnvironmentScanPlacement>(dy, std::move(target), std::move(allowed), m.value("max_steps", 1));
+    }
     if (t == "surface_water_depth_filter") return std::make_shared<SurfaceWaterDepthFilter>(m.value("max_water_depth", 0));
     if (t == "block_predicate_filter") return std::make_shared<BlockPredicateFilter>(parsePredicate(m["predicate"]));
     if (t == "random_offset") return std::make_shared<RandomOffsetPlacement>(parseIntProvider(m["xz_spread"]), parseIntProvider(m["y_spread"]));
@@ -394,7 +578,7 @@ std::shared_ptr<const PlacementModifier> parseModifier(const json& m) {
         }
         return std::make_shared<CountPlacement>(parseIntProvider(c));
     }
-    return nullptr; // height_range / environment_scan / count_on_every_layer / unknown -> identity
+    return nullptr; // environment_scan / count_on_every_layer / unknown -> identity
 }
 
 std::optional<TreeConfig> parseTreeConfig(const json& c) {
@@ -481,6 +665,16 @@ PlacedFeature::FeaturePlacer hugeMushroomPlacer(const json& c, bool red) {
     const int radius = c.value("foliage_radius", red ? 2 : 3);
     return [stem, cap, radius, red](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
         if (!lv.isEmptyBlock(pos)) return false;
+        // HugeMushroomFeature only grows on dirt/mycelium — reject water/sand/air
+        // below (fixes huge mushrooms generating on the ocean surface).
+        {
+            std::string below = lv.getBlockState({ pos.x, pos.y - 1, pos.z });
+            if (auto colon = below.find(':'); colon != std::string::npos) below = below.substr(colon + 1);
+            static const std::unordered_set<std::string> ground = {
+                "grass_block", "dirt", "coarse_dirt", "podzol", "mycelium", "rooted_dirt", "mud", "moss_block"
+            };
+            if (!ground.count(below)) return false;
+        }
         const int height = 4 + r.nextInt(3) + (red ? r.nextInt(2) : 0);
         for (int y = 0; y < height; ++y) { BlockPos s{ pos.x, pos.y + y, pos.z }; lv.setBlock(s, stem->getState(r, s), 2); }
         if (red) { // rounded dome over the top layers
@@ -881,6 +1075,131 @@ PlacedFeature::FeaturePlacer orePlacer(const json& c) {
                                 ++placed;
                                 break;
                             }
+// ── ore feature ──────────────────────────────────────────────────────────────
+// 1:1 port of net.minecraft.world.level.levelgen.feature.OreFeature (place +
+// doPlace + canPlaceOre). Builds an ellipsoid vein along a random axis, replacing
+// blocks that match a target RuleTest (tag_match / block_match / blockstate_match /
+// random_*). RNG call order matches Java exactly. Mth.sin is reproduced bit-exactly
+// from its table-fill formula (SIN[i] = sin(i*2π/65536)); Math.sin/cos stay real.
+PlacedFeature::FeaturePlacer orePlacer(const json& cfg) {
+    struct Target {
+        std::function<bool(const mc::block::BlockTags&, const std::string&, RandomSource&)> test;
+        std::string state;
+    };
+    auto targets = std::make_shared<std::vector<Target>>();
+    for (const auto& t : cfg.value("targets", json::array())) {
+        Target tg;
+        tg.state = stateName(t.value("state", json()));
+        const json rule = t.value("target", json::object());
+        const std::string pt = stripNs(rule.value("predicate_type", std::string("always_true")));
+        if (pt == "tag_match") {
+            std::string tag = rule.value("tag", std::string());
+            tg.test = [tag](const mc::block::BlockTags& tags, const std::string& name, RandomSource&) { return tags.isInTag(name, tag); };
+        } else if (pt == "block_match") {
+            std::string blk = rule.value("block", std::string());
+            tg.test = [blk](const mc::block::BlockTags&, const std::string& name, RandomSource&) { return name == blk; };
+        } else if (pt == "blockstate_match") {
+            std::string blk = stateName(rule.value("block_state", json()));
+            tg.test = [blk](const mc::block::BlockTags&, const std::string& name, RandomSource&) { return name == blk; };
+        } else if (pt == "random_block_match") {
+            std::string blk = rule.value("block", std::string());
+            float p = rule.value("probability", 0.0f);
+            tg.test = [blk, p](const mc::block::BlockTags&, const std::string& name, RandomSource& r) { return name == blk && r.nextFloat() < p; };
+        } else if (pt == "random_blockstate_match") {
+            std::string blk = stateName(rule.value("block_state", json()));
+            float p = rule.value("probability", 0.0f);
+            tg.test = [blk, p](const mc::block::BlockTags&, const std::string& name, RandomSource& r) { return name == blk && r.nextFloat() < p; };
+        } else {
+            tg.test = [](const mc::block::BlockTags&, const std::string&, RandomSource&) { return true; }; // always_true
+        }
+        targets->push_back(std::move(tg));
+    }
+    const int size = cfg.value("size", 0);
+    const float discard = cfg.value("discard_chance_on_air_exposure", 0.0f);
+
+    return [targets, size, discard](WorldGenLevel& lv, RandomSource& random, BlockPos origin) -> bool {
+        if (size <= 0 || targets->empty()) return false;
+        const mc::block::BlockTags& tags = *static_cast<ChunkWGL&>(lv).tags;
+        constexpr double PI = 3.14159265358979323846;
+        auto mthSin = [](float v) { int idx = (int)(v * 10430.378f) & 65535; return (float)std::sin((double)idx * (2.0 * PI) / 65536.0); };
+        auto ceilI = [](double d) { return (int)std::ceil(d); };
+        auto floorI = [](double d) { return (int)std::floor(d); };
+        auto lerp = [](double t, double a, double b) { return a + t * (b - a); };
+
+        const float dir = random.nextFloat() * (float)PI;
+        const float spreadXY = size / 8.0f;
+        const int maxRadius = ceilI((size / 16.0f * 2.0f + 1.0f) / 2.0f);
+        const double x0 = origin.x + std::sin((double)dir) * spreadXY;
+        const double x1 = origin.x - std::sin((double)dir) * spreadXY;
+        const double z0 = origin.z + std::cos((double)dir) * spreadXY;
+        const double z1 = origin.z - std::cos((double)dir) * spreadXY;
+        const double y0 = origin.y + random.nextInt(3) - 2;
+        const double y1 = origin.y + random.nextInt(3) - 2;
+        const int xStart = origin.x - ceilI(spreadXY) - maxRadius;
+        const int yStart = origin.y - 2 - maxRadius;
+        const int zStart = origin.z - ceilI(spreadXY) - maxRadius;
+        const int sizeXZ = 2 * (ceilI(spreadXY) + maxRadius);
+        const int sizeY = 2 * (2 + maxRadius);
+
+        bool reachable = false;
+        for (int xp = xStart; xp <= xStart + sizeXZ && !reachable; ++xp)
+            for (int zp = zStart; zp <= zStart + sizeXZ && !reachable; ++zp)
+                if (yStart <= lv.getHeight(Heightmap::Types::OCEAN_FLOOR_WG, xp, zp)) reachable = true;
+        if (!reachable) return false;
+
+        std::vector<double> data((std::size_t)size * 4);
+        for (int i = 0; i < size; ++i) {
+            float step = (float)i / size;
+            data[i * 4 + 0] = lerp(step, x0, x1);
+            data[i * 4 + 1] = lerp(step, y0, y1);
+            data[i * 4 + 2] = lerp(step, z0, z1);
+            double ss = random.nextDouble() * size / 16.0;
+            data[i * 4 + 3] = ((mthSin((float)PI * step) + 1.0) * ss + 1.0) / 2.0;
+        }
+        for (int i1 = 0; i1 < size - 1; ++i1) {
+            if (data[i1 * 4 + 3] <= 0.0) continue;
+            for (int i2 = i1 + 1; i2 < size; ++i2) {
+                if (data[i2 * 4 + 3] <= 0.0) continue;
+                double dx = data[i1 * 4] - data[i2 * 4], dy = data[i1 * 4 + 1] - data[i2 * 4 + 1];
+                double dz = data[i1 * 4 + 2] - data[i2 * 4 + 2], dr = data[i1 * 4 + 3] - data[i2 * 4 + 3];
+                if (dr * dr > dx * dx + dy * dy + dz * dz) { if (dr > 0.0) data[i2 * 4 + 3] = -1.0; else data[i1 * 4 + 3] = -1.0; }
+            }
+        }
+        std::vector<char> done((std::size_t)sizeXZ * sizeY * sizeXZ, 0);
+        int placed = 0;
+        for (int i = 0; i < size; ++i) {
+            double r = data[i * 4 + 3];
+            if (r < 0.0) continue;
+            double xx = data[i * 4], yy = data[i * 4 + 1], zz = data[i * 4 + 2];
+            int xMin = std::max(floorI(xx - r), xStart), yMin = std::max(floorI(yy - r), yStart), zMin = std::max(floorI(zz - r), zStart);
+            int xMax = std::max(floorI(xx + r), xMin), yMax = std::max(floorI(yy + r), yMin), zMax = std::max(floorI(zz + r), zMin);
+            for (int x = xMin; x <= xMax; ++x) {
+                double xd = (x + 0.5 - xx) / r;
+                if (xd * xd >= 1.0) continue;
+                for (int y = yMin; y <= yMax; ++y) {
+                    double yd = (y + 0.5 - yy) / r;
+                    if (xd * xd + yd * yd >= 1.0) continue;
+                    for (int z = zMin; z <= zMax; ++z) {
+                        double zd = (z + 0.5 - zz) / r;
+                        if (xd * xd + yd * yd + zd * zd >= 1.0) continue;
+                        if (y < CHUNK_MIN_Y || y >= CHUNK_MAX_Y) continue;
+                        std::size_t bit = (std::size_t)(x - xStart) + (std::size_t)(y - yStart) * sizeXZ + (std::size_t)(z - zStart) * sizeXZ * sizeY;
+                        if (bit >= done.size() || done[bit]) continue;
+                        done[bit] = 1;
+                        const BlockPos op{ x, y, z };
+                        const std::string existing = lv.getBlockState(op);
+                        for (const auto& tg : *targets) {
+                            if (!tg.test(tags, existing, random)) continue;
+                            // shouldSkipAirCheck(random, discard): <=0 skip; >=1 never; else nextFloat()>=discard
+                            bool skipAir = discard <= 0.0f ? true : (discard >= 1.0f ? false : random.nextFloat() >= discard);
+                            bool ok = skipAir;
+                            if (!skipAir) {
+                                ok = !(lv.isEmptyBlock({ x + 1, y, z }) || lv.isEmptyBlock({ x - 1, y, z }) ||
+                                       lv.isEmptyBlock({ x, y + 1, z }) || lv.isEmptyBlock({ x, y - 1, z }) ||
+                                       lv.isEmptyBlock({ x, y, z + 1 }) || lv.isEmptyBlock({ x, y, z - 1 }));
+                            }
+                            if (ok) { lv.setBlock(op, tg.state, 2); ++placed; }
+                            break;
                         }
                     }
                 }
@@ -907,6 +1226,7 @@ Resolved resolveConfigured(const std::string& dir, const json& cf) {
     const json& cfg = cf.value("config", json::object());
     if (t == "ore") return { orePlacer(cfg), true };
     if (t == "simple_block") return { simpleBlockPlacer(parseProvider(cfg["to_place"])), true };
+    if (t == "ore" || t == "scattered_ore") return { orePlacer(cfg), true };
     if (t == "tree") {
         auto tc = parseTreeConfig(cfg);
         return tc ? Resolved{ treePlacer(*tc), true } : noop();
@@ -1029,12 +1349,14 @@ void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
                           const std::function<std::string(int, int, int)>& biomeGetter,
                           const BiomeFeatures& biomeFeatures,
                           const mc::block::BlockTags& tags,
-                          const std::string& worldgenDir) {
+                          const std::string& worldgenDir,
+                          const std::function<LevelChunk*(int, int)>& chunkAt) {
     const ChunkPos cp = chunk.pos();
     const int minX = cp.x * 16, minZ = cp.z * 16;
 
     ChunkWGL level;
     level.chunk = &chunk;
+    level.chunkAt = chunkAt ? &chunkAt : nullptr;
     level.tags = &tags;
     level.biomeFeatures = &biomeFeatures;
     level.biomeGetter = &biomeGetter;

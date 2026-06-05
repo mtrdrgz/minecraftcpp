@@ -5,6 +5,43 @@
 
 ---
 
+## ⛔ RULE #0 — THE ONE RULE THAT MATTERS MOST (READ FIRST, EVERY TIME)
+
+**This is a 1:1 reverse-engineering port. You are translating Java → C++, nothing else.
+NEVER invent, guess, approximate, simplify, tune, or "make it look reasonable".
+EVERY value, constant, formula, ordering, and algorithm MUST come from the decompiled
+Java source (`26.1.2/src/`) or the worldgen data JSON (`26.1.2/data/`).**
+
+If you cannot find the source for something, STOP and go read the Java. Do not fill the
+gap with a plausible-looking number. A wrong-but-plausible value is WORSE than a TODO,
+because it hides the bug and looks done.
+
+Concretely, this means:
+- ❌ NO `rng.nextInt(10)` "≈ 1 tree/chunk for visibility" style density tuning.
+- ❌ NO "chance = 0.05" hardcoded because it looked about right.
+- ❌ NO predicate/condition that `return true;` "for now" — that silently disables the
+  exact gating that makes vanilla worldgen correct (see the predicate bug below).
+- ❌ NO placeholder hashes/curves/noise (an FNV in place of MD5, a lerp in place of a
+  spline). These corrupt EVERYTHING downstream and are nearly invisible until you see
+  the world.
+- ✅ Port the real class. Read `<Feature>.java`, `<Placement>.java`, the data JSON.
+  Copy the constants verbatim. Match the RNG call order exactly.
+- ✅ If a feature/predicate/type isn't ported yet, make it a hard no-op that does
+  NOTHING and is logged/listed as unported — never a silent "pass everything".
+- ✅ Prove parity with a `*_parity` test against ground truth from the real jar/data
+  whenever you can. The repo's culture is parity tests, not eyeballing.
+
+**Why this rule exists (real bugs this session, Session 40):** the worldgen "worked"
+visually but was full of disguised approximations that produced absurd results
+(pumpkins piled on beaches, sugar cane everywhere, only ~3 biomes in the whole world,
+every tree a dark spruce). None of these were "a number slightly off" — they were
+omitted algorithms masked by `return true` / placeholder code. The fixes were not
+tuning; they were porting the real Java that had been skipped. See Session 40 below.
+
+If you only read one line of this file: **port it from the source; do not make it up.**
+
+---
+
 ## WHAT THIS PROJECT IS
 
 A faithful **port** of Minecraft Java Edition 26.1.2 to native C++ for Windows.
@@ -24,18 +61,31 @@ If the Java does X, the C++ does X. If you are unsure, read the Java source firs
 
 ## SOURCE MATERIAL LOCATIONS
 
+> NOTE: the repo root on this machine is `C:\Users\Mateo\Desktop\minecraftcpp\`
+> (older docs said `...\Desktop\Claude\` — that path is stale; everything below is
+> relative to the current repo root).
+
 ```
-C:\Users\Mateo\Desktop\Claude\
-├── 26.1.2\
+C:\Users\Mateo\Desktop\minecraftcpp\
+├── 26.1.2\                 ← git-ignored; fetched from Mojang CDN (see below)
 │   ├── client.jar          ← Original JAR (do not modify)
-│   └── src\                ← Decompiled Java source (25,635 files) — READ THIS
-│       ├── net\minecraft\  ← Main game code (6,596 files)
-│       └── com\mojang\     ← Mojang platform libs (286 files)
-├── assets\
-│   ├── indexes\30.json     ← Asset index
-│   └── objects\            ← 4,749 raw asset files (textures, sounds, etc.)
+│   ├── data\               ← Worldgen DATA JSON — THE authoritative 1:1 values
+│   │   └── minecraft\worldgen\{biome,configured_feature,placed_feature,
+│   │       noise_settings,density_function,structure,...}\*.json
+│   └── src\                ← Decompiled Java source — READ THIS before porting
+│       ├── net\minecraft\  ← Main game code
+│       └── com\mojang\     ← Mojang platform libs
+├── mcpp\                   ← the C++ project (build here)
+├── memory\ (per-agent)     ← Claude Code memory (build quirks etc.)
 └── AGENTS.md               ← This file (keep updated)
 ```
+
+**Reading order to port a worldgen feature 1:1:** (1) the biome JSON lists placed
+features per step; (2) `placed_feature/<name>.json` gives the placement modifier chain
+(count/rarity/heightmap/predicates); (3) `configured_feature/<name>.json` gives the
+feature type + config; (4) the Java class for the feature/placement/predicate gives
+the algorithm. Port all four faithfully — the JSON carries the numbers, the Java
+carries the logic.
 
 **Java source package → purpose quick reference:**
 | Java Package | Files | What it does |

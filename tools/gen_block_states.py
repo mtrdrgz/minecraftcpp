@@ -2,15 +2,17 @@
 gen_block_states.py — Generate block state ID mapping from client.jar + Blocks.java
 Outputs: mcpp/src/assets/block_states.json
 """
+import os
 import zipfile, json, re
 from pathlib import Path
 from collections import defaultdict
 
-JAR         = Path(r"C:\Users\Mateo\Desktop\Claude\26.1.2\client.jar")
-SRC         = Path(r"C:\Users\Mateo\Desktop\Claude\26.1.2\src\net\minecraft\world\level\block")
-ATLAS_JSON  = Path(r"C:\Users\Mateo\Desktop\Claude\mcpp\src\assets\block_atlas.json")
+ROOT        = Path(__file__).resolve().parents[1]
+JAR         = Path(os.environ.get("MCPP_CLIENT_JAR", ROOT / "26.1.2" / "client.jar"))
+SRC         = Path(os.environ.get("MCPP_BLOCK_SRC", ROOT / "26.1.2" / "src" / "net" / "minecraft" / "world" / "level" / "block"))
+ATLAS_JSON  = Path(os.environ.get("MCPP_ATLAS_JSON", ROOT / "mcpp" / "src" / "assets" / "block_atlas.json"))
 BLOCKS_JAVA = SRC / "Blocks.java"
-OUT         = Path(r"C:\Users\Mateo\Desktop\Claude\mcpp\src\assets\block_states.json")
+OUT         = Path(os.environ.get("MCPP_BLOCK_STATES_OUT", ROOT / "mcpp" / "src" / "assets" / "block_states.json"))
 
 # Known atlas textures
 with open(ATLAS_JSON) as f:
