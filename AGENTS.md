@@ -303,7 +303,23 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 46 (option sliders support mouse drag)
+**Last updated**: Session 47 (GUI Scale option applies to UI)
+
+**Session 47**: fixed the tasklist UI bug where the `GUI Scale` option existed
+but did not affect the rendered interface. Ported Java's
+`Window.calculateScale(maxScale, enforceUnicode=false)` behavior: scale starts at
+1 and increments while the next scale keeps the logical GUI at least 320x240;
+option value `0` is Auto, and `1..4` are fixed caps. `Minecraft` now exposes
+`guiScale()`, `guiScaledWidth()/Height()`, `guiMouseX()/Y()`, and `resizeGui()`.
+Screens initialize/reinitialize with logical scaled dimensions, mouse
+click/drag/release events are converted from framebuffer coordinates to GUI
+coordinates, and `GuiGraphics::render` is called with logical GUI dimensions so
+2D vertices scale back to the physical framebuffer like Java. The in-game HUD now
+positions hotbar/crosshair/stats using logical GUI dimensions too. Verified with
+wrapper commands: built `mcpp` Release and ran an 8s title-screen smoke; the
+window initialized, entered the main loop, and was killed by the intentional
+timeout. `TASKLIST.md` now marks only the GUI Scale subitem done; broader menu
+completion remains open.
 
 **Session 46**: fixed the tasklist UI bug where option sliders only reacted to
 clicks. Ported the relevant `AbstractSliderButton` behavior into the current C++

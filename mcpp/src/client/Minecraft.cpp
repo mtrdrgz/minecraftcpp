@@ -125,7 +125,62 @@ void Minecraft::setScreen(std::unique_ptr<gui::Screen> screen) {
     MC_LOG_INFO("setScreen called with {}", screen ? screen->title() : "nullptr");
     m_currentScreen = std::move(screen);
     if (m_currentScreen) {
-        m_currentScreen->init(this, m_window->width(), m_window->height());
+        m_cachedGuiScale = guiScale();
+        m_cachedGuiWidth = guiScaledWidth();
+        m_cachedGuiHeight = guiScaledHeight();
+        m_currentScreen->init(this, m_cachedGuiWidth, m_cachedGuiHeight);
+    }
+}
+
+int Minecraft::guiScale() const {
+    const int maxScale = m_options.guiScale;
+    int scale = 1;
+    const int framebufferWidth = m_window ? m_window->width() : 0;
+    const int framebufferHeight = m_window ? m_window->height() : 0;
+    while (scale != maxScale
+        && scale < framebufferWidth
+        && scale < framebufferHeight
+        && framebufferWidth / (scale + 1) >= 320
+        && framebufferHeight / (scale + 1) >= 240) {
+        ++scale;
+    }
+    return scale;
+}
+
+int Minecraft::guiScaledWidth() const {
+    const int scale = std::max(1, guiScale());
+    const int width = m_window ? m_window->width() : 0;
+    return (width + scale - 1) / scale;
+}
+
+int Minecraft::guiScaledHeight() const {
+    const int scale = std::max(1, guiScale());
+    const int height = m_window ? m_window->height() : 0;
+    return (height + scale - 1) / scale;
+}
+
+double Minecraft::guiMouseX() const {
+    if (!m_window || m_window->width() <= 0) return 0.0;
+    return (double)m_window->mouseX() * (double)guiScaledWidth() / (double)m_window->width();
+}
+
+double Minecraft::guiMouseY() const {
+    if (!m_window || m_window->height() <= 0) return 0.0;
+    return (double)m_window->mouseY() * (double)guiScaledHeight() / (double)m_window->height();
+}
+
+void Minecraft::resizeGui() {
+    const int scale = guiScale();
+    const int width = guiScaledWidth();
+    const int height = guiScaledHeight();
+    if (scale == m_cachedGuiScale && width == m_cachedGuiWidth && height == m_cachedGuiHeight) {
+        return;
+    }
+    m_cachedGuiScale = scale;
+    m_cachedGuiWidth = width;
+    m_cachedGuiHeight = height;
+    if (m_currentScreen) {
+        m_currentScreen->init(this, width, height);
     }
 }
 

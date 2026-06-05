@@ -36,7 +36,7 @@
   - [ ] El indicador de dónde está el slider (que es como un rectángulo) no tiene texturas o parece un placeholder.
   - [ ] Faltan muchas opciones dentro de todos los submenús.
   - [ ] Dentro de Video, la opción de Gráficos tiene un corte en el botón, como si la textura se repitiera por un UV mal puesto o similar.
-  - [ ] Hay que añadir funcionalidad al botón de GUI Scale.
+  - [x] Hay que añadir funcionalidad al botón de GUI Scale. (Arreglado aplicando la escala GUI con el algoritmo Java `Window.calculateScale`: Auto respeta el mínimo 320x240, las pantallas se reinicializan con tamaño lógico escalado, el mouse se convierte a coordenadas GUI y el render 2D usa dimensiones lógicas.)
   - [ ] Hay que terminar de añadir todos los botones y opciones dentro de los submenús.
   - [ ] Hay que añadir la interfaz del selector de mundos singleplayer para hacer un port 1:1 de verdad.
   - [ ] Hay que añadir el menú de pausa (ESC) ingame para poder volver al menú, etc.

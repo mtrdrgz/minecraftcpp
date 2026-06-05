@@ -23,16 +23,16 @@ void Gui::render(render::GuiGraphics& g, float pt) {
     renderStats(g);
 
     // Crosshair
-    int sw = m_minecraft->window()->width();
-    int sh = m_minecraft->window()->height();
+    int sw = m_minecraft->guiScaledWidth();
+    int sh = m_minecraft->guiScaledHeight();
     if (m_crosshairTex) {
         g.blit(m_crosshairTex, (sw - 15) / 2, (sh - 15) / 2, 0, 0, 15, 15, 15, 15);
     }
 }
 
 void Gui::renderHotbar(render::GuiGraphics& g, float pt) {
-    int sw = m_minecraft->window()->width();
-    int sh = m_minecraft->window()->height();
+    int sw = m_minecraft->guiScaledWidth();
+    int sh = m_minecraft->guiScaledHeight();
     int x = sw / 2 - 91;
     int y = sh - 22;
 
@@ -44,8 +44,8 @@ void Gui::renderHotbar(render::GuiGraphics& g, float pt) {
 }
 
 void Gui::renderStats(render::GuiGraphics& g) {
-    int sw = m_minecraft->window()->width();
-    int sh = m_minecraft->window()->height();
+    int sw = m_minecraft->guiScaledWidth();
+    int sh = m_minecraft->guiScaledHeight();
     int x = sw / 2 - 91;
     int y = sh - 39;
 

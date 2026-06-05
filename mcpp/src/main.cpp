@@ -102,7 +102,7 @@ int main() {
         if (window.consumeLButtonClicked()) {
             if (mc.screen()) {
                 // A menu is open: route the click to its widgets, cursor stays visible.
-                mc.screen()->mouseClicked((double)window.mouseX(), (double)window.mouseY(), 0);
+                mc.screen()->mouseClicked(mc.guiMouseX(), mc.guiMouseY(), 0);
             } else if (mc.isInGame() && !window.isMouseCaptured()) {
                 // In-game with no menu: click to (re)grab the mouse for the camera.
                 window.captureMouse(true);
@@ -110,12 +110,13 @@ int main() {
         }
         int dragDx = 0, dragDy = 0;
         if (mc.screen() && window.consumeMouseDrag(dragDx, dragDy)) {
-            mc.screen()->mouseDragged((double)window.mouseX(), (double)window.mouseY(), 0,
-                                      (double)dragDx, (double)dragDy);
+            const double scale = (double)mc.guiScale();
+            mc.screen()->mouseDragged(mc.guiMouseX(), mc.guiMouseY(), 0,
+                                      (double)dragDx / scale, (double)dragDy / scale);
         }
         if (window.consumeLButtonReleased()) {
             if (mc.screen()) {
-                mc.screen()->mouseReleased((double)window.mouseX(), (double)window.mouseY(), 0);
+                mc.screen()->mouseReleased(mc.guiMouseX(), mc.guiMouseY(), 0);
             }
         }
 
@@ -130,6 +131,7 @@ int main() {
         }
 
         float partialTick = (float)(tickAccum / TICK_MS);
+        mc.resizeGui();
         mc.render(partialTick);
         
         static int frames = 0;
@@ -151,13 +153,13 @@ int main() {
 
                 if (mc.gui() && mc.guiGraphics()) {
                     mc.gui()->render(*mc.guiGraphics(), partialTick);
-                    mc.guiGraphics()->render(cmd, (float)window.width(), (float)window.height());
+                    mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
                 }
             } else if (mc.screen()) {
                 // Rotating panorama background (3D), then the screen's 2D widgets on top.
                 mc.renderPanorama(cmd, window.width(), window.height(), (float)(dtMs / 1000.0));
-                mc.screen()->render(*mc.guiGraphics(), (int)window.mouseX(), (int)window.mouseY(), partialTick);
-                mc.guiGraphics()->render(cmd, (float)window.width(), (float)window.height());
+                mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
+                mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
             }
 
             device->endFrame();

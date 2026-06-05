@@ -87,6 +87,12 @@ public:
     void openOptionsScreen();
 
     GameOptions& options() { return m_options; }
+    int guiScale() const;
+    int guiScaledWidth() const;
+    int guiScaledHeight() const;
+    double guiMouseX() const;
+    double guiMouseY() const;
+    void resizeGui();
 
     // Title panorama background (rotating cubemap). renderPanorama draws it to cmd;
     // panoramaOverlay/panoramaLoaded let the title screen blit the overlay + fall back
@@ -163,6 +169,9 @@ private:
     render::ITexture* m_accessTex = nullptr;
     std::string       m_splashText;
     GameOptions       m_options;
+    int               m_cachedGuiScale = 1;
+    int               m_cachedGuiWidth = 0;
+    int               m_cachedGuiHeight = 0;
     std::unique_ptr<gui::Gui>           m_gui;
     std::unique_ptr<audio::SoundManager> m_soundManager;
     std::unique_ptr<gui::Screen>        m_currentScreen;
