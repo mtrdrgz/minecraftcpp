@@ -71,7 +71,9 @@ set(MC_SOURCES
     client/player/LocalPlayer.cpp
     gui/Gui.cpp
     gui/components/Button.cpp
+    gui/components/OptionWidgets.cpp
     gui/screens/TitleScreen.cpp
+    gui/screens/options/OptionsScreen.cpp
     # Render — Common
     render/RenderBackend.cpp
     # Render — OpenGL
@@ -95,6 +97,7 @@ set(MC_SOURCES
     render/entity/EntityRenderDispatcher.cpp
     render/gui/GuiGraphics.cpp
     render/gui/Font.cpp
+    render/gui/PanoramaRenderer.cpp
     render/level/ChunkMesh.cpp
     render/level/LevelRenderer.cpp
     # Audio

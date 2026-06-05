@@ -575,6 +575,16 @@ PlacedFeature::FeaturePlacer hugeMushroomPlacer(const json& c, bool red) {
     const int radius = c.value("foliage_radius", red ? 2 : 3);
     return [stem, cap, radius, red](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
         if (!lv.isEmptyBlock(pos)) return false;
+        // HugeMushroomFeature only grows on dirt/mycelium — reject water/sand/air
+        // below (fixes huge mushrooms generating on the ocean surface).
+        {
+            std::string below = lv.getBlockState({ pos.x, pos.y - 1, pos.z });
+            if (auto colon = below.find(':'); colon != std::string::npos) below = below.substr(colon + 1);
+            static const std::unordered_set<std::string> ground = {
+                "grass_block", "dirt", "coarse_dirt", "podzol", "mycelium", "rooted_dirt", "mud", "moss_block"
+            };
+            if (!ground.count(below)) return false;
+        }
         const int height = 4 + r.nextInt(3) + (red ? r.nextInt(2) : 0);
         for (int y = 0; y < height; ++y) { BlockPos s{ pos.x, pos.y + y, pos.z }; lv.setBlock(s, stem->getState(r, s), 2); }
         if (red) { // rounded dome over the top layers

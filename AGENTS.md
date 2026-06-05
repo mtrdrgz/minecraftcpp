@@ -303,8 +303,104 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 42 (tree clipping really fixed via deferred decoration +
-cross-chunk TreeWorld; glow_lichen/cave_vines off the surface via ported placements)
+**Last updated**: Session 47 (fixed panorama 180° flip; real option widgets — Slider/
+CycleButton + GameOptions store; Sound/Video/Controls sub-screens populated; FOV slider)
+
+**DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
+it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
+the CPU generator instead. Current focus order: **(1) MENUS**, then (2) CPU worldgen perf,
+then (3) real structures.
+
+**Session 43:**
+- placeTree now rejects an origin whose block-below is wood/leaves/log/stem (or air/fluid):
+  the chunk heightmap rises onto a neighbour's leaves (cross-chunk decoration), so OCEAN_FLOOR
+  placement could land a tree on another tree's foliage + drop a dirt block on the leaves.
+- hugeMushroomPlacer requires dirt/mycelium below (HugeMushroomFeature ground gate) → no more
+  huge mushrooms on the ocean surface.
+- updateLocalChunks budgets the deferred-decoration pass to a few chunks/tick (nearest-first)
+  to cut the movement stutter (decoration is heavy + main-thread). This is a stopgap; the real
+  perf work (focus #2) is to reuse generators, make the feature caches thread-safe so decoration
+  can run on workers, and stop re-reading worldgen JSON.
+
+## MENU SYSTEM ROADMAP (focus #1 — port 1:1 from net.minecraft.client.gui.screens.*)
+
+Why the menu was "all gray": the font + GUI textures live in client.jar, NOT assets.bin.
+Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
+
+- [x] **Embed + render font/logo/button** (Session 43). `assets/resource_ids.h` +
+  `assets.rc` now carry `ascii.png` (IDR_FONT_ASCII), `gui_logo.png` (IDR_GUI_LOGO),
+  `gui_button.png`/`gui_button_hl.png`. `Minecraft::render` loads them via
+  `loadResourceTex(IDR_*)` (RCDATA → stb). Font/logo/buttons are no longer null.
+  EXTRACTION (gitignored, local only): unzip the four PNGs from client.jar into
+  `mcpp/src/assets/` (see Session 43 PowerShell). NOTE: in 26.1.2's jar the title
+  `panorama_0..5.png` are 1×1 STUBS — the real panorama isn't shippable from this jar,
+  so use the dirt-tile MENU_BACKGROUND fallback (the game's own no-panorama background).
+- [ ] **Font fidelity**: port real glyph advances (`FontManager`/`GlyphProvider` derive
+  widths from the ascii.png non-empty columns; current Font.cpp uses hardcoded widths).
+- [x] **Mouse-capture fix** (Session 45). `Window::onLButtonDown` captured the mouse on
+  EVERY click (hid the cursor + clipped it to centre) → the title screen was unclickable.
+  Removed it; `main.cpp` now decides: menu open → route click to the screen (cursor stays
+  visible); in-game + no menu → click grabs the mouse for the camera.
+- [x] **Splash text + icons** (Session 45). Embedded `splashes.txt` (IDR_SPLASHES) +
+  `language.png`/`accessibility.png` (IDR_GUI_LANG/ACCESS). `pickSplash()` picks a random
+  non-empty line; `TitleScreen::renderSplash` ports `SplashRenderer` (yellow, rotated
+  -PI/9, pulsing scale `1.8 - |sin(...)*0.1|`, at `w/2+123, 69`). Added `GuiGraphics::rotate`.
+  Icons drawn 16x16 on the 20x20 language/accessibility buttons.
+- [x] **Background = dirt-tile** (the no-panorama fallback) — but see below: the REAL
+  panorama art IS available.
+- [x] **Panorama background** (Session 46). `render/gui/PanoramaRenderer.{h,cpp}` draws the
+  rotating title panorama as a perspective cube (FOV 85, znear .05, zfar 10) of 6 textured
+  faces (the GL-cubemap equivalent). Faces load from assets.bin (1.3 MB each; the jar has
+  only 1x1 stubs). Face→PNG mapping from CubeMapTexture (`SUFFIXES={_1,_3,_5,_4,_0,_2}` into
+  GL faces +X,-X,+Y,-Y,+Z,-Z): +X=pan1,-X=pan3,+Y=pan5,-Y=pan4,+Z=pan0,-Z=pan2. Spin ≈2°/s
+  (`spin += dt*20*0.1`). `Minecraft::renderPanorama` draws it to the cmd in main.cpp's title
+  branch (before the GUI); `TitleScreen` overlays panorama_overlay (dirt fallback if faces
+  missing). CAVEAT: per-face UV ORIENTATION is best-effort (cube built from a standard
+  inward skybox layout + CubeMap's rotationX(180); could not screenshot-verify) — if a face
+  looks mirrored/upside-down, flip its UVs in PanoramaRenderer's CUBE table.
+- [x] **Title screen 1:1** (Session 44). Rewrote `gui/screens/TitleScreen.cpp` straight
+  from the decompiled `TitleScreen.java` + `LogoRenderer.java`: Singleplayer /
+  Multiplayer / Minecraft Realms stacked (200x20, topPos=h/4+48, spacing 24), then the
+  row [language 20] [Options... 98] [Quit Game 98] [accessibility 20] at topPos+36, logo
+  256x44@(w/2-128,30), edition subtitle 128x14@(w/2-64,67), version bottom-left +
+  copyright bottom-right, dirt-tile background. REMOVED the invented "Connect to
+  Localhost" button. Unported-screen actions (Multiplayer/Realms/Options/lang/access)
+  are hard no-ops; Singleplayer starts the local world (stand-in for SelectWorldScreen).
+  Strings are the real en_us.json values. NOTE: the client GUI classes are NOT in the
+  pre-decompiled `26.1.2/src` (only world/util/core were). Decompile what you need with
+  Vineflower: extract the `.class` files from `client.jar` into a stage dir and run
+  `jdk25/bin/java -jar vineflower-1.12.0.jar <stage> <out>` (output now in
+  `26.1.2/gui_src/`, gitignored). GUI textures extracted from client.jar and embedded as
+  RCDATA: ascii/logo/edition/button/button_hl/dirt (IDR_* in resource_ids.h).
+  TODO next: real splash text (needs splashes file + diagonal yellow render); 9-slice
+  button sprite; language/accessibility icon sprites.
+- [ ] **Widget library**: `Button`/`SpriteIconButton`/`AbstractWidget` with the real
+  9-slice sprite scaling (`button.png` is a NineSlice sprite) + hover/focus.
+- [x] **Options navigation** (Session 46). `gui/screens/options/OptionsScreen.{h,cpp}`
+  ports `OptionsScreen.java`'s layout: the 2-column grid of category buttons (Skin
+  Customization / Music & Sounds / Video Settings / Controls / Language / Chat Settings /
+  Resource Packs / Accessibility Settings / Telemetry Data / Credits & Attribution) + a
+  Done button. Centralised screen creation in `Minecraft::openTitleScreen()` /
+  `openOptionsScreen()` (GUI textures are owned by Minecraft and reused, so screens rebuild
+  with their textures). Title "Options..." button → openOptionsScreen; each category opens
+  an `OptionsSubScreen` (real title + Done → back); Done → back to title. Navigation works.
+- [x] **Option widgets** (Session 47). `gui/components/OptionWidgets.{h,cpp}`: AbstractWidget
+  + Slider + CycleButton (+ WidgetButton). `client/Options.h` GameOptions store (owned by
+  Minecraft, `options()`; volumes 0..1, fov 30..110, sensitivity 0..1→0..200%, render
+  distance 2..32, gamma 0..1). `OptionsSubScreen` is now a real base (add*/layout: big=1col
+  310px, small=2col 150px + Done). Ported the option LISTS from the Java:
+  SoundOptionsScreen (master big + 9 source sliders + subtitles/directional toggles, from
+  SoundOptionsScreen.java), VideoSettingsScreen (graphics cycle / render distance / GUI
+  scale / brightness / fullscreen / vsync / view bobbing), ControlsScreen (sensitivity +
+  invert/auto-jump/discrete-scroll/touchscreen). FOV slider in the OptionsScreen subheader.
+  CAVEATS / NEXT: sliders are click-to-set (drag = poll mouse-down each frame — needs a
+  Window `isMouseDown()`); options are NOT persisted to disk; categories without a concrete
+  screen yet (Skin/Language/Chat/Resource Packs/Accessibility/Telemetry/Credits) open the
+  generic titled screen — port each `*.java` option list + the key-binding list (Controls).
+- [ ] **Screen framework polish**: real `GridLayout`/`HeaderAndFooterLayout`, 9-slice
+  button sprite, hover tooltips, keyboard/ESC handling.
+
+
 
 **Session 42 — finish the tree-clipping fix + cave plants on surface:**
 

@@ -103,6 +103,10 @@ void GuiGraphics::scale(float x, float y, float z) {
     m_poseStack.back() = glm::scale(m_poseStack.back(), {x, y, z});
 }
 
+void GuiGraphics::rotate(float radians) {
+    m_poseStack.back() = glm::rotate(m_poseStack.back(), radians, {0.0f, 0.0f, 1.0f});
+}
+
 void GuiGraphics::addQuad(const GuiVertex& v0, const GuiVertex& v1, const GuiVertex& v2, const GuiVertex& v3, ITexture* tex) {
     if (!m_batches.empty() && m_batches.back().texture == tex) {
         m_batches.back().count += 6;

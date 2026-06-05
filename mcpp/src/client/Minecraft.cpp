@@ -12,31 +12,83 @@
 #include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
+#include "../gui/screens/options/OptionsScreen.h"
+#include "../render/gui/PanoramaRenderer.h"
+#include "../assets/resource_ids.h"
 #include <stb_image.h>
+#include <windows.h>
 #include <cmath>
 #include <filesystem>
 #include <exception>
+#include <sstream>
+#include <random>
+#include <chrono>
+#include <vector>
+#include <string>
 
 namespace mc {
 
 namespace {
+    // Decode a 4-channel texture from already-read PNG bytes.
+    render::ITexture* decodeTex(render::IRenderDevice* dev, render::ICommandList* cmd, const uint8_t* bytes, int len) {
+        if (!bytes || len <= 0) return nullptr;
+        int w, h, ch;
+        stbi_set_flip_vertically_on_load(false);
+        uint8_t* p = stbi_load_from_memory(bytes, len, &w, &h, &ch, 4);
+        if (!p) return nullptr;
+        render::TextureDesc d;
+        d.width = (uint32_t)w; d.height = (uint32_t)h; d.format = render::TextureFormat::RGBA8;
+        d.filter = render::FilterMode::Nearest;
+        render::ITexture* t = dev->createTexture(d);
+        cmd->uploadTexture(t, p);
+        stbi_image_free(p);
+        return t;
+    }
+
     render::ITexture* loadAssetTex(render::IRenderDevice* dev, render::ICommandList* cmd, std::string_view path) {
         auto b = AssetManager::instance().readRaw(path);
         if (b.empty()) {
             MC_LOG_WARN("Asset not found: {}", path);
             return nullptr;
         }
-        int w, h, ch;
-        stbi_set_flip_vertically_on_load(false);
-        uint8_t* p = stbi_load_from_memory(b.data(), (int)b.size(), &w, &h, &ch, 4);
-        if (!p) return nullptr;
-        render::TextureDesc d;
-        d.width = w; d.height = h; d.format = render::TextureFormat::RGBA8;
-        d.filter = render::FilterMode::Nearest;
-        render::ITexture* t = dev->createTexture(d);
-        cmd->uploadTexture(t, p);
-        stbi_image_free(p);
-        return t;
+        return decodeTex(dev, cmd, b.data(), (int)b.size());
+    }
+
+    // Load a PNG embedded as an RCDATA resource (font / GUI textures from client.jar).
+    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+        if (!hres) return nullptr;
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return decodeTex(dev, cmd, data, (int)size);
+    }
+
+    // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
+    std::string loadResourceText(int resourceId) {
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+        if (!hres) return {};
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const char* data = static_cast<const char*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return data ? std::string(data, data + size) : std::string{};
+    }
+
+    // SplashManager: pick a random non-empty line from splashes.txt.
+    std::string pickSplash() {
+        const std::string txt = loadResourceText(IDR_SPLASHES);
+        std::vector<std::string> lines;
+        std::stringstream ss(txt);
+        std::string line;
+        while (std::getline(ss, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();
+            if (!line.empty()) lines.push_back(line);
+        }
+        if (lines.empty()) return {};
+        std::mt19937 rng((unsigned)std::chrono::steady_clock::now().time_since_epoch().count());
+        return lines[rng() % lines.size()];
     }
 }
 
@@ -44,6 +96,7 @@ Minecraft::Minecraft(Window* window, render::IRenderDevice* device)
     : m_window(window), m_device(device) 
 {
     m_guiGraphics = std::make_unique<render::GuiGraphics>(device);
+    m_panorama = std::make_unique<render::PanoramaRenderer>(device);
     m_gui = std::make_unique<gui::Gui>(this);
     m_soundManager = std::make_unique<audio::SoundManager>();
     m_soundManager->init();
@@ -73,6 +126,18 @@ void Minecraft::setScreen(std::unique_ptr<gui::Screen> screen) {
     if (m_currentScreen) {
         m_currentScreen->init(this, m_window->width(), m_window->height());
     }
+}
+
+void Minecraft::renderPanorama(render::ICommandList* cmd, int w, int h, float dtSeconds) {
+    if (m_panorama) m_panorama->render(cmd, w, h, dtSeconds);
+}
+
+render::ITexture* Minecraft::panoramaOverlay() {
+    return m_panorama ? m_panorama->overlay() : nullptr;
+}
+
+bool Minecraft::panoramaLoaded() const {
+    return m_panorama && m_panorama->loaded();
 }
 
 // ── Chunk storage ─────────────────────────────────────────────────────────────
@@ -556,11 +621,19 @@ void Minecraft::render(float pt) {
     if (!guiInit) {
         auto* cmd = m_device->beginFrame(m_window->width(), m_window->height());
         
-        // fontTex is typically null: the GUI/font textures live in client.jar, not
-        // assets.bin (which only holds asset-index objects). Build the Font anyway so
-        // font() is never null — Font tolerates a null texture (text just won't draw).
-        render::ITexture* fontTex = loadAssetTex(m_device, cmd, "minecraft/textures/font/ascii.png");
+        // Font + GUI textures are embedded as Windows resources (extracted from
+        // client.jar — they aren't in assets.bin). Loaded ONCE into members and reused
+        // to (re)build screens (so the title rebuilds correctly when you close Options).
+        render::ITexture* fontTex = loadResourceTex(m_device, cmd, IDR_FONT_ASCII);
         m_font = std::make_unique<render::Font>(m_device, fontTex);
+        m_logoTex    = loadResourceTex(m_device, cmd, IDR_GUI_LOGO);
+        m_editionTex = loadResourceTex(m_device, cmd, IDR_GUI_EDITION);
+        m_dirtTex    = loadResourceTex(m_device, cmd, IDR_GUI_DIRT);
+        m_btnTex     = loadResourceTex(m_device, cmd, IDR_GUI_BUTTON);
+        m_btnHlTex   = loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL);
+        m_langTex    = loadResourceTex(m_device, cmd, IDR_GUI_LANG);
+        m_accessTex  = loadResourceTex(m_device, cmd, IDR_GUI_ACCESS);
+        m_splashText = pickSplash();
 
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
@@ -568,17 +641,29 @@ void Minecraft::render(float pt) {
         m_gui->setHeartTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/full.png"));
         m_gui->setFoodTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
 
-        auto ts = std::make_unique<gui::screens::TitleScreen>();
-        ts->setLogoTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/title/minecraft.png"));
-        ts->setButtonTextures(
-            loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/button.png"),
-            loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/button_highlighted.png")
-        );
-        setScreen(std::move(ts));
+        openTitleScreen();
 
         guiInit = true;
         m_device->endFrame();
     }
+}
+
+void Minecraft::openTitleScreen() {
+    auto ts = std::make_unique<gui::screens::TitleScreen>();
+    ts->setLogoTexture(m_logoTex);
+    ts->setEditionTexture(m_editionTex);
+    ts->setDirtTexture(m_dirtTex);
+    ts->setButtonTextures(m_btnTex, m_btnHlTex);
+    ts->setIconTextures(m_langTex, m_accessTex);
+    ts->setSplash(m_splashText);
+    setScreen(std::move(ts));
+}
+
+void Minecraft::openOptionsScreen() {
+    auto os = std::make_unique<gui::screens::OptionsScreen>();
+    os->setButtonTextures(m_btnTex, m_btnHlTex);
+    os->setBackAction([this]() { openTitleScreen(); });
+    setScreen(std::move(os));
 }
 
 void Minecraft::updateLocalChunks() {
@@ -635,15 +720,27 @@ void Minecraft::updateLocalChunks() {
         }
     }
 
-    // 2b. Deferred decoration: decorate any loaded, undecorated chunk whose 8
-    // neighbours are now present. As terrain streams in, interior chunks become
-    // eligible and get trees/ores/structures with full cross-chunk context (no
-    // clipping at borders). Collect keys first (tryDecorate writes into neighbours).
+    // 2b. Deferred decoration: decorate loaded, undecorated chunks whose 8
+    // neighbours are present (so trees/ores/structures get full cross-chunk context,
+    // no border clipping). BUDGETED to a few per tick: decoration is heavy and runs
+    // on the main thread, so doing every eligible chunk at once causes the movement
+    // stutter. Nearest-first so the area around the player fills in before the rim.
     {
         std::vector<ChunkPos> ready;
         for (const auto& [key, chunk] : m_chunks)
             if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
-        for (ChunkPos cp : ready) tryDecorate(cp);
+        std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
+            return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
+                 < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
+        });
+        constexpr int MAX_DECORATE_PER_TICK = 2;
+        int done = 0;
+        for (ChunkPos cp : ready) {
+            LevelChunk* c = getChunk(cp);
+            if (!c || c->decorated) continue;
+            tryDecorate(cp);
+            if (c->decorated && ++done >= MAX_DECORATE_PER_TICK) break;
+        }
     }
 
     // 3. Load/generate chunks inside RADIUS

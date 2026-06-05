@@ -11,6 +11,7 @@
 #include "../gui/screens/Screen.h"
 #include "../audio/SoundManager.h"
 #include "../core/ThreadPool.h"
+#include "Options.h"
 #include <unordered_map>
 #include <memory>
 #include <string>
@@ -29,6 +30,7 @@ namespace levelgen {
     namespace feature { class BiomeFeatures; }
 }
 namespace block { class BlockTags; }
+namespace render { class PanoramaRenderer; }
 
 struct PlayerInfo {
     UUID profileId{};
@@ -80,6 +82,18 @@ public:
     audio::SoundManager* soundManager() { return m_soundManager.get(); }
     
     void setScreen(std::unique_ptr<gui::Screen> screen);
+    // Centralised screen construction (the GUI textures are owned here and reused).
+    void openTitleScreen();
+    void openOptionsScreen();
+
+    GameOptions& options() { return m_options; }
+
+    // Title panorama background (rotating cubemap). renderPanorama draws it to cmd;
+    // panoramaOverlay/panoramaLoaded let the title screen blit the overlay + fall back
+    // to the dirt background if the panorama art isn't available.
+    void renderPanorama(render::ICommandList* cmd, int w, int h, float dtSeconds);
+    render::ITexture* panoramaOverlay();
+    bool panoramaLoaded() const;
 
 private:
     void handlePackets();
@@ -135,8 +149,20 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<LevelChunk>> m_chunks;
     std::unordered_map<UUID, PlayerInfo, UUIDHash> m_playerInfo;
 
-    std::unique_ptr<render::GuiGraphics> m_guiGraphics;
+    std::unique_ptr<render::GuiGraphics>     m_guiGraphics;
+    std::unique_ptr<render::PanoramaRenderer> m_panorama;
     std::unique_ptr<render::Font>        m_font;
+
+    // GUI textures (loaded once from embedded resources; reused to (re)build screens).
+    render::ITexture* m_logoTex = nullptr;
+    render::ITexture* m_editionTex = nullptr;
+    render::ITexture* m_dirtTex = nullptr;
+    render::ITexture* m_btnTex = nullptr;
+    render::ITexture* m_btnHlTex = nullptr;
+    render::ITexture* m_langTex = nullptr;
+    render::ITexture* m_accessTex = nullptr;
+    std::string       m_splashText;
+    GameOptions       m_options;
     std::unique_ptr<gui::Gui>           m_gui;
     std::unique_ptr<audio::SoundManager> m_soundManager;
     std::unique_ptr<gui::Screen>        m_currentScreen;

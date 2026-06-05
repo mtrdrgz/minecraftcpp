@@ -741,6 +741,25 @@ bool placeTree(TreeWorld& world, RandomSource& rng,
     int maxY = originY + treeHeight + 1;
     if (minY < CHUNK_MIN_Y + 1 || maxY > CHUNK_MAX_Y + 1) return false;
 
+    // Don't originate a tree on top of another tree. The chunk heightmap rises onto
+    // a neighbour's leaves (placed via cross-chunk decoration), so the OCEAN_FLOOR
+    // placement can land the origin on foliage; the trunk placer would then drop a
+    // dirt block onto the leaves and grow a tree on top (the "tree on a tree" / lone
+    // floating-dirt artifact). Require the block below the trunk base to be ground,
+    // not wood/leaves (and not air/fluid — belt-and-braces against water mushrooms).
+    {
+        const mc::BlockState* below = mc::getBlockState(world.getBlock(originX, originY - 1, originZ));
+        if (below && below->block) {
+            const std::string& bn = below->block->name;
+            const bool wood = bn.find("_leaves") != std::string::npos || bn.find("_log") != std::string::npos ||
+                              bn.find("_wood") != std::string::npos || bn.find("_stem") != std::string::npos ||
+                              bn.find("mushroom_block") != std::string::npos;
+            if (wood || below->isAir() || below->isFluid()) return false;
+        } else {
+            return false; // no ground below
+        }
+    }
+
     // Clearance check — may clip tree height
     int clippedHeight = getMaxFreeTreeHeight(world, treeHeight, originX, originY, originZ, config);
     auto minClipped   = config.minimumSize->minClippedHeight();
