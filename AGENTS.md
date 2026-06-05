@@ -303,8 +303,8 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 45 (fixed the menu mouse-capture bug so buttons are clickable;
-added splash text + language/accessibility icons; panorama art located in assets.bin — next)
+**Last updated**: Session 46 (rotating panorama background; OptionsScreen navigation —
+Options button now opens the real category grid + sub-screens with Done/back)
 
 **DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
 it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
@@ -376,10 +376,21 @@ Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
   button sprite; language/accessibility icon sprites.
 - [ ] **Widget library**: `Button`/`SpriteIconButton`/`AbstractWidget` with the real
   9-slice sprite scaling (`button.png` is a NineSlice sprite) + hover/focus.
-- [ ] **Options screens**: `OptionsScreen` + sub-screens (Video/Controls/Sound/Lang/Chat/
-  Accessibility) from the Java, with `OptionInstance`-backed widgets (sliders/cycle buttons).
-- [ ] **Screen framework**: `Screen` base (init/render/widgets/tick), `GuiGraphics` blit/
-  fill/drawString parity, layout helpers (`GridLayout`/`HeaderAndFooterLayout`).
+- [x] **Options navigation** (Session 46). `gui/screens/options/OptionsScreen.{h,cpp}`
+  ports `OptionsScreen.java`'s layout: the 2-column grid of category buttons (Skin
+  Customization / Music & Sounds / Video Settings / Controls / Language / Chat Settings /
+  Resource Packs / Accessibility Settings / Telemetry Data / Credits & Attribution) + a
+  Done button. Centralised screen creation in `Minecraft::openTitleScreen()` /
+  `openOptionsScreen()` (GUI textures are owned by Minecraft and reused, so screens rebuild
+  with their textures). Title "Options..." button → openOptionsScreen; each category opens
+  an `OptionsSubScreen` (real title + Done → back); Done → back to title. Navigation works.
+- [ ] **Option WIDGETS (next increment, do NOT invent)**: the sub-screens are currently
+  the real titled screen + Done only. Port the actual `OptionInstance`-backed widgets
+  (FOV/sensitivity sliders, cycle buttons, etc.) per VideoSettingsScreen/ControlsScreen/
+  SoundOptionsScreen/etc. — read each `*.java`, don't fabricate controls. Needs an
+  `Options` value store + slider/cycle-button widgets.
+- [ ] **Screen framework polish**: real `GridLayout`/`HeaderAndFooterLayout`, 9-slice
+  button sprite, hover tooltips, keyboard/ESC handling.
 
 
 

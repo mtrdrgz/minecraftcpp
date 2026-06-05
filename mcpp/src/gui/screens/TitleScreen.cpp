@@ -49,7 +49,7 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
     // Language icon, then Options / Quit, then Accessibility icon — one row.
     topPos += 36;
     addButton(w / 2 - 124, topPos, 20, 20, "", []() {});                              // CommonButtons.language — not ported
-    addButton(w / 2 - 100, topPos, 98, 20, "Options...", []() {});                    // OptionsScreen — not ported yet
+    addButton(w / 2 - 100, topPos, 98, 20, "Options...", [this]() { m_minecraft->openOptionsScreen(); });
     addButton(w / 2 + 2, topPos, 98, 20, "Quit Game", []() { PostQuitMessage(0); });
     addButton(w / 2 + 104, topPos, 20, 20, "", []() {});                              // CommonButtons.accessibility — not ported
 }

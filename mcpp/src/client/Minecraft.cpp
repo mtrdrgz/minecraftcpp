@@ -12,6 +12,7 @@
 #include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
+#include "../gui/screens/options/OptionsScreen.h"
 #include "../render/gui/PanoramaRenderer.h"
 #include "../assets/resource_ids.h"
 #include <stb_image.h>
@@ -621,10 +622,18 @@ void Minecraft::render(float pt) {
         auto* cmd = m_device->beginFrame(m_window->width(), m_window->height());
         
         // Font + GUI textures are embedded as Windows resources (extracted from
-        // client.jar — they aren't in assets.bin). This is what makes the menu show
-        // real text/logo/buttons instead of an all-gray screen.
+        // client.jar — they aren't in assets.bin). Loaded ONCE into members and reused
+        // to (re)build screens (so the title rebuilds correctly when you close Options).
         render::ITexture* fontTex = loadResourceTex(m_device, cmd, IDR_FONT_ASCII);
         m_font = std::make_unique<render::Font>(m_device, fontTex);
+        m_logoTex    = loadResourceTex(m_device, cmd, IDR_GUI_LOGO);
+        m_editionTex = loadResourceTex(m_device, cmd, IDR_GUI_EDITION);
+        m_dirtTex    = loadResourceTex(m_device, cmd, IDR_GUI_DIRT);
+        m_btnTex     = loadResourceTex(m_device, cmd, IDR_GUI_BUTTON);
+        m_btnHlTex   = loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL);
+        m_langTex    = loadResourceTex(m_device, cmd, IDR_GUI_LANG);
+        m_accessTex  = loadResourceTex(m_device, cmd, IDR_GUI_ACCESS);
+        m_splashText = pickSplash();
 
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
@@ -632,22 +641,29 @@ void Minecraft::render(float pt) {
         m_gui->setHeartTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/full.png"));
         m_gui->setFoodTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
 
-        auto ts = std::make_unique<gui::screens::TitleScreen>();
-        ts->setLogoTexture(loadResourceTex(m_device, cmd, IDR_GUI_LOGO));
-        ts->setEditionTexture(loadResourceTex(m_device, cmd, IDR_GUI_EDITION));
-        ts->setDirtTexture(loadResourceTex(m_device, cmd, IDR_GUI_DIRT));
-        ts->setButtonTextures(
-            loadResourceTex(m_device, cmd, IDR_GUI_BUTTON),
-            loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL)
-        );
-        ts->setIconTextures(loadResourceTex(m_device, cmd, IDR_GUI_LANG),
-                            loadResourceTex(m_device, cmd, IDR_GUI_ACCESS));
-        ts->setSplash(pickSplash());
-        setScreen(std::move(ts));
+        openTitleScreen();
 
         guiInit = true;
         m_device->endFrame();
     }
+}
+
+void Minecraft::openTitleScreen() {
+    auto ts = std::make_unique<gui::screens::TitleScreen>();
+    ts->setLogoTexture(m_logoTex);
+    ts->setEditionTexture(m_editionTex);
+    ts->setDirtTexture(m_dirtTex);
+    ts->setButtonTextures(m_btnTex, m_btnHlTex);
+    ts->setIconTextures(m_langTex, m_accessTex);
+    ts->setSplash(m_splashText);
+    setScreen(std::move(ts));
+}
+
+void Minecraft::openOptionsScreen() {
+    auto os = std::make_unique<gui::screens::OptionsScreen>();
+    os->setButtonTextures(m_btnTex, m_btnHlTex);
+    os->setBackAction([this]() { openTitleScreen(); });
+    setScreen(std::move(os));
 }
 
 void Minecraft::updateLocalChunks() {

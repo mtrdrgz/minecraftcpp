@@ -81,6 +81,9 @@ public:
     audio::SoundManager* soundManager() { return m_soundManager.get(); }
     
     void setScreen(std::unique_ptr<gui::Screen> screen);
+    // Centralised screen construction (the GUI textures are owned here and reused).
+    void openTitleScreen();
+    void openOptionsScreen();
 
     // Title panorama background (rotating cubemap). renderPanorama draws it to cmd;
     // panoramaOverlay/panoramaLoaded let the title screen blit the overlay + fall back
@@ -146,6 +149,16 @@ private:
     std::unique_ptr<render::GuiGraphics>     m_guiGraphics;
     std::unique_ptr<render::PanoramaRenderer> m_panorama;
     std::unique_ptr<render::Font>        m_font;
+
+    // GUI textures (loaded once from embedded resources; reused to (re)build screens).
+    render::ITexture* m_logoTex = nullptr;
+    render::ITexture* m_editionTex = nullptr;
+    render::ITexture* m_dirtTex = nullptr;
+    render::ITexture* m_btnTex = nullptr;
+    render::ITexture* m_btnHlTex = nullptr;
+    render::ITexture* m_langTex = nullptr;
+    render::ITexture* m_accessTex = nullptr;
+    std::string       m_splashText;
     std::unique_ptr<gui::Gui>           m_gui;
     std::unique_ptr<audio::SoundManager> m_soundManager;
     std::unique_ptr<gui::Screen>        m_currentScreen;
