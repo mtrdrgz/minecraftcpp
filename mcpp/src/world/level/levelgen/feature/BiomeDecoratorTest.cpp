@@ -14,6 +14,7 @@
 #include "../../block/Blocks.h"
 #include "../../chunk/LevelChunk.h"
 
+#include <algorithm>
 #include <iostream>
 #include <map>
 #include <string>
@@ -48,6 +49,18 @@ std::unique_ptr<LevelChunk> makePlains(int cx, int cz) {
     return c;
 }
 
+std::unique_ptr<LevelChunk> makeStoneSlab(int cx, int cz, int minY, int maxY) {
+    auto c = std::make_unique<LevelChunk>(ChunkPos{ cx, cz });
+    const uint32_t stone = getDefaultBlockStateId("stone", 0);
+    for (int x = 0; x < 16; ++x)
+        for (int z = 0; z < 16; ++z) {
+            const int wx = cx * 16 + x, wz = cz * 16 + z;
+            for (int y = minY; y <= maxY; ++y) c->setBlock(wx, y, wz, stone);
+        }
+    c->computeHeightmap();
+    return c;
+}
+
 // Collect plants placed above the surface as (x,y,z)->block.
 std::map<std::tuple<int, int, int>, std::string> collectPlants(const LevelChunk& c) {
     std::map<std::tuple<int, int, int>, std::string> out;
@@ -57,6 +70,17 @@ std::map<std::tuple<int, int, int>, std::string> collectPlants(const LevelChunk&
             for (int y = 71; y < 80; ++y) {
                 const uint32_t id = c.getBlock(p.x * 16 + x, y, p.z * 16 + z);
                 if (id != 0) out[{ x, y, z }] = nameOf(id);
+            }
+    return out;
+}
+
+int countBlockInRange(const LevelChunk& c, const std::string& target, int minY, int maxY) {
+    int out = 0;
+    const ChunkPos p = c.pos();
+    for (int x = 0; x < 16; ++x)
+        for (int z = 0; z < 16; ++z)
+            for (int y = minY; y <= maxY; ++y) {
+                if (nameOf(c.getBlock(p.x * 16 + x, y, p.z * 16 + z)) == target) ++out;
             }
     return out;
 }
@@ -81,11 +105,15 @@ int main() {
         check(veg[4] == "minecraft:flower_plains", "plains[9][4] == flower_plains");
         check(veg[5] == "minecraft:patch_grass_plain", "plains[9][5] == patch_grass_plain");
     }
+    const auto& meadowOres = bf.featuresForStep("minecraft:meadow", GenerationStep::UNDERGROUND_ORES);
+    check(std::find(meadowOres.begin(), meadowOres.end(), "minecraft:ore_emerald") != meadowOres.end(),
+          "meadow underground ores include ore_emerald");
     check(bf.biomeHasFeature("minecraft:plains", 9, "minecraft:patch_grass_plain"), "biome filter: plains has grass");
     check(!bf.biomeHasFeature("minecraft:ocean", 9, "minecraft:patch_grass_plain"), "biome filter: ocean lacks grass");
 
     auto plains = [](int, int, int) { return std::string("minecraft:plains"); };
     auto forest = [](int, int, int) { return std::string("minecraft:forest"); };
+    auto meadow = [](int, int, int) { return std::string("minecraft:meadow"); };
     auto voidb = [](int, int, int) { return std::string("minecraft:the_void"); };
     const std::string DIR = "26.1.2/data/minecraft/worldgen";
     auto countName = [](const std::map<std::tuple<int, int, int>, std::string>& m, const std::string& n) {
@@ -112,6 +140,15 @@ int main() {
     check(logs > 0, "forest: tree logs placed (got " + std::to_string(logs) + ")");
     check(leaves > 0, "forest: tree leaves placed (got " + std::to_string(leaves) + ")");
     std::cerr << "  plains plants=" << plants1.size() << "  forest logs=" << logs << " leaves=" << leaves << "\n";
+
+    // Mountain ore: ore_emerald's JSON uses count(100) + in_square +
+    // height_range(trapezoid -16..480) + biome. A high stone slab catches the
+    // height_range path; if the modifier is accidentally treated as identity,
+    // the origin stays at y=0 and this produces no emeralds.
+    auto mountain = makeStoneSlab(2, 2, 200, 240);
+    applyBiomeDecoration(*mountain, 42LL, meadow, bf, tags, DIR);
+    const int emeralds = countBlockInRange(*mountain, "minecraft:emerald_ore", 200, 240);
+    check(emeralds > 0, "meadow: emerald ore placed through height_range (got " + std::to_string(emeralds) + ")");
 
     // A biome with no features (the_void) decorates to nothing (gating sanity).
     auto c2 = makePlains(0, 0);

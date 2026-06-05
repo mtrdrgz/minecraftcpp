@@ -161,6 +161,20 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LOG->textures.all = "oak_log";
     blocks::OAK_LOG->textures.top = blocks::OAK_LOG->textures.bot = "oak_log_top";
 
+    // Ore decoration fallback blocks. The Windows executable loads the full
+    // block_states.json resource; these keep non-resource tests representative.
+    for (const char* b : {
+             "minecraft:granite", "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
+             "minecraft:clay", "minecraft:blackstone", "minecraft:magma_block", "minecraft:soul_sand",
+             "minecraft:coal_ore", "minecraft:deepslate_coal_ore", "minecraft:iron_ore", "minecraft:deepslate_iron_ore",
+             "minecraft:copper_ore", "minecraft:deepslate_copper_ore", "minecraft:gold_ore", "minecraft:deepslate_gold_ore",
+             "minecraft:redstone_ore", "minecraft:deepslate_redstone_ore", "minecraft:lapis_ore", "minecraft:deepslate_lapis_ore",
+             "minecraft:diamond_ore", "minecraft:deepslate_diamond_ore", "minecraft:emerald_ore", "minecraft:deepslate_emerald_ore",
+             "minecraft:nether_gold_ore", "minecraft:nether_quartz_ore", "minecraft:ancient_debris", "minecraft:infested_stone",
+             "minecraft:infested_deepslate", "minecraft:raw_copper_block", "minecraft:raw_iron_block" }) {
+        registerBlock(b, solid, byName)->textures.all = std::string(b).substr(10);
+    }
+
     auto leaves_p = solid;
     leaves_p.isOpaque = false; leaves_p.noOcclusion = true;
     blocks::OAK_LEAVES = registerBlock("minecraft:oak_leaves", leaves_p, byName);

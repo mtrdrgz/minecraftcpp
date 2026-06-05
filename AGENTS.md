@@ -253,7 +253,29 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 43 (flowerbed/vine special plant meshes)
+**Last updated**: Session 44 (JSON-driven ore feature + height_range)
+
+**Session 44**: fixed the tasklist ore-distribution path by moving ore generation
+onto the Java/data-driven decoration pipeline instead of the old hardcoded
+`OreGen.cpp`. `BiomeDecorator` now parses `minecraft:height_range` via the
+already-ported `HeightProvider` stack (`constant`, `uniform`, `biased_to_bottom`,
+`very_biased_to_bottom`, `trapezoid`) and resolves vertical anchors
+(`absolute`, `above_bottom`, `below_top`). `minecraft:ore` configured features
+now port Java `OreFeature`: seeded vein direction, segment radius samples,
+overlap culling, tested-position bitset, target-state order, `tag_match` and
+`block_match` rule tests, and `discard_chance_on_air_exposure` with the six-way
+air-neighbor check. `TreeGen.cpp` no longer includes or calls `OreGen.h`, and
+`OreGen.cpp` was removed from the main `mcpp` and `biome_decorator_test` CMake
+source lists so the hand-authored ore table cannot affect runtime generation.
+The fallback block registry now includes ore/replacement blocks so decoration
+tests without embedded `block_states.json` remain meaningful. Added a
+`biome_decorator_test` mountain-slab check proving `ore_emerald` goes through
+the real `height_range` path. Verified with wrapper commands: built
+`biome_decorator_test`, ran `biome_decorator_test`, built `mcpp`, ran
+`block_tags_parity`, `embedded_worldgen_assets_test`, and `vegetation_demo`; all
+pass. Caveat: decoration still writes through a single-chunk `WorldGenLevel`
+view, so cross-chunk feature writes/neighbour reads are still clamped compared
+with Java's full `WorldGenRegion`.
 
 **Session 43**: improved plant model fidelity using the real 26.1.2 block model
 JSON from `client.jar`. Important parity note: ordinary flowers such as dandelion
@@ -413,10 +435,11 @@ the removed hand-authored approximate generators — port from Java + data only.
    router so the *sampled* climate (temperature/humidity/... density functions)
    is also verified end-to-end, and add the same coverage for nether/end presets.
 4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
-5. Port placed/configured features and structures only from Java/data definitions. The approximate tree/ore/surface-decoration/structure generators added by another LLM were removed from the build and must not be re-enabled as-is.
+5. Port placed/configured features and structures only from Java/data definitions. The approximate ore/surface-decoration/structure generators added by another LLM must not be re-enabled as-is; `TreeGen.cpp` remains compiled only for the tree primitives used by the data-driven `BiomeDecorator`.
 6. Tasklist next: continue the remaining rendering/worldgen/UI items from
-   `C:\Users\Mateo\Desktop\tasklist.txt` (notably abnormal gray vegetation/tinting,
-   plant/vine models, ore distribution, chunk-generation stutter/lagback, and menus).
+   `C:\Users\Mateo\Desktop\tasklist.txt` (notably chunk-generation stutter/lagback,
+   biome-aware tinting, animated water/lava/kelp textures, kelp/water plant logic,
+   bamboo model/displacement, structures, and menus).
 
 **Known issues / limitations:**
 - Online mode auth not implemented.
@@ -431,7 +454,7 @@ the removed hand-authored approximate generators — port from Java + data only.
 - `Aquifer` is now ported as its own C++ module with Java's global fluid picker, disabled aquifer path, and noise-based aquifer sampling/pressure/fluid-level logic. `NoiseBasedChunkGenerator::fillFromNoise()` now uses `aquifer.computeSubstance(context, density)` and falls back to `defaultBlock` when Java would return `null`.
 - `OreVeinifier` is now ported and wired after Aquifer, matching Java's `NoiseChunk` material rule order when `settings.oreVeinsEnabled()` is true.
 - `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` exist but are not certified complete. Treat them as partial until each condition/rule is checked against Java source.
-- The previous LLM added `BiomeSource`, `feature/TreeGen`, `feature/OreGen`, `feature/SurfaceDecoration`, and `structure/StructureGen` as approximate systems. They contained hand-authored biome points, per-chunk random scattering, hardcoded chances, and simplified structures. Session 23 removed them from `src/CMakeLists.txt` and removed their calls from `NoiseBasedChunkGenerator::buildSurface()`. The files may remain on disk for reference, but they are intentionally out of the executable.
+- The previous LLM added `BiomeSource`, `feature/TreeGen`, `feature/OreGen`, `feature/SurfaceDecoration`, and `structure/StructureGen` as approximate systems. They contained hand-authored biome points, per-chunk random scattering, hardcoded chances, and simplified structures. The approximate ore/surface-decoration/structure paths are intentionally out of the executable; `TreeGen.cpp` remains compiled only for the tree primitive classes used by the data-driven `BiomeDecorator`, and its old `decorateChunk()` entry point is not called and no longer calls `OreGen`.
 - `NoiseBasedChunkGenerator::buildSurface()` now passes an empty biome key to `SurfaceSystem` until the Java `Climate` / `MultiNoiseBiomeSource` pipeline is ported. This keeps biome-dependent rules inactive instead of feeding them fake biomes.
 - Session 24 replaced the fake `BiomeSource` implementation with a Java-shaped foundation: `Climate.h` now ports `quantizeCoord`, `Parameter`, `TargetPoint`, `ParameterPoint::fitness`, and `ParameterList::findValue` using the same distance metric as Java.
 - Session 25 ported the full `OverworldBiomeBuilder` preset shape: off-coast biomes, all `addInlandBiomes()` weirdness slices (`addPeaks`, `addHighSlice`, `addMidSlice`, `addLowSlice`, `addValleys`), underground biomes, and the Java `pick*` helper decisions. `NoiseBasedChunkGenerator::buildSurface()` now passes this biome lookup into `SurfaceSystem` for overworld terrain. This is a direct C++ port scaffold and must be audited line-by-line before claiming final 1:1 biome behavior.
