@@ -499,7 +499,6 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                                name == "cave_vines" || name == "cave_vines_plant" ||
                                name.find("coral") != std::string::npos);
                 }
-                bool isPlant = bs && bs->block && isCrossPlant(bs->block->name);
 
                 if (isPlant) {
                     std::string texOverride = "";

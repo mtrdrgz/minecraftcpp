@@ -249,13 +249,12 @@ void Minecraft::decorateChunk(LevelChunk& chunk) {
     auto biomeGetter = [this](int x, int y, int z) {
         return m_localGenerator->getBiome(x, y, z);
     };
-    // Let features write across this chunk's borders into already-loaded neighbours
-    // (fixes trees clipped at chunk edges) — main-thread only, so getChunk is safe.
-    auto chunkAt = [this](int cx, int cz) { return getChunk({ cx, cz }); };
+    // Decoration writes are clamped to this chunk: the (branch) BiomeDecorator
+    // restored after the PR#6 merge has no cross-chunk chunkAt view.
     try {
         levelgen::feature::applyBiomeDecoration(
             chunk, (std::int64_t)m_worldSeed, biomeGetter,
-            *m_biomeFeatures, *m_blockTags, m_worldgenDir, chunkAt);
+            *m_biomeFeatures, *m_blockTags, m_worldgenDir);
     } catch (const std::exception& e) {
         MC_LOG_WARN("decorateChunk failed at ({},{}): {}", chunk.pos().x, chunk.pos().z, e.what());
     }

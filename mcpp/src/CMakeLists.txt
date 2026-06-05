@@ -162,13 +162,15 @@ target_link_libraries(mcpp PRIVATE
 target_link_libraries(mcpp PRIVATE
     user32 gdi32 kernel32 opengl32
     ws2_32 bcrypt
-    xaudio2_9 ole32
+    ole32
     d3d12 dxgi d3dcompiler
 )
+# Audio import lib differs by toolchain: llvm-mingw bundles xaudio2_9.lib, while
+# the MSVC-ABI Windows SDK ships xaudio2.lib (xaudio2_9.lib does not exist there).
 if(MINGW)
-    target_link_libraries(mcpp PRIVATE xaudio2_9 ole32)
+    target_link_libraries(mcpp PRIVATE xaudio2_9)
 else()
-    target_link_libraries(mcpp PRIVATE xaudio2 ole32)
+    target_link_libraries(mcpp PRIVATE xaudio2)
 endif()
 
 target_compile_definitions(mcpp PRIVATE
