@@ -20,6 +20,7 @@
 #include <cmath>
 #include <filesystem>
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <random>
 #include <chrono>
@@ -216,6 +217,22 @@ namespace {
         }
         return "";
     }
+
+    std::vector<std::pair<std::string, std::string>> readJsonAssetEntries(std::string_view prefix) {
+        std::vector<std::pair<std::string, std::string>> entries;
+        auto& assets = AssetManager::instance();
+        for (const std::string& path : assets.list(prefix)) {
+            if (!path.ends_with(".json")) {
+                continue;
+            }
+            std::vector<uint8_t> bytes = assets.readRaw(path);
+            if (bytes.empty()) {
+                continue;
+            }
+            entries.emplace_back(path, std::string(bytes.begin(), bytes.end()));
+        }
+        return entries;
+    }
 }
 
 void Minecraft::ensureWorldgenData() {
@@ -223,21 +240,42 @@ void Minecraft::ensureWorldgenData() {
     m_worldgenTried = true;
 
     std::string dataRoot = discoverDataRoot();
-    if (dataRoot.empty()) {
-        MC_LOG_WARN("Worldgen data (26.1.2/data) not found near cwd or exe; "
-                    "terrain will generate without trees/vegetation");
-        return;
-    }
-
     try {
+        if (!dataRoot.empty()) {
+            m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
+                levelgen::feature::BiomeFeatures::loadFromDirectory(dataRoot + "/minecraft/worldgen/biome"));
+            m_blockTags = std::make_unique<block::BlockTags>(
+                block::BlockTags::loadFromDirectory(dataRoot + "/minecraft/tags/block"));
+            m_worldgenDir = dataRoot + "/minecraft/worldgen";
+            m_worldgenReady = true;
+            MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from {}",
+                        m_biomeFeatures->biomeCount(), dataRoot);
+            return;
+        }
+
+        const auto biomeEntries = readJsonAssetEntries("data/minecraft/worldgen/biome/");
+        const auto tagEntries = readJsonAssetEntries("data/minecraft/tags/block/");
+        if (biomeEntries.empty() || tagEntries.empty()) {
+            MC_LOG_WARN("Worldgen data not found in 26.1.2/data or embedded assets; "
+                        "terrain will generate without trees/vegetation");
+            return;
+        }
+
+        levelgen::feature::setJsonAssetReader([](std::string_view path) -> std::optional<std::string> {
+            std::vector<uint8_t> bytes = AssetManager::instance().readRaw(path);
+            if (bytes.empty()) {
+                return std::nullopt;
+            }
+            return std::string(bytes.begin(), bytes.end());
+        });
         m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
-            levelgen::feature::BiomeFeatures::loadFromDirectory(dataRoot + "/minecraft/worldgen/biome"));
+            levelgen::feature::BiomeFeatures::loadFromJsonEntries(biomeEntries));
         m_blockTags = std::make_unique<block::BlockTags>(
-            block::BlockTags::loadFromDirectory(dataRoot + "/minecraft/tags/block"));
-        m_worldgenDir = dataRoot + "/minecraft/worldgen";
+            block::BlockTags::loadFromJsonEntries(tagEntries));
+        m_worldgenDir = "data/minecraft/worldgen";
         m_worldgenReady = true;
-        MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from {}",
-                    m_biomeFeatures->biomeCount(), dataRoot);
+        MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from embedded assets",
+                    m_biomeFeatures->biomeCount());
     } catch (const std::exception& e) {
         MC_LOG_WARN("Failed to load worldgen decoration data: {}", e.what());
         m_worldgenReady = false;

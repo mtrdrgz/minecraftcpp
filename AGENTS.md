@@ -303,7 +303,29 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 44 (JSON-driven ore feature + height_range)
+**Last updated**: Session 45 (deferred decoration owns cross-chunk writes)
+
+**Session 45**: re-verified and tightened the chunk-border decoration path. The
+client remains the owner of `applyBiomeDecoration()` and only decorates chunks
+after all 8 neighbours are loaded, passing `chunkAt` through `ChunkWGL` into
+`TreeWorld` so trees at a chunk edge can write leaves/logs into adjacent loaded
+chunks. Removed the old decoration call from
+`NoiseBasedChunkGenerator::buildSurface()`; that route decorated a single chunk
+without a neighbour resolver and could duplicate client decoration or reintroduce
+clipped features. Restored the standalone/embedded worldgen JSON fallback in
+`Minecraft::ensureWorldgenData()`: if local `26.1.2/data` is absent, it loads
+biome features and block tags from embedded MCAS `data/minecraft/...` entries
+and installs the JSON asset reader for placed/configured feature resolution.
+`biome_decorator_test` now has a deterministic edge-oak regression check that
+places an oak at `x=15` and proves leaves/logs appear in chunk `x=1`; the test
+also locates `26.1.2/data` from either repo root or `mcpp/`. Verified with wrapper
+commands: built `biome_decorator_test`, ran `biome_decorator_test`, built
+`embedded_worldgen_assets_test`, ran `embedded_worldgen_assets_test`, built
+`mcpp`, and ran a 35s `--quickPlaySingleplayer` smoke (world loaded and entered
+main loop; process was killed by the intentional timeout). Caveat: non-tree
+features still write through `ChunkWGL::setBlock`, which is clamped to the active
+chunk except where a feature uses a dedicated cross-chunk writer; Java's full
+`WorldGenRegion` write/read semantics are still not fully ported.
 
 **Session 44**: fixed the tasklist ore-distribution path by moving ore generation
 onto the Java/data-driven decoration pipeline instead of the old hardcoded

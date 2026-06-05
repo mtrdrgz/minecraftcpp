@@ -605,11 +605,10 @@ bool placeTree(TreeWorld& world, RandomSource& rng,
 
 // ---------------------------------------------------------------------------
 // Chunk decoration entry point
-// Called by NoiseBasedChunkGenerator after buildSurface().
-// Scatters trees across the chunk using a per-chunk seeded random.
+// Legacy standalone tree scatter entry point. Runtime decoration goes through
+// BiomeDecorator/applyBiomeDecoration after neighbouring chunks are loaded.
 // ---------------------------------------------------------------------------
 
 void decorateChunk(LevelChunk& chunk, uint64_t worldSeed, const std::function<std::string(int, int, int)>& biomeGetter);
 
 } // namespace mc::levelgen::feature
-

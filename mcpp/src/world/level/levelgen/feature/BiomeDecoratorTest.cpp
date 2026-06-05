@@ -9,12 +9,14 @@
 
 #include "BiomeDecorator.h"
 #include "BiomeFeatures.h"
+#include "TreeGen.h"
 #include "../../block/BlockState.h"
 #include "../../block/BlockTags.h"
 #include "../../block/Blocks.h"
 #include "../../chunk/LevelChunk.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <map>
 #include <string>
@@ -84,6 +86,15 @@ int countBlockInRange(const LevelChunk& c, const std::string& target, int minY, 
             }
     return out;
 }
+
+std::filesystem::path findDataRoot() {
+    for (const auto& candidate : {
+             std::filesystem::path("26.1.2/data/minecraft"),
+             std::filesystem::path("../26.1.2/data/minecraft") }) {
+        if (std::filesystem::exists(candidate / "worldgen/biome")) return candidate;
+    }
+    return "26.1.2/data/minecraft";
+}
 } // namespace
 
 int main() {
@@ -91,8 +102,9 @@ int main() {
     BiomeFeatures bf;
     mc::block::BlockTags tags;
     try {
-        bf = BiomeFeatures::loadFromDirectory("26.1.2/data/minecraft/worldgen/biome");
-        tags = mc::block::BlockTags::loadFromDirectory("26.1.2/data/minecraft/tags/block");
+        const auto dataRoot = findDataRoot();
+        bf = BiomeFeatures::loadFromDirectory((dataRoot / "worldgen/biome").string());
+        tags = mc::block::BlockTags::loadFromDirectory((dataRoot / "tags/block").string());
     } catch (const std::exception& e) {
         std::cerr << "load error: " << e.what() << '\n';
         return 2;
@@ -115,7 +127,7 @@ int main() {
     auto forest = [](int, int, int) { return std::string("minecraft:forest"); };
     auto meadow = [](int, int, int) { return std::string("minecraft:meadow"); };
     auto voidb = [](int, int, int) { return std::string("minecraft:the_void"); };
-    const std::string DIR = "26.1.2/data/minecraft/worldgen";
+    const std::string DIR = (findDataRoot() / "worldgen").string();
     auto countName = [](const std::map<std::tuple<int, int, int>, std::string>& m, const std::string& n) {
         int c = 0; for (auto& [k, v] : m) if (v == n) ++c; return c;
     };
@@ -140,6 +152,26 @@ int main() {
     check(logs > 0, "forest: tree logs placed (got " + std::to_string(logs) + ")");
     check(leaves > 0, "forest: tree leaves placed (got " + std::to_string(leaves) + ")");
     std::cerr << "  plains plants=" << plants1.size() << "  forest logs=" << logs << " leaves=" << leaves << "\n";
+
+    // TreeWorld must write foliage/trunks into loaded neighbour chunks. Java
+    // decorates through a WorldGenRegion, so a tree rooted at x=15 may place
+    // leaves in chunk x=1 instead of getting clipped at the active chunk border.
+    auto edge = makePlains(0, 0);
+    auto east = makePlains(1, 0);
+    TreeWorld treeWorld{ *edge, 0, 0 };
+    std::function<LevelChunk*(int, int)> chunkAt = [&](int cx, int cz) -> LevelChunk* {
+        if (cx == 0 && cz == 0) return edge.get();
+        if (cx == 1 && cz == 0) return east.get();
+        return nullptr;
+    };
+    treeWorld.chunkAt = &chunkAt;
+    auto treeRandom = std::make_shared<mc::levelgen::LegacyRandomSource>(1234LL);
+    check(placeTree(treeWorld, *treeRandom, 15, 71, 8, makeOakConfig()), "edge oak placed");
+    const int neighbourLeaves = countBlockInRange(*east, "minecraft:oak_leaves", 71, 90);
+    const int neighbourLogs = countBlockInRange(*east, "minecraft:oak_log", 71, 90);
+    check(neighbourLeaves + neighbourLogs > 0,
+          "edge tree wrote into neighbour chunk (got " + std::to_string(neighbourLeaves) +
+          " leaves, " + std::to_string(neighbourLogs) + " logs)");
 
     // Mountain ore: ore_emerald's JSON uses count(100) + in_square +
     // height_range(trapezoid -16..480) + biome. A high stone slab catches the
