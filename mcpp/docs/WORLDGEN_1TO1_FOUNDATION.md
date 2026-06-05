@@ -30,13 +30,13 @@ The following runtime systems are intentionally disabled until rebuilt on vanill
 - hand-built structures;
 - low-level plant guards in `LevelChunk::setBlock()`.
 
-## Required foundation before re-enabling decoration
+## Foundation status
 
 ### 1. WorldGenRegion
 
 Java features do not place through a single `LevelChunk`. They place through `WorldGenRegion` with neighbour reads and explicit writable bounds.
 
-The C++ foundation now has `mcpp/src/world/level/levelgen/WorldGenRegion.h` as the common replacement for ad-hoc chunk views.
+Status: **foundation added** in `mcpp/src/world/level/levelgen/WorldGenRegion.h`.
 
 Next work:
 
@@ -55,12 +55,18 @@ setFeatureSeed(decorationSeed, globalFeatureIndex, step)
 
 A local merged feature list is not sufficient.
 
+Status: **foundation added** in:
+
+- `mcpp/src/world/level/levelgen/feature/FeatureSorter.h`
+- `mcpp/src/world/level/levelgen/feature/DecorationPlan.h`
+
+The new code is data-only and does not place blocks. It prepares the Java-style feature order and the per-step feature indices that future decoration should seed/place.
+
 Next work:
 
-- port `FeatureSorter` semantics;
-- build per-step feature data from possible biomes;
-- preserve indices for skipped unsupported features;
-- compare feature ordering against Java for a fixed biome set.
+- compare feature ordering against Java for a fixed biome set;
+- connect `DecorationPlan` to a no-op decoration driver that logs/records planned calls;
+- preserve indices for skipped unsupported features once runtime decoration is re-enabled.
 
 ### 3. Placement modifiers and block predicates
 
