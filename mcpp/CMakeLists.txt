@@ -20,7 +20,7 @@ target_compile_definitions(glm INTERFACE
 
 # nlohmann/json (header-only)
 add_library(nlohmann_json INTERFACE)
-target_include_directories(nlohmann_json INTERFACE vendor/nlohmann)
+target_include_directories(nlohmann_json INTERFACE vendor)
 
 # stb (header-only, each TU that uses it must define the implementation macro once)
 add_library(stb INTERFACE)

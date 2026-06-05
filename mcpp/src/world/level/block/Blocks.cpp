@@ -1,5 +1,6 @@
 ﻿#include "Blocks.h"
 #include "../../../core/Log.h"
+#include "BlockStates.h"
 #include <nlohmann/json.hpp>
 #if defined(_WIN32)
 #include "../../../assets/resource_ids.h"
@@ -45,6 +46,58 @@ Block* getBlockByName(std::string_view name) {
 uint32_t getDefaultBlockStateId(std::string_view name, uint32_t fallback) {
     auto it = g_defaultStateByName.find(std::string(name));
     return it == g_defaultStateByName.end() ? fallback : it->second;
+}
+
+namespace {
+
+std::string stripMinecraftNamespace(std::string name) {
+    if (name.starts_with("minecraft:")) {
+        name.erase(0, 10);
+    }
+    return name;
+}
+
+bool isPillarBlockName(const std::string& name) {
+    return name.ends_with("_log") || name.ends_with("_wood") ||
+           name.ends_with("_stem") || name.ends_with("_hyphae") ||
+           name == "bamboo_block";
+}
+
+uint32_t checkedStateOffset(const std::string& name, uint32_t base, int offset) {
+    const uint32_t id = base + static_cast<uint32_t>(offset);
+    if (id >= g_blockStates.size()) {
+        return base;
+    }
+    const BlockState* state = getBlockState(id);
+    if (state && state->block && state->block->name == name) {
+        return id;
+    }
+    return base;
+}
+
+} // namespace
+
+uint32_t getBlockStateId(std::string_view serializedState, uint32_t fallback) {
+    const std::string state(serializedState);
+    const std::string name = stripMinecraftNamespace(block::blockName(state));
+    const uint32_t base = getDefaultBlockStateId(name, fallback);
+    const auto props = block::properties(state);
+    if (props.empty()) {
+        return base;
+    }
+
+    if (auto axis = props.find("axis"); axis != props.end() && isPillarBlockName(name)) {
+        if (axis->second == "x") return checkedStateOffset(name, base, 0);
+        if (axis->second == "y") return checkedStateOffset(name, base, 1);
+        if (axis->second == "z") return checkedStateOffset(name, base, 2);
+    }
+
+    if (auto half = props.find("half"); half != props.end()) {
+        if (half->second == "lower") return checkedStateOffset(name, base, 0);
+        if (half->second == "upper") return checkedStateOffset(name, base, 1);
+    }
+
+    return base;
 }
 
 const BlockState* getDefaultBlockState(std::string_view name) {
@@ -107,6 +160,20 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LOG = registerBlock("minecraft:oak_log", solid, byName);
     blocks::OAK_LOG->textures.all = "oak_log";
     blocks::OAK_LOG->textures.top = blocks::OAK_LOG->textures.bot = "oak_log_top";
+
+    // Ore decoration fallback blocks. The Windows executable loads the full
+    // block_states.json resource; these keep non-resource tests representative.
+    for (const char* b : {
+             "minecraft:granite", "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
+             "minecraft:clay", "minecraft:blackstone", "minecraft:magma_block", "minecraft:soul_sand",
+             "minecraft:coal_ore", "minecraft:deepslate_coal_ore", "minecraft:iron_ore", "minecraft:deepslate_iron_ore",
+             "minecraft:copper_ore", "minecraft:deepslate_copper_ore", "minecraft:gold_ore", "minecraft:deepslate_gold_ore",
+             "minecraft:redstone_ore", "minecraft:deepslate_redstone_ore", "minecraft:lapis_ore", "minecraft:deepslate_lapis_ore",
+             "minecraft:diamond_ore", "minecraft:deepslate_diamond_ore", "minecraft:emerald_ore", "minecraft:deepslate_emerald_ore",
+             "minecraft:nether_gold_ore", "minecraft:nether_quartz_ore", "minecraft:ancient_debris", "minecraft:infested_stone",
+             "minecraft:infested_deepslate", "minecraft:raw_copper_block", "minecraft:raw_iron_block" }) {
+        registerBlock(b, solid, byName)->textures.all = std::string(b).substr(10);
+    }
 
     auto leaves_p = solid;
     leaves_p.isOpaque = false; leaves_p.noOcclusion = true;
@@ -255,6 +322,12 @@ void initBlocks() {
 
             g_blockStates[id].block   = blk;
             g_blockStates[id].stateId = (uint32_t)id;
+            const uint32_t baseId = getDefaultBlockStateId(name, (uint32_t)id);
+            const uint32_t offset = (uint32_t)id - baseId;
+            if (isPillarBlockName(name) && offset < 3) {
+                static constexpr const char* AXES[3] = { "x", "y", "z" };
+                g_blockStates[id].properties["axis"] = AXES[offset];
+            }
         }
 
         // Fix any gaps (states not in the JSON map to air)

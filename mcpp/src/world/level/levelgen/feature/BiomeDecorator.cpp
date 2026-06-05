@@ -27,6 +27,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -44,7 +45,26 @@ using mc::valueproviders::BiasedToBottomInt;
 using mc::valueproviders::ClampedInt;
 using mc::valueproviders::TrapezoidInt;
 using mc::valueproviders::IntProviderPtr;
+using mc::levelgen::VerticalAnchorPtr;
+using mc::levelgen::heightproviders::HeightProviderPtr;
+using mc::levelgen::heightproviders::ConstantHeight;
+using mc::levelgen::heightproviders::UniformHeight;
+using mc::levelgen::heightproviders::BiasedToBottomHeight;
+using mc::levelgen::heightproviders::VeryBiasedToBottomHeight;
+using mc::levelgen::heightproviders::TrapezoidHeight;
 using json = nlohmann::json;
+namespace Anchors = mc::levelgen::VerticalAnchors;
+
+namespace {
+JsonAssetReader& jsonAssetReader() {
+    static JsonAssetReader reader;
+    return reader;
+}
+} // namespace
+
+void setJsonAssetReader(JsonAssetReader reader) {
+    jsonAssetReader() = std::move(reader);
+}
 
 namespace {
 
@@ -117,6 +137,9 @@ struct ChunkWGL final : WorldGenLevel {
     }
 
     void setBlock(BlockPos p, const std::string& state, int) override {
+        if (!inChunk(p)) return; // clamp to this chunk
+        const uint32_t id = getBlockStateId(state, 0);
+        if (id != 0) chunk->setBlock(p.x, p.y, p.z, id);
         if (p.y < CHUNK_MIN_Y || p.y >= CHUNK_MAX_Y) return;
         LevelChunk* c = owning(p.x, p.z);
         if (!c) return; // owning chunk not loaded — drop (no neighbour region here)
@@ -131,6 +154,15 @@ struct ChunkWGL final : WorldGenLevel {
 std::string stripNs(std::string s) {
     if (auto c = s.find(':'); c != std::string::npos) s = s.substr(c + 1);
     return s;
+}
+
+std::string normalizeId(std::string s) {
+    if (s.find(':') == std::string::npos) s = "minecraft:" + s;
+    return s;
+}
+
+std::string stateBlockId(const std::string& state) {
+    return normalizeId(mc::block::blockName(state));
 }
 
 // minecraft:biome filter: keep the position iff the biome there lists the feature
@@ -245,15 +277,36 @@ PlacedFeature::FeaturePlacer treePlacer(TreeConfig cfg) {
 
 std::optional<json> loadJsonFile(const std::string& dir, const char* sub, std::string name) {
     name = stripNs(std::move(name));
-    std::ifstream in(dir + "/" + sub + "/" + name + ".json");
-    if (!in) return std::nullopt;
-    std::stringstream ss; ss << in.rdbuf();
-    try { return json::parse(ss.str()); } catch (...) { return std::nullopt; }
+    const std::filesystem::path path = std::filesystem::path(dir) / sub / (name + ".json");
+    std::ifstream in(path);
+    if (in) {
+        std::stringstream ss; ss << in.rdbuf();
+        try { return json::parse(ss.str()); } catch (...) { return std::nullopt; }
+    }
+
+    if (jsonAssetReader()) {
+        const std::string assetPath = path.generic_string();
+        if (auto text = jsonAssetReader()(assetPath)) {
+            try { return json::parse(*text); } catch (...) { return std::nullopt; }
+        }
+    }
+    return std::nullopt;
 }
 
 std::string stateName(const json& j) {
     if (j.is_string()) return j.get<std::string>();
-    if (j.is_object()) return j.value("Name", std::string("minecraft:air"));
+    if (j.is_object()) {
+        std::string name = j.value("Name", std::string("minecraft:air"));
+        const auto propsIt = j.find("Properties");
+        if (propsIt == j.end() || !propsIt->is_object() || propsIt->empty()) {
+            return name;
+        }
+        std::map<std::string, std::string> props;
+        for (const auto& [key, value] : propsIt->items()) {
+            props[key] = value.is_string() ? value.get<std::string>() : value.dump();
+        }
+        return mc::block::serializeState(name, props);
+    }
     return "minecraft:air";
 }
 
@@ -308,6 +361,37 @@ IntProviderPtr parseIntProvider(const json& j) {
     if (t == "clamped") return ClampedInt::of(parseIntProvider(j["source"]), j.value("min_inclusive", 0), j.value("max_inclusive", 0));
     if (t == "trapezoid") return TrapezoidInt::of(j.value("min", 0), j.value("max", 0), j.value("plateau", 0));
     return ConstantInt::of(0);
+}
+
+VerticalAnchorPtr parseVerticalAnchor(const json& j) {
+    if (j.is_number_integer()) return Anchors::absolute(j.get<int>());
+    if (!j.is_object()) return Anchors::absolute(0);
+    if (j.contains("absolute")) return Anchors::absolute(j.value("absolute", 0));
+    if (j.contains("above_bottom")) return Anchors::aboveBottom(j.value("above_bottom", 0));
+    if (j.contains("below_top")) return Anchors::belowTop(j.value("below_top", 0));
+    return Anchors::absolute(0);
+}
+
+HeightProviderPtr parseHeightProvider(const json& j) {
+    if (j.is_number_integer()) return std::make_shared<ConstantHeight>(Anchors::absolute(j.get<int>()));
+    if (!j.is_object()) return std::make_shared<ConstantHeight>(Anchors::absolute(0));
+
+    const std::string t = typeOf(j);
+    if (t == "constant") {
+        return std::make_shared<ConstantHeight>(parseVerticalAnchor(j.value("value", json::object())));
+    }
+
+    VerticalAnchorPtr min = parseVerticalAnchor(j.value("min_inclusive", json::object()));
+    VerticalAnchorPtr max = parseVerticalAnchor(j.value("max_inclusive", json::object()));
+    if (t == "uniform") return std::make_shared<UniformHeight>(std::move(min), std::move(max));
+    if (t == "biased_to_bottom")
+        return std::make_shared<BiasedToBottomHeight>(std::move(min), std::move(max), j.value("inner", 1));
+    if (t == "very_biased_to_bottom")
+        return std::make_shared<VeryBiasedToBottomHeight>(std::move(min), std::move(max), j.value("inner", 1));
+    if (t == "trapezoid")
+        return std::make_shared<TrapezoidHeight>(std::move(min), std::move(max), j.value("plateau", 0));
+
+    return std::make_shared<ConstantHeight>(Anchors::absolute(0));
 }
 
 IntVal parseIntVal(const json& j) {
@@ -464,6 +548,7 @@ std::shared_ptr<const PlacementModifier> parseModifier(const json& m) {
     if (t == "in_square") return std::make_shared<InSquarePlacement>();
     if (t == "biome") return std::make_shared<BiomeFilter>(biomeAllows);
     if (t == "rarity_filter") return std::make_shared<RarityFilter>(m.value("chance", 1));
+    if (t == "height_range") return std::make_shared<HeightRangePlacement>(parseHeightProvider(m["height"]));
     if (t == "heightmap") return std::make_shared<HeightmapPlacement>(hmType(m.value("heightmap", std::string("MOTION_BLOCKING"))));
     if (t == "height_range") return std::make_shared<HeightRangePlacement>(parseHeightProvider(m["height"]));
     if (t == "surface_relative_threshold_filter")
@@ -537,11 +622,16 @@ std::optional<TreeConfig> parseTreeConfig(const json& c) {
     auto size = std::make_shared<TwoLayersFeatureSize>(ms.value("limit", 1), ms.value("lower_size", 0), ms.value("upper_size", 1),
                                                        minClip >= 0 ? std::optional<int>(minClip) : std::nullopt);
 
-    const uint32_t logId = getDefaultBlockStateId(stripNs(providerState(c.value("trunk_provider", json::object()))), 0);
-    const uint32_t leafId = getDefaultBlockStateId(stripNs(providerState(c.value("foliage_provider", json::object()))), 0);
+    const std::string trunkState = providerState(c.value("trunk_provider", json::object()));
+    const std::string logName = stripNs(mc::block::blockName(trunkState));
+    const uint32_t logId = getBlockStateId(trunkState, 0);
+    const uint32_t leafId = getBlockStateId(providerState(c.value("foliage_provider", json::object())), 0);
     const uint32_t dirtId = getDefaultBlockStateId("dirt", 0);
     if (logId == 0 || leafId == 0) return std::nullopt; // block not in registry -> skip
-    return TreeConfig{ logId, logId, logId, leafId, dirtId, trunk, foliage, size, true };
+    const uint32_t logX = getBlockStateId("minecraft:" + logName + "[axis=x]", logId);
+    const uint32_t logY = getBlockStateId("minecraft:" + logName + "[axis=y]", logId);
+    const uint32_t logZ = getBlockStateId("minecraft:" + logName + "[axis=z]", logId);
+    return TreeConfig{ logY, logX, logZ, leafId, dirtId, trunk, foliage, size, true };
 }
 
 // ── Non-tree feature placers (one universal function per configured-feature type,
@@ -676,12 +766,57 @@ PlacedFeature::FeaturePlacer fallenTreePlacer(const json& c) {
     auto trunk = parseProvider(c["trunk_provider"]);
     auto len = parseIntProvider(c.value("log_length", json(5)));
     return [trunk, len](WorldGenLevel& lv, RandomSource& r, BlockPos pos) -> bool {
-        const int L = std::max(len->sample(r), 2);
         static const int D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
         const int d = r.nextInt(4);
+        const int logLength = std::max(len->sample(r) - 2, 0);
+        const std::string axis = D[d][0] != 0 ? "x" : "z";
+
+        auto validTreePos = [&lv](BlockPos p) {
+            if (auto* w = dynamic_cast<ChunkWGL*>(&lv); w && !w->inChunk(p)) {
+                return false;
+            }
+            return lv.isEmptyBlock(p);
+        };
+        auto isOverSolidGround = [&lv](BlockPos p) {
+            const std::string belowState = lv.getBlockState(BlockPos{ p.x, p.y - 1, p.z });
+            std::string belowName = stripNs(mc::block::blockName(belowState));
+            const mc::Block* below = getBlockByName(belowName);
+            return below && below->isSolid();
+        };
+        auto mayPlaceOn = [&](BlockPos p) {
+            return validTreePos(p) && isOverSolidGround(p);
+        };
+
         lv.setBlock(pos, trunk->getState(r, pos), 2);
-        BlockPos cur = pos;
-        for (int i = 1; i <= L; ++i) { cur.x += D[d][0]; cur.z += D[d][1]; if (!lv.isEmptyBlock(cur)) break; lv.setBlock(cur, trunk->getState(r, cur), 2); }
+        const int distanceFromStump = 2 + r.nextInt(2);
+        BlockPos start{ pos.x + D[d][0] * distanceFromStump, pos.y + 1, pos.z + D[d][1] * distanceFromStump };
+        for (int i = 0; i < 6 && !mayPlaceOn(start); ++i) {
+            --start.y;
+        }
+
+        BlockPos cur = start;
+        int groundGap = 0;
+        for (int i = 0; i < logLength; ++i) {
+            if (!validTreePos(cur)) {
+                return true;
+            }
+            if (!isOverSolidGround(cur)) {
+                if (++groundGap > 2) {
+                    return true;
+                }
+            } else {
+                groundGap = 0;
+            }
+            cur.x += D[d][0];
+            cur.z += D[d][1];
+        }
+
+        cur = start;
+        for (int i = 0; i < logLength; ++i) {
+            lv.setBlock(cur, mc::block::setProperty(trunk->getState(r, cur), "axis", axis), 2);
+            cur.x += D[d][0];
+            cur.z += D[d][1];
+        }
         return true;
     };
 }
@@ -772,6 +907,174 @@ PlacedFeature::FeaturePlacer coralPlacer() {
     };
 }
 
+using RuleTestPredicate = std::function<bool(WorldGenLevel&, RandomSource&, const std::string&)>;
+
+struct OreTarget {
+    RuleTestPredicate target;
+    std::string state;
+};
+
+RuleTestPredicate parseRuleTest(const json& j) {
+    const std::string t = stripNs(j.value("predicate_type", std::string()));
+    if (t == "tag_match") {
+        const std::string tag = j.value("tag", std::string("minecraft:stone_ore_replaceables"));
+        return [tag](WorldGenLevel& lv, RandomSource&, const std::string& current) {
+            return static_cast<ChunkWGL&>(lv).tags->isInTag(stateBlockId(current), tag);
+        };
+    }
+    if (t == "block_match") {
+        const std::string block = normalizeId(j.value("block", std::string("minecraft:air")));
+        return [block](WorldGenLevel&, RandomSource&, const std::string& current) {
+            return stateBlockId(current) == block;
+        };
+    }
+    return [](WorldGenLevel&, RandomSource&, const std::string&) { return false; };
+}
+
+bool shouldSkipAirCheck(RandomSource& r, float discardChanceOnAirExposure) {
+    if (discardChanceOnAirExposure <= 0.0F) return true;
+    if (discardChanceOnAirExposure >= 1.0F) return false;
+    return r.nextFloat() >= discardChanceOnAirExposure;
+}
+
+bool isAirState(const std::string& state) {
+    return stateBlockId(state) == "minecraft:air";
+}
+
+bool isAdjacentToAir(WorldGenLevel& lv, BlockPos p) {
+    static const BlockPos dirs[6] = {
+        { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 },
+        { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 }
+    };
+    for (const BlockPos& d : dirs) {
+        if (isAirState(lv.getBlockState(BlockPos{ p.x + d.x, p.y + d.y, p.z + d.z }))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool canPlaceOre(WorldGenLevel& lv, RandomSource& r, const std::string& current,
+                 float discardChanceOnAirExposure, const OreTarget& target, BlockPos p) {
+    if (!target.target(lv, r, current)) return false;
+    return shouldSkipAirCheck(r, discardChanceOnAirExposure) || !isAdjacentToAir(lv, p);
+}
+
+PlacedFeature::FeaturePlacer orePlacer(const json& c) {
+    auto targets = std::make_shared<std::vector<OreTarget>>();
+    for (const auto& t : c.value("targets", json::array())) {
+        targets->push_back({ parseRuleTest(t.value("target", json::object())),
+                             stateName(t.value("state", json("minecraft:air"))) });
+    }
+    const int size = c.value("size", 0);
+    const float discard = c.value("discard_chance_on_air_exposure", 0.0F);
+
+    return [targets, size, discard](WorldGenLevel& lv, RandomSource& r, BlockPos origin) -> bool {
+        if (size <= 0 || targets->empty()) return false;
+
+        constexpr float kPi = 3.14159265358979323846F;
+        const float dir = r.nextFloat() * kPi;
+        const float spreadXY = static_cast<float>(size) / 8.0F;
+        const int maxRadius = static_cast<int>(std::ceil(((static_cast<float>(size) / 16.0F) * 2.0F + 1.0F) / 2.0F));
+        const int spreadCeil = static_cast<int>(std::ceil(spreadXY));
+        const double x0 = static_cast<double>(origin.x) + std::sin(dir) * spreadXY;
+        const double x1 = static_cast<double>(origin.x) - std::sin(dir) * spreadXY;
+        const double z0 = static_cast<double>(origin.z) + std::cos(dir) * spreadXY;
+        const double z1 = static_cast<double>(origin.z) - std::cos(dir) * spreadXY;
+        const double y0 = static_cast<double>(origin.y + r.nextInt(3) - 2);
+        const double y1 = static_cast<double>(origin.y + r.nextInt(3) - 2);
+        const int xStart = origin.x - spreadCeil - maxRadius;
+        const int yStart = origin.y - 2 - maxRadius;
+        const int zStart = origin.z - spreadCeil - maxRadius;
+        const int sizeXZ = 2 * (spreadCeil + maxRadius);
+        const int sizeY = 2 * (2 + maxRadius);
+
+        bool intersectsTerrain = false;
+        for (int xprobe = xStart; xprobe <= xStart + sizeXZ && !intersectsTerrain; ++xprobe) {
+            for (int zprobe = zStart; zprobe <= zStart + sizeXZ; ++zprobe) {
+                if (yStart <= lv.getHeight(Heightmap::Types::OCEAN_FLOOR_WG, xprobe, zprobe)) {
+                    intersectsTerrain = true;
+                    break;
+                }
+            }
+        }
+        if (!intersectsTerrain) return false;
+
+        std::vector<double> data(static_cast<std::size_t>(size) * 4);
+        for (int i = 0; i < size; ++i) {
+            const float step = static_cast<float>(i) / static_cast<float>(size);
+            const double xx = x0 + static_cast<double>(step) * (x1 - x0);
+            const double yy = y0 + static_cast<double>(step) * (y1 - y0);
+            const double zz = z0 + static_cast<double>(step) * (z1 - z0);
+            const double ss = r.nextDouble() * static_cast<double>(size) / 16.0;
+            const double radius = ((std::sin(kPi * step) + 1.0F) * ss + 1.0) / 2.0;
+            data[static_cast<std::size_t>(i) * 4 + 0] = xx;
+            data[static_cast<std::size_t>(i) * 4 + 1] = yy;
+            data[static_cast<std::size_t>(i) * 4 + 2] = zz;
+            data[static_cast<std::size_t>(i) * 4 + 3] = radius;
+        }
+
+        for (int i1 = 0; i1 < size - 1; ++i1) {
+            if (data[static_cast<std::size_t>(i1) * 4 + 3] <= 0.0) continue;
+            for (int i2 = i1 + 1; i2 < size; ++i2) {
+                if (data[static_cast<std::size_t>(i2) * 4 + 3] <= 0.0) continue;
+                const double dx = data[static_cast<std::size_t>(i1) * 4 + 0] - data[static_cast<std::size_t>(i2) * 4 + 0];
+                const double dy = data[static_cast<std::size_t>(i1) * 4 + 1] - data[static_cast<std::size_t>(i2) * 4 + 1];
+                const double dz = data[static_cast<std::size_t>(i1) * 4 + 2] - data[static_cast<std::size_t>(i2) * 4 + 2];
+                const double dr = data[static_cast<std::size_t>(i1) * 4 + 3] - data[static_cast<std::size_t>(i2) * 4 + 3];
+                if (dr * dr > dx * dx + dy * dy + dz * dz) {
+                    data[static_cast<std::size_t>(dr > 0.0 ? i2 : i1) * 4 + 3] = -1.0;
+                }
+            }
+        }
+
+        std::vector<unsigned char> tested(static_cast<std::size_t>(std::max(sizeXZ, 1)) *
+                                          static_cast<std::size_t>(std::max(sizeY, 1)) *
+                                          static_cast<std::size_t>(std::max(sizeXZ, 1)));
+        int placed = 0;
+
+        for (int i = 0; i < size; ++i) {
+            const double radius = data[static_cast<std::size_t>(i) * 4 + 3];
+            if (radius < 0.0) continue;
+            const double xx = data[static_cast<std::size_t>(i) * 4 + 0];
+            const double yy = data[static_cast<std::size_t>(i) * 4 + 1];
+            const double zz = data[static_cast<std::size_t>(i) * 4 + 2];
+            const int xMin = std::max(static_cast<int>(std::floor(xx - radius)), xStart);
+            const int yMin = std::max(static_cast<int>(std::floor(yy - radius)), yStart);
+            const int zMin = std::max(static_cast<int>(std::floor(zz - radius)), zStart);
+            const int xMax = std::max(static_cast<int>(std::floor(xx + radius)), xMin);
+            const int yMax = std::max(static_cast<int>(std::floor(yy + radius)), yMin);
+            const int zMax = std::max(static_cast<int>(std::floor(zz + radius)), zMin);
+
+            for (int x = xMin; x <= xMax; ++x) {
+                const double xd = (static_cast<double>(x) + 0.5 - xx) / radius;
+                if (xd * xd >= 1.0) continue;
+                for (int y = yMin; y <= yMax; ++y) {
+                    const double yd = (static_cast<double>(y) + 0.5 - yy) / radius;
+                    if (xd * xd + yd * yd >= 1.0) continue;
+                    if (y < CHUNK_MIN_Y || y >= CHUNK_MAX_Y) continue;
+                    for (int z = zMin; z <= zMax; ++z) {
+                        const double zd = (static_cast<double>(z) + 0.5 - zz) / radius;
+                        if (xd * xd + yd * yd + zd * zd >= 1.0) continue;
+
+                        const BlockPos orePos{ x, y, z };
+                        if (auto* w = dynamic_cast<ChunkWGL*>(&lv); w && !w->inChunk(orePos)) continue;
+
+                        std::size_t bitSetIndex = static_cast<std::size_t>(x - xStart)
+                            + static_cast<std::size_t>(y - yStart) * static_cast<std::size_t>(sizeXZ)
+                            + static_cast<std::size_t>(z - zStart) * static_cast<std::size_t>(sizeXZ) * static_cast<std::size_t>(sizeY);
+                        if (bitSetIndex >= tested.size()) tested.resize(bitSetIndex + 1);
+                        if (tested[bitSetIndex]) continue;
+                        tested[bitSetIndex] = 1;
+
+                        const std::string current = lv.getBlockState(orePos);
+                        for (const OreTarget& target : *targets) {
+                            if (getBlockStateId(target.state, 0) == 0) continue;
+                            if (canPlaceOre(lv, r, current, discard, target, orePos)) {
+                                lv.setBlock(orePos, target.state, 2);
+                                ++placed;
+                                break;
+                            }
 // ── ore feature ──────────────────────────────────────────────────────────────
 // 1:1 port of net.minecraft.world.level.levelgen.feature.OreFeature (place +
 // doPlace + canPlaceOre). Builds an ellipsoid vein along a random axis, replacing
@@ -921,6 +1224,7 @@ Resolved resolveByName(const std::string& dir, const std::string& name); // fwd
 Resolved resolveConfigured(const std::string& dir, const json& cf) {
     const std::string t = typeOf(cf);
     const json& cfg = cf.value("config", json::object());
+    if (t == "ore") return { orePlacer(cfg), true };
     if (t == "simple_block") return { simpleBlockPlacer(parseProvider(cfg["to_place"])), true };
     if (t == "ore" || t == "scattered_ore") return { orePlacer(cfg), true };
     if (t == "tree") {
@@ -1003,15 +1307,16 @@ Resolved resolveConfigured(const std::string& dir, const json& cf) {
 }
 
 Resolved resolveByName(const std::string& dir, const std::string& name) {
-    static std::unordered_map<std::string, Resolved> cache;
+    thread_local std::unordered_map<std::string, Resolved> cache;
     if (name.empty()) return noop();
-    if (auto it = cache.find(name); it != cache.end()) return it->second;
-    cache[name] = noop(); // placeholder breaks any reference cycle
+    const std::string cacheKey = dir + '\0' + name;
+    if (auto it = cache.find(cacheKey); it != cache.end()) return it->second;
+    cache[cacheKey] = noop(); // placeholder breaks any reference cycle
     Resolved res;
     if (auto cf = loadJsonFile(dir, "configured_feature", name)) res = resolveConfigured(dir, *cf);
     else if (auto pf = loadJsonFile(dir, "placed_feature", name)) res = resolveByName(dir, featureRef((*pf)["feature"]));
     else res = noop();
-    cache[name] = res;
+    cache[cacheKey] = res;
     return res;
 }
 
@@ -1030,10 +1335,11 @@ std::shared_ptr<PlacedFeature> buildPlaced(const std::string& dir, const std::st
 }
 
 std::shared_ptr<PlacedFeature> featureFor(const std::string& dir, const std::string& key) {
-    static std::unordered_map<std::string, std::shared_ptr<PlacedFeature>> cache;
-    if (auto it = cache.find(key); it != cache.end()) return it->second;
+    thread_local std::unordered_map<std::string, std::shared_ptr<PlacedFeature>> cache;
+    const std::string cacheKey = dir + '\0' + key;
+    if (auto it = cache.find(cacheKey); it != cache.end()) return it->second;
     auto pf = buildPlaced(dir, key);
-    cache[key] = pf;
+    cache[cacheKey] = pf;
     return pf;
 }
 

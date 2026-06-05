@@ -73,10 +73,13 @@ static TintRGB getTextureTint(const std::string& name) {
         name == "short_grass"          || name == "fern"                     ||
         name == "tall_grass_top"       || name == "tall_grass_bottom"        ||
         name == "large_fern_top"       || name == "large_fern_bottom"        ||
+        name == "bush"                 || name == "firefly_bush"             ||
         name == "sugar_cane")
         return {121, 192, 90};   // #79C05A plains grass
     if (name == "water_still" || name == "water_flow")
         return {63, 118, 228};   // #3F76E4 beautiful water blue
+    if (name == "short_dry_grass" || name == "tall_dry_grass")
+        return {92, 60, 50};      // DryFoliageColor.FOLIAGE_DRY_DEFAULT (#5C3C32)
     // Fixed spruce leaf tint (biome-independent per BlockColors.java)
     if (name == "spruce_leaves") return {97,  153, 97};  // #619961
     // Fixed birch leaf tint (biome-independent per BlockColors.java)
@@ -84,6 +87,38 @@ static TintRGB getTextureTint(const std::string& name) {
     // Remaining leaves & vines use biome foliage color
     if (name.ends_with("_leaves") || name == "vine") return {89, 174, 48}; // #59AE30
     return {255, 255, 255};
+}
+
+static bool isPillarTextureBlock(const std::string& name) {
+    return name.ends_with("_log") || name.ends_with("_wood") ||
+           name.ends_with("_stem") || name.ends_with("_hyphae") ||
+           name == "bamboo_block";
+}
+
+static std::string textureForStateFace(const mc::BlockState& state, int face) {
+    const mc::Block* block = state.block;
+    if (!block) {
+        return "";
+    }
+
+    if (isPillarTextureBlock(block->name)) {
+        std::string axis = state.getProperty("axis");
+        if (axis.empty()) {
+            axis = "y";
+        }
+        const bool endFace =
+            (axis == "x" && (face == 0 || face == 1)) ||
+            (axis == "y" && (face == 2 || face == 3)) ||
+            (axis == "z" && (face == 4 || face == 5));
+        if (endFace && !block->textures.top.empty()) {
+            return block->textures.top;
+        }
+        if (!endFace && !block->textures.side.empty()) {
+            return block->textures.side;
+        }
+    }
+
+    return block->textures.forFace(face);
 }
 
 // Get UV coordinates and biome tint from atlas (or fallback grid if atlas null)
@@ -97,7 +132,7 @@ static void getUV(uint32_t stateId, int face,
     if (atlas && atlas->isLoaded()) {
         const mc::BlockState* bs = mc::getBlockState(stateId);
         if (bs && bs->block) {
-            std::string name = bs->block->textures.forFace(face);
+            std::string name = textureForStateFace(*bs, face);
             if (name.empty()) {
                 if (bs->block->name == "water") {
                     name = "water_still";
@@ -171,6 +206,21 @@ bool ChunkMesher::shouldCull(const LevelChunk& chunk, const LevelChunk* neighbor
         }
     }
 
+    // Explicitly bypass culling if the neighboring block is a plant block
+    const std::string& name = nb->block->name;
+    if (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" ||
+        name == "short_dry_grass" || name == "tall_dry_grass" || name == "dead_bush" ||
+        name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
+        name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
+        name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
+        name == "bush" || name == "firefly_bush" || name == "sweet_berry_bush" ||
+        name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
+        name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
+        name == "pink_petals" || name == "wildflowers" || name == "leaf_litter" ||
+        name == "vine" || name == "cave_vines" || name == "cave_vines_plant" ||
+        name.find("coral") != std::string::npos) {
+        return false;
+    }
     // Cross/cutout plants never occlude an adjacent face.
     if (isCrossPlant(nb->block->name)) return false;
 
@@ -281,6 +331,82 @@ void ChunkMesher::emitCross(SectionMesh& mesh, float bx, float by, float bz,
     }
 }
 
+static bool resolveTexture(const TextureAtlas* atlas, const std::string& texture,
+                           float& u0, float& v0, float& u1, float& v1,
+                           TintRGB& tint) {
+    tint = getTextureTint(texture);
+    if (atlas && atlas->isLoaded()) {
+        if (const mc::AtlasUV* auv = atlas->uv(texture)) {
+            u0 = auv->u0; v0 = auv->v0;
+            u1 = auv->u1; v1 = auv->v1;
+            return true;
+        }
+        const mc::AtlasUV& miss = atlas->missingUV();
+        u0 = miss.u0; v0 = miss.v0; u1 = miss.u1; v1 = miss.v1;
+        tint = {255, 255, 255};
+        return false;
+    }
+    u0 = 0.0f; v0 = 0.0f; u1 = 1.0f; v1 = 1.0f;
+    return true;
+}
+
+static void emitTexturedQuad(SectionMesh& mesh,
+                             const std::array<std::array<float, 3>, 4>& corners,
+                             const TextureAtlas* atlas,
+                             const std::string& texture,
+                             uint8_t light) {
+    float u0, v0, u1, v1;
+    TintRGB tint;
+    resolveTexture(atlas, texture, u0, v0, u1, v1, tint);
+    const uint8_t r = (uint8_t)((uint32_t)light * tint.r / 15);
+    const uint8_t g = (uint8_t)((uint32_t)light * tint.g / 15);
+    const uint8_t b = (uint8_t)((uint32_t)light * tint.b / 15);
+
+    const uint32_t base = (uint32_t)mesh.vertices.size();
+    for (int i = 0; i < 4; ++i) {
+        mesh.vertices.push_back({
+            corners[i][0], corners[i][1], corners[i][2],
+            u0 + UV_CORNERS[i][0] * (u1 - u0),
+            v0 + UV_CORNERS[i][1] * (v1 - v0),
+            r, g, b, 255
+        });
+    }
+    mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
+    mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 2); mesh.indices.push_back(base + 3);
+    mesh.indices.push_back(base + 2); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 0);
+    mesh.indices.push_back(base + 3); mesh.indices.push_back(base + 2); mesh.indices.push_back(base + 0);
+}
+
+static void emitGroundPlant(SectionMesh& mesh, float bx, float by, float bz,
+                            const TextureAtlas* atlas, const std::string& texture,
+                            uint8_t light) {
+    const float y = by + 0.0625f;
+    emitTexturedQuad(mesh, {{
+        {{bx + 0.0f, y, bz + 1.0f}},
+        {{bx + 1.0f, y, bz + 1.0f}},
+        {{bx + 1.0f, y, bz + 0.0f}},
+        {{bx + 0.0f, y, bz + 0.0f}},
+    }}, atlas, texture, light);
+}
+
+static void emitVineFace(SectionMesh& mesh, float bx, float by, float bz,
+                         const TextureAtlas* atlas, uint8_t light, int dir) {
+    constexpr float kInset = 0.05f;
+    if (dir == 0) { // north
+        const float z = bz + kInset;
+        emitTexturedQuad(mesh, {{{{bx, by, z}}, {{bx + 1.0f, by, z}}, {{bx + 1.0f, by + 1.0f, z}}, {{bx, by + 1.0f, z}}}}, atlas, "vine", light);
+    } else if (dir == 1) { // east
+        const float x = bx + 1.0f - kInset;
+        emitTexturedQuad(mesh, {{{{x, by, bz}}, {{x, by, bz + 1.0f}}, {{x, by + 1.0f, bz + 1.0f}}, {{x, by + 1.0f, bz}}}}, atlas, "vine", light);
+    } else if (dir == 2) { // south
+        const float z = bz + 1.0f - kInset;
+        emitTexturedQuad(mesh, {{{{bx + 1.0f, by, z}}, {{bx, by, z}}, {{bx, by + 1.0f, z}}, {{bx + 1.0f, by + 1.0f, z}}}}, atlas, "vine", light);
+    } else { // west
+        const float x = bx + kInset;
+        emitTexturedQuad(mesh, {{{{x, by, bz + 1.0f}}, {{x, by, bz}}, {{x, by + 1.0f, bz}}, {{x, by + 1.0f, bz + 1.0f}}}}, atlas, "vine", light);
+    }
+}
+
 void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                                 const LevelChunk* neighbors[4],
                                 const TextureAtlas* atlas,
@@ -293,6 +419,25 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
     int baseY = CHUNK_MIN_Y + sectionIndex * 16;
     int chunkWorldX = chunk.pos().x * 16;
     int chunkWorldZ = chunk.pos().z * 16;
+    auto stateAt = [&](int wx, int wy, int wz) -> uint32_t {
+        const int cx = wx >> 4;
+        const int cz = wz >> 4;
+        const int chunkCx = chunk.pos().x;
+        const int chunkCz = chunk.pos().z;
+        if (cx == chunkCx && cz == chunkCz) {
+            return chunk.getBlock(wx, wy, wz);
+        }
+        const LevelChunk* nbr = nullptr;
+        if      (cx == chunkCx + 1 && cz == chunkCz) nbr = neighbors[0];
+        else if (cx == chunkCx - 1 && cz == chunkCz) nbr = neighbors[1];
+        else if (cz == chunkCz + 1 && cx == chunkCx) nbr = neighbors[2];
+        else if (cz == chunkCz - 1 && cx == chunkCx) nbr = neighbors[3];
+        return nbr ? nbr->getBlock(wx, wy, wz) : 0;
+    };
+    auto solidAt = [&](int wx, int wy, int wz) {
+        const mc::BlockState* s = mc::getBlockState(stateAt(wx, wy, wz));
+        return s && s->block && s->block->isSolid();
+    };
 
     for (int ly = 0; ly < 16; ++ly) {
         int wy = baseY + ly;
@@ -322,6 +467,38 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                     else                  light = (uint8_t)(15 - depth);
                 }
 
+                bool isPlant = false;
+                if (bs && bs->block) {
+                    const std::string& name = bs->block->name;
+                    if (name == "pink_petals" || name == "wildflowers" || name == "leaf_litter") {
+                        emitGroundPlant(out, bx, by, bz, atlas, name, light);
+                        continue;
+                    }
+                    if (name == "vine") {
+                        bool emitted = false;
+                        const int support[4][2] = { {0, -1}, {1, 0}, {0, 1}, {-1, 0} };
+                        for (int dir = 0; dir < 4; ++dir) {
+                            if (solidAt(wx + support[dir][0], wy, wz + support[dir][1])) {
+                                emitVineFace(out, bx, by, bz, atlas, light, dir);
+                                emitted = true;
+                            }
+                        }
+                        if (!emitted) {
+                            emitVineFace(out, bx, by, bz, atlas, light, 0);
+                        }
+                        continue;
+                    }
+                    isPlant = (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" ||
+                               name == "short_dry_grass" || name == "tall_dry_grass" || name == "dead_bush" ||
+                               name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
+                               name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
+                               name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
+                               name == "bush" || name == "firefly_bush" || name == "sweet_berry_bush" ||
+                               name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
+                               name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
+                               name == "cave_vines" || name == "cave_vines_plant" ||
+                               name.find("coral") != std::string::npos);
+                }
                 bool isPlant = bs && bs->block && isCrossPlant(bs->block->name);
 
                 if (isPlant) {

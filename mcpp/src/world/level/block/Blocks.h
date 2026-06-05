@@ -19,6 +19,7 @@ void initBlocks(/* AssetPack* pack */);
 
 Block* getBlockByName(std::string_view name);
 uint32_t getDefaultBlockStateId(std::string_view name, uint32_t fallback = 0);
+uint32_t getBlockStateId(std::string_view serializedState, uint32_t fallback = 0);
 const BlockState* getDefaultBlockState(std::string_view name);
 
 // Convenience references to important blocks (set during initBlocks)

@@ -38,6 +38,11 @@ __pycache__/
 # Keep these local; do not publish them to GitHub.
 26.1.2/
 assets/
+!mcpp/src/assets/
+mcpp/src/assets/*
+!mcpp/src/assets/*.cpp
+!mcpp/src/assets/*.h
+!mcpp/src/assets/*.rc
 mcpp/src/assets/assets.bin
 mcpp/src/assets/block_atlas.png
 mcpp/src/assets/block_atlas.json

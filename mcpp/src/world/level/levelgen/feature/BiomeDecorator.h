@@ -22,9 +22,17 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace mc::levelgen::feature {
+
+using JsonAssetReader = std::function<std::optional<std::string>(std::string_view path)>;
+
+// Optional fallback used by standalone builds whose worldgen JSON is embedded in
+// the MCAS asset pack. Filesystem data remains the first choice when present.
+void setJsonAssetReader(JsonAssetReader reader);
 
 // worldgenDir is the data/minecraft/worldgen root (holding placed_feature/ and
 // configured_feature/); features are loaded from it data-drivenly and cached.

@@ -5,14 +5,21 @@
 #include "RandomState.h"
 #include "SurfaceSystem.h"
 #include "SurfaceRuleData.h"
+#include "../../../assets/AssetManager.h"
 #include "../block/Blocks.h"
+#include "../block/BlockTags.h"
 #include "../block/BlockState.h"
+#include "feature/BiomeDecorator.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace mc::levelgen {
 
@@ -274,6 +281,92 @@ namespace {
         }
         return NoiseRouterData::overworld(randomState, false, false);
     }
+
+    struct DecorationData {
+        feature::BiomeFeatures biomeFeatures;
+        block::BlockTags blockTags;
+        std::string worldgenDir;
+        bool loaded = false;
+    };
+
+    std::vector<std::pair<std::string, std::string>> readJsonAssetEntries(std::string_view prefix) {
+        std::vector<std::pair<std::string, std::string>> entries;
+        auto& assets = AssetManager::instance();
+        for (const std::string& path : assets.list(prefix)) {
+            if (!path.ends_with(".json")) {
+                continue;
+            }
+            std::vector<uint8_t> bytes = assets.readRaw(path);
+            if (bytes.empty()) {
+                continue;
+            }
+            entries.emplace_back(path, std::string(bytes.begin(), bytes.end()));
+        }
+        return entries;
+    }
+
+    bool loadEmbeddedDecorationData(DecorationData& out) {
+        const auto biomeEntries = readJsonAssetEntries("data/minecraft/worldgen/biome/");
+        const auto tagEntries = readJsonAssetEntries("data/minecraft/tags/block/");
+        if (biomeEntries.empty() || tagEntries.empty()) {
+            return false;
+        }
+
+        try {
+            feature::setJsonAssetReader([](std::string_view path) -> std::optional<std::string> {
+                std::vector<uint8_t> bytes = AssetManager::instance().readRaw(path);
+                if (bytes.empty()) {
+                    return std::nullopt;
+                }
+                return std::string(bytes.begin(), bytes.end());
+            });
+            out.biomeFeatures = feature::BiomeFeatures::loadFromJsonEntries(biomeEntries);
+            out.blockTags = block::BlockTags::loadFromJsonEntries(tagEntries);
+            out.worldgenDir = "data/minecraft/worldgen";
+            out.loaded = out.biomeFeatures.biomeCount() > 0 && out.blockTags.tagCount() > 0;
+        } catch (...) {
+            out.loaded = false;
+        }
+        return out.loaded;
+    }
+
+    const DecorationData& decorationData() {
+        namespace fs = std::filesystem;
+        static const DecorationData data = [] {
+            DecorationData out;
+            const fs::path candidates[] = {
+                fs::path("26.1.2/data/minecraft"),
+                fs::path("../26.1.2/data/minecraft"),
+                fs::path("../../26.1.2/data/minecraft"),
+            };
+
+            for (const fs::path& root : candidates) {
+                const fs::path worldgen = root / "worldgen";
+                const fs::path biomes = worldgen / "biome";
+                const fs::path tags = root / "tags" / "block";
+                if (!fs::is_directory(biomes) || !fs::is_directory(tags)) {
+                    continue;
+                }
+
+                try {
+                    out.biomeFeatures = feature::BiomeFeatures::loadFromDirectory(biomes.string());
+                    out.blockTags = block::BlockTags::loadFromDirectory(tags.string());
+                    out.worldgenDir = worldgen.string();
+                    out.loaded = out.biomeFeatures.biomeCount() > 0 && out.blockTags.tagCount() > 0;
+                } catch (...) {
+                    out.loaded = false;
+                }
+                if (out.loaded) {
+                    break;
+                }
+            }
+            if (!out.loaded) {
+                loadEmbeddedDecorationData(out);
+            }
+            return out;
+        }();
+        return data;
+    }
 }
 
 NoiseBasedChunkGenerator::NoiseBasedChunkGenerator(uint64_t seed)
@@ -448,9 +541,17 @@ void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
 
     system.buildSurface(randomState, chunk, prelimSurf, biomeGetter, genCtx, m_surfaceRuleSource);
 
-
-    // Vegetation decoration (trees) — called here after surface is final
-
+    chunk.computeHeightmap();
+    const DecorationData& deco = decorationData();
+    if (deco.loaded) {
+        feature::applyBiomeDecoration(
+            chunk,
+            static_cast<std::int64_t>(m_seed),
+            biomeGetter,
+            deco.biomeFeatures,
+            deco.blockTags,
+            deco.worldgenDir);
+    }
 
     chunk.computeHeightmap();
     chunk.setLoaded(true);

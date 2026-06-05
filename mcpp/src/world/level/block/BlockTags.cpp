@@ -17,6 +17,29 @@ std::string normalizeId(std::string id) {
     return id;
 }
 
+std::string stemFromPath(const std::string& path) {
+    const std::size_t slash = path.find_last_of("/\\");
+    const std::size_t begin = slash == std::string::npos ? 0 : slash + 1;
+    const std::size_t dot = path.find_last_of('.');
+    const std::size_t end = dot == std::string::npos || dot < begin ? path.size() : dot;
+    return path.substr(begin, end - begin);
+}
+
+std::vector<std::string> parseTagJson(const std::string& text) {
+    const nlohmann::json j = nlohmann::json::parse(text);
+    std::vector<std::string> entries;
+    for (const auto& v : j.at("values")) {
+        // entry is either "minecraft:x" / "#minecraft:tag" or {"id":..,"required":..}
+        std::string id = v.is_string() ? v.get<std::string>() : v.at("id").get<std::string>();
+        if (!id.empty() && id.front() == '#') {
+            entries.push_back("#" + normalizeId(id.substr(1)));
+        } else {
+            entries.push_back(normalizeId(id));
+        }
+    }
+    return entries;
+}
+
 } // namespace
 
 BlockTags BlockTags::loadFromDirectory(const std::string& dir) {
@@ -32,19 +55,19 @@ BlockTags BlockTags::loadFromDirectory(const std::string& dir) {
         std::ifstream in(entry.path());
         std::stringstream ss;
         ss << in.rdbuf();
-        const nlohmann::json j = nlohmann::json::parse(ss.str());
         const std::string tagName = "minecraft:" + entry.path().stem().string();
-        std::vector<std::string> entries;
-        for (const auto& v : j.at("values")) {
-            // entry is either "minecraft:x" / "#minecraft:tag" or {"id":..,"required":..}
-            std::string id = v.is_string() ? v.get<std::string>() : v.at("id").get<std::string>();
-            if (!id.empty() && id.front() == '#') {
-                entries.push_back("#" + normalizeId(id.substr(1)));
-            } else {
-                entries.push_back(normalizeId(id));
-            }
+        tags.m_raw[tagName] = parseTagJson(ss.str());
+    }
+    return tags;
+}
+
+BlockTags BlockTags::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
+    BlockTags tags;
+    for (const auto& [path, text] : entries) {
+        if (!path.ends_with(".json")) {
+            continue;
         }
-        tags.m_raw[tagName] = std::move(entries);
+        tags.m_raw["minecraft:" + stemFromPath(path)] = parseTagJson(text);
     }
     return tags;
 }

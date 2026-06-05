@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mc::block {
@@ -16,6 +17,7 @@ class BlockTags {
 public:
     // Load every tag file under `dir` (e.g. .../data/minecraft/tags/block).
     static BlockTags loadFromDirectory(const std::string& dir);
+    static BlockTags loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries);
 
     // Is `block` ("minecraft:dirt") a member of `tag` ("minecraft:supports_vegetation")?
     bool isInTag(const std::string& block, const std::string& tag) const;

@@ -303,253 +303,100 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 47 (fixed panorama 180° flip; real option widgets — Slider/
-CycleButton + GameOptions store; Sound/Video/Controls sub-screens populated; FOV slider)
+**Last updated**: Session 44 (JSON-driven ore feature + height_range)
 
-**DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
-it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
-the CPU generator instead. Current focus order: **(1) MENUS**, then (2) CPU worldgen perf,
-then (3) real structures.
+**Session 44**: fixed the tasklist ore-distribution path by moving ore generation
+onto the Java/data-driven decoration pipeline instead of the old hardcoded
+`OreGen.cpp`. `BiomeDecorator` now parses `minecraft:height_range` via the
+already-ported `HeightProvider` stack (`constant`, `uniform`, `biased_to_bottom`,
+`very_biased_to_bottom`, `trapezoid`) and resolves vertical anchors
+(`absolute`, `above_bottom`, `below_top`). `minecraft:ore` configured features
+now port Java `OreFeature`: seeded vein direction, segment radius samples,
+overlap culling, tested-position bitset, target-state order, `tag_match` and
+`block_match` rule tests, and `discard_chance_on_air_exposure` with the six-way
+air-neighbor check. `TreeGen.cpp` no longer includes or calls `OreGen.h`, and
+`OreGen.cpp` was removed from the main `mcpp` and `biome_decorator_test` CMake
+source lists so the hand-authored ore table cannot affect runtime generation.
+The fallback block registry now includes ore/replacement blocks so decoration
+tests without embedded `block_states.json` remain meaningful. Added a
+`biome_decorator_test` mountain-slab check proving `ore_emerald` goes through
+the real `height_range` path. Verified with wrapper commands: built
+`biome_decorator_test`, ran `biome_decorator_test`, built `mcpp`, ran
+`block_tags_parity`, `embedded_worldgen_assets_test`, and `vegetation_demo`; all
+pass. Caveat: decoration still writes through a single-chunk `WorldGenLevel`
+view, so cross-chunk feature writes/neighbour reads are still clamped compared
+with Java's full `WorldGenRegion`.
 
-**Session 43:**
-- placeTree now rejects an origin whose block-below is wood/leaves/log/stem (or air/fluid):
-  the chunk heightmap rises onto a neighbour's leaves (cross-chunk decoration), so OCEAN_FLOOR
-  placement could land a tree on another tree's foliage + drop a dirt block on the leaves.
-- hugeMushroomPlacer requires dirt/mycelium below (HugeMushroomFeature ground gate) → no more
-  huge mushrooms on the ocean surface.
-- updateLocalChunks budgets the deferred-decoration pass to a few chunks/tick (nearest-first)
-  to cut the movement stutter (decoration is heavy + main-thread). This is a stopgap; the real
-  perf work (focus #2) is to reuse generators, make the feature caches thread-safe so decoration
-  can run on workers, and stop re-reading worldgen JSON.
+**Session 43**: improved plant model fidelity using the real 26.1.2 block model
+JSON from `client.jar`. Important parity note: ordinary flowers such as dandelion
+and poppy are still `minecraft:block/cross` in Java and should remain cross
+meshes. The special flat flowerbed blocks `pink_petals`, `wildflowers`, and
+`leaf_litter` now render as a low horizontal double-sided plane instead of cube or
+cross geometry. `vine` now renders as thin wall planes inset on faces that have a
+solid neighboring support, with a north-face fallback when direction data is not
+available; this matches the shape of the Java `vine` model better than the old
+generic block path. `cave_vines` and `cave_vines_plant` were added to the plant
+cross path because their Java models use `minecraft:block/cross`. Neighbor
+face-culling now treats these special plant/vine blocks as non-occluding. Verified
+with wrapper command: `mcpp` target builds. Remaining caveat: full multipart
+state-driven model rendering (e.g. exact `flower_amount`/`facing` for flowerbeds
+and exact vine directional block-state properties) is still not ported.
 
-## MENU SYSTEM ROADMAP (focus #1 — port 1:1 from net.minecraft.client.gui.screens.*)
+**Session 42**: fixed the visible gray/cube vegetation class called out in the
+tasklist for the currently ported plant renderer. `ChunkMesh` now treats
+`short_dry_grass`, `tall_dry_grass`, `bush`, and `firefly_bush` as cross-plane
+plant meshes instead of ordinary block geometry, and neighbor face-culling now
+recognizes those blocks as plants too. Dry grass textures now use Java's
+`DryFoliageColor.FOLIAGE_DRY_DEFAULT` fallback tint (`#5C3C32`) instead of raw
+gray atlas pixels; bush/firefly_bush use the existing plains grass tint fallback.
+Verified with wrapper command: `mcpp` target builds. Remaining caveat: this is
+still a fallback tint path; true biome-aware grass/foliage/dry-foliage/water
+colors need biome IDs available to the mesher and Java colormap sampling.
 
-Why the menu was "all gray": the font + GUI textures live in client.jar, NOT assets.bin.
-Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
+**Session 41**: fixed the tasklist standalone-decoration gap. `tools/asset_packer`
+now accepts an optional `data_minecraft_dir` argument and packs
+`data/minecraft/worldgen/**` plus the direct `data/minecraft/tags/block/*.json`
+files into MCAS under stable `data/minecraft/...` keys. The local ignored
+`mcpp/src/assets/assets.bin` was regenerated from `assets/`,
+`26.1.2/src/assets` (absent/skip), and `26.1.2/data/minecraft`; it now contains
+5944 entries and the worldgen/tag JSON needed by decoration. `AssetManager` can
+now list packed paths by prefix. `BlockTags` and `BiomeFeatures` share their disk
+parsers with a new `loadFromJsonEntries` path so embedded JSON and sidecar JSON
+produce the same data. `BiomeDecorator` has an optional JSON asset-reader fallback
+for lazy `placed_feature`/`configured_feature` resolution, and
+`NoiseBasedChunkGenerator::decorationData()` now tries local `26.1.2/data` first
+but falls back to MCAS when the exe is moved. `.gitignore` now permits source files
+under `mcpp/src/assets` to be versioned while keeping extracted/proprietary blobs
+ignored, and `assets/assets.rc` has explicit CMake `OBJECT_DEPENDS` so resource
+objects rebuild when the local pack changes. Added `embedded_worldgen_assets_test`,
+which initializes the embedded resource and verifies 65 biome JSON files and 244
+block tags load/parse from MCAS. Verified with wrapper commands: regenerated
+`assets.bin`, built `asset_packer`, `mcpp`, `embedded_worldgen_assets_test`,
+`biome_decorator_test`, `block_tags_parity`, and `vegetation_demo`; all tests pass.
 
-- [x] **Embed + render font/logo/button** (Session 43). `assets/resource_ids.h` +
-  `assets.rc` now carry `ascii.png` (IDR_FONT_ASCII), `gui_logo.png` (IDR_GUI_LOGO),
-  `gui_button.png`/`gui_button_hl.png`. `Minecraft::render` loads them via
-  `loadResourceTex(IDR_*)` (RCDATA → stb). Font/logo/buttons are no longer null.
-  EXTRACTION (gitignored, local only): unzip the four PNGs from client.jar into
-  `mcpp/src/assets/` (see Session 43 PowerShell). NOTE: in 26.1.2's jar the title
-  `panorama_0..5.png` are 1×1 STUBS — the real panorama isn't shippable from this jar,
-  so use the dirt-tile MENU_BACKGROUND fallback (the game's own no-panorama background).
-- [ ] **Font fidelity**: port real glyph advances (`FontManager`/`GlyphProvider` derive
-  widths from the ascii.png non-empty columns; current Font.cpp uses hardcoded widths).
-- [x] **Mouse-capture fix** (Session 45). `Window::onLButtonDown` captured the mouse on
-  EVERY click (hid the cursor + clipped it to centre) → the title screen was unclickable.
-  Removed it; `main.cpp` now decides: menu open → route click to the screen (cursor stays
-  visible); in-game + no menu → click grabs the mouse for the camera.
-- [x] **Splash text + icons** (Session 45). Embedded `splashes.txt` (IDR_SPLASHES) +
-  `language.png`/`accessibility.png` (IDR_GUI_LANG/ACCESS). `pickSplash()` picks a random
-  non-empty line; `TitleScreen::renderSplash` ports `SplashRenderer` (yellow, rotated
-  -PI/9, pulsing scale `1.8 - |sin(...)*0.1|`, at `w/2+123, 69`). Added `GuiGraphics::rotate`.
-  Icons drawn 16x16 on the 20x20 language/accessibility buttons.
-- [x] **Background = dirt-tile** (the no-panorama fallback) — but see below: the REAL
-  panorama art IS available.
-- [x] **Panorama background** (Session 46). `render/gui/PanoramaRenderer.{h,cpp}` draws the
-  rotating title panorama as a perspective cube (FOV 85, znear .05, zfar 10) of 6 textured
-  faces (the GL-cubemap equivalent). Faces load from assets.bin (1.3 MB each; the jar has
-  only 1x1 stubs). Face→PNG mapping from CubeMapTexture (`SUFFIXES={_1,_3,_5,_4,_0,_2}` into
-  GL faces +X,-X,+Y,-Y,+Z,-Z): +X=pan1,-X=pan3,+Y=pan5,-Y=pan4,+Z=pan0,-Z=pan2. Spin ≈2°/s
-  (`spin += dt*20*0.1`). `Minecraft::renderPanorama` draws it to the cmd in main.cpp's title
-  branch (before the GUI); `TitleScreen` overlays panorama_overlay (dirt fallback if faces
-  missing). CAVEAT: per-face UV ORIENTATION is best-effort (cube built from a standard
-  inward skybox layout + CubeMap's rotationX(180); could not screenshot-verify) — if a face
-  looks mirrored/upside-down, flip its UVs in PanoramaRenderer's CUBE table.
-- [x] **Title screen 1:1** (Session 44). Rewrote `gui/screens/TitleScreen.cpp` straight
-  from the decompiled `TitleScreen.java` + `LogoRenderer.java`: Singleplayer /
-  Multiplayer / Minecraft Realms stacked (200x20, topPos=h/4+48, spacing 24), then the
-  row [language 20] [Options... 98] [Quit Game 98] [accessibility 20] at topPos+36, logo
-  256x44@(w/2-128,30), edition subtitle 128x14@(w/2-64,67), version bottom-left +
-  copyright bottom-right, dirt-tile background. REMOVED the invented "Connect to
-  Localhost" button. Unported-screen actions (Multiplayer/Realms/Options/lang/access)
-  are hard no-ops; Singleplayer starts the local world (stand-in for SelectWorldScreen).
-  Strings are the real en_us.json values. NOTE: the client GUI classes are NOT in the
-  pre-decompiled `26.1.2/src` (only world/util/core were). Decompile what you need with
-  Vineflower: extract the `.class` files from `client.jar` into a stage dir and run
-  `jdk25/bin/java -jar vineflower-1.12.0.jar <stage> <out>` (output now in
-  `26.1.2/gui_src/`, gitignored). GUI textures extracted from client.jar and embedded as
-  RCDATA: ascii/logo/edition/button/button_hl/dirt (IDR_* in resource_ids.h).
-  TODO next: real splash text (needs splashes file + diagonal yellow render); 9-slice
-  button sprite; language/accessibility icon sprites.
-- [ ] **Widget library**: `Button`/`SpriteIconButton`/`AbstractWidget` with the real
-  9-slice sprite scaling (`button.png` is a NineSlice sprite) + hover/focus.
-- [x] **Options navigation** (Session 46). `gui/screens/options/OptionsScreen.{h,cpp}`
-  ports `OptionsScreen.java`'s layout: the 2-column grid of category buttons (Skin
-  Customization / Music & Sounds / Video Settings / Controls / Language / Chat Settings /
-  Resource Packs / Accessibility Settings / Telemetry Data / Credits & Attribution) + a
-  Done button. Centralised screen creation in `Minecraft::openTitleScreen()` /
-  `openOptionsScreen()` (GUI textures are owned by Minecraft and reused, so screens rebuild
-  with their textures). Title "Options..." button → openOptionsScreen; each category opens
-  an `OptionsSubScreen` (real title + Done → back); Done → back to title. Navigation works.
-- [x] **Option widgets** (Session 47). `gui/components/OptionWidgets.{h,cpp}`: AbstractWidget
-  + Slider + CycleButton (+ WidgetButton). `client/Options.h` GameOptions store (owned by
-  Minecraft, `options()`; volumes 0..1, fov 30..110, sensitivity 0..1→0..200%, render
-  distance 2..32, gamma 0..1). `OptionsSubScreen` is now a real base (add*/layout: big=1col
-  310px, small=2col 150px + Done). Ported the option LISTS from the Java:
-  SoundOptionsScreen (master big + 9 source sliders + subtitles/directional toggles, from
-  SoundOptionsScreen.java), VideoSettingsScreen (graphics cycle / render distance / GUI
-  scale / brightness / fullscreen / vsync / view bobbing), ControlsScreen (sensitivity +
-  invert/auto-jump/discrete-scroll/touchscreen). FOV slider in the OptionsScreen subheader.
-  CAVEATS / NEXT: sliders are click-to-set (drag = poll mouse-down each frame — needs a
-  Window `isMouseDown()`); options are NOT persisted to disk; categories without a concrete
-  screen yet (Skin/Language/Chat/Resource Packs/Accessibility/Telemetry/Credits) open the
-  generic titled screen — port each `*.java` option list + the key-binding list (Controls).
-- [ ] **Screen framework polish**: real `GridLayout`/`HeaderAndFooterLayout`, 9-slice
-  button sprite, hover tooltips, keyboard/ESC handling.
-
-
-
-**Session 42 — finish the tree-clipping fix + cave plants on surface:**
-
-1. **Trees STILL clipped at borders (Session 41 didn't fully fix it).** Root cause:
-   the tree placer writes through `TreeWorld` (TreeGen.h), NOT the ChunkWGL — and
-   TreeWorld clamped to one chunk, so foliage spilling across a border was dropped
-   regardless of the ChunkWGL change. Fixes: (a) `TreeWorld` now routes reads/writes
-   to the owning chunk via the same `chunkAt` resolver (treePlacer sets it from the
-   WGL); (b) **deferred decoration** — `LevelChunk::decorated` flag + `Minecraft::
-   tryDecorate(cp)` which only decorates a chunk once ALL 8 neighbours are loaded, so
-   cross-chunk writes always land. `startLocalGame` now gens a 5×5 and decorates the
-   inner 3×3; `updateLocalChunks` defers decoration to a per-tick pass over loaded
-   chunks. The frontier shows bare terrain (trees appear as you approach) instead of
-   clipped trees — strictly correct. Verified: 2715 leaves in the decorated 3×3.
-
-2. **glow_lichen / cave_vines spawning on the surface everywhere.** Wiring
-   `height_range` (Session 41) spread their Y to 0..256, but their gating placements
-   were unported → pass-through. Ported `surface_relative_threshold_filter`
-   (keeps glow_lichen ≥13 below surface) and `environment_scan` (cave_vines scan up to
-   a ceiling) + a `has_sturdy_face` predicate (approx: full solid+opaque cube).
-   Verified: 0 cave-plants above y60. (They now need real caves to place at all —
-   correct, since carvers aren't ported yet.)
-   NOTE: their RENDER is still a cross (isCrossPlant), not flat-on-wall — the mesher
-   has no block-model/multiface system. They're off the surface now so it's rarely
-   seen; proper flat rendering needs the model port.
-
-**Reminder for unported placement modifiers:** the default in `parseModifier` is to
-SKIP (nullptr → pass-through). For FILTERS that gate cave/underground features this is
-WRONG (it lets them onto the surface). When you wire a new positional modifier
-(height_range, etc.), check whether sibling FILTER modifiers in the same placed_feature
-are still unported — porting one without the other moved glow_lichen to the surface.
-
-
-
-**Session 41 — more worldgen ports + fixes (port, don't tune):**
-
-1. **Trees clipped at chunk borders / lone floating dirt — FIXED.** `BiomeDecorator`'s
-   `ChunkWGL` dropped any write outside the active 16×16 chunk, so a tree near a
-   border lost the foliage/trunk that belonged in the neighbour (the "half/quarter
-   sphere of leaves" + a lone dirt block). It now routes reads/writes to the chunk
-   that OWNS each world position via an optional `chunkAt(cx,cz)` resolver
-   (`applyBiomeDecoration(..., chunkAt)`), so features write across borders into
-   already-loaded neighbours and mark them dirty. `Minecraft::decorateChunk` passes
-   `getChunk` (main-thread only). LIMITATION: a neighbour that isn't loaded yet is
-   still skipped — the proper fix is Java's two-phase WorldGenRegion (features for a
-   chunk run only once all chunks in its region reached the prior step). Same
-   best-effort model as structures. Unit tests pass `chunkAt={}` → single-chunk.
-
-2. **Ore generator ported 1:1.** `resolveConfigured` now handles `ore`/`scattered_ore`
-   (`orePlacer`) — a faithful port of `OreFeature.place`+`doPlace`+`canPlaceOre`
-   (ellipsoid vein along a random axis, RuleTest targets tag_match/block_match/
-   blockstate_match/random_*, discard_chance_on_air_exposure, exact RNG order).
-   Also wired the `height_range` placement (was unhandled → identity!) with a
-   `HeightProvider`/`VerticalAnchor` parser (constant/uniform/[very_]biased_to_bottom/
-   trapezoid; absolute/above_bottom/below_top). Verified in-engine: 3285 ore blocks in
-   the spawn 3×3. CAVEAT: `Mth.sin` isn't ported project-wide; `orePlacer` reproduces
-   it bit-exactly inline (SIN[i]=sin(i·2π/65536)); port a shared `Mth` for other users.
-
-3. **More cutout plants don't occlude / aren't cubes.** Added small mushrooms
-   (red/brown_mushroom), glow_lichen, sculk_vein, cave_vines(_plant), hanging_roots,
-   dripleaf, spore_blossom, twisting/weeping vines, vine to `isCrossPlant`
-   (ChunkMesh.cpp). Still a hardcoded list, not the block-model system.
-
-**Open / deferred (next sessions — from the source, never tune):**
-- **Savanna/biome grass+foliage tint.** `ChunkMesh.cpp getTextureTint` hardcodes the
-  plains color for ALL grass/foliage. The 1:1 path: embed `assets/minecraft/textures/
-  colormap/{grass,foliage}.png` (extend tools/build_atlas.py to pull them from
-  client.jar), port `GrassColor.get(temp,downfall)`/`FoliageColor` (index = `((1-temp)*255)`,
-  `((1-temp*downfall)*255)` into the colormap), `BiomeColors`, and the
-  `grass_color_modifier` (none/dark_forest/swamp) + biome `grass_color`/`foliage_color`
-  overrides; feed the per-block biome (temp/downfall from BiomeRegistry) into the mesher.
-- **"Whole chunk surface becomes one block" when moving fast.** Reported as a likely
-  data race during concurrent async chunk gen (4 worker threads). Could NOT reproduce
-  from the info at hand — NEEDS a screenshot + seed/coords. Suspects to check first:
-  any mutable state shared across the per-chunk generators built in the
-  `updateLocalChunks` worker lambda; the `Climate::RTree m_lastResult` (mutable) if a
-  BiomeSource is ever shared across threads; `getOrCreateNoise` if a RandomState is
-  shared. Each worker currently builds its OWN generator, so confirm nothing is static.
-- **`random_patch` feature still unported** (`resolveConfigured` → noop) — port
-  `RandomPatchFeature` (tries / xz_spread / y_spread + inner placed feature). Flowers
-  reaching the world densely (the giant flower diamond) is likely related.
-- Structures: user will request real spawning next; current ones are approximations
-  (see WORLDGEN_PLAN.md / Session structure notes).
-- Certify terrain NormalNoise/DensityFunction parity (MD5 is correct now).
-
----
-
-### Session 40 (previous)
-**Original Session 40 fixes: real MD5 noise seeding, block predicates, plant rendering
-— the worldgen got wired into the engine and runnable.**
-
-**Session 40 — root-cause fixes for "it generates but it's wrong" (all were skipped
-ports, NOT mis-tuned numbers):**
-
-1. **MD5 noise seeding (the big one).** `RandomSource.cpp` `md5Bytes()` was an FNV
-   placeholder, not MD5. The overworld uses Xoroshiro, whose
-   `XoroshiroPositionalRandomFactory.fromHashOf(name)` seeds EVERY named noise
-   (`Noises::TEMPERATURE/VEGETATION/CONTINENTALNESS/EROSION/RIDGE/SHIFT` + all terrain
-   noises) via `Hashing.md5().hashString(name).asBytes()`. Wrong/correlated seeds →
-   the climate noise collapsed → the whole world was ~3 biomes (taiga/snow/desert,
-   i.e. only temperature varied) and non-1:1 with Java. Replaced with real RFC 1321
-   MD5. Result verified in-engine: biome variety over a 1024×1024 sample went 3 → 12
-   (beach, birch_forest, deep_ocean, forest, jungle, oceans, plains, river, savanna,
-   sparse_jungle, …). MD5 now covered by `worldgen_random_parity` (standard vectors
-   for "" and "abc" via `RandomSupport::seedFromHashOf`). This also makes ALL terrain
-   noise 1:1, so do a NormalNoise/density parity pass next to certify it.
-
-2. **Block predicates (pumpkins & sugar cane).** `BiomeDecorator.cpp parsePredicate`
-   did not implement `matching_blocks` or `matching_fluids` (both fell through to
-   `return true`), and NO predicate applied the `offset` field. Java's
-   `StateTestingPredicate.test(level,origin)` = `test(level.getBlockState(origin.offset(offset)))`.
-   So `patch_pumpkin` ("air here AND grass_block at offset [0,-1,0]") and
-   `patch_sugar_cane` ("air, would_survive, AND water at [±1,-1,0]") had their gating
-   silently disabled → pumpkins/sugar cane scattered onto sand/water in absurd counts.
-   Ported `matching_blocks`, `matching_fluids`, and `offset` for all state-testing
-   predicates + `would_survive`. (Fluids are modeled as the water/lava blocks.)
-
-3. **Plant rendering (`ChunkMesh.cpp`).** Two duplicated hardcoded plant lists
-   (cross-render + cull-bypass) were missing newer cutout blocks, so `leaf_litter`
-   (and bush/firefly_bush/wildflowers/pink_petals/dry grass) rendered as full cubes
-   AND culled neighbour faces (holes in the ground). Unified into one `isCrossPlant()`
-   used by both sites and added the missing blocks. NOTE: this is still a hardcoded
-   list standing in for the real block-model system — a proper port reads block models
-   (JSON) to decide render shape + occlusion. Until then, keep `isCrossPlant` in sync
-   with `Blocks.cpp`.
-
-**Worldgen is now wired into the engine** (Sessions earlier this set): the local world
-(`Minecraft::startLocalGame` + the streaming `updateLocalChunks` integration) runs
-`applyBiomeDecoration` (trees/vegetation) and `generateStructures` on the MAIN thread
-(the BiomeDecorator/feature caches are not thread-safe). `decorateChunk`/`runStructures`
-load the data-driven JSON from the discovered `26.1.2/data` tree. Run from the REPO
-ROOT so that tree resolves; `--quickPlaySingleplayer` enters the world.
-
-**Open / next (attack from the source, do NOT tune):**
-- Certify terrain NormalNoise/DensityFunction parity now that MD5 is correct (add a
-  `noise`/`density_function` parity target vs the real jar). The biome *map* is varied
-  now but full terrain-shape parity is unverified.
-- `random_patch` feature type is still NOT handled in `resolveConfigured` (falls to
-  noop). Grass/flowers currently reach the world via other paths; port `RandomPatchFeature`
-  (tries / xz_spread / y_spread + the inner placed feature) properly.
-- Structures are hand-built approximations, not the template/jigsaw port; dungeons need
-  carvers (no caves yet). See WORLDGEN_PLAN.md.
-- `leaf_litter`/cutout rendering is a hardcoded list, not the block-model system.
-
----
-
-## PREVIOUS STATE (pre-Session-40)
-
-**Last updated**: Session 39 (surface vegetation breadth: double plants + dry vegetation + canSurvive dispatch)
+**Session 40**: first tasklist bug pass focused on generated decoration/log regressions.
+`Blocks` now exposes `getBlockStateId(serializedState)` for canonical states such
+as `minecraft:oak_log[axis=x]` and `minecraft:tall_grass[half=upper]`, and loaded
+pillar state IDs now carry inferred `axis` properties. `BiomeDecorator` preserves
+JSON `Properties` when resolving providers, writes property-aware state IDs into
+chunks, resolves trunk/leaf states through the new state helper, uses horizontal
+log IDs in tree configs, and makes `FallenTreeFeature` closer to Java's shape:
+stump first, random horizontal direction, 2-3 block gap from the stump, downward
+ground probe, solid-support checks, gap limiting, and horizontal `axis=x/z` logs.
+Feature/config caches in `BiomeDecorator` are now `thread_local` and keyed by data
+directory + feature key to avoid shared-cache races during threaded generation.
+`ChunkMesh` now chooses pillar top/side textures from the block state's `axis`, so
+horizontal fallen logs no longer render as vertical logs. `NoiseBasedChunkGenerator`
+now computes the heightmap after surface creation, loads biome feature lists and
+block tags from local `26.1.2/data/minecraft`, and calls `applyBiomeDecoration`
+before the final heightmap/mesh-dirty pass. Build hygiene fixed during verification:
+`nlohmann_json` exposes the correct vendor include root, MinGW links XAudio2 as
+`xaudio2_9`, DX12 adapter probing uses `IID_PPV_ARGS`, and `AABB.cpp` includes
+`<algorithm>`. Verified with wrapper commands: `mcpp` build, `biome_decorator_test`,
+`block_tags_parity`, and `vegetation_demo` all pass. Remaining important caveat:
+runtime decoration data still comes from sidecar `26.1.2/data/minecraft`; embedding
+worldgen/tags JSON into the executable/asset pack is still required for a moved
+standalone exe to keep trees/decorations.
 
 **Session 39**: extended surface vegetation coverage. `world/level/block/BlockStates.h`
 (canonical state-id property helpers: blockName / setProperty, sorted like Java).
@@ -619,7 +466,7 @@ Now verified: `NormalNoise.getValue` matches Java bit-for-bit and the
 NoiseThresholdProvider (flower_plain) state selection matches 1:1
 (`block_state_provider_parity` NOISE + BSPN cases).
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
-**Executable**: `C:\Users\Mateo\Desktop\Claude\mcpp\build\mcpp.exe` — built 2026-05-31
+**Executable**: `C:\Users\Mateo\Desktop\minecraftcpp\mcpp\build\mcpp.exe` - built 2026-06-05
 
 **Worldgen roadmap**: `mcpp/docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
 the full feature/tree/structure port (Phases A–G, with real data counts). Phase A
@@ -638,7 +485,11 @@ the removed hand-authored approximate generators — port from Java + data only.
    router so the *sampled* climate (temperature/humidity/... density functions)
    is also verified end-to-end, and add the same coverage for nether/end presets.
 4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
-5. Port placed/configured features and structures only from Java/data definitions. The approximate tree/ore/surface-decoration/structure generators added by another LLM were removed from the build and must not be re-enabled as-is.
+5. Port placed/configured features and structures only from Java/data definitions. The approximate ore/surface-decoration/structure generators added by another LLM must not be re-enabled as-is; `TreeGen.cpp` remains compiled only for the tree primitives used by the data-driven `BiomeDecorator`.
+6. Tasklist next: continue the remaining rendering/worldgen/UI items from
+   `C:\Users\Mateo\Desktop\tasklist.txt` (notably chunk-generation stutter/lagback,
+   biome-aware tinting, animated water/lava/kelp textures, kelp/water plant logic,
+   bamboo model/displacement, structures, and menus).
 
 **Known issues / limitations:**
 - Online mode auth not implemented.
@@ -653,7 +504,7 @@ the removed hand-authored approximate generators — port from Java + data only.
 - `Aquifer` is now ported as its own C++ module with Java's global fluid picker, disabled aquifer path, and noise-based aquifer sampling/pressure/fluid-level logic. `NoiseBasedChunkGenerator::fillFromNoise()` now uses `aquifer.computeSubstance(context, density)` and falls back to `defaultBlock` when Java would return `null`.
 - `OreVeinifier` is now ported and wired after Aquifer, matching Java's `NoiseChunk` material rule order when `settings.oreVeinsEnabled()` is true.
 - `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` exist but are not certified complete. Treat them as partial until each condition/rule is checked against Java source.
-- The previous LLM added `BiomeSource`, `feature/TreeGen`, `feature/OreGen`, `feature/SurfaceDecoration`, and `structure/StructureGen` as approximate systems. They contained hand-authored biome points, per-chunk random scattering, hardcoded chances, and simplified structures. Session 23 removed them from `src/CMakeLists.txt` and removed their calls from `NoiseBasedChunkGenerator::buildSurface()`. The files may remain on disk for reference, but they are intentionally out of the executable.
+- The previous LLM added `BiomeSource`, `feature/TreeGen`, `feature/OreGen`, `feature/SurfaceDecoration`, and `structure/StructureGen` as approximate systems. They contained hand-authored biome points, per-chunk random scattering, hardcoded chances, and simplified structures. The approximate ore/surface-decoration/structure paths are intentionally out of the executable; `TreeGen.cpp` remains compiled only for the tree primitive classes used by the data-driven `BiomeDecorator`, and its old `decorateChunk()` entry point is not called and no longer calls `OreGen`.
 - `NoiseBasedChunkGenerator::buildSurface()` now passes an empty biome key to `SurfaceSystem` until the Java `Climate` / `MultiNoiseBiomeSource` pipeline is ported. This keeps biome-dependent rules inactive instead of feeding them fake biomes.
 - Session 24 replaced the fake `BiomeSource` implementation with a Java-shaped foundation: `Climate.h` now ports `quantizeCoord`, `Parameter`, `TargetPoint`, `ParameterPoint::fitness`, and `ParameterList::findValue` using the same distance metric as Java.
 - Session 25 ported the full `OverworldBiomeBuilder` preset shape: off-coast biomes, all `addInlandBiomes()` weirdness slices (`addPeaks`, `addHighSlice`, `addMidSlice`, `addLowSlice`, `addValleys`), underground biomes, and the Java `pick*` helper decisions. `NoiseBasedChunkGenerator::buildSurface()` now passes this biome lookup into `SurfaceSystem` for overworld terrain. This is a direct C++ port scaffold and must be audited line-by-line before claiming final 1:1 biome behavior.

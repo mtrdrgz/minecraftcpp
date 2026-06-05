@@ -1,5 +1,4 @@
 #include "TreeGen.h"
-#include "OreGen.h"
 #include "../../block/Blocks.h"
 #include "../../block/BlockState.h"
 #include "../RandomSource.h"
@@ -867,9 +866,6 @@ void decorateChunk(LevelChunk& chunk, uint64_t worldSeed, const std::function<st
 
         placeTree(world, rng, originX, originY, originZ, *selectedCfg);
     }
-
-    // Populate ores and underground pockets using 1:1 vanilla Minecraft math
-    decorateOres(chunk, worldSeed, biomeGetter);
 
     chunk.computeHeightmap();
 }
