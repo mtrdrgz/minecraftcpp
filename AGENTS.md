@@ -303,8 +303,8 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 44 (TitleScreen ported 1:1 from decompiled TitleScreen.java —
-real buttons/layout/strings + dirt background + logo; removed the invented localhost btn)
+**Last updated**: Session 45 (fixed the menu mouse-capture bug so buttons are clickable;
+added splash text + language/accessibility icons; panorama art located in assets.bin — next)
 
 **DIRECTION (decided by the user, Session 43):** GPU/OpenCL worldgen is OFF the table —
 it has no source to port (Minecraft generates on CPU) and would violate RULE #0. Optimize
@@ -337,8 +337,25 @@ Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
   so use the dirt-tile MENU_BACKGROUND fallback (the game's own no-panorama background).
 - [ ] **Font fidelity**: port real glyph advances (`FontManager`/`GlyphProvider` derive
   widths from the ascii.png non-empty columns; current Font.cpp uses hardcoded widths).
-- [ ] **Background**: dirt-tile `MENU_BACKGROUND` (tiled `block/dirt` darkened) since the
-  panorama is stubbed. Port `PanoramaRenderer`/`CubeMap` only if real panorama art appears.
+- [x] **Mouse-capture fix** (Session 45). `Window::onLButtonDown` captured the mouse on
+  EVERY click (hid the cursor + clipped it to centre) → the title screen was unclickable.
+  Removed it; `main.cpp` now decides: menu open → route click to the screen (cursor stays
+  visible); in-game + no menu → click grabs the mouse for the camera.
+- [x] **Splash text + icons** (Session 45). Embedded `splashes.txt` (IDR_SPLASHES) +
+  `language.png`/`accessibility.png` (IDR_GUI_LANG/ACCESS). `pickSplash()` picks a random
+  non-empty line; `TitleScreen::renderSplash` ports `SplashRenderer` (yellow, rotated
+  -PI/9, pulsing scale `1.8 - |sin(...)*0.1|`, at `w/2+123, 69`). Added `GuiGraphics::rotate`.
+  Icons drawn 16x16 on the 20x20 language/accessibility buttons.
+- [x] **Background = dirt-tile** (the no-panorama fallback) — but see below: the REAL
+  panorama art IS available.
+- [ ] **Panorama (NEXT, art confirmed available)**: the title `panorama_0..5.png` are 1x1
+  stubs IN client.jar, but the FULL-RES faces (1.3 MB each) live in `assets.bin` (the MCAS
+  asset store) at `minecraft/textures/gui/title/background/panorama_{0..5}.png` — load via
+  `AssetManager::readRaw`. Port `CubeMap`/`Panorama` (decompiled into `26.1.2/gui_src`): a
+  perspective cube (FOV 85, znear .05, zfar 10), 6 faces, slow rotation, then blit
+  `panorama_overlay`. Needs a small 3D pass before the GUI in the title branch (add a
+  panorama pipeline like LevelRenderer's sky pipeline). Mind the per-face mapping/UV
+  orientation so faces aren't mirrored/seamed.
 - [x] **Title screen 1:1** (Session 44). Rewrote `gui/screens/TitleScreen.cpp` straight
   from the decompiled `TitleScreen.java` + `LogoRenderer.java`: Singleplayer /
   Multiplayer / Minecraft Realms stacked (200x20, topPos=h/4+48, spacing 24), then the

@@ -31,6 +31,7 @@ public:
     void pop()  { if (m_poseStack.size() > 1) m_poseStack.pop_back(); }
     void translate(float x, float y, float z = 0.0f);
     void scale(float x, float y, float z = 1.0f);
+    void rotate(float radians); // around Z (for the rotated splash text)
 
     // Execution
     void render(ICommandList* cmd, float screenW, float screenH);

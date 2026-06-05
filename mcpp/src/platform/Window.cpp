@@ -145,8 +145,11 @@ void Window::onMouseMove(int x, int y) {
 }
 
 void Window::onLButtonDown() {
+    // Just record the click. Whether it should grab the mouse is a GAME decision
+    // (in-game = grab for the camera; on a menu = keep the cursor visible so the
+    // user can click widgets) — handled in the main loop, not here. Capturing on
+    // every click hid the cursor on the title screen and broke button clicks.
     m_lButtonClicked = true;
-    if (!m_mouseCaptured) captureMouse(true);
 }
 
 LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {

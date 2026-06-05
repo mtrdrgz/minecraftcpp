@@ -99,8 +99,14 @@ int main() {
     constexpr float SKY_R = 0.529f, SKY_G = 0.808f, SKY_B = 0.980f;
 
     while (window.pollEvents()) {
-        if (window.consumeLButtonClicked() && mc.screen()) {
-            mc.screen()->mouseClicked((double)window.mouseX(), (double)window.mouseY(), 0);
+        if (window.consumeLButtonClicked()) {
+            if (mc.screen()) {
+                // A menu is open: route the click to its widgets, cursor stays visible.
+                mc.screen()->mouseClicked((double)window.mouseX(), (double)window.mouseY(), 0);
+            } else if (mc.isInGame() && !window.isMouseCaptured()) {
+                // In-game with no menu: click to (re)grab the mouse for the camera.
+                window.captureMouse(true);
+            }
         }
 
         auto now = Clock::now();

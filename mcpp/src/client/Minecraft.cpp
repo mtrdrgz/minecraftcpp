@@ -18,6 +18,11 @@
 #include <cmath>
 #include <filesystem>
 #include <exception>
+#include <sstream>
+#include <random>
+#include <chrono>
+#include <vector>
+#include <string>
 
 namespace mc {
 
@@ -56,6 +61,32 @@ namespace {
         const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
         DWORD size = SizeofResource(hmod, hres);
         return decodeTex(dev, cmd, data, (int)size);
+    }
+
+    // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
+    std::string loadResourceText(int resourceId) {
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+        if (!hres) return {};
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const char* data = static_cast<const char*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return data ? std::string(data, data + size) : std::string{};
+    }
+
+    // SplashManager: pick a random non-empty line from splashes.txt.
+    std::string pickSplash() {
+        const std::string txt = loadResourceText(IDR_SPLASHES);
+        std::vector<std::string> lines;
+        std::stringstream ss(txt);
+        std::string line;
+        while (std::getline(ss, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();
+            if (!line.empty()) lines.push_back(line);
+        }
+        if (lines.empty()) return {};
+        std::mt19937 rng((unsigned)std::chrono::steady_clock::now().time_since_epoch().count());
+        return lines[rng() % lines.size()];
     }
 }
 
@@ -595,6 +626,9 @@ void Minecraft::render(float pt) {
             loadResourceTex(m_device, cmd, IDR_GUI_BUTTON),
             loadResourceTex(m_device, cmd, IDR_GUI_BUTTON_HL)
         );
+        ts->setIconTextures(loadResourceTex(m_device, cmd, IDR_GUI_LANG),
+                            loadResourceTex(m_device, cmd, IDR_GUI_ACCESS));
+        ts->setSplash(pickSplash());
         setScreen(std::move(ts));
 
         guiInit = true;
