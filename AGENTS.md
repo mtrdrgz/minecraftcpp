@@ -253,7 +253,18 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 41 (standalone embedded worldgen/tags data)
+**Last updated**: Session 42 (dry/bush vegetation tint and plant meshing)
+
+**Session 42**: fixed the visible gray/cube vegetation class called out in the
+tasklist for the currently ported plant renderer. `ChunkMesh` now treats
+`short_dry_grass`, `tall_dry_grass`, `bush`, and `firefly_bush` as cross-plane
+plant meshes instead of ordinary block geometry, and neighbor face-culling now
+recognizes those blocks as plants too. Dry grass textures now use Java's
+`DryFoliageColor.FOLIAGE_DRY_DEFAULT` fallback tint (`#5C3C32`) instead of raw
+gray atlas pixels; bush/firefly_bush use the existing plains grass tint fallback.
+Verified with wrapper command: `mcpp` target builds. Remaining caveat: this is
+still a fallback tint path; true biome-aware grass/foliage/dry-foliage/water
+colors need biome IDs available to the mesher and Java colormap sampling.
 
 **Session 41**: fixed the tasklist standalone-decoration gap. `tools/asset_packer`
 now accepts an optional `data_minecraft_dir` argument and packs

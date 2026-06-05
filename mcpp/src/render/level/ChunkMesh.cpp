@@ -40,10 +40,13 @@ static TintRGB getTextureTint(const std::string& name) {
         name == "short_grass"          || name == "fern"                     ||
         name == "tall_grass_top"       || name == "tall_grass_bottom"        ||
         name == "large_fern_top"       || name == "large_fern_bottom"        ||
+        name == "bush"                 || name == "firefly_bush"             ||
         name == "sugar_cane")
         return {121, 192, 90};   // #79C05A plains grass
     if (name == "water_still" || name == "water_flow")
         return {63, 118, 228};   // #3F76E4 beautiful water blue
+    if (name == "short_dry_grass" || name == "tall_dry_grass")
+        return {92, 60, 50};      // DryFoliageColor.FOLIAGE_DRY_DEFAULT (#5C3C32)
     // Fixed spruce leaf tint (biome-independent per BlockColors.java)
     if (name == "spruce_leaves") return {97,  153, 97};  // #619961
     // Fixed birch leaf tint (biome-independent per BlockColors.java)
@@ -172,11 +175,13 @@ bool ChunkMesher::shouldCull(const LevelChunk& chunk, const LevelChunk* neighbor
 
     // Explicitly bypass culling if the neighboring block is a plant block
     const std::string& name = nb->block->name;
-    if (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" || name == "dead_bush" ||
+    if (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" ||
+        name == "short_dry_grass" || name == "tall_dry_grass" || name == "dead_bush" ||
         name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
         name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
         name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
-        name == "sweet_berry_bush" || name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
+        name == "bush" || name == "firefly_bush" || name == "sweet_berry_bush" ||
+        name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
         name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
         name.find("coral") != std::string::npos) {
         return false;
@@ -333,11 +338,13 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                 bool isPlant = false;
                 if (bs && bs->block) {
                     const std::string& name = bs->block->name;
-                    isPlant = (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" || name == "dead_bush" ||
+                    isPlant = (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" ||
+                               name == "short_dry_grass" || name == "tall_dry_grass" || name == "dead_bush" ||
                                name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
                                name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
                                name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
-                               name == "sweet_berry_bush" || name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
+                               name == "bush" || name == "firefly_bush" || name == "sweet_berry_bush" ||
+                               name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
                                name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
                                name.find("coral") != std::string::npos);
                 }
