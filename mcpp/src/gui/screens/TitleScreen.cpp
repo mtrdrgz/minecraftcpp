@@ -86,7 +86,15 @@ void TitleScreen::renderSplash(render::GuiGraphics& g) {
 }
 
 void TitleScreen::render(render::GuiGraphics& g, int mx, int my, float pt) {
-    renderDirtBackground(g);
+    // The rotating panorama (3D cube) is drawn to the command list before this by the
+    // main loop; here we just overlay the vignette. If the panorama art isn't loaded,
+    // fall back to the dirt MENU_BACKGROUND.
+    if (m_minecraft->panoramaLoaded()) {
+        if (render::ITexture* ov = m_minecraft->panoramaOverlay())
+            g.blit(ov, 0, 0, 0.0f, 0.0f, m_width, m_height, m_width, m_height);
+    } else {
+        renderDirtBackground(g);
+    }
 
     // Logo: 256x44 sampled from the top of the 256x64 texture, at (w/2-128, 30).
     if (m_logoTex) {

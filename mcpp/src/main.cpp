@@ -144,6 +144,8 @@ int main() {
                     mc.guiGraphics()->render(cmd, (float)window.width(), (float)window.height());
                 }
             } else if (mc.screen()) {
+                // Rotating panorama background (3D), then the screen's 2D widgets on top.
+                mc.renderPanorama(cmd, window.width(), window.height(), (float)(dtMs / 1000.0));
                 mc.screen()->render(*mc.guiGraphics(), (int)window.mouseX(), (int)window.mouseY(), partialTick);
                 mc.guiGraphics()->render(cmd, (float)window.width(), (float)window.height());
             }

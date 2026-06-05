@@ -348,14 +348,16 @@ Fix is to embed them as Windows resources (extract from `26.1.2/client.jar`).
   Icons drawn 16x16 on the 20x20 language/accessibility buttons.
 - [x] **Background = dirt-tile** (the no-panorama fallback) — but see below: the REAL
   panorama art IS available.
-- [ ] **Panorama (NEXT, art confirmed available)**: the title `panorama_0..5.png` are 1x1
-  stubs IN client.jar, but the FULL-RES faces (1.3 MB each) live in `assets.bin` (the MCAS
-  asset store) at `minecraft/textures/gui/title/background/panorama_{0..5}.png` — load via
-  `AssetManager::readRaw`. Port `CubeMap`/`Panorama` (decompiled into `26.1.2/gui_src`): a
-  perspective cube (FOV 85, znear .05, zfar 10), 6 faces, slow rotation, then blit
-  `panorama_overlay`. Needs a small 3D pass before the GUI in the title branch (add a
-  panorama pipeline like LevelRenderer's sky pipeline). Mind the per-face mapping/UV
-  orientation so faces aren't mirrored/seamed.
+- [x] **Panorama background** (Session 46). `render/gui/PanoramaRenderer.{h,cpp}` draws the
+  rotating title panorama as a perspective cube (FOV 85, znear .05, zfar 10) of 6 textured
+  faces (the GL-cubemap equivalent). Faces load from assets.bin (1.3 MB each; the jar has
+  only 1x1 stubs). Face→PNG mapping from CubeMapTexture (`SUFFIXES={_1,_3,_5,_4,_0,_2}` into
+  GL faces +X,-X,+Y,-Y,+Z,-Z): +X=pan1,-X=pan3,+Y=pan5,-Y=pan4,+Z=pan0,-Z=pan2. Spin ≈2°/s
+  (`spin += dt*20*0.1`). `Minecraft::renderPanorama` draws it to the cmd in main.cpp's title
+  branch (before the GUI); `TitleScreen` overlays panorama_overlay (dirt fallback if faces
+  missing). CAVEAT: per-face UV ORIENTATION is best-effort (cube built from a standard
+  inward skybox layout + CubeMap's rotationX(180); could not screenshot-verify) — if a face
+  looks mirrored/upside-down, flip its UVs in PanoramaRenderer's CUBE table.
 - [x] **Title screen 1:1** (Session 44). Rewrote `gui/screens/TitleScreen.cpp` straight
   from the decompiled `TitleScreen.java` + `LogoRenderer.java`: Singleplayer /
   Multiplayer / Minecraft Realms stacked (200x20, topPos=h/4+48, spacing 24), then the

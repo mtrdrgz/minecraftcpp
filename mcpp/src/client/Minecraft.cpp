@@ -12,6 +12,7 @@
 #include "../world/level/block/BlockTags.h"
 #include "../assets/AssetManager.h"
 #include "../gui/screens/TitleScreen.h"
+#include "../render/gui/PanoramaRenderer.h"
 #include "../assets/resource_ids.h"
 #include <stb_image.h>
 #include <windows.h>
@@ -94,6 +95,7 @@ Minecraft::Minecraft(Window* window, render::IRenderDevice* device)
     : m_window(window), m_device(device) 
 {
     m_guiGraphics = std::make_unique<render::GuiGraphics>(device);
+    m_panorama = std::make_unique<render::PanoramaRenderer>(device);
     m_gui = std::make_unique<gui::Gui>(this);
     m_soundManager = std::make_unique<audio::SoundManager>();
     m_soundManager->init();
@@ -123,6 +125,18 @@ void Minecraft::setScreen(std::unique_ptr<gui::Screen> screen) {
     if (m_currentScreen) {
         m_currentScreen->init(this, m_window->width(), m_window->height());
     }
+}
+
+void Minecraft::renderPanorama(render::ICommandList* cmd, int w, int h, float dtSeconds) {
+    if (m_panorama) m_panorama->render(cmd, w, h, dtSeconds);
+}
+
+render::ITexture* Minecraft::panoramaOverlay() {
+    return m_panorama ? m_panorama->overlay() : nullptr;
+}
+
+bool Minecraft::panoramaLoaded() const {
+    return m_panorama && m_panorama->loaded();
 }
 
 // ── Chunk storage ─────────────────────────────────────────────────────────────

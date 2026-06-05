@@ -95,6 +95,7 @@ set(MC_SOURCES
     render/entity/EntityRenderDispatcher.cpp
     render/gui/GuiGraphics.cpp
     render/gui/Font.cpp
+    render/gui/PanoramaRenderer.cpp
     render/level/ChunkMesh.cpp
     render/level/LevelRenderer.cpp
     # Audio

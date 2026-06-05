@@ -29,6 +29,7 @@ namespace levelgen {
     namespace feature { class BiomeFeatures; }
 }
 namespace block { class BlockTags; }
+namespace render { class PanoramaRenderer; }
 
 struct PlayerInfo {
     UUID profileId{};
@@ -80,6 +81,13 @@ public:
     audio::SoundManager* soundManager() { return m_soundManager.get(); }
     
     void setScreen(std::unique_ptr<gui::Screen> screen);
+
+    // Title panorama background (rotating cubemap). renderPanorama draws it to cmd;
+    // panoramaOverlay/panoramaLoaded let the title screen blit the overlay + fall back
+    // to the dirt background if the panorama art isn't available.
+    void renderPanorama(render::ICommandList* cmd, int w, int h, float dtSeconds);
+    render::ITexture* panoramaOverlay();
+    bool panoramaLoaded() const;
 
 private:
     void handlePackets();
@@ -135,7 +143,8 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<LevelChunk>> m_chunks;
     std::unordered_map<UUID, PlayerInfo, UUIDHash> m_playerInfo;
 
-    std::unique_ptr<render::GuiGraphics> m_guiGraphics;
+    std::unique_ptr<render::GuiGraphics>     m_guiGraphics;
+    std::unique_ptr<render::PanoramaRenderer> m_panorama;
     std::unique_ptr<render::Font>        m_font;
     std::unique_ptr<gui::Gui>           m_gui;
     std::unique_ptr<audio::SoundManager> m_soundManager;
