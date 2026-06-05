@@ -32,7 +32,7 @@
 ## Menú / UI
 
 - [ ] El menú principal tiene un montón de cosas que faltan, problemas de funcionamiento y cosas que no son como en el juego original:
-  - [ ] Los sliders solo reaccionan al click, no a la acción de deslizar el mouse con el click presionado.
+  - [x] Los sliders solo reaccionan al click, no a la acción de deslizar el mouse con el click presionado. (Arreglado portando la semántica de `AbstractSliderButton`: click inicia drag, `mouseDragged` actualiza con `(mouseX - (x + 4)) / (width - 8)`, `mouseReleased` suelta el handle; eventos propagados desde Win32 -> Screen -> widget.)
   - [ ] El indicador de dónde está el slider (que es como un rectángulo) no tiene texturas o parece un placeholder.
   - [ ] Faltan muchas opciones dentro de todos los submenús.
   - [ ] Dentro de Video, la opción de Gráficos tiene un corte en el botón, como si la textura se repitiera por un UV mal puesto o similar.

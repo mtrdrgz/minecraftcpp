@@ -303,7 +303,20 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 45 (deferred decoration owns cross-chunk writes)
+**Last updated**: Session 46 (option sliders support mouse drag)
+
+**Session 46**: fixed the tasklist UI bug where option sliders only reacted to
+clicks. Ported the relevant `AbstractSliderButton` behavior into the current C++
+widget stack: left click starts a slider drag, `mouseDragged` updates the value,
+and `mouseReleased` clears the drag state. The value update now uses Java's handle
+geometry, `(mouseX - (x + 4)) / (width - 8)`, instead of the previous full-widget
+width fraction. Added mouse release/drag propagation through `Window` ->
+`main.cpp` -> `Screen` -> `OptionsScreen`/`OptionsSubScreen` -> widgets, while
+preserving the existing in-game click-to-capture behavior when no screen is open.
+Verified with wrapper commands: built `mcpp` Release and ran an 8s title-screen
+smoke; the window initialized, entered the main loop, and was killed by the
+intentional timeout. `TASKLIST.md` now marks only the slider-drag subitem done;
+the broader menu/UI section remains open.
 
 **Session 45**: re-verified and tightened the chunk-border decoration path. The
 client remains the owner of `applyBiomeDecoration()` and only decorates chunks

@@ -33,16 +33,39 @@ void Slider::render(render::GuiGraphics& g, render::Font& font, int mx, int my) 
     // Handle (8px) at the value fraction.
     const double frac = m_max > m_min ? std::clamp((m_value - m_min) / (m_max - m_min), 0.0, 1.0) : 0.0;
     const int hx = m_x + (int)(frac * (m_w - 8));
-    const bool hover = hovered(mx, my);
+    const bool hover = hovered(mx, my) || m_dragging;
     g.fill(hx, m_y, hx + 8, m_y + m_h, hover ? glm::vec4{ 0.75f, 0.75f, 0.75f, 1.0f } : glm::vec4{ 0.55f, 0.55f, 0.55f, 1.0f });
     drawLabel(g, font, m_label + ": " + m_fmt(m_value));
 }
 bool Slider::mouseClicked(double x, double y, int button) {
     if (button != 0 || !hovered((int)x, (int)y)) return false;
-    const double frac = std::clamp((x - m_x) / (double)m_w, 0.0, 1.0);
-    m_value = m_min + frac * (m_max - m_min);
-    if (m_onChange) m_onChange(m_value);
+    m_dragging = true;
+    setValueFromMouse(x);
     return true;
+}
+
+bool Slider::mouseReleased(double, double, int button) {
+    if (button != 0 || !m_dragging) return false;
+    m_dragging = false;
+    return true;
+}
+
+bool Slider::mouseDragged(double x, double, int button, double, double) {
+    if (button != 0 || !m_dragging) return false;
+    setValueFromMouse(x);
+    return true;
+}
+
+void Slider::setValueFromMouse(double x) {
+    const double denom = std::max(1, m_w - 8);
+    setValue((x - (m_x + 4)) / denom);
+}
+
+void Slider::setValue(double value) {
+    const double normalized = std::clamp(value, 0.0, 1.0);
+    const double old = m_value;
+    m_value = m_min + normalized * (m_max - m_min);
+    if (old != m_value && m_onChange) m_onChange(m_value);
 }
 
 // ── CycleButton ──────────────────────────────────────────────────────────────

@@ -108,6 +108,16 @@ int main() {
                 window.captureMouse(true);
             }
         }
+        int dragDx = 0, dragDy = 0;
+        if (mc.screen() && window.consumeMouseDrag(dragDx, dragDy)) {
+            mc.screen()->mouseDragged((double)window.mouseX(), (double)window.mouseY(), 0,
+                                      (double)dragDx, (double)dragDy);
+        }
+        if (window.consumeLButtonReleased()) {
+            if (mc.screen()) {
+                mc.screen()->mouseReleased((double)window.mouseX(), (double)window.mouseY(), 0);
+            }
+        }
 
         auto now = Clock::now();
         double dtMs = std::chrono::duration<double, std::milli>(now - lastTick).count();

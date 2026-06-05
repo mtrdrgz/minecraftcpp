@@ -139,6 +139,10 @@ void Window::onMouseMove(int x, int y) {
         m_ignoreNextMove = true;
         SetCursorPos(screenCenter.x, screenCenter.y);
     } else {
+        if (m_lButtonDown) {
+            m_dragDx += x - m_lastMouseX;
+            m_dragDy += y - m_lastMouseY;
+        }
         m_lastMouseX = x;
         m_lastMouseY = y;
     }
@@ -150,6 +154,20 @@ void Window::onLButtonDown() {
     // user can click widgets) — handled in the main loop, not here. Capturing on
     // every click hid the cursor on the title screen and broke button clicks.
     m_lButtonClicked = true;
+    m_lButtonDown = true;
+    if (!m_mouseCaptured) SetCapture(m_hwnd);
+}
+
+void Window::onLButtonUp() {
+    m_lButtonReleased = true;
+    m_lButtonDown = false;
+    if (!m_mouseCaptured && GetCapture() == m_hwnd) ReleaseCapture();
+}
+
+void Window::clearLButtonState() {
+    m_lButtonDown = false;
+    m_dragDx = m_dragDy = 0;
+    if (!m_mouseCaptured && GetCapture() == m_hwnd) ReleaseCapture();
 }
 
 LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -199,10 +217,16 @@ LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (self) self->onLButtonDown();
         return 0;
 
+    case WM_LBUTTONUP:
+        if (self) self->onLButtonUp();
+        return 0;
+
     case WM_ACTIVATE:
         // Release mouse capture when window loses focus
-        if (self && LOWORD(wp) == WA_INACTIVE)
+        if (self && LOWORD(wp) == WA_INACTIVE) {
+            self->clearLButtonState();
             self->captureMouse(false);
+        }
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);

@@ -15,6 +15,10 @@ public:
 
     virtual void render(render::GuiGraphics& g, render::Font& font, int mouseX, int mouseY) = 0;
     virtual bool mouseClicked(double x, double y, int button) = 0;
+    virtual bool mouseReleased(double x, double y, int button) { (void)x; (void)y; (void)button; return false; }
+    virtual bool mouseDragged(double x, double y, int button, double dx, double dy) {
+        (void)x; (void)y; (void)button; (void)dx; (void)dy; return false;
+    }
 
     void setPos(int x, int y) { m_x = x; m_y = y; }
     void setSize(int w, int h) { m_w = w; m_h = h; }
@@ -46,8 +50,7 @@ private:
     bool m_active = true;
 };
 
-// Slider over [minV, maxV]. Click sets the value to the click fraction (and drags
-// while held is a future refinement). onChange(value) writes back to GameOptions.
+// Slider over [minV, maxV]. Click/drag follows AbstractSliderButton's handle math.
 class Slider final : public AbstractWidget {
 public:
     Slider(int x, int y, int w, int h, std::string label, double value, double minV, double maxV,
@@ -56,11 +59,17 @@ public:
           m_fmt(std::move(fmt)), m_onChange(std::move(onChange)) {}
     void render(render::GuiGraphics& g, render::Font& font, int mx, int my) override;
     bool mouseClicked(double x, double y, int button) override;
+    bool mouseReleased(double x, double y, int button) override;
+    bool mouseDragged(double x, double y, int button, double dx, double dy) override;
 private:
+    void setValueFromMouse(double x);
+    void setValue(double value);
+
     std::string m_label;
     double m_value, m_min, m_max;
     std::function<std::string(double)> m_fmt;
     std::function<void(double)> m_onChange;
+    bool m_dragging = false;
 };
 
 // Cycle button: clicking advances through `choices`. onChange(index) writes back.

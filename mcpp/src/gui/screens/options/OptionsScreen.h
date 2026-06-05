@@ -17,6 +17,8 @@ public:
     void init(Minecraft* mc, int w, int h) override;
     void render(render::GuiGraphics& g, int mx, int my, float pt) override;
     void mouseClicked(double x, double y, int button) override;
+    void mouseReleased(double x, double y, int button) override;
+    void mouseDragged(double x, double y, int button, double dx, double dy) override;
     void setButtonTextures(render::ITexture* n, render::ITexture* h) { m_btnN = n; m_btnH = h; }
 
 protected:
@@ -45,6 +47,8 @@ public:
     void init(Minecraft* mc, int w, int h) override;
     void render(render::GuiGraphics& g, int mx, int my, float pt) override;
     void mouseClicked(double x, double y, int button) override;
+    void mouseReleased(double x, double y, int button) override;
+    void mouseDragged(double x, double y, int button, double dx, double dy) override;
     void setButtonTextures(render::ITexture* n, render::ITexture* h) { m_btnN = n; m_btnH = h; }
     void setBackAction(std::function<void()> f) { m_back = std::move(f); }
 

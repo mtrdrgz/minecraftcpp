@@ -24,6 +24,8 @@ public:
     virtual void render(render::GuiGraphics& g, int mouseX, int mouseY, float partialTick) = 0;
     virtual void keyPressed(int key, int scancode, int mods) {}
     virtual void mouseClicked(double x, double y, int button) {}
+    virtual void mouseReleased(double x, double y, int button) {}
+    virtual void mouseDragged(double x, double y, int button, double dx, double dy) {}
 
     const std::string& title() const { return m_title; }
 

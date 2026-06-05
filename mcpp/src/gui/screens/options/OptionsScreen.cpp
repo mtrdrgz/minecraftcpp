@@ -72,6 +72,14 @@ void OptionsSubScreen::mouseClicked(double x, double y, int button) {
     for (auto& widget : m_widgets) if (widget->mouseClicked(x, y, button)) break;
 }
 
+void OptionsSubScreen::mouseReleased(double x, double y, int button) {
+    for (auto& widget : m_widgets) if (widget->mouseReleased(x, y, button)) break;
+}
+
+void OptionsSubScreen::mouseDragged(double x, double y, int button, double dx, double dy) {
+    for (auto& widget : m_widgets) if (widget->mouseDragged(x, y, button, dx, dy)) break;
+}
+
 // ── OptionsScreen (category grid + FOV) ──────────────────────────────────────
 OptionsScreen::OptionsScreen() : Screen("Options") {}
 
@@ -134,6 +142,14 @@ void OptionsScreen::render(render::GuiGraphics& g, int mx, int my, float pt) {
 
 void OptionsScreen::mouseClicked(double x, double y, int button) {
     for (auto& widget : m_widgets) if (widget->mouseClicked(x, y, button)) break;
+}
+
+void OptionsScreen::mouseReleased(double x, double y, int button) {
+    for (auto& widget : m_widgets) if (widget->mouseReleased(x, y, button)) break;
+}
+
+void OptionsScreen::mouseDragged(double x, double y, int button, double dx, double dy) {
+    for (auto& widget : m_widgets) if (widget->mouseDragged(x, y, button, dx, dy)) break;
 }
 
 // ── Concrete category screens (real options from the Java) ───────────────────
