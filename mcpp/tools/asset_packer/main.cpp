@@ -1,6 +1,6 @@
 //
 // asset_packer — offline tool
-// Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin>
+// Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir]
 //
 // Reads assets/indexes/<id>.json, maps hash -> original path, and writes:
 //
@@ -17,12 +17,14 @@
 
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -36,6 +38,45 @@ struct Entry {
     std::vector<uint8_t> data;
 };
 
+static void addDirectory(std::vector<Entry>& entries,
+                         const fs::path& root,
+                         const std::string& prefix,
+                         bool recursive = true) {
+    if (!fs::exists(root)) {
+        return;
+    }
+    std::vector<fs::path> files;
+    if (recursive) {
+        for (auto& e : fs::recursive_directory_iterator(root)) {
+            if (e.is_regular_file()) {
+                files.push_back(e.path());
+            }
+        }
+    } else {
+        for (auto& e : fs::directory_iterator(root)) {
+            if (e.is_regular_file()) {
+                files.push_back(e.path());
+            }
+        }
+    }
+    std::sort(files.begin(), files.end());
+    for (const fs::path& file : files) {
+        fs::path rel_path = fs::relative(file, root);
+        std::string path_str = prefix;
+        if (!path_str.empty() && path_str.back() != '/') {
+            path_str.push_back('/');
+        }
+        path_str += rel_path.generic_string();
+
+        std::ifstream f(file, std::ios::binary | std::ios::ate);
+        auto sz = f.tellg();
+        f.seekg(0);
+        std::vector<uint8_t> buf(static_cast<size_t>(sz));
+        f.read(reinterpret_cast<char*>(buf.data()), sz);
+        entries.push_back({std::move(path_str), "", std::move(buf)});
+    }
+}
+
 static void write_u16(std::ostream& out, uint16_t v) {
     out.write(reinterpret_cast<const char*>(&v), 2);
 }
@@ -44,14 +85,18 @@ static void write_u32(std::ostream& out, uint32_t v) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 4) {
-        std::cerr << "Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin>\n";
+    if (argc != 4 && argc != 5) {
+        std::cerr << "Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir]\n";
         return 1;
     }
 
     fs::path assets_dir = argv[1];
     fs::path src_assets_dir = argv[2];
     fs::path output_path = argv[3];
+    fs::path data_minecraft_dir;
+    if (argc == 5) {
+        data_minecraft_dir = argv[4];
+    }
 
     std::vector<Entry> entries;
 
@@ -90,20 +135,14 @@ int main(int argc, char* argv[]) {
     // 2. Add files from src_assets_dir (e.g. 26.1.2/src/assets)
     if (fs::exists(src_assets_dir)) {
         std::cout << "Packing from src_assets_dir: " << src_assets_dir << "\n";
-        for (auto& e : fs::recursive_directory_iterator(src_assets_dir)) {
-            if (e.is_regular_file()) {
-                fs::path rel_path = fs::relative(e.path(), src_assets_dir);
-                std::string path_str = rel_path.generic_string();
-                
-                std::ifstream f(e.path(), std::ios::binary | std::ios::ate);
-                auto sz = f.tellg();
-                f.seekg(0);
-                std::vector<uint8_t> buf(static_cast<size_t>(sz));
-                f.read(reinterpret_cast<char*>(buf.data()), sz);
-                
-                entries.push_back({path_str, "", std::move(buf)});
-            }
-        }
+        addDirectory(entries, src_assets_dir, "");
+    }
+
+    // 3. Add data-driven worldgen JSON needed by standalone terrain decoration.
+    if (!data_minecraft_dir.empty() && fs::exists(data_minecraft_dir)) {
+        std::cout << "Packing worldgen data from: " << data_minecraft_dir << "\n";
+        addDirectory(entries, data_minecraft_dir / "worldgen", "data/minecraft/worldgen");
+        addDirectory(entries, data_minecraft_dir / "tags" / "block", "data/minecraft/tags/block", false);
     }
 
     std::cout << "Packing " << entries.size() << " total assets...\n";

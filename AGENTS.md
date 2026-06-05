@@ -253,7 +253,28 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 40 (tasklist pass: fallen-log axis + decoration integration hardening)
+**Last updated**: Session 41 (standalone embedded worldgen/tags data)
+
+**Session 41**: fixed the tasklist standalone-decoration gap. `tools/asset_packer`
+now accepts an optional `data_minecraft_dir` argument and packs
+`data/minecraft/worldgen/**` plus the direct `data/minecraft/tags/block/*.json`
+files into MCAS under stable `data/minecraft/...` keys. The local ignored
+`mcpp/src/assets/assets.bin` was regenerated from `assets/`,
+`26.1.2/src/assets` (absent/skip), and `26.1.2/data/minecraft`; it now contains
+5944 entries and the worldgen/tag JSON needed by decoration. `AssetManager` can
+now list packed paths by prefix. `BlockTags` and `BiomeFeatures` share their disk
+parsers with a new `loadFromJsonEntries` path so embedded JSON and sidecar JSON
+produce the same data. `BiomeDecorator` has an optional JSON asset-reader fallback
+for lazy `placed_feature`/`configured_feature` resolution, and
+`NoiseBasedChunkGenerator::decorationData()` now tries local `26.1.2/data` first
+but falls back to MCAS when the exe is moved. `.gitignore` now permits source files
+under `mcpp/src/assets` to be versioned while keeping extracted/proprietary blobs
+ignored, and `assets/assets.rc` has explicit CMake `OBJECT_DEPENDS` so resource
+objects rebuild when the local pack changes. Added `embedded_worldgen_assets_test`,
+which initializes the embedded resource and verifies 65 biome JSON files and 244
+block tags load/parse from MCAS. Verified with wrapper commands: regenerated
+`assets.bin`, built `asset_packer`, `mcpp`, `embedded_worldgen_assets_test`,
+`biome_decorator_test`, `block_tags_parity`, and `vegetation_demo`; all tests pass.
 
 **Session 40**: first tasklist bug pass focused on generated decoration/log regressions.
 `Blocks` now exposes `getBlockStateId(serializedState)` for canonical states such
@@ -367,9 +388,9 @@ the removed hand-authored approximate generators — port from Java + data only.
    is also verified end-to-end, and add the same coverage for nether/end presets.
 4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
 5. Port placed/configured features and structures only from Java/data definitions. The approximate tree/ore/surface-decoration/structure generators added by another LLM were removed from the build and must not be re-enabled as-is.
-6. Tasklist next: embed `worldgen/*` and `tags/block/*` JSON into the runtime asset
-   pack/loaders so decorations survive moving the exe, then continue the remaining
-   rendering/worldgen/UI items from `C:\Users\Mateo\Desktop\tasklist.txt`.
+6. Tasklist next: continue the remaining rendering/worldgen/UI items from
+   `C:\Users\Mateo\Desktop\tasklist.txt` (notably abnormal gray vegetation/tinting,
+   plant/vine models, ore distribution, chunk-generation stutter/lagback, and menus).
 
 **Known issues / limitations:**
 - Online mode auth not implemented.

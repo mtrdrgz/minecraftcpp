@@ -14,6 +14,38 @@ std::string normalizeId(std::string id) {
     if (id.find(':') == std::string::npos) id = "minecraft:" + id;
     return id;
 }
+
+std::string stemFromPath(const std::string& path) {
+    const std::size_t slash = path.find_last_of("/\\");
+    const std::size_t begin = slash == std::string::npos ? 0 : slash + 1;
+    const std::size_t dot = path.find_last_of('.');
+    const std::size_t end = dot == std::string::npos || dot < begin ? path.size() : dot;
+    return path.substr(begin, end - begin);
+}
+
+bool parseBiomeFeatures(const std::string& text,
+                        std::array<std::vector<std::string>, GenerationStep::COUNT>& steps) {
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(text);
+    } catch (const std::exception&) {
+        return false;
+    }
+    const auto features = j.find("features");
+    if (features == j.end() || !features->is_array()) return false;
+
+    int step = 0;
+    for (const auto& stepArr : *features) {
+        if (step >= GenerationStep::COUNT) break;
+        if (stepArr.is_array()) {
+            for (const auto& v : stepArr) {
+                if (v.is_string()) steps[step].push_back(normalizeId(v.get<std::string>()));
+            }
+        }
+        ++step;
+    }
+    return true;
+}
 } // namespace
 
 BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
@@ -27,27 +59,26 @@ BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
         std::ifstream in(entry.path());
         std::stringstream ss;
         ss << in.rdbuf();
-        nlohmann::json j;
-        try {
-            j = nlohmann::json::parse(ss.str());
-        } catch (const std::exception&) {
-            continue;
-        }
-        const auto features = j.find("features");
-        if (features == j.end() || !features->is_array()) continue;
 
         const std::string biome = "minecraft:" + entry.path().stem().string();
         auto& steps = out.m_biomes[biome];
-        // features is an array of arrays: features[step] = [ "minecraft:x", ... ]
-        int step = 0;
-        for (const auto& stepArr : *features) {
-            if (step >= GenerationStep::COUNT) break;
-            if (stepArr.is_array()) {
-                for (const auto& v : stepArr) {
-                    if (v.is_string()) steps[step].push_back(normalizeId(v.get<std::string>()));
-                }
-            }
-            ++step;
+        if (!parseBiomeFeatures(ss.str(), steps)) {
+            out.m_biomes.erase(biome);
+        }
+    }
+    return out;
+}
+
+BiomeFeatures BiomeFeatures::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
+    BiomeFeatures out;
+    for (const auto& [path, text] : entries) {
+        if (!path.ends_with(".json")) {
+            continue;
+        }
+        const std::string biome = "minecraft:" + stemFromPath(path);
+        auto& steps = out.m_biomes[biome];
+        if (!parseBiomeFeatures(text, steps)) {
+            out.m_biomes.erase(biome);
         }
     }
     return out;

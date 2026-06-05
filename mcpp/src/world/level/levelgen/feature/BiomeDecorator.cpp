@@ -26,6 +26,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -44,6 +45,17 @@ using mc::valueproviders::ClampedInt;
 using mc::valueproviders::TrapezoidInt;
 using mc::valueproviders::IntProviderPtr;
 using json = nlohmann::json;
+
+namespace {
+JsonAssetReader& jsonAssetReader() {
+    static JsonAssetReader reader;
+    return reader;
+}
+} // namespace
+
+void setJsonAssetReader(JsonAssetReader reader) {
+    jsonAssetReader() = std::move(reader);
+}
 
 namespace {
 
@@ -166,10 +178,20 @@ PlacedFeature::FeaturePlacer treePlacer(TreeConfig cfg) {
 
 std::optional<json> loadJsonFile(const std::string& dir, const char* sub, std::string name) {
     name = stripNs(std::move(name));
-    std::ifstream in(dir + "/" + sub + "/" + name + ".json");
-    if (!in) return std::nullopt;
-    std::stringstream ss; ss << in.rdbuf();
-    try { return json::parse(ss.str()); } catch (...) { return std::nullopt; }
+    const std::filesystem::path path = std::filesystem::path(dir) / sub / (name + ".json");
+    std::ifstream in(path);
+    if (in) {
+        std::stringstream ss; ss << in.rdbuf();
+        try { return json::parse(ss.str()); } catch (...) { return std::nullopt; }
+    }
+
+    if (jsonAssetReader()) {
+        const std::string assetPath = path.generic_string();
+        if (auto text = jsonAssetReader()(assetPath)) {
+            try { return json::parse(*text); } catch (...) { return std::nullopt; }
+        }
+    }
+    return std::nullopt;
 }
 
 std::string stateName(const json& j) {

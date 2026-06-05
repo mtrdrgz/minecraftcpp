@@ -103,6 +103,25 @@ set(MC_SOURCES
     ../vendor/stb/stb_vorbis.c
 )
 
+set(MC_ASSET_RESOURCE_DEPS
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/block_atlas.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/block_atlas.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/block_states.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/ascii.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_logo.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_button.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_button_hl.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_dirt.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_edition.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/splashes.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_lang.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_access.png"
+)
+set_source_files_properties(assets/assets.rc PROPERTIES
+    OBJECT_DEPENDS "${MC_ASSET_RESOURCE_DEPS}"
+)
+
 add_executable(mcpp WIN32 ${MC_SOURCES})
 
 if(MSVC)
@@ -322,6 +341,23 @@ if(WIN32)
     target_link_libraries(biome_decorator_test PRIVATE bcrypt)
 endif()
 set_target_properties(biome_decorator_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Standalone resource smoke: the exe-embedded MCAS pack must carry enough
+# data/minecraft JSON for worldgen decoration without a sidecar 26.1.2 folder.
+add_executable(embedded_worldgen_assets_test
+    world/level/levelgen/feature/EmbeddedWorldgenAssetsTest.cpp
+    assets/AssetPack.cpp
+    assets/AssetManager.cpp
+    assets/assets.rc
+    world/level/block/BlockTags.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+)
+target_include_directories(embedded_worldgen_assets_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(embedded_worldgen_assets_test PRIVATE nlohmann_json)
+set_target_properties(embedded_worldgen_assets_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

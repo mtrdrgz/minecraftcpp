@@ -5,6 +5,7 @@
 #include "RandomState.h"
 #include "SurfaceSystem.h"
 #include "SurfaceRuleData.h"
+#include "../../../assets/AssetManager.h"
 #include "../block/Blocks.h"
 #include "../block/BlockTags.h"
 #include "../block/BlockState.h"
@@ -15,7 +16,10 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace mc::levelgen {
 
@@ -285,6 +289,47 @@ namespace {
         bool loaded = false;
     };
 
+    std::vector<std::pair<std::string, std::string>> readJsonAssetEntries(std::string_view prefix) {
+        std::vector<std::pair<std::string, std::string>> entries;
+        auto& assets = AssetManager::instance();
+        for (const std::string& path : assets.list(prefix)) {
+            if (!path.ends_with(".json")) {
+                continue;
+            }
+            std::vector<uint8_t> bytes = assets.readRaw(path);
+            if (bytes.empty()) {
+                continue;
+            }
+            entries.emplace_back(path, std::string(bytes.begin(), bytes.end()));
+        }
+        return entries;
+    }
+
+    bool loadEmbeddedDecorationData(DecorationData& out) {
+        const auto biomeEntries = readJsonAssetEntries("data/minecraft/worldgen/biome/");
+        const auto tagEntries = readJsonAssetEntries("data/minecraft/tags/block/");
+        if (biomeEntries.empty() || tagEntries.empty()) {
+            return false;
+        }
+
+        try {
+            feature::setJsonAssetReader([](std::string_view path) -> std::optional<std::string> {
+                std::vector<uint8_t> bytes = AssetManager::instance().readRaw(path);
+                if (bytes.empty()) {
+                    return std::nullopt;
+                }
+                return std::string(bytes.begin(), bytes.end());
+            });
+            out.biomeFeatures = feature::BiomeFeatures::loadFromJsonEntries(biomeEntries);
+            out.blockTags = block::BlockTags::loadFromJsonEntries(tagEntries);
+            out.worldgenDir = "data/minecraft/worldgen";
+            out.loaded = out.biomeFeatures.biomeCount() > 0 && out.blockTags.tagCount() > 0;
+        } catch (...) {
+            out.loaded = false;
+        }
+        return out.loaded;
+    }
+
     const DecorationData& decorationData() {
         namespace fs = std::filesystem;
         static const DecorationData data = [] {
@@ -314,6 +359,9 @@ namespace {
                 if (out.loaded) {
                     break;
                 }
+            }
+            if (!out.loaded) {
+                loadEmbeddedDecorationData(out);
             }
             return out;
         }();

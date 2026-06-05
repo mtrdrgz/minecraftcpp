@@ -14,6 +14,7 @@
 #include <array>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mc::levelgen::feature {
@@ -22,6 +23,7 @@ class BiomeFeatures {
 public:
     // Reads every biome/*.json under `dir`, recording its features[step][i] keys.
     static BiomeFeatures loadFromDirectory(const std::string& dir);
+    static BiomeFeatures loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries);
 
     bool hasBiome(const std::string& biome) const;
 
