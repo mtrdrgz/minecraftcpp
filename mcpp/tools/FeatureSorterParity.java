@@ -2,9 +2,9 @@
 //
 // This emits the vanilla StepFeatureData order for all 26.1.2 biomes using a
 // deterministic lexicographic biome-source order. The C++ test rebuilds the
-// same graph from data/minecraft/worldgen/biome/*.json and compares each
-// step-local feature index, which is the value fed to
-// WorldgenRandom.setFeatureSeed(decorationSeed, index, step).
+// same graph from data/minecraft/worldgen/biome/*.json and compares both the
+// number of per-step buckets and each step-local feature index, which is the
+// value fed to WorldgenRandom.setFeatureSeed(decorationSeed, index, step).
 //
 //   tools/run_groundtruth.ps1 -Tool FeatureSorterParity -Out mcpp/build/feature_sorter.tsv
 
@@ -47,6 +47,7 @@ public class FeatureSorterParity {
             holder -> holder.value().getGenerationSettings().features(),
             true
         );
+        out.println("STEPS\t" + featuresPerStep.size());
 
         for (int step = 0; step < featuresPerStep.size(); ++step) {
             List<PlacedFeature> features = featuresPerStep.get(step).features();
