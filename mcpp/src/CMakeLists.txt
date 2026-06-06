@@ -455,6 +455,20 @@ set_target_properties(carved_terrain_column_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# FeatureSorter parity: global per-step PlacedFeature order/indexes against the
+# real Java FeatureSorter. This target is isolated from mcpp runtime and only
+# builds the data loader plus the parity harness.
+add_executable(feature_sorter_parity
+    world/level/levelgen/feature/FeatureSorterParityTest.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+)
+target_include_directories(feature_sorter_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(feature_sorter_parity PRIVATE nlohmann_json)
+set_target_properties(feature_sorter_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # BlockStateProvider parity (Simple / Weighted / NoiseThreshold). Also covers
 # raw NormalNoise.getValue (the NOISE cases). `--cases <tsv>` compares against
 # tools/BlockStateProviderParity.java (the real decompiled providers).
