@@ -32,7 +32,26 @@ jobs:
         run: cmake -S mcpp -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>"
 
       - name: Build mcpp only
-        run: cmake --build build --config Release --target mcpp --parallel 4
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cmake --build build --config Release --target mcpp --parallel 4 *> build-output.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Host '--- build-output tail ---'
+            Get-Content build-output.log -Tail 220
+            Write-Host '--- end build-output tail ---'
+            exit $code
+          }
+          Get-Content build-output.log -Tail 80
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-log
+          path: build-output.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Package
         run: |
