@@ -1,0 +1,54 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-release.yml'
+      - 'mcpp/CMakeLists.txt'
+      - 'mcpp/cmake/**'
+      - 'mcpp/src/**'
+      - 'mcpp/vendor/**'
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Configure
+        run: cmake -S mcpp -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>"
+
+      - name: Build mcpp only
+        run: cmake --build build --config Release --target mcpp --parallel 4
+
+      - name: Package
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $short = '${{ github.sha }}'.Substring(0, 7)
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $exe = 'build/Release/mcpp.exe'
+          if (!(Test-Path $exe)) { $exe = 'build/mcpp.exe' }
+          if (!(Test-Path $exe)) { throw 'mcpp.exe was not produced' }
+          Copy-Item $exe 'dist/mcpp.exe'
+          (Get-FileHash 'dist/mcpp.exe' -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -Encoding ASCII 'dist/mcpp.exe.sha256'
+          Compress-Archive -Path 'dist/mcpp.exe','dist/mcpp.exe.sha256' -DestinationPath "dist/mcpp-$short-windows-x64.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpp-windows-x64
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
