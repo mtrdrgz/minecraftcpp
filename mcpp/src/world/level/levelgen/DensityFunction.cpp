@@ -633,7 +633,10 @@ DensityFunctionPtr peaksAndValleys(DensityFunctionPtr input) {
 }
 
 double peaksAndValleys(double weirdness) {
-    return -(std::abs(std::abs(weirdness) - 0.6666667) - 0.33333334) * 3.0;
+    // RIDGES_FOLDED density function (NoiseRouterData.peaksAndValleys(DensityFunction)):
+    // double arithmetic mul(add(abs(add(abs(w), -2/3)), -1/3), -3.0). The -2/3 and -1/3
+    // are the DOUBLE constants, not the float helper's 0.6666667F / 0.33333334F.
+    return (std::abs(std::abs(weirdness) - 0.6666666666666666) - 0.3333333333333333) * -3.0;
 }
 
 } // namespace DensityFunctions

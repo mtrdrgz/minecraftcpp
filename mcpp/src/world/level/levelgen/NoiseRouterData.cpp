@@ -294,7 +294,9 @@ NoiseRouter overworld(RandomState& randomState, bool largeBiomes, bool amplified
     auto ridgesCoordinate = densityCoordinate(ridgesFolded);
 
     auto offset = DensityFunctions::add(
-        DensityFunctions::constant(-0.50375),
+        // Java: DensityFunctions.constant(-0.50375F) — a float literal widened to
+        // double (= -0.5037500262260437), NOT the exact double -0.50375.
+        DensityFunctions::constant(static_cast<double>(-0.50375f)),
         spline(TerrainProvider::overworldOffset(continentsCoordinate, erosionCoordinate, ridgesCoordinate, amplified)));
     auto factor = spline(TerrainProvider::overworldFactor(continentsCoordinate, erosionCoordinate, weirdnessCoordinate, ridgesCoordinate, amplified));
     auto depth = offsetToDepth(offset);
