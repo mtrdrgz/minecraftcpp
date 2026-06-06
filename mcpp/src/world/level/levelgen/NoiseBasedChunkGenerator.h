@@ -7,8 +7,12 @@
 #include "NoiseRouter.h"
 #include "RandomSource.h"
 #include "SurfaceRules.h"
+#include "feature/BiomeFeatures.h"
+#include "feature/FeatureSorter.h"
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace mc::levelgen {
 
@@ -29,8 +33,21 @@ public:
     void applyCarvers(LevelChunk& chunk) const;
 
     // Block-resolution biome at a world position (BiomeManager zoomer), as used by
-    // the decoration step (applyBiomeDecoration) and gameplay biome queries.
+    // gameplay biome queries.
     std::string getBiome(int blockX, int blockY, int blockZ) const;
+
+    // Quart-resolution noise biome as stored in Java LevelChunkSection biome
+    // containers. Biome decoration uses these, not the block-resolution zoomer.
+    std::string getNoiseBiome(int quartX, int quartY, int quartZ) const;
+
+    // Java ChunkGenerator memoizes FeatureSorter.buildFeaturesPerStep over
+    // List.copyOf(biomeSource.possibleBiomes()). The C++ generator stores the
+    // same source biome set and sorted per-step feature data once worldgen JSON
+    // has been loaded by the engine.
+    void initializeDecorationFeatures(const feature::BiomeFeatures& biomeFeatures);
+    bool hasDecorationFeatures() const noexcept { return m_decorationFeaturesReady; }
+    const std::vector<std::string>& decorationSourceBiomes() const noexcept { return m_decorationSourceBiomes; }
+    const std::vector<feature::FeatureSorter::StepFeatureData>& decorationFeaturesPerStep() const noexcept { return m_decorationFeaturesPerStep; }
 
     int getSeaLevel()  const { return m_settings.seaLevel; }
     int getMinY()      const { return m_settings.noiseSettings.minY; }
@@ -50,6 +67,9 @@ private:
     SurfaceRules::RuleSourcePtr m_surfaceRuleSource;
     std::unique_ptr<BiomeSource> m_biomeSource;
     std::unique_ptr<BiomeManager> m_biomeManager;
+    std::vector<std::string> m_decorationSourceBiomes;
+    std::vector<feature::FeatureSorter::StepFeatureData> m_decorationFeaturesPerStep;
+    bool m_decorationFeaturesReady = false;
 };
 
 } // namespace mc::levelgen
