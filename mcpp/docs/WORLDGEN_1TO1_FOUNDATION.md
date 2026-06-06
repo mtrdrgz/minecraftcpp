@@ -176,13 +176,22 @@ Ground truth comes from the REAL decompiled 26.1.2 classes, never a reimplementa
 - A C++ `*_parity` target reads the TSV with `--cases <tsv>` and reports
   `cases=N mismatches=M`.
 
-Verified working: `worldgen_random_parity` vs `WorldgenRandomParity` →
-`cases=540 mismatches=0` (the WorldgenRandom seeding primitive every later stage
-depends on is bit-exact).
+Verified working:
 
-Next ground-truth targets, in dependency order: final-density / noise-router
-samples (validates the `RandomState` wiring in §6 — the deepest currently enabled
-stage), climate sampler samples, then the §2 decoration seed-order plan.
+- `worldgen_random_parity` vs `WorldgenRandomParity`:
+  `cases=540 mismatches=0` (the WorldgenRandom seeding primitive every later
+  stage depends on is bit-exact).
+- `density_parity` vs `DensityParity`:
+  `cases=488 mismatches=0` for the seed-wired overworld router functions
+  (`temperature`, `vegetation`, `continents`, `erosion`, `depth`, `ridges`,
+  `final_density`).
+- `climate_biome_parity` vs `ClimateBiomeParity`:
+  `cases=56 mismatches=0` for Java `RandomState` + `Climate.Sampler` +
+  `MultiNoiseBiomeSourceParameterList.Preset.OVERWORLD`, comparing all six
+  quantized climate coordinates and the selected biome id.
+
+Next ground-truth target in dependency order: the §2 decoration seed-order plan
+(`decoration_seed` / step / global feature index / feature seed / feature id).
 
 ## What not to do
 

@@ -311,6 +311,34 @@ set_target_properties(density_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Overworld Climate.Sampler + MultiNoiseBiomeSource preset parity. This consumes
+# tools/ClimateBiomeParity.java output and validates quantized climate targets
+# plus selected biome ids after the NoiseRouter has been seed-wired.
+add_executable(climate_biome_parity
+    world/level/levelgen/ClimateBiomeParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+)
+target_include_directories(climate_biome_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(climate_biome_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(climate_biome_parity PRIVATE bcrypt)
+endif()
+set_target_properties(climate_biome_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # BlockStateProvider parity (Simple / Weighted / NoiseThreshold). Also covers
 # raw NormalNoise.getValue (the NOISE cases). `--cases <tsv>` compares against
 # tools/BlockStateProviderParity.java (the real decompiled providers).

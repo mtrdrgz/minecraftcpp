@@ -11,6 +11,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$processPath = [System.Environment]::GetEnvironmentVariable("Path", "Process")
+if ([string]::IsNullOrEmpty($processPath)) {
+    $processPath = [System.Environment]::GetEnvironmentVariable("PATH", "Process")
+}
+if (-not [string]::IsNullOrEmpty($processPath)) {
+    [System.Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+    [System.Environment]::SetEnvironmentVariable("Path", $processPath, "Process")
+}
+
 if ([string]::IsNullOrWhiteSpace($LogPath)) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $LogPath = Join-Path (Get-Location) "build\logs\run-$stamp.log"

@@ -303,7 +303,26 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 48 (in-game pause screen)
+**Last updated**: Session 49 (NoiseRouter + climate biome parity)
+
+**Session 49**: pulled `origin/main` to `208c9c0` and continued the strict
+Java-vs-C++ worldgen parity track. Fixed `mcpp/tools/run_with_timeout.ps1` so it
+normalizes duplicate `Path`/`PATH` process environment entries before
+`Start-Process`; this keeps the mandatory timeout wrapper usable in the Codex
+desktop environment. Re-generated real Java `DensityParity` cases with
+`run_groundtruth.ps1` and verified `density_parity`: `DensityRouter cases=488
+mismatches=0`, so the seed-wired overworld `NoiseRouter` functions
+(`temperature` through `final_density`) are bit-exact for the sampled cases.
+Added the next parity stage: `mcpp/tools/ClimateBiomeParity.java` emits real
+Java `RandomState` + `Climate.Sampler` +
+`MultiNoiseBiomeSourceParameterList.Preset.OVERWORLD` rows, and
+`climate_biome_parity` compares all six quantized climate target coordinates
+plus the selected biome id. Verified with wrapper commands: generated 56 Java
+rows, built `climate_biome_parity`, and ran it with `ClimateBiome cases=56
+mismatches=0`. Caveat: the Java ground-truth runner needed to be executed outside
+the Codex filesystem sandbox because JDK 25's `toRealPath()` on
+`26.1.2/jdk25/conf/security/java.security` is denied inside the sandbox; normal
+C++ builds/tests ran through the wrapper.
 
 **Session 48**: fixed the tasklist UI bug requiring an in-game pause menu. Added
 `gui/screens/PauseScreen` and wired ESC as an edge-trigger in `main.cpp`: when no
@@ -547,11 +566,12 @@ the removed hand-authored approximate generators — port from Java + data only.
    DONE (Session 30): proven byte-identical to the real Java output (7593 entries,
    all quantized longs + biome ids + order match exactly). See `overworld_biome_parity`.
 2. Split/rename `BiomeSource` into the Java-shaped roles (`BiomeSource`, `MultiNoiseBiomeSource`, parameter-list preset provider) instead of leaving the current combined wrapper.
-3. Biome *selection* parity is now covered for the overworld preset (Session 30:
-   `Climate::RTree` ported and verified against the real Java RTree over 300k
-   targets incl. all 4155 distance-tie cases). Still TODO: wire the real noise
-   router so the *sampled* climate (temperature/humidity/... density functions)
-   is also verified end-to-end, and add the same coverage for nether/end presets.
+3. Biome *selection* parity is now covered for the overworld preset. Session 30
+   verified `Climate::RTree` against the real Java RTree over 300k targets incl.
+   all 4155 distance-tie cases. Session 49 verified the seed-wired sampled
+   overworld climate end-to-end (`density_parity`: 488/0 mismatches;
+   `climate_biome_parity`: 56/0 mismatches for quantized target + biome id).
+   Still TODO: add the same coverage for nether/end presets.
 4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
 5. Port placed/configured features and structures only from Java/data definitions. The approximate ore/surface-decoration/structure generators added by another LLM must not be re-enabled as-is; `TreeGen.cpp` remains compiled only for the tree primitives used by the data-driven `BiomeDecorator`.
 6. Tasklist next: continue the remaining rendering/worldgen/UI items from
