@@ -10,12 +10,20 @@ import net.minecraft.data.registries.VanillaRegistries;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
+import net.minecraft.world.level.levelgen.Noises;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
 
 public class DensityParity {
     static String bits(double v) { return Long.toString(Double.doubleToRawLongBits(v)); }
 
     public static void main(String[] args) {
+        // Bootstrap installs a Log4j redirect on System.out that prefixes every line
+        // ("[..] [main/INFO]: [STDOUT]: ..."), which would corrupt the TSV. Capture
+        // the real stdout BEFORE bootStrap and emit through it.
+        final java.io.PrintStream out = System.out;
         net.minecraft.SharedConstants.tryDetectVersion(); // DataFixerUpper needs the game version
         net.minecraft.server.Bootstrap.bootStrap();
         HolderLookup.Provider holders = VanillaRegistries.createLookup();
@@ -37,10 +45,29 @@ public class DensityParity {
             for (int[] c : coords) {
                 DensityFunction.FunctionContext ctx = new DensityFunction.SinglePointContext(c[0], c[1], c[2]);
                 for (int i = 0; i < fns.length; i++) {
-                    System.out.println(seed + "\t" + c[0] + "\t" + c[1] + "\t" + c[2] + "\t" + names[i]
+                    out.println(seed + "\t" + c[0] + "\t" + c[1] + "\t" + c[2] + "\t" + names[i]
                         + "\t" + bits(fns[i].compute(ctx)));
                 }
             }
+
+            // Raw seeded-noise probes: isolate noise seeding/sampling from the
+            // density-function wiring. Each is rs.getOrCreateNoise(key).getValue(x,y,z).
+            @SuppressWarnings("unchecked")
+            ResourceKey<NormalNoise.NoiseParameters>[] rawKeys =
+                new ResourceKey[]{ Noises.SHIFT, Noises.TEMPERATURE, Noises.CONTINENTALNESS, Noises.EROSION, Noises.RIDGE };
+            String[] rawNames = { "raw:offset", "raw:temperature", "raw:continentalness", "raw:erosion", "raw:ridge" };
+            for (int[] c : coords) {
+                for (int i = 0; i < rawKeys.length; i++) {
+                    double v = rs.getOrCreateNoise(rawKeys[i]).getValue(c[0], c[1], c[2]);
+                    out.println(seed + "\t" + c[0] + "\t" + c[1] + "\t" + c[2] + "\t" + rawNames[i] + "\t" + bits(v));
+                }
+            }
+
+            // Positional-chain probes (forkPositional + fromHashOf): the seeding
+            // primitives worldgen_random_parity does NOT cover. Emitted as raw longs.
+            var f = new net.minecraft.world.level.levelgen.XoroshiroRandomSource(seed).forkPositional();
+            out.println(seed + "\t0\t0\t0\tfork:minecraft:offset\t" + f.fromHashOf("minecraft:offset").nextLong());
+            out.println(seed + "\t0\t0\t0\tfork:octave_-3\t" + f.fromHashOf("octave_-3").nextLong());
         }
     }
 }

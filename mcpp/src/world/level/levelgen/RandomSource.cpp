@@ -445,11 +445,19 @@ XoroshiroRandomSource::XoroshiroRandomSource(int64_t seedLo, int64_t seedHi)
 }
 
 std::shared_ptr<RandomSource> XoroshiroRandomSource::fork() {
-    return std::make_shared<XoroshiroRandomSource>(m_randomNumberGenerator.nextLong(), m_randomNumberGenerator.nextLong());
+    // Java evaluates the two nextLong() args left-to-right (seedLo then seedHi).
+    // C++ argument evaluation order is unspecified (clang/x64 is right-to-left),
+    // which would swap seedLo/seedHi and desync EVERY positional-derived noise.
+    const int64_t seedLo = m_randomNumberGenerator.nextLong();
+    const int64_t seedHi = m_randomNumberGenerator.nextLong();
+    return std::make_shared<XoroshiroRandomSource>(seedLo, seedHi);
 }
 
 std::shared_ptr<PositionalRandomFactory> XoroshiroRandomSource::forkPositional() {
-    return std::make_shared<XoroshiroPositionalRandomFactory>(m_randomNumberGenerator.nextLong(), m_randomNumberGenerator.nextLong());
+    // See fork(): force Java's left-to-right seedLo/seedHi evaluation order.
+    const int64_t seedLo = m_randomNumberGenerator.nextLong();
+    const int64_t seedHi = m_randomNumberGenerator.nextLong();
+    return std::make_shared<XoroshiroPositionalRandomFactory>(seedLo, seedHi);
 }
 
 void XoroshiroRandomSource::setSeed(int64_t seed) {

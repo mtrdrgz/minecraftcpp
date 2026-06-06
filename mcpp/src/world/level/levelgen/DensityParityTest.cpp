@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -77,27 +78,39 @@ int main(int argc, char** argv) {
         cases.push_back(std::move(c));
     }
 
-    // Build the router once per distinct seed (in first-seen order).
+    // Build the router once per distinct seed (in first-seen order). Keep the
+    // RandomState alive so raw-noise probes (raw:<key>) can call getOrCreateNoise.
     long long curSeed = 0; bool have = false;
     NoiseRouter router;
+    std::unique_ptr<RandomState> rs;
     int total = 0, mismatch = 0, shown = 0;
     for (const Case& c : cases) {
         if (!have || c.seed != curSeed) {
-            RandomState rs(NoiseGeneratorSettings::overworld(), static_cast<std::uint64_t>(c.seed));
-            router = NoiseRouterData::overworld(rs, false, false);
+            rs = std::make_unique<RandomState>(NoiseGeneratorSettings::overworld(), static_cast<std::uint64_t>(c.seed));
+            router = NoiseRouterData::overworld(*rs, false, false);
             curSeed = c.seed; have = true;
         }
-        DensityFunctionPtr fn = pick(router, c.fn);
-        if (!fn) { std::cerr << "unknown function: " << c.fn << "\n"; return 2; }
-        const double v = fn->compute(DensityFunctionContext{ c.x, c.y, c.z });
-        const std::uint64_t got = rawBits(v);
+        std::uint64_t got;
+        if (c.fn.rfind("fork:", 0) == 0) {
+            // Positional-chain probe: XoroshiroRandomSource(seed).forkPositional().fromHashOf(key).nextLong().
+            const std::string key = c.fn.substr(5);
+            auto factory = XoroshiroRandomSource(static_cast<std::int64_t>(c.seed)).forkPositional();
+            got = static_cast<std::uint64_t>(factory->fromHashOf(key)->nextLong());
+        } else if (c.fn.rfind("raw:", 0) == 0) {
+            got = rawBits(rs->getOrCreateNoise(c.fn.substr(4))->getValue(c.x, c.y, c.z));
+        } else {
+            DensityFunctionPtr fn = pick(router, c.fn);
+            if (!fn) { std::cerr << "unknown function: " << c.fn << "\n"; return 2; }
+            got = rawBits(fn->compute(DensityFunctionContext{ c.x, c.y, c.z }));
+        }
         ++total;
         if (got != c.bits) {
             ++mismatch;
-            if (shown < 12) {
-                double exp; std::uint64_t eb = c.bits; std::memcpy(&exp, &eb, 8);
+            if (shown < 20 || c.fn.rfind("fork:", 0) == 0) {
+                double g, e; std::memcpy(&g, &got, 8); std::uint64_t eb = c.bits; std::memcpy(&e, &eb, 8);
                 std::cerr << "MISMATCH seed=" << c.seed << " (" << c.x << "," << c.y << "," << c.z << ") "
-                          << c.fn << "  got=" << v << " expected=" << exp << "\n";
+                          << c.fn << "  got=" << g << "/" << static_cast<long long>(got)
+                          << " expected=" << e << "/" << static_cast<long long>(c.bits) << "\n";
                 ++shown;
             }
         }
