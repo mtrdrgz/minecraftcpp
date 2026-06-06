@@ -1,11 +1,32 @@
 #include "BiomeSource.h"
 #include "OverworldBiomeBuilder.h"
 
+#include <set>
+
 namespace mc::levelgen {
+
+namespace {
+std::vector<std::string> distinctBiomeIdsInEncounterOrder(const std::vector<Climate::ParameterList<std::string>::Entry>& entries) {
+    std::set<std::string> seen;
+    std::vector<std::string> out;
+    for (const auto& entry : entries) {
+        const std::string& biome = entry.second;
+        if (seen.insert(biome).second) {
+            out.push_back(biome);
+        }
+    }
+    return out;
+}
+} // namespace
 
 BiomeSource::BiomeSource(const NoiseRouter& router) : m_router(router) {
     m_parameters = Climate::ParameterList<std::string>(buildOverworldBiomePreset());
+    m_possibleBiomes = distinctBiomeIdsInEncounterOrder(m_parameters.values());
     m_overworldPresetComplete = true;
+}
+
+std::vector<std::string> BiomeSource::collectOverworldPossibleBiomes() {
+    return distinctBiomeIdsInEncounterOrder(buildOverworldBiomePreset());
 }
 
 std::string BiomeSource::getBiomeAt(int blockX, int blockY, int blockZ) const {
