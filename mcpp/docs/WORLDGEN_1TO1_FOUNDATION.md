@@ -161,6 +161,29 @@ Suggested stages:
 
 Minimum initial output: per-section block hash. Later output: exact block diffs.
 
+#### Harness setup (working)
+
+Ground truth comes from the REAL decompiled 26.1.2 classes, never a reimplementation:
+
+- Runtime (git-ignored under `26.1.2/`, fetched per AGENTS.md): `client.jar`
+  (v69 bytecode), `libs/*.jar` (datafixerupper/guava/fastutil/… from the version
+  manifest `libraries[]`, required at runtime — even `XoroshiroRandomSource`
+  pulls in `com.mojang.serialization.Codec`), and a JDK 25 under `26.1.2/jdk25/`.
+- A Java generator in `mcpp/tools/<Name>.java` prints a TSV (raw IEEE bits for
+  floats/doubles so the comparison is exact).
+- `mcpp/tools/run_groundtruth.ps1 -Tool <Name> -Out <tsv>` compiles + runs it
+  against the correct classpath.
+- A C++ `*_parity` target reads the TSV with `--cases <tsv>` and reports
+  `cases=N mismatches=M`.
+
+Verified working: `worldgen_random_parity` vs `WorldgenRandomParity` →
+`cases=540 mismatches=0` (the WorldgenRandom seeding primitive every later stage
+depends on is bit-exact).
+
+Next ground-truth targets, in dependency order: final-density / noise-router
+samples (validates the `RandomState` wiring in §6 — the deepest currently enabled
+stage), climate sampler samples, then the §2 decoration seed-order plan.
+
 ## What not to do
 
 Do not add new visual approximations to make the world look fuller.
