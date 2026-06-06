@@ -34,10 +34,20 @@ public:
     // Whether `biome` lists `featureKey` in `step` (the minecraft:biome filter).
     bool biomeHasFeature(const std::string& biome, int step, const std::string& featureKey) const;
 
+    // Java FeatureSorter uses max(features().size()) across its feature sources,
+    // including trailing empty/missing steps. This preserves the original JSON
+    // array length for each biome instead of inferring it from non-empty steps.
+    int stepCountForBiome(const std::string& biome) const;
+
     std::size_t biomeCount() const { return m_biomes.size(); }
 
 private:
-    std::map<std::string, std::array<std::vector<std::string>, GenerationStep::COUNT>> m_biomes;
+    struct BiomeEntry {
+        std::array<std::vector<std::string>, GenerationStep::COUNT> steps;
+        int stepCount = 0;
+    };
+
+    std::map<std::string, BiomeEntry> m_biomes;
 };
 
 } // namespace mc::levelgen::feature
