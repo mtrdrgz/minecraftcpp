@@ -47,10 +47,9 @@ public:
             int step = 0;
             std::string feature;
 
-            friend bool operator<(const FeatureData& a, const FeatureData& b) {
-                if (a.step != b.step) return a.step < b.step;
-                if (a.featureIndex != b.featureIndex) return a.featureIndex < b.featureIndex;
-                return a.feature < b.feature;
+            bool operator<(const FeatureData& other) const {
+                if (step != other.step) return step < other.step;
+                return featureIndex < other.featureIndex;
             }
         };
 
@@ -61,10 +60,10 @@ public:
 
         for (const std::string& source : featureSources) {
             std::vector<FeatureData> featureList;
+            maxStep = std::max(maxStep, biomeFeatures.stepCountForBiome(source));
 
             for (int step = 0; step < GenerationStep::COUNT; ++step) {
                 const auto& stepFeatures = biomeFeatures.featuresForStep(source, step);
-                if (!stepFeatures.empty()) maxStep = std::max(maxStep, step + 1);
 
                 for (const std::string& feature : stepFeatures) {
                     auto [it, inserted] = featureIndex.emplace(feature, nextFeatureIndex);
@@ -100,7 +99,6 @@ public:
 
         std::reverse(sortedFeatures.begin(), sortedFeatures.end());
 
-        if (maxStep == 0) maxStep = GenerationStep::COUNT;
         std::vector<StepFeatureData> out(static_cast<std::size_t>(maxStep));
         for (const FeatureData& data : sortedFeatures) {
             if (data.step >= 0 && data.step < maxStep) {

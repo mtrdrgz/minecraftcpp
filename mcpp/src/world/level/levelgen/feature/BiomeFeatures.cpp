@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -24,7 +25,8 @@ std::string stemFromPath(const std::string& path) {
 }
 
 bool parseBiomeFeatures(const std::string& text,
-                        std::array<std::vector<std::string>, GenerationStep::COUNT>& steps) {
+                        std::array<std::vector<std::string>, GenerationStep::COUNT>& steps,
+                        int& stepCount) {
     nlohmann::json j;
     try {
         j = nlohmann::json::parse(text);
@@ -34,6 +36,7 @@ bool parseBiomeFeatures(const std::string& text,
     const auto features = j.find("features");
     if (features == j.end() || !features->is_array()) return false;
 
+    stepCount = std::min(static_cast<int>(features->size()), static_cast<int>(GenerationStep::COUNT));
     int step = 0;
     for (const auto& stepArr : *features) {
         if (step >= GenerationStep::COUNT) break;
@@ -61,8 +64,8 @@ BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
         ss << in.rdbuf();
 
         const std::string biome = "minecraft:" + entry.path().stem().string();
-        auto& steps = out.m_biomes[biome];
-        if (!parseBiomeFeatures(ss.str(), steps)) {
+        auto& biomeEntry = out.m_biomes[biome];
+        if (!parseBiomeFeatures(ss.str(), biomeEntry.steps, biomeEntry.stepCount)) {
             out.m_biomes.erase(biome);
         }
     }
@@ -76,8 +79,8 @@ BiomeFeatures BiomeFeatures::loadFromJsonEntries(const std::vector<std::pair<std
             continue;
         }
         const std::string biome = "minecraft:" + stemFromPath(path);
-        auto& steps = out.m_biomes[biome];
-        if (!parseBiomeFeatures(text, steps)) {
+        auto& biomeEntry = out.m_biomes[biome];
+        if (!parseBiomeFeatures(text, biomeEntry.steps, biomeEntry.stepCount)) {
             out.m_biomes.erase(biome);
         }
     }
@@ -92,7 +95,7 @@ const std::vector<std::string>& BiomeFeatures::featuresForStep(const std::string
     static const std::vector<std::string> empty;
     auto it = m_biomes.find(biome);
     if (it == m_biomes.end() || step < 0 || step >= GenerationStep::COUNT) return empty;
-    return it->second[step];
+    return it->second.steps[step];
 }
 
 bool BiomeFeatures::biomeHasFeature(const std::string& biome, int step, const std::string& featureKey) const {
@@ -101,6 +104,11 @@ bool BiomeFeatures::biomeHasFeature(const std::string& biome, int step, const st
         if (k == featureKey) return true;
     }
     return false;
+}
+
+int BiomeFeatures::stepCountForBiome(const std::string& biome) const {
+    auto it = m_biomes.find(biome);
+    return it == m_biomes.end() ? 0 : it->second.stepCount;
 }
 
 } // namespace mc::levelgen::feature
