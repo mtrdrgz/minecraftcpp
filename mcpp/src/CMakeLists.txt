@@ -285,6 +285,32 @@ set_target_properties(world_placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# NoiseRouter / RandomState density parity: samples the seed-wired overworld
+# router (temperature..final_density) against tools/DensityParity.java (the real
+# decompiled RandomState). Validates audit #6 (mapAll / NoiseWiringHelper wiring).
+add_executable(density_parity
+    world/level/levelgen/DensityParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+)
+target_include_directories(density_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(density_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(density_parity PRIVATE bcrypt)
+endif()
+set_target_properties(density_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # BlockStateProvider parity (Simple / Weighted / NoiseThreshold). Also covers
 # raw NormalNoise.getValue (the NOISE cases). `--cases <tsv>` compares against
 # tools/BlockStateProviderParity.java (the real decompiled providers).

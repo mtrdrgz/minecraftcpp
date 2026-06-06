@@ -38,10 +38,18 @@ $cp = "$classes;$jar;$libs\*"
 if ($LASTEXITCODE -ne 0) { throw "javac failed for $Tool" }
 
 New-Item -ItemType Directory -Force (Split-Path -Parent $Out) | Out-Null
+# JVM deprecation warnings (e.g. joml's sun.misc.Unsafe) print to stderr; route
+# them to a log so ErrorActionPreference=Stop doesn't treat them as fatal, and
+# write stdout as ASCII (PowerShell's '>' default is UTF-16, which a byte-reading
+# C++ test would choke on).
+$errLog = "$Out.stderr.log"
+$ErrorActionPreference = 'Continue'
 if ([string]::IsNullOrWhiteSpace($ToolArgs)) {
-    & "$bin\java.exe" -cp $cp $Tool | Out-File -FilePath $Out -Encoding ascii
+    & "$bin\java.exe" -cp $cp $Tool 2>$errLog | Out-File -FilePath $Out -Encoding ascii
 } else {
-    & "$bin\java.exe" -cp $cp $Tool ($ToolArgs -split ' ') | Out-File -FilePath $Out -Encoding ascii
+    & "$bin\java.exe" -cp $cp $Tool ($ToolArgs -split ' ') 2>$errLog | Out-File -FilePath $Out -Encoding ascii
 }
-if ($LASTEXITCODE -ne 0) { throw "$Tool run failed" }
+$code = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($code -ne 0) { Write-Host (Get-Content $errLog -ErrorAction SilentlyContinue | Select-Object -Last 15 | Out-String); throw "$Tool run failed (exit $code)" }
 Write-Host ("Ground truth written: {0} ({1} lines)" -f $Out, (Get-Content $Out | Measure-Object -Line).Lines)
