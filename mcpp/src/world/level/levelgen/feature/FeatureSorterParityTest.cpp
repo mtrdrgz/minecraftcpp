@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
 
     std::vector<std::string> biomeSources;
     std::vector<ExpectedFeature> expected;
+    int expectedStepCount = -1;
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty()) {
@@ -74,6 +75,8 @@ int main(int argc, char** argv) {
         }
         if (parts[0] == "BIOME" && parts.size() == 2) {
             biomeSources.push_back(parts[1]);
+        } else if (parts[0] == "STEPS" && parts.size() == 2) {
+            expectedStepCount = std::stoi(parts[1]);
         } else if (parts[0] == "STEP" && parts.size() == 4) {
             expected.push_back(ExpectedFeature{
                 std::stoi(parts[1]),
@@ -83,8 +86,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (biomeSources.empty() || expected.empty()) {
-        std::cerr << "empty FeatureSorter parity data in " << casesPath << "\n";
+    if (biomeSources.empty() || expectedStepCount < 0) {
+        std::cerr << "empty or incomplete FeatureSorter parity data in " << casesPath << "\n";
         return 2;
     }
 
@@ -104,6 +107,13 @@ int main(int argc, char** argv) {
     int total = 0;
     int mismatches = 0;
     int shown = 0;
+
+    if (static_cast<int>(actualSteps.size()) != expectedStepCount) {
+        ++mismatches;
+        std::cerr << "MISMATCH step-count got=" << actualSteps.size()
+                  << " expected=" << expectedStepCount << "\n";
+    }
+
     for (const ExpectedFeature& e : expected) {
         ++total;
         std::string got = "<missing-step>";
@@ -136,6 +146,7 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "FeatureSorter biomes=" << biomeSources.size()
+              << " steps=" << actualSteps.size()
               << " features=" << total
               << " mismatches=" << mismatches << "\n";
     return mismatches == 0 ? 0 : 1;
