@@ -34,6 +34,7 @@ set(MC_SOURCES
     world/level/levelgen/SurfaceRules.cpp
     world/level/levelgen/SurfaceSystem.cpp
     world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
     world/level/levelgen/BiomeSource.cpp
     world/level/levelgen/BiomeManager.cpp
     world/level/levelgen/OverworldBiomeBuilder.cpp
@@ -335,6 +336,121 @@ if(WIN32)
     target_link_libraries(climate_biome_parity PRIVATE bcrypt)
 endif()
 set_target_properties(climate_biome_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Base terrain column parity before surface/carvers/decoration. Compares the
+# C++ fillFromNoise result against Java NoiseBasedChunkGenerator.getBaseColumn().
+add_executable(base_terrain_column_parity
+    world/level/levelgen/BaseTerrainColumnParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(base_terrain_column_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(base_terrain_column_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(base_terrain_column_parity PRIVATE bcrypt)
+endif()
+set_target_properties(base_terrain_column_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Surface terrain column parity after buildSurface and before
+# carvers/structures/features/decoration.
+add_executable(surface_terrain_column_parity
+    world/level/levelgen/SurfaceTerrainColumnParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(surface_terrain_column_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(surface_terrain_column_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(surface_terrain_column_parity PRIVATE bcrypt)
+endif()
+set_target_properties(surface_terrain_column_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Carved terrain column parity after Java buildSurface+applyCarvers and before
+# structures/features/decoration. This is expected to fail until the C++ carver
+# port is wired.
+add_executable(carved_terrain_column_parity
+    world/level/levelgen/CarvedTerrainColumnParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(carved_terrain_column_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(carved_terrain_column_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(carved_terrain_column_parity PRIVATE bcrypt)
+endif()
+set_target_properties(carved_terrain_column_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

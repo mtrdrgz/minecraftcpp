@@ -435,6 +435,7 @@ void Minecraft::startLocalGame(uint64_t seed) {
             LevelChunk* chunk = getOrCreateChunk({cx, cz});
             m_localGenerator->fillFromNoise(*chunk);
             m_localGenerator->buildSurface(*chunk);
+            m_localGenerator->applyCarvers(*chunk);
         }
     }
 
@@ -902,6 +903,7 @@ void Minecraft::updateLocalChunks() {
                 levelgen::NoiseBasedChunkGenerator generator(seed);
                 generator.fillFromNoise(*chunk);
                 generator.buildSurface(*chunk);
+                generator.applyCarvers(*chunk);
                 return chunk;
             })
         });

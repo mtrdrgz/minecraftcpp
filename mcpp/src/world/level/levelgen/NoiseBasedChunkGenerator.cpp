@@ -5,6 +5,7 @@
 #include "RandomState.h"
 #include "SurfaceSystem.h"
 #include "SurfaceRuleData.h"
+#include "carver/WorldCarver.h"
 #include "../block/Blocks.h"
 #include "../block/BlockState.h"
 #include <algorithm>
@@ -324,7 +325,10 @@ double NoiseBasedChunkGenerator::sampleFinalDensity(int blockX, int blockY, int 
 }
 
 int NoiseBasedChunkGenerator::samplePreliminarySurfaceLevel(int blockX, int blockZ) const {
-    return static_cast<int>(m_router.preliminarySurfaceLevel->compute(DensityFunctionContext{ blockX, 0, blockZ }));
+    const int quantizedX = floorDiv(blockX, 4) * 4;
+    const int quantizedZ = floorDiv(blockZ, 4) * 4;
+    return static_cast<int>(std::floor(
+        m_router.preliminarySurfaceLevel->compute(DensityFunctionContext{ quantizedX, 0, quantizedZ })));
 }
 
 int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
@@ -339,7 +343,6 @@ int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
 void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk) const {
     const uint32_t air = stateIdFor("air", 0);
     const uint32_t solid = m_settings.defaultBlock ? m_settings.defaultBlock : stateIdFor("stone", air);
-    const uint32_t bedrock = stateIdFor("bedrock", solid);
     const ChunkPos pos = chunk.pos();
     const int chunkStartBlockX = pos.x * 16;
     const int chunkStartBlockZ = pos.z * 16;
@@ -407,10 +410,6 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk) const {
                                 }
                             }
 
-                            if (blockY <= CHUNK_MIN_Y + 4 && solid != air) {
-                                state = bedrock;
-                            }
-
                             if (state != air) {
                                 chunk.setBlock(blockX, blockY, blockZ, state);
                             }
@@ -431,8 +430,9 @@ void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
     // recreate it per chunk (cheap since noise instances are just seeded Perlin trees).
     RandomState randomState(m_settings, m_seed);
 
-    // noiseRandom is used for clay bands and surface-depth variance
-    auto noiseRandom = randomState.getOrCreateRandomFactory("minecraft:terrain");
+    // Java SurfaceSystem receives RandomState.random directly. "minecraft:terrain"
+    // is only for BlendedNoise re-seeding, not surface depth/clay-band randomness.
+    auto noiseRandom = randomState.random();
 
     SurfaceSystem system(randomState, noiseRandom, m_settings.defaultBlock, m_settings.seaLevel);
 
@@ -454,6 +454,46 @@ void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
     chunk.computeHeightmap();
     chunk.setLoaded(true);
     chunk.meshDirty = true;
+}
+
+void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk) const {
+    if (m_settings.defaultBlock == stateIdFor("netherrack", UINT32_MAX)
+        || m_settings.defaultBlock == stateIdFor("end_stone", UINT32_MAX)) {
+        return;
+    }
+
+    auto preliminarySurface = [this](int blockX, int blockZ) {
+        return samplePreliminarySurfaceLevel(blockX, blockZ);
+    };
+    auto biomeGetter = [this](int blockX, int blockY, int blockZ) -> std::string {
+        return m_biomeManager ? m_biomeManager->getBiome(blockX, blockY, blockZ) : "";
+    };
+    RandomState randomState(m_settings, m_seed);
+    SurfaceSystem surfaceSystem(randomState, randomState.random(), m_settings.defaultBlock, m_settings.seaLevel);
+    WorldGenCtx genCtx;
+    genCtx.minGenY = m_settings.noiseSettings.minY;
+    genCtx.genDepth = m_settings.noiseSettings.height;
+    auto topMaterial = [&](LevelChunk& targetChunk, int blockX, int blockY, int blockZ, bool underFluid) {
+        return surfaceSystem.topMaterial(
+            randomState,
+            targetChunk,
+            preliminarySurface,
+            biomeGetter,
+            genCtx,
+            m_surfaceRuleSource,
+            blockX,
+            blockY,
+            blockZ,
+            underFluid);
+    };
+    carver::applyOverworldCarvers(
+        chunk,
+        static_cast<std::int64_t>(m_seed),
+        m_settings,
+        m_router,
+        m_aquiferRandom,
+        preliminarySurface,
+        topMaterial);
 }
 
 } // namespace mc::levelgen

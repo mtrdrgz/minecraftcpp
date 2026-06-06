@@ -38,6 +38,21 @@ public:
         const SurfaceRules::RuleSourcePtr& ruleSource
     );
 
+    // Port of SurfaceSystem.topMaterial, used by carvers after opening a surface
+    // grass/mycelium column.
+    std::optional<uint32_t> topMaterial(
+        RandomState& randomState,
+        LevelChunk& chunk,
+        const std::function<int(int, int)>& prelimSurfFn,
+        const std::function<std::string(int, int, int)>& biomeGetter,
+        const WorldGenCtx& genCtx,
+        const SurfaceRules::RuleSourcePtr& ruleSource,
+        int blockX,
+        int blockY,
+        int blockZ,
+        bool underFluid
+    );
+
     int    getSurfaceDepth(int blockX, int blockZ);
     double getSurfaceSecondary(int blockX, int blockZ);
     uint32_t getBand(int worldX, int y, int worldZ);

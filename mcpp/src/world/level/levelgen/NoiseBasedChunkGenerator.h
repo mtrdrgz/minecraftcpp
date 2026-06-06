@@ -26,6 +26,7 @@ public:
     int getBaseHeight(int blockX, int blockZ) const;
     void fillFromNoise(LevelChunk& chunk) const;
     void buildSurface(LevelChunk& chunk) const;
+    void applyCarvers(LevelChunk& chunk) const;
 
     // Block-resolution biome at a world position (BiomeManager zoomer), as used by
     // the decoration step (applyBiomeDecoration) and gameplay biome queries.

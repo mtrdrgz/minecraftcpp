@@ -3,10 +3,9 @@
 #include "../block/Blocks.h"
 
 // Port of net.minecraft.data.worldgen.SurfaceRuleData.
-// Each function mirrors its Java counterpart exactly, referencing Biome keys as
-// "minecraft:<snake_case>" strings. Biome conditions evaluate to false until a full
-// biome system is wired in; the non-biome rules (deepslate, bedrock, grass/dirt
-// fallback, badlands clay bands, stone-depth checks) are fully functional.
+// Each function mirrors its Java counterpart, referencing biome keys as
+// "minecraft:<snake_case>" strings. Biome conditions are evaluated through the
+// Java-shaped BiomeManager/BiomeSource pipeline in overworld surface generation.
 
 namespace mc::levelgen::SurfaceRuleData {
 

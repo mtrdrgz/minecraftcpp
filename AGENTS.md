@@ -303,7 +303,82 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 49 (NoiseRouter + climate biome parity)
+**Last updated**: Session 52 (overworld terrain through carvers certified 1:1)
+
+**Session 52**: picked up the Session 51 carver verification handoff from the
+Claude Code transcript. Generated the Java carved-terrain ground truth with
+`run_groundtruth.ps1 -Tool CarvedTerrainColumnParity`, then chased the apparent
+224 C++ over-carve mismatches. Root cause #1 was the Java harness, not C++:
+`VanillaRegistries.createLookup()` alone left `BlockTags.OVERWORLD_CARVER_REPLACEABLES`
+effectively unbound, so real replaceables such as `minecraft:deepslate` tested
+false in Java. Fixed `mcpp/tools/CarvedTerrainColumnParity.java` to load and
+resolve the vanilla block tag JSON from `26.1.2/data/minecraft/tags/block/**`
+and apply it to `BuiltInRegistries.BLOCK` before creating the registry lookup.
+That dropped carved parity to one mismatch. Root cause #2 was a real C++ aquifer
+bug: `NoiseBasedChunkGenerator::samplePreliminarySurfaceLevel()` evaluated raw
+block coordinates and truncated toward zero; Java `NoiseChunk.preliminarySurfaceLevel`
+quantizes X/Z through `QuartPos.fromBlock()->toBlock()` and uses `Mth.floor`.
+Ported that exact quantize+floor behavior. Final verified wrapper runs:
+`base_terrain_column_parity` (`BaseTerrainColumn cases=21504 mismatches=0`),
+`surface_terrain_column_parity` (`SurfaceTerrainColumn cases=21504 mismatches=0`),
+`carved_terrain_column_parity` (`CarvedTerrainColumn cases=21504 mismatches=0`),
+and `mcpp` target build. Terrain is now sampled-column certified 1:1 through
+`fillFromNoise()+buildSurface()+applyCarvers()` for the overworld cases; structures,
+features, decoration, exhaustive surface-rule coverage, and nether/end terrain
+remain uncertified.
+
+**Session 51**: continued the terrain-only 1:1 track by adding the first Java-shaped
+overworld carver stage after the now-certified base/surface pipeline. Added
+`mcpp/tools/CarvedTerrainColumnParity.java` and the C++ target
+`carved_terrain_column_parity` to compare Java `buildSurface()+applyCarvers()`
+columns before structures/features/decoration. Implemented
+`world/level/levelgen/carver/WorldCarver.{h,cpp}` with the vanilla overworld
+configured carvers (`minecraft:cave`, `minecraft:cave_extra_underground`,
+`minecraft:canyon`), Java `WorldgenRandom.setLargeFeatureSeed(seed + index, x, z)`
+ordering, cave/canyon config constants from `Carvers.java`, `CarvingMask`,
+aquifer-backed carved state selection, lava-level handling, exact resolved
+`overworld_carver_replaceables` fallback IDs, Java `Mth` sine table indexing, and
+the `WorldCarver.carveBlock` grass/mycelium top-material restoration path via a
+ported `SurfaceSystem::topMaterial`. `NoiseBasedChunkGenerator::applyCarvers()`
+is now wired into both local initial chunk generation and async chunk generation,
+so `mcpp.exe` generates terrain with the new carver stage. Re-verified the
+already-certified stages after the integration: `base_terrain_column_parity`
+(`BaseTerrainColumn cases=21504 mismatches=0`) and
+`surface_terrain_column_parity` (`SurfaceTerrainColumn cases=21504 mismatches=0`),
+then built `carved_terrain_column_parity` and `mcpp`. Important caveat: the Java
+carved-terrain TSV could not be generated in this session. The normal sandbox run
+failed with JDK/libs access errors, and the required escalated runner was rejected
+by the Codex usage limit until 8:40 PM. Therefore carver code is compiled and
+Java-shaped, but carved terrain is NOT yet certified 1:1; next terrain work should
+first generate `mcpp/build/carved_terrain_columns.tsv` with
+`mcpp/tools/run_groundtruth.ps1 -Tool CarvedTerrainColumnParity` and run
+`carved_terrain_column_parity --cases ...`, then fix any mismatches.
+
+**Session 50**: focused exclusively on proving/fixing the current overworld base
+terrain before continuing terrain generation. Added real Java ground-truth
+harnesses `mcpp/tools/BaseTerrainColumnParity.java` and
+`mcpp/tools/SurfaceTerrainColumnParity.java`, plus C++ targets
+`base_terrain_column_parity` and `surface_terrain_column_parity`. The base
+terrain harness compares C++ `NoiseBasedChunkGenerator::fillFromNoise()` against
+Java `NoiseBasedChunkGenerator.getBaseColumn()` before surface/carvers/features;
+the surface harness fills a real Java `ProtoChunk`, calls vanilla
+`NoiseBasedChunkGenerator.buildSurface(...)`, and compares after C++
+`fillFromNoise()+buildSurface()`, still before carvers/structures/features/
+decoration. Fixed three real parity bugs: removed hardcoded bottom bedrock from
+`fillFromNoise()` because Java applies bedrock via surface rules, passed the
+root `RandomState.random()` positional factory into `SurfaceSystem` instead of
+the `"minecraft:terrain"` factory, and fixed `Mth.getSeed` parity by preserving
+Java's 32-bit overflow for the `x * 3129871` term before widening to `long`.
+Verified with wrapper commands: regenerated 21,504 Java base rows and 21,504
+Java surface rows, built and ran `base_terrain_column_parity`
+(`BaseTerrainColumn cases=21504 mismatches=0`), built and ran
+`surface_terrain_column_parity` (`SurfaceTerrainColumn cases=21504 mismatches=0`),
+ran `worldgen_random_parity` (passed), and built `mcpp`. A short
+`--quickPlaySingleplayer` smoke was intentionally killed by timeout after launch;
+the wrapper log did not capture game stdout. Caveat: this is sampled column
+parity for overworld terrain through `buildSurface`; carvers, structures,
+features, decorations, exhaustive surface-rule coverage, and nether/end terrain
+are not certified by these two tests.
 
 **Session 49**: pulled `origin/main` to `208c9c0` and continued the strict
 Java-vs-C++ worldgen parity track. Fixed `mcpp/tools/run_with_timeout.ps1` so it
@@ -553,12 +628,14 @@ Now verified: `NormalNoise.getValue` matches Java bit-for-bit and the
 NoiseThresholdProvider (flower_plain) state selection matches 1:1
 (`block_state_provider_parity` NOISE + BSPN cases).
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
-**Executable**: `C:\Users\Mateo\Desktop\minecraftcpp\mcpp\build\mcpp.exe` - built 2026-06-05
+**Executable**: `C:\Users\Mateo\Desktop\minecraftcpp\mcpp\build\mcpp.exe` - built 2026-06-06
 
 **Worldgen roadmap**: `mcpp/docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
 the full feature/tree/structure port (Phases A–G, with real data counts). Phase A
-(biome registry) is done; Phases B–G (decoration framework, feature types, trees,
-carvers, structures, engine integration) are the remaining work. Do NOT reintroduce
+ (biome registry) is done; overworld carvers now have sampled Java parity through
+`carved_terrain_column_parity`; the remaining work is decoration framework,
+feature types, trees beyond the currently wired primitives, structures, broader
+engine integration, and nether/end coverage. Do NOT reintroduce
 the removed hand-authored approximate generators — port from Java + data only.
 
 **Next action**: PHASE 15 — Game Logic
@@ -572,7 +649,11 @@ the removed hand-authored approximate generators — port from Java + data only.
    overworld climate end-to-end (`density_parity`: 488/0 mismatches;
    `climate_biome_parity`: 56/0 mismatches for quantized target + biome id).
    Still TODO: add the same coverage for nether/end presets.
-4. Continue the Java-faithful surface pipeline: verify/finish `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` against the decompiled Java before claiming them complete.
+4. Terrain through overworld carvers is now sampled-column certified
+   (`base_terrain_column_parity`, `surface_terrain_column_parity`, and
+   `carved_terrain_column_parity` all 21,504/0 in Session 52). Next terrain
+   work can move to structures/features/decoration, but each new stage must get
+   its own Java-backed parity harness before it is called certified.
 5. Port placed/configured features and structures only from Java/data definitions. The approximate ore/surface-decoration/structure generators added by another LLM must not be re-enabled as-is; `TreeGen.cpp` remains compiled only for the tree primitives used by the data-driven `BiomeDecorator`.
 6. Tasklist next: continue the remaining rendering/worldgen/UI items from
    `C:\Users\Mateo\Desktop\tasklist.txt` (notably chunk-generation stutter/lagback,
@@ -591,9 +672,15 @@ the removed hand-authored approximate generators — port from Java + data only.
 - `SurfaceSystem::frozenOceanExtension()` now ports `Biome.shouldMeltFrozenOceanIcebergSlightly()` for frozen/deep-frozen ocean using Java's `TemperatureModifier.FROZEN` logic and the `FROZEN_TEMPERATURE_NOISE`/`BIOME_INFO_NOISE` seeds, replacing the earlier hardcoded no-melt approximation.
 - `Aquifer` is now ported as its own C++ module with Java's global fluid picker, disabled aquifer path, and noise-based aquifer sampling/pressure/fluid-level logic. `NoiseBasedChunkGenerator::fillFromNoise()` now uses `aquifer.computeSubstance(context, density)` and falls back to `defaultBlock` when Java would return `null`.
 - `OreVeinifier` is now ported and wired after Aquifer, matching Java's `NoiseChunk` material rule order when `settings.oreVeinsEnabled()` is true.
-- `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` exist but are not certified complete. Treat them as partial until each condition/rule is checked against Java source.
+- `SurfaceRules`, `SurfaceSystem`, and `SurfaceRuleData` now have sampled
+  overworld `buildSurface` column parity against real Java (Session 50:
+  21,504/0 mismatches), but they are not exhaustively certified across every
+  condition/rule/biome edge case. Keep adding Java-backed cases as terrain work
+  expands.
 - The previous LLM added `BiomeSource`, `feature/TreeGen`, `feature/OreGen`, `feature/SurfaceDecoration`, and `structure/StructureGen` as approximate systems. They contained hand-authored biome points, per-chunk random scattering, hardcoded chances, and simplified structures. The approximate ore/surface-decoration/structure paths are intentionally out of the executable; `TreeGen.cpp` remains compiled only for the tree primitive classes used by the data-driven `BiomeDecorator`, and its old `decorateChunk()` entry point is not called and no longer calls `OreGen`.
-- `NoiseBasedChunkGenerator::buildSurface()` now passes an empty biome key to `SurfaceSystem` until the Java `Climate` / `MultiNoiseBiomeSource` pipeline is ported. This keeps biome-dependent rules inactive instead of feeding them fake biomes.
+- `NoiseBasedChunkGenerator::buildSurface()` now samples the Java-shaped
+  `BiomeManager` / `BiomeSource` climate pipeline for overworld surface rules.
+  Nether/end biome sampling and terrain presets still need equivalent coverage.
 - Session 24 replaced the fake `BiomeSource` implementation with a Java-shaped foundation: `Climate.h` now ports `quantizeCoord`, `Parameter`, `TargetPoint`, `ParameterPoint::fitness`, and `ParameterList::findValue` using the same distance metric as Java.
 - Session 25 ported the full `OverworldBiomeBuilder` preset shape: off-coast biomes, all `addInlandBiomes()` weirdness slices (`addPeaks`, `addHighSlice`, `addMidSlice`, `addLowSlice`, `addValleys`), underground biomes, and the Java `pick*` helper decisions. `NoiseBasedChunkGenerator::buildSurface()` now passes this biome lookup into `SurfaceSystem` for overworld terrain. This is a direct C++ port scaffold and must be audited line-by-line before claiming final 1:1 biome behavior.
 - Session 26 mechanically split the Overworld preset builder out of `BiomeSource.cpp` into `OverworldBiomeBuilder.h/.cpp`. `BiomeSource.cpp` is now only the router-sampling wrapper that builds the preset and calls `Climate::ParameterList::findValue()`. Build and quick singleplayer smoke passed after the split.
@@ -724,4 +811,8 @@ the removed hand-authored approximate generators — port from Java + data only.
 - Inventory system mirrors the Java `Container` interface for future compatibility with server-side sync.
 - The Title Screen `Singleplayer` button now starts an offline local world instead of attempting localhost networking; `Connect to Localhost` remains available as a separate button.
 - OpenGL buffer allocation uses direct-state-access (`glCreateBuffers`/`glNamedBufferData`) so index buffers are valid without relying on VAO state during creation.
-- The current visible singleplayer terrain scaffold must not be treated as final terrain generation. Replace it systematically with direct ports from the Java decompiled source; do not tune or invent noise behavior.
+- The current overworld base terrain is sampled-verified through
+  `buildSurface`, but whole-world generation is not final until Java carvers,
+  structures, features, decoration, and broader parity coverage are complete.
+  Continue replacing/expanding systems only with direct ports from the Java
+  decompiled source and data; do not tune or invent noise behavior.

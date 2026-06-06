@@ -179,6 +179,39 @@ void SurfaceSystem::buildSurface(
     }
 }
 
+std::optional<uint32_t> SurfaceSystem::topMaterial(
+    RandomState& randomState,
+    LevelChunk& chunk,
+    const std::function<int(int, int)>& prelimSurfFn,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const WorldGenCtx& genCtx,
+    const SurfaceRules::RuleSourcePtr& ruleSource,
+    int blockX,
+    int blockY,
+    int blockZ,
+    bool underFluid
+) {
+    SurfaceRules::Context ctx;
+    ctx.system       = this;
+    ctx.chunk        = &chunk;
+    ctx.randomState  = &randomState;
+    ctx.prelimSurfFn = prelimSurfFn;
+    ctx.biomeGetter  = biomeGetter;
+    ctx.genCtx       = genCtx;
+    ctx.initConditions();
+
+    SurfaceRules::SurfaceRulePtr rule = ruleSource->apply(ctx);
+    ctx.updateXZ(blockX, blockZ);
+    ctx.updateY(
+        1,
+        1,
+        underFluid ? blockY + 1 : std::numeric_limits<int>::min(),
+        blockX,
+        blockY,
+        blockZ);
+    return rule->tryApply(blockX, blockY, blockZ);
+}
+
 // ---------- Helper methods ----------
 
 int SurfaceSystem::getSurfaceDepth(int blockX, int blockZ) {

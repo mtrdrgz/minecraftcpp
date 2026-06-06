@@ -618,7 +618,11 @@ void WorldgenRandom::setLargeFeatureWithSalt(int64_t seed, int32_t x, int32_t z,
 }
 
 int64_t getMthSeed(int32_t x, int32_t y, int32_t z) {
-    int64_t seed = javaLongXor(javaLongMul(x, 3129871LL), javaLongXor(javaLongMul(z, 116129781LL), y));
+    // Java: long seed = x * 3129871 ^ z * 116129781L ^ y;
+    // The x term is int * int, so it overflows to 32 bits before widening.
+    const int64_t xTerm = static_cast<int64_t>(javaInt(static_cast<uint32_t>(x) * 3129871U));
+    const int64_t zTerm = javaLongMul(static_cast<int64_t>(z), 116129781LL);
+    int64_t seed = javaLongXor(javaLongXor(xTerm, zTerm), static_cast<int64_t>(y));
     seed = javaLongAdd(javaLongMul(javaLongMul(seed, seed), 42317861LL), javaLongMul(seed, 11LL));
     return seed >> 16;
 }
