@@ -13,6 +13,17 @@ namespace mc::nbt {
 // Reads/writes Minecraft's binary NBT format (big-endian, as Java DataInputStream)
 // Reference: net.minecraft.nbt.NbtIo + net.minecraft.nbt.StreamTagVisitor
 
+// Byte-swap helper shared by the reader and writer; NBT is big-endian like Java's
+// DataInput/DataOutputStream. std::byteswap is C++23.
+template<class T>
+inline T swapEndian(T v) {
+    if constexpr (sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8) {
+        return static_cast<T>(std::byteswap(v));
+    } else {
+        return v;
+    }
+}
+
 class NbtReader {
 public:
     explicit NbtReader(std::span<const uint8_t> data) : m_data(data), m_pos(0) {}
@@ -41,15 +52,6 @@ private:
     float    readFloat()  { uint32_t v = readBE<uint32_t>(); float f; std::memcpy(&f, &v, 4); return f; }
     double   readDouble() { uint64_t v = readBE<uint64_t>(); double d; std::memcpy(&d, &v, 8); return d; }
     std::string readString();  // 2-byte length + UTF-8 bytes
-
-    template<class T>
-    static T swapEndian(T v) {
-        if constexpr (sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8) {
-            return static_cast<T>(std::byteswap(v));
-        } else {
-            return v;
-        }
-    }
 
     template<class T>
     T read() {
@@ -92,7 +94,7 @@ private:
     void writeString(std::string_view s);
     template<class T>
     void writeBE(T v) {
-        v = NbtReader::swapEndian(v);
+        v = swapEndian(v);
         const uint8_t* p = reinterpret_cast<const uint8_t*>(&v);
         m_buf.insert(m_buf.end(), p, p + sizeof(T));
     }
