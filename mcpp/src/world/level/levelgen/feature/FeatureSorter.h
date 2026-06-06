@@ -12,21 +12,6 @@
 
 namespace mc::levelgen::feature {
 
-// Port foundation for net.minecraft.world.level.biome.FeatureSorter.
-//
-// Java builds a global per-step PlacedFeature order once from
-// List.copyOf(biomeSource.possibleBiomes()). Later applyBiomeDecoration collects
-// possible biomes around the current chunk, maps their features to the sorted
-// step-local indices, sorts those indices, and calls:
-//
-//   random.setFeatureSeed(decorationSeed, globalIndexOfFeature, step)
-//
-// where globalIndexOfFeature is the feature's index within StepFeatureData for
-// that generation step. A local per-chunk merged list is not equivalent.
-//
-// This header intentionally works on placed-feature keys instead of live
-// PlacedFeature objects so the ordering foundation can be validated before
-// re-enabling feature placement runtime.
 class FeatureSorter {
 public:
     struct StepFeatureData {
@@ -47,10 +32,9 @@ public:
             int step = 0;
             std::string feature;
 
-            friend bool operator<(const FeatureData& a, const FeatureData& b) {
-                if (a.step != b.step) return a.step < b.step;
-                if (a.featureIndex != b.featureIndex) return a.featureIndex < b.featureIndex;
-                return a.feature < b.feature;
+            bool operator<(const FeatureData& other) const {
+                if (step != other.step) return step < other.step;
+                return featureIndex < other.featureIndex;
             }
         };
 
@@ -61,10 +45,10 @@ public:
 
         for (const std::string& source : featureSources) {
             std::vector<FeatureData> featureList;
+            maxStep = std::max(maxStep, biomeFeatures.stepCountForBiome(source));
 
             for (int step = 0; step < GenerationStep::COUNT; ++step) {
                 const auto& stepFeatures = biomeFeatures.featuresForStep(source, step);
-                if (!stepFeatures.empty()) maxStep = std::max(maxStep, step + 1);
 
                 for (const std::string& feature : stepFeatures) {
                     auto [it, inserted] = featureIndex.emplace(feature, nextFeatureIndex);
@@ -90,9 +74,6 @@ public:
                 throw std::logic_error("FeatureSorter DFS finished with non-empty visiting set");
             }
             if (!discovered.contains(feature) && dfs(edges, discovered, visiting, sortedFeatures, feature)) {
-                // Java tries to reduce the involved sources before throwing. We keep
-                // the same strict behavior for now and preserve the flag in the API so
-                // a later diagnostic port can report the reduced source set.
                 (void)tryReducingError;
                 throw std::logic_error("Feature order cycle found");
             }
@@ -100,7 +81,6 @@ public:
 
         std::reverse(sortedFeatures.begin(), sortedFeatures.end());
 
-        if (maxStep == 0) maxStep = GenerationStep::COUNT;
         std::vector<StepFeatureData> out(static_cast<std::size_t>(maxStep));
         for (const FeatureData& data : sortedFeatures) {
             if (data.step >= 0 && data.step < maxStep) {
@@ -115,9 +95,6 @@ public:
         return out;
     }
 
-    // Mirrors the inner feature-selection part of ChunkGenerator.applyBiomeDecoration:
-    // collect all features listed by the 3x3 possible biomes for this step, map to
-    // StepFeatureData indices, then sort ascending before seeding/placing.
     static std::vector<int> selectFeatureIndicesForStep(const std::vector<std::string>& possibleBiomes,
                                                          const BiomeFeatures& biomeFeatures,
                                                          const StepFeatureData& stepFeatureData,
