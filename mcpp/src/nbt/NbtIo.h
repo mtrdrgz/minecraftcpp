@@ -1,10 +1,12 @@
 #pragma once
 #include "Tag.h"
-#include <span>
-#include <vector>
+#include <bit>
 #include <cstdint>
+#include <cstring>
 #include <optional>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 namespace mc::nbt {
 
@@ -36,26 +38,31 @@ private:
     int16_t  readShort()  { return (int16_t)readBE<uint16_t>(); }
     int32_t  readInt()    { return (int32_t)readBE<uint32_t>(); }
     int64_t  readLong()   { return (int64_t)readBE<uint64_t>(); }
-    float    readFloat()  { uint32_t v = readBE<uint32_t>(); float f; memcpy(&f, &v, 4); return f; }
-    double   readDouble() { uint64_t v = readBE<uint64_t>(); double d; memcpy(&d, &v, 8); return d; }
+    float    readFloat()  { uint32_t v = readBE<uint32_t>(); float f; std::memcpy(&f, &v, 4); return f; }
+    double   readDouble() { uint64_t v = readBE<uint64_t>(); double d; std::memcpy(&d, &v, 8); return d; }
     std::string readString();  // 2-byte length + UTF-8 bytes
+
+    template<class T>
+    static T swapEndian(T v) {
+        if constexpr (sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8) {
+            return static_cast<T>(std::byteswap(v));
+        } else {
+            return v;
+        }
+    }
 
     template<class T>
     T read() {
         if (m_pos + sizeof(T) > m_data.size())
             throw std::runtime_error("NBT read past end");
         T v;
-        memcpy(&v, m_data.data() + m_pos, sizeof(T));
+        std::memcpy(&v, m_data.data() + m_pos, sizeof(T));
         m_pos += sizeof(T);
         return v;
     }
     template<class T>
     T readBE() {
-        T v = read<T>();
-        if constexpr (sizeof(T) == 2) return (T)((v >> 8) | (v << 8));
-        if constexpr (sizeof(T) == 4) return (T)__builtin_bswap32((uint32_t)v);
-        if constexpr (sizeof(T) == 8) return (T)__builtin_bswap64((uint64_t)v);
-        return v;
+        return swapEndian(read<T>());
     }
 
     std::span<const uint8_t> m_data;
@@ -80,14 +87,12 @@ private:
     void writeShort(int16_t v) { writeBE<uint16_t>((uint16_t)v); }
     void writeInt(int32_t v)   { writeBE<uint32_t>((uint32_t)v); }
     void writeLong(int64_t v)  { writeBE<uint64_t>((uint64_t)v); }
-    void writeFloat(float v)   { uint32_t u; memcpy(&u, &v, 4); writeBE<uint32_t>(u); }
-    void writeDouble(double v) { uint64_t u; memcpy(&u, &v, 8); writeBE<uint64_t>(u); }
+    void writeFloat(float v)   { uint32_t u; std::memcpy(&u, &v, 4); writeBE<uint32_t>(u); }
+    void writeDouble(double v) { uint64_t u; std::memcpy(&u, &v, 8); writeBE<uint64_t>(u); }
     void writeString(std::string_view s);
     template<class T>
     void writeBE(T v) {
-        if constexpr (sizeof(T) == 2) v = (T)((v >> 8) | (v << 8));
-        if constexpr (sizeof(T) == 4) v = (T)__builtin_bswap32((uint32_t)v);
-        if constexpr (sizeof(T) == 8) v = (T)__builtin_bswap64((uint64_t)v);
+        v = NbtReader::swapEndian(v);
         const uint8_t* p = reinterpret_cast<const uint8_t*>(&v);
         m_buf.insert(m_buf.end(), p, p + sizeof(T));
     }
