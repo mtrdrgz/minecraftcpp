@@ -16,6 +16,7 @@
 #include "../placement/NoiseCountPlacement.h"
 #include "../placement/HeightmapPlacement.h"
 #include "stateproviders/BlockStateProvider.h"
+#include "stateproviders/NoiseBasedStateProviders.h"
 #include "../../block/Blocks.h"
 #include "../../block/BlockState.h"
 #include "../../block/BlockTags.h"
@@ -153,6 +154,18 @@ sp::BlockStateProviderPtr loadStateProvider(const json& j) {
             es.push_back({ stateName(e.at("data")), e.at("weight").get<int>() });
         return std::make_shared<sp::WeightedStateProvider>(std::move(es));
     }
+    if (t == "noise_threshold_provider") {
+        NoiseParameters params;
+        params.firstOctave = j.at("noise").at("firstOctave").get<int>();
+        for (const auto& a : j.at("noise").at("amplitudes")) params.amplitudes.push_back(a.get<double>());
+        std::vector<sp::BlockState> low, high;
+        for (const auto& s : j.at("low_states")) low.push_back(stateName(s));
+        for (const auto& s : j.at("high_states")) high.push_back(stateName(s));
+        return std::make_shared<sp::NoiseThresholdProvider>(
+            j.at("seed").get<std::int64_t>(), std::move(params),
+            j.at("scale").get<float>(), j.at("threshold").get<float>(), j.at("high_chance").get<float>(),
+            stateName(j.at("default_state")), std::move(low), std::move(high));
+    }
     throw std::runtime_error("unsupported state_provider: " + t);
 }
 
@@ -188,10 +201,27 @@ Pred loadPredicate(const json& j) {
     throw std::runtime_error("unsupported block_predicate: " + t);
 }
 
+std::shared_ptr<const PlacementModifier> loadModifier(const json& j); // fwd
+
 // simple_block feature placer (SimpleBlockFeature.place): provider state, canSurvive,
 // DoublePlant => place lower+upper.
 PlacedFeature::FeaturePlacer loadFeature(const json& cfg) {
     const std::string t = stripNs(cfg.at("type").get<std::string>());
+    if (t == "simple_random_selector") {
+        // SimpleRandomSelectorFeature.place: nextInt(size), then run the chosen
+        // inline placed feature (which has its own placement modifiers).
+        auto subs = std::make_shared<std::vector<std::shared_ptr<PlacedFeature>>>();
+        for (const auto& entry : cfg.at("config").at("features")) {
+            std::vector<std::shared_ptr<const PlacementModifier>> mods;
+            if (entry.contains("placement"))
+                for (const auto& m : entry.at("placement")) { auto mod = loadModifier(m); if (mod) mods.push_back(mod); }
+            subs->push_back(std::make_shared<PlacedFeature>(loadFeature(entry.at("feature")), mods));
+        }
+        return [subs](WorldGenLevel& lvl, RandomSource& rng, BlockPos p) -> bool {
+            const int i = rng.nextInt(static_cast<int>(subs->size()));
+            return (*subs)[i]->place(lvl, rng, p, mc::CHUNK_MIN_Y, mc::CHUNK_MAX_Y - mc::CHUNK_MIN_Y);
+        };
+    }
     if (t == "simple_block") {
         sp::BlockStateProviderPtr provider = loadStateProvider(cfg.at("config").at("to_place"));
         return [provider](WorldGenLevel& lvl, RandomSource& rng, BlockPos p) -> bool {
@@ -309,7 +339,8 @@ int main(int argc, char** argv) {
         ChunkLevel level(&chunk, cx, cz, minY, maxY);
         PlacedFeature placed(placer, mods);
         WorldgenRandom random(std::make_shared<XoroshiroRandomSource>(seed));
-        random.setFeatureSeed(seed, 0, 0);
+        const std::int64_t deco = random.setDecorationSeed(seed, cx * 16, cz * 16);
+        random.setFeatureSeed(deco, 0, 0);
         placed.place(level, random, BlockPos{ cx * 16, 0, cz * 16 }, minY, maxY - minY);
 
         std::map<std::tuple<int,int,int>, std::string> got;

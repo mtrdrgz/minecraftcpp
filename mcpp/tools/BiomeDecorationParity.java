@@ -165,7 +165,7 @@ public class BiomeDecorationParity {
             .getOrThrow(ResourceKey.create(Registries.BIOME, Identifier.parse(biomeId)));
 
         long[] seeds = { 0L, 123456789L };
-        final int WANT = 3; // chunks-with-output to keep per seed
+        final int WANT = 16; // land chunks to keep per seed (output or not)
 
         for (long seed : seeds) {
             RandomState randomState = RandomState.create(provider, NoiseGeneratorSettings.OVERWORLD, seed);
@@ -219,7 +219,8 @@ public class BiomeDecorationParity {
                         +" at="+blockId(chunk.getBlockState(new BlockPos(hx, wswg, hz))));
                 }
                 WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(seed));
-                random.setFeatureSeed(seed, 0, 0);
+                long deco = random.setDecorationSeed(seed, cx * 16, cz * 16);
+                random.setFeatureSeed(deco, 0, 0);
                 boolean ok = placed.value().placeWithBiomeCheck(level, generator, random, new BlockPos(cx * 16, 0, cz * 16));
                 if (System.getenv("DECO_DEBUG") != null) System.err.println("DBG place ok="+ok);
 
@@ -238,7 +239,7 @@ public class BiomeDecorationParity {
                             .append('\t').append(blockId(s)).append('\n'); putCount++; }
                     }
                 }
-                if (putCount > 0) { out.print(preBuf); out.print(putBuf); kept++; }
+                out.print(preBuf); out.print(putBuf); kept++;
             }
         }
     }

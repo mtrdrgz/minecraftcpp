@@ -303,7 +303,31 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 57 (decoration: data-driven loader + grass family certified)
+**Last updated**: Session 58 (decoration: vanilla seeding + 8 vegetation features certified)
+
+**Session 58** (decoration track — flowers + correct seeding): fixed the decoration
+seeding to be vanilla-faithful and extended the loader through the flower features.
+- SEEDING FIX (important): per-feature runs now use the real
+  `random.setDecorationSeed(seed, chunkMinX, chunkMinZ)` then `setFeatureSeed(deco,0,0)`
+  per chunk (was a fixed `setFeatureSeed(seed,0,0)` for every chunk — gave identical
+  RNG everywhere and never exercised `rarity_filter`). Both harness and C++ test.
+- Harness keeps a FIXED set of land chunks (16/seed) instead of scanning until
+  output, so rare features (rarity_filter) are exercised and runs are bounded.
+- Loader additions: `noise_threshold_provider` (flower_plain), `dual` not yet;
+  `simple_random_selector` (recursive — picks one inline placed sub-feature via
+  nextInt(size); forest flowers).
+- CERTIFIED 1:1 (`biome_decoration_parity`, mismatches=0, 32 land chunks, 2 seeds,
+  vs real Java): patch_grass_plain (997), patch_grass_forest (211),
+  patch_grass_jungle (2180), patch_grass_normal (508), patch_tall_grass (114,
+  double-plant), patch_large_fern (114, double-plant), flower_plains (14,
+  noise_threshold), flower_forest_flowers (120, simple_random_selector).
+  flower_default trivially 0. Run via `tools/BiomeDecorationParity.java <placed>
+  <grassy biome listing it>`.
+- NOT yet: `dual_noise_provider` (flower_meadow), dead bush / dry grass (need
+  `#dead_bush_may_place_on` surfaces), and the big one — TREES (`tree` feature +
+  trunk/foliage placers + decorators), the next major type.
+
+**Session 57** (decoration track — data-driven, vegetation batch): made the
 
 **Session 57** (decoration track — data-driven, vegetation batch): made the
 decoration parity test data-driven — it loads `placed_feature/<id>.json` +
