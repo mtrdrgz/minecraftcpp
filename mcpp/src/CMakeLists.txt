@@ -457,6 +457,33 @@ set_target_properties(biome_surface_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Per-feature biome DECORATION parity. Loads the vanilla pre-decoration chunk
+# (PRE rows from tools/BiomeDecorationParity.java) into a LevelChunk, runs the
+# ported PlacedFeature pipeline for one feature with the identical decoration
+# seed, and compares the blocks it writes against PUT. Terrain comes from the
+# ground truth, isolating feature/placement correctness. Certifies decoration
+# features one at a time (grass first).
+add_executable(biome_decoration_parity
+    world/level/levelgen/feature/BiomeDecorationParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(biome_decoration_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(biome_decoration_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(biome_decoration_parity PRIVATE bcrypt)
+endif()
+set_target_properties(biome_decoration_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Carved terrain column parity after Java buildSurface+applyCarvers and before
 # structures/features/decoration. This is expected to fail until the C++ carver
 # port is wired.

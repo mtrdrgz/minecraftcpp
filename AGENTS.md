@@ -303,7 +303,34 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 55 (decoration: fixed lazy-stream placement order)
+**Last updated**: Session 56 (decoration: first feature certified 1:1 — grass)
+
+**Session 56** (decoration track — first certified feature): built the decoration
+ground-truth harness and certified the first vegetation feature end-to-end.
+- The blocker for decoration parity is that Java feature placement needs a
+  `WorldGenLevel` (unlike `buildSurface`). Solution: `tools/BiomeDecorationParity.java`
+  drives the REAL vanilla `PlacedFeature.placeWithBiomeCheck` over a dynamic-`Proxy`
+  `WorldGenLevel` backed by a ProtoChunk (implements the abstract methods features
+  touch; routes interface default methods via `InvocationHandler.invokeDefault`;
+  single-chunk isolation — air outside, drop out-of-chunk writes). It scans for
+  land chunks (cheap centre-column precheck), emits the pre-decoration chunk (PRE)
+  and every block the feature writes (PUT).
+- CRITICAL: the harness must bind the vanilla block tags to `BuiltInRegistries.BLOCK`
+  (`bindVanillaBlockTags`, same fix as Session 52's carver harness) or `state.is(tag)`
+  is always false and `canSurvive` rejects every plant. short_grass survives on
+  `#minecraft:supports_vegetation` (NOT `#dirt`, which is only dirt/coarse/rooted).
+- C++: certified the depth-first `PlacedFeature.place` (Session 55) drives the real
+  modifier chain; `BiomeDecorationParityTest` loads PRE into a LevelChunk, runs the
+  assembled `patch_grass_plain` chain (noise_threshold_count, in_square, heightmap,
+  count, random_offset[trapezoid], block_predicate[#air]) + `simple_block(short_grass)`.
+  CERTIFIED: `biome_decoration_parity` → `feature=patch_grass_plain placed_cases=186
+  mismatches=0` (6 land chunks, 2 seeds). This is the first of ~30 feature types.
+- NEXT: more `simple_block`/vegetation reuse the same pipeline (fern, dead bush,
+  flowers, dry grass); then `random_patch`/`flower` configs; then TREES (the big
+  one: `TreeFeature` + trunk/foliage placers + decorators); ores; lakes/springs/etc.
+  `applyBiomeDecoration` runtime wiring stays a no-op until each is parity-tested.
+
+**Session 55** (decoration track — foundation): the user asked to port all biome
 
 **Session 55** (decoration track — foundation): the user asked to port all biome
 decorations. State check first: `applyBiomeDecoration` is a deliberate **no-op**
