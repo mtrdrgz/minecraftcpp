@@ -303,7 +303,33 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 59 (decoration: trees investigation — open blocker)
+**Last updated**: Session 60 (decoration: OAK TREE certified 1:1)
+
+**Session 60** (decoration track — trees): ported the oak `tree` feature to the
+C++ data-driven loader and certified it 1:1, incl. multi-tree overlap.
+- Ported: `StraightTrunkPlacer` (getTreeHeight = base+nextInt(a+1)+nextInt(b+1);
+  placeBelowTrunkBlock via `rule_based_state_provider`; logs; foliage attachment),
+  `BlobFoliagePlacer` (foliageHeight const; radius/offset providers; createFoliage
+  rows; corner-skip `nextInt(2)` in shouldSkipLocation — only at |dx|==r&&|dz|==r),
+  `TwoLayersFeatureSize` + `getMaxFreeTreeHeight`, validTreePos (air|
+  #replaceable_by_trees) / isFree (+#logs). Block-name comparison makes
+  `updateLeaves` (distance prop) a no-op.
+- KEY FIX — heightmaps: Java maintains only `*_WG` heightmaps during worldgen
+  decoration; non-WG variants are FROZEN at pre-decoration. So `WORLD_SURFACE_WG`
+  is LIVE (a later grass sees an earlier one raise it) but `OCEAN_FLOOR` (used by
+  trees) is FROZEN (a later tree's origin is the original surface, not an earlier
+  tree's logs). `OCEAN_FLOOR` counts only motion-blocking (is_opaque) non-fluid
+  blocks, so leaves don't raise it. Without this, multi-tree drifted (357 mism).
+- Origin: trees anchor in the AIR above the surface (heightmap OCEAN_FLOOR gives
+  the top-solid y; the synthetic placement adds random_offset vertical(+1) on BOTH
+  sides — matches vanilla's on-top-of-ground anchoring).
+- CERTIFIED: `biome_decoration_parity --tree minecraft:oak` →
+  `placed_cases=13611 mismatches=0` (32 land chunks, 2 seeds, 10 trees/chunk with
+  overlap). Grass re-verified 997/0. Harness: `tree:minecraft:oak`.
+- NEXT: spruce/birch/etc (other trunk/foliage placer types: fancy/forking/giant,
+  spruce/pine/acacia foliage), then dead bush/dry grass, dual_noise_provider, ores.
+
+**Session 59** (decoration track — trees investigation — open blocker, now resolved S60)
 
 **Session 59** (decoration track — trees, IN PROGRESS, not certified): added a tree
 ground-truth mode to `BiomeDecorationParity.java` ("tree:minecraft:oak" wraps the

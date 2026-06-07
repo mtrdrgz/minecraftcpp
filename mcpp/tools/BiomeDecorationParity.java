@@ -231,8 +231,6 @@ public class BiomeDecorationParity {
                 if (System.getenv("DECO_DEBUG") != null) {
                     int hx = cx*16+4, hz = cz*16+4;
                     int wswg = chunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, hx, hz);
-                    int ofl = chunk.getHeight(Heightmap.Types.OCEAN_FLOOR, hx, hz);
-                    System.err.println("DBG OCEAN_FLOOR("+hx+","+hz+")="+ofl);
                     System.err.println("DBG seed="+seed+" chunk="+cx+","+cz+" WSWG("+hx+","+hz+")="+wswg
                         +" top="+blockId(chunk.getBlockState(new BlockPos(hx, wswg-1, hz)))
                         +" at="+blockId(chunk.getBlockState(new BlockPos(hx, wswg, hz))));

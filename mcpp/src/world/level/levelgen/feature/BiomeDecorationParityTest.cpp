@@ -94,17 +94,33 @@ public:
     ChunkLevel(mc::LevelChunk* chunk, int cx, int cz, int minY, int maxY)
         : m_chunk(chunk), m_cx(cx), m_cz(cz), m_minY(minY), m_maxY(maxY) {
         m_airId = mc::getDefaultBlockStateId("air", 0);
+        // Frozen pre-decoration heights for the non-WG heightmaps (see below).
+        for (int i = 0; i < 256; ++i) m_frozenOpaque[i] = scan(cx * 16 + (i & 15), cz * 16 + (i >> 4), true);
     }
     bool inChunk(BlockPos p) const { return floorDiv(p.x, 16) == m_cx && floorDiv(p.z, 16) == m_cz; }
     int getMinY() const override { return m_minY; }
+    // Java maintains only the *_WG heightmaps during worldgen decoration; the
+    // non-WG variants (OCEAN_FLOOR, MOTION_BLOCKING, ...) keep their pre-decoration
+    // values. So WORLD_SURFACE_WG is LIVE (a later grass sees an earlier one),
+    // while OCEAN_FLOOR (used by trees) is FROZEN (a later tree's origin is the
+    // original surface, not an earlier tree's logs). OCEAN_FLOOR counts only
+    // motion-blocking (opaque) non-fluid blocks; WORLD_SURFACE any non-air.
     int getHeight(Heightmap::Types type, int x, int z) const override {
         if (floorDiv(x, 16) != m_cx || floorDiv(z, 16) != m_cz) return m_minY - 1;
+        switch (type) {
+            case Heightmap::Types::WORLD_SURFACE_WG: return scan(x, z, false);          // live, non-air
+            case Heightmap::Types::OCEAN_FLOOR_WG:   return scan(x, z, true);           // live, opaque non-fluid
+            case Heightmap::Types::OCEAN_FLOOR:      return m_frozenOpaque[(z - m_cz * 16) * 16 + (x - m_cx * 16)];
+            default:                                 return scan(x, z, false);          // WORLD_SURFACE / MOTION_BLOCKING (frozen≈live for terrain)
+        }
+    }
+    // topmost matching block (getFirstAvailable-1); opaque=true -> motion-blocking non-fluid.
+    int scan(int x, int z, bool opaque) const {
         for (int y = m_maxY - 1; y >= m_minY; --y) {
             const std::uint32_t id = m_chunk->getBlock(x, y, z);
             if (id == m_airId) continue;
-            const bool fluid = (name(id) == "minecraft:water" || name(id) == "minecraft:lava");
-            if ((type == Heightmap::Types::OCEAN_FLOOR_WG || type == Heightmap::Types::OCEAN_FLOOR) && fluid) continue;
-            return y; // topmost matching == getFirstAvailable-1
+            if (opaque) { const mc::BlockState* s = mc::getBlockState(id); if (!s || s->isFluid() || !s->isOpaque()) continue; }
+            return y;
         }
         return m_minY - 1;
     }
@@ -127,6 +143,7 @@ public:
     }
 private:
     mc::LevelChunk* m_chunk; int m_cx, m_cz, m_minY, m_maxY; std::uint32_t m_airId{};
+    int m_frozenOpaque[256]{};
 };
 
 // ---- JSON -> object loaders (throw on unsupported; never fake) ----
@@ -203,10 +220,117 @@ Pred loadPredicate(const json& j) {
 
 std::shared_ptr<const PlacementModifier> loadModifier(const json& j); // fwd
 
+// TreeFeature.validTreePos / TrunkPlacer.isFree (block-behaviour boundary).
+bool treeValidPos(WorldGenLevel& l, BlockPos p) {
+    const std::string s = l.getBlockState(p);
+    return s == "minecraft:air" || g_tags->isInTag(s, "minecraft:replaceable_by_trees");
+}
+bool treeIsFree(WorldGenLevel& l, BlockPos p) {
+    return treeValidPos(l, p) || g_tags->isInTag(l.getBlockState(p), "minecraft:logs");
+}
+
+// Parsed oak-family tree (straight trunk + blob foliage + two-layers size).
+struct TreeCfg {
+    int baseHeight, heightRandA, heightRandB;
+    int blobHeight;
+    IntProviderPtr radius, offset;
+    std::string trunkState, foliageState;
+    std::vector<std::pair<std::function<bool(WorldGenLevel&, BlockPos)>, std::string>> belowRules;
+    int limit, lowerSize, upperSize;
+    bool hasMinClipped; int minClipped;
+    bool ignoreVines;
+};
+
+int treeSizeAt(const TreeCfg& c, int yo) { return yo < c.limit ? c.lowerSize : c.upperSize; }
+
+int getMaxFreeTreeHeight(WorldGenLevel& level, int treeHeight, BlockPos treePos, const TreeCfg& c) {
+    for (int y = 0; y <= treeHeight + 1; ++y) {
+        int r = treeSizeAt(c, y);
+        for (int dx = -r; dx <= r; ++dx)
+            for (int dz = -r; dz <= r; ++dz)
+                if (!treeIsFree(level, BlockPos{ treePos.x + dx, treePos.y + y, treePos.z + dz }))
+                    return y - 2; // ignoreVines true for oak -> no vine check
+    }
+    return treeHeight;
+}
+
 // simple_block feature placer (SimpleBlockFeature.place): provider state, canSurvive,
 // DoublePlant => place lower+upper.
 PlacedFeature::FeaturePlacer loadFeature(const json& cfg) {
     const std::string t = stripNs(cfg.at("type").get<std::string>());
+    if (t == "tree") {
+        const json& cc = cfg.at("config");
+        auto tc = std::make_shared<TreeCfg>();
+        const json& tp = cc.at("trunk_placer");
+        if (stripNs(tp.at("type").get<std::string>()) != "straight_trunk_placer")
+            throw std::runtime_error("unsupported trunk_placer: " + tp.at("type").get<std::string>());
+        tc->baseHeight = tp.at("base_height").get<int>();
+        tc->heightRandA = tp.at("height_rand_a").get<int>();
+        tc->heightRandB = tp.at("height_rand_b").get<int>();
+        const json& fp = cc.at("foliage_placer");
+        if (stripNs(fp.at("type").get<std::string>()) != "blob_foliage_placer")
+            throw std::runtime_error("unsupported foliage_placer: " + fp.at("type").get<std::string>());
+        tc->blobHeight = fp.at("height").get<int>();
+        tc->radius = loadIntProvider(fp.at("radius"));
+        tc->offset = loadIntProvider(fp.at("offset"));
+        tc->trunkState = stateName(cc.at("trunk_provider").at("state"));
+        tc->foliageState = stateName(cc.at("foliage_provider").at("state"));
+        // below_trunk_provider: rule_based -> [(predicate, thenState)]
+        const json& bp = cc.at("below_trunk_provider");
+        if (stripNs(bp.at("type").get<std::string>()) != "rule_based_state_provider")
+            throw std::runtime_error("unsupported below_trunk_provider: " + bp.at("type").get<std::string>());
+        for (const auto& rule : bp.at("rules"))
+            tc->belowRules.push_back({ loadPredicate(rule.at("if_true")), stateName(rule.at("then").at("state")) });
+        const json& ms = cc.at("minimum_size");
+        if (stripNs(ms.at("type").get<std::string>()) != "two_layers_feature_size")
+            throw std::runtime_error("unsupported minimum_size: " + ms.at("type").get<std::string>());
+        tc->limit = ms.value("limit", 1);
+        tc->lowerSize = ms.value("lower_size", 0);
+        tc->upperSize = ms.value("upper_size", 1);
+        tc->hasMinClipped = ms.contains("min_clipped_height");
+        tc->minClipped = tc->hasMinClipped ? ms.at("min_clipped_height").get<int>() : 0;
+        tc->ignoreVines = cc.value("ignore_vines", false);
+
+        return [tc](WorldGenLevel& level, RandomSource& rng, BlockPos origin) -> bool {
+            const int treeHeight = tc->baseHeight + rng.nextInt(tc->heightRandA + 1) + rng.nextInt(tc->heightRandB + 1);
+            const int /*foliageHeight*/ fh = tc->blobHeight;          // BlobFoliagePlacer.foliageHeight (no rng)
+            const int leafRadius = tc->radius->sample(rng);           // foliageRadius
+            const int clipped = getMaxFreeTreeHeight(level, treeHeight, origin, *tc);
+            if (!(clipped >= treeHeight || (tc->hasMinClipped && clipped >= tc->minClipped))) return false;
+
+            // placeTrunk (straight): below block, logs, one foliage attachment.
+            for (const auto& [pred, thenState] : tc->belowRules) {
+                if (pred(level, BlockPos{ origin.x, origin.y - 1, origin.z })) {
+                    level.setBlock(BlockPos{ origin.x, origin.y - 1, origin.z }, thenState, 19);
+                    break;
+                }
+            }
+            for (int y = 0; y < clipped; ++y) {
+                BlockPos p{ origin.x, origin.y + y, origin.z };
+                if (treeValidPos(level, p)) level.setBlock(p, tc->trunkState, 19);
+            }
+            const BlockPos attach{ origin.x, origin.y + clipped, origin.z };
+
+            // createFoliage (blob).
+            const int off = tc->offset->sample(rng);                  // FoliagePlacer.offset (no rng for const)
+            for (int yo = off; yo >= off - fh; --yo) {
+                const int currentRadius = std::max(leafRadius + 0 - 1 - yo / 2, 0);
+                for (int dx = -currentRadius; dx <= currentRadius; ++dx) {
+                    for (int dz = -currentRadius; dz <= currentRadius; ++dz) {
+                        // shouldSkipLocationSigned -> shouldSkipLocation(abs(dx),yo,abs(dz),r)
+                        const int mdx = std::abs(dx), mdz = std::abs(dz);
+                        bool skip = false;
+                        if (mdx == currentRadius && mdz == currentRadius)
+                            skip = (rng.nextInt(2) == 0 || yo == 0);   // corner: consume nextInt(2)
+                        if (skip) continue;
+                        BlockPos lp{ attach.x + dx, attach.y + yo, attach.z + dz };
+                        if (treeValidPos(level, lp)) level.setBlock(lp, tc->foliageState, 19); // tryPlaceLeaf
+                    }
+                }
+            }
+            return true;
+        };
+    }
     if (t == "simple_random_selector") {
         // SimpleRandomSelectorFeature.place: nextInt(size), then run the chosen
         // inline placed feature (which has its own placement modifiers).
@@ -274,14 +398,17 @@ using Key = std::tuple<long long, int, int>;
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath, placedId, dataDir;
+    std::string casesPath, placedId, treeCfgId, dataDir;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];
         else if (a == "--placed" && i + 1 < argc) placedId = argv[++i];
+        else if (a == "--tree" && i + 1 < argc) treeCfgId = argv[++i];
         else if (a == "--datadir" && i + 1 < argc) dataDir = argv[++i];
     }
-    if (casesPath.empty() || placedId.empty()) { std::cerr << "usage: biome_decoration_parity --cases <tsv> --placed <id>\n"; return 2; }
+    if (casesPath.empty() || (placedId.empty() && treeCfgId.empty())) {
+        std::cerr << "usage: biome_decoration_parity --cases <tsv> (--placed <id> | --tree <cfgid>)\n"; return 2;
+    }
     if (dataDir.empty()) dataDir = findDataDir();
 
     installBlockStatesEnv();
@@ -289,18 +416,29 @@ int main(int argc, char** argv) {
     static mc::block::BlockTags tags = mc::block::BlockTags::loadFromDirectory(dataDir + "/tags/block");
     g_tags = &tags;
 
-    // Load the placed + configured feature JSON and assemble the PlacedFeature.
-    const std::string pname = stripNs(placedId);
-    json placedJson; { std::ifstream f(dataDir + "/worldgen/placed_feature/" + pname + ".json"); if (!f) { std::cerr << "no placed_feature " << pname << "\n"; return 2; } f >> placedJson; }
-    const std::string cfgId = stripNs(placedJson.at("feature").get<std::string>());
-    json cfgJson; { std::ifstream f(dataDir + "/worldgen/configured_feature/" + cfgId + ".json"); if (!f) { std::cerr << "no configured_feature " << cfgId << "\n"; return 2; } f >> cfgJson; }
-
+    // Load the configured feature JSON + build the placement modifier chain.
+    // Tree mode uses a synthetic surface placement [count(10), in_square,
+    // heightmap OCEAN_FLOOR, random_offset vertical(+1)] (matches the harness).
     std::vector<std::shared_ptr<const PlacementModifier>> mods;
+    json cfgJson;
+    if (!treeCfgId.empty()) {
+        const std::string cfgId = stripNs(treeCfgId);
+        std::ifstream f(dataDir + "/worldgen/configured_feature/" + cfgId + ".json");
+        if (!f) { std::cerr << "no configured_feature " << cfgId << "\n"; return 2; } f >> cfgJson;
+        mods.push_back(std::make_shared<CountPlacement>(ConstantInt::of(10)));
+        mods.push_back(std::make_shared<InSquarePlacement>());
+        mods.push_back(std::make_shared<HeightmapPlacement>(Heightmap::Types::OCEAN_FLOOR));
+        mods.push_back(std::make_shared<RandomOffsetPlacement>(ConstantInt::of(0), ConstantInt::of(1)));
+    } else {
+        const std::string pname = stripNs(placedId);
+        json placedJson; { std::ifstream f(dataDir + "/worldgen/placed_feature/" + pname + ".json"); if (!f) { std::cerr << "no placed_feature " << pname << "\n"; return 2; } f >> placedJson; }
+        const std::string cfgId = stripNs(placedJson.at("feature").get<std::string>());
+        { std::ifstream f(dataDir + "/worldgen/configured_feature/" + cfgId + ".json"); if (!f) { std::cerr << "no configured_feature " << cfgId << "\n"; return 2; } f >> cfgJson; }
+        for (const auto& m : placedJson.at("placement")) { auto mod = loadModifier(m); if (mod) mods.push_back(mod); }
+    }
+    if (placedId.empty()) placedId = treeCfgId;
+
     try {
-        for (const auto& m : placedJson.at("placement")) {
-            auto mod = loadModifier(m);
-            if (mod) mods.push_back(mod);
-        }
         PlacedFeature::FeaturePlacer placer = loadFeature(cfgJson);
         (void)placer;
     } catch (const std::exception& e) {
