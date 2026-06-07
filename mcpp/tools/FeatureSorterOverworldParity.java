@@ -17,6 +17,7 @@ import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 
 public class FeatureSorterOverworldParity {
     public static void main(String[] args) {
+        final java.io.PrintStream out = System.out;
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         HolderLookup.Provider holders = VanillaRegistries.createLookup();
@@ -32,6 +33,9 @@ public class FeatureSorterOverworldParity {
         List<Holder.Reference<Biome>> biomeSources = List.copyOf(source.possibleBiomes()).stream()
             .map(holder -> biomes.getOrThrow(holder.unwrapKey().orElseThrow()))
             .toList();
+
+        out.println("MODE\tOVERWORLD_SOURCE");
+        biomeSources.forEach(holder -> out.println("BIOME\t" + holder.key().identifier()));
         System.out.println("MODE\tOVERWORLD_SOURCE");
         biomeSources.forEach(holder -> System.out.println("BIOME\t" + holder.key().identifier()));
 
@@ -39,12 +43,14 @@ public class FeatureSorterOverworldParity {
             biomeSources,
             holder -> holder.value().getGenerationSettings().features(),
             true);
+        out.println("STEPS\t" + featuresPerStep.size());
         System.out.println("STEPS\t" + featuresPerStep.size());
         for (int step = 0; step < featuresPerStep.size(); ++step) {
             List<PlacedFeature> features = featuresPerStep.get(step).features();
             for (int index = 0; index < features.size(); ++index) {
                 String key = featureKeys.get(features.get(index));
                 if (key == null) throw new IllegalStateException("Unregistered placed feature");
+                out.println("STEP\t" + step + "\t" + index + "\t" + key);
                 System.out.println("STEP\t" + step + "\t" + index + "\t" + key);
             }
         }
