@@ -303,7 +303,47 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 52 (overworld terrain through carvers certified 1:1)
+**Last updated**: Session 53 (FeatureSorter + structure placement certified 1:1)
+
+**Session 53** (feature ordering + structure placement track): integrated the
+FeatureSorter parity work from PR #7 (`continue-feature-sorter-parity`) into the
+mainline and certified it on Linux, then added the first certified structure
+stage — structure *placement* (where structures can spawn for a seed).
+
+- Toolchain: this session ran the real Java ground-truth on **Linux**. Fetched
+  the SHA1-verified `client.jar`, JDK 25 and the 107 manifest libs into `26.1.2/`
+  per the AGENTS.md CDN workflow, and re-extracted `data/minecraft/**` from the
+  real jar (the cloned `26.1.2/` was git-LFS pointers, not real content — any
+  parity work MUST materialize the LFS content first). Added
+  `mcpp/tools/run_groundtruth.sh`, the Linux counterpart of `run_groundtruth.ps1`.
+
+- FeatureSorter (PR #7, now mainline): `FeatureSorter::buildFeaturesPerStep`
+  matches Java — `maxStep` uses each biome's full JSON feature-list length
+  (trailing empty steps included), and the `FeatureData` comparator orders by
+  (step, featureIndex). Certified: `feature_sorter_parity` →
+  `biomes=65 steps=11 features=205 mismatches=0` vs `FeatureSorterParity.java`.
+  This pins the global per-step PlacedFeature index fed to
+  `WorldgenRandom.setFeatureSeed(decorationSeed, index, step)` for every biome.
+
+- Structure placement (new): ported
+  `world/level/levelgen/structure/placement/StructurePlacement.{h,cpp}` 1:1 —
+  `RandomSpreadStructurePlacement.getPotentialStructureChunk`/`isPlacementChunk`,
+  `RandomSpreadType` (linear/triangular), `Math.floorDiv`, the four
+  `FrequencyReductionMethod` reducers (default + legacy_type_1/2/3, with the exact
+  quirky arg orders), and exclusion zones via `hasStructureChunkInRange`. Loads
+  every `worldgen/structure_set/*.json`. Certified: `structure_placement_parity` →
+  `seeds=4 set-checks=76 positives=28947 mismatches=0` vs
+  `StructurePlacementParity.java` (real Java `StructurePlacement.isStructureChunk`
+  through `ChunkGeneratorStructureState`), covering all **19 random_spread** sets
+  over a 160×160 chunk grid for seeds {0,1,42,123456789}.
+
+- NOT yet certified / next: strongholds (`concentric_rings` placement — needs the
+  ring precompute in `ChunkGeneratorStructureState`); and the structure *piece*
+  assembly (jigsaw/template) — i.e. the actual blocks each structure writes. The
+  existing `StructureGen.cpp` piece shapes remain hand-built approximations and
+  are explicitly NOT 1:1 yet. Biome decoration feature execution is ordered
+  correctly now (FeatureSorter) but per-feature placement is still partially
+  ported (see Sessions 32–42).
 
 **Session 52**: picked up the Session 51 carver verification handoff from the
 Claude Code transcript. Generated the Java carved-terrain ground truth with

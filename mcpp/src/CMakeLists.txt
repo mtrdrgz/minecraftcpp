@@ -469,6 +469,22 @@ set_target_properties(feature_sorter_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Structure placement parity: which chunks are structure chunks per world seed
+# for every random_spread structure set (RandomSpreadStructurePlacement +
+# frequency reduction + exclusion zones) against the real Java StructurePlacement.
+# Compares against tools/StructurePlacementParity.java over a fixed chunk grid.
+add_executable(structure_placement_parity
+    world/level/levelgen/structure/placement/StructurePlacementParityTest.cpp
+    world/level/levelgen/structure/placement/StructurePlacement.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(structure_placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_placement_parity PRIVATE nlohmann_json)
+set_target_properties(structure_placement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # BlockStateProvider parity (Simple / Weighted / NoiseThreshold). Also covers
 # raw NormalNoise.getValue (the NOISE cases). `--cases <tsv>` compares against
 # tools/BlockStateProviderParity.java (the real decompiled providers).
