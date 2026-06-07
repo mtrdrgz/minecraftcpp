@@ -303,7 +303,33 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 56 (decoration: first feature certified 1:1 — grass)
+**Last updated**: Session 57 (decoration: data-driven loader + grass family certified)
+
+**Session 57** (decoration track — data-driven, vegetation batch): made the
+decoration parity test data-driven — it loads `placed_feature/<id>.json` +
+`configured_feature/<id>.json` and assembles the ported PlacedFeature pipeline
+(throws on any unsupported modifier/feature/provider — never faked). Supported so
+far: modifiers `noise_threshold_count`, `noise_based_count`, `count`,
+`rarity_filter`, `in_square`, `heightmap`, `random_offset`, `biome` (pass-through),
+`block_predicate_filter` (matching_block_tag / matching_blocks / would_survive /
+all_of / any_of / not / true); feature `simple_block` with `simple` and
+`weighted` state providers; double-plant placement; `canSurvive` for
+`#supports_vegetation` and `#dead_bush_may_place_on`.
+- CERTIFIED 1:1 (each `biome_decoration_parity --placed <id>`, mismatches=0,
+  6 land chunks × 2 seeds, vs real Java): `patch_grass_plain` (186),
+  `patch_grass_forest` (34), `patch_grass_jungle` (410), `patch_grass_normal` (89),
+  `patch_tall_grass` (162, double-plant). Run via
+  `tools/BiomeDecorationParity.java <placed> <grassy biome that lists it>` then the
+  C++ test. The forced biome MUST be grassy-surfaced (plants need
+  `#supports_vegetation` below) AND list the feature.
+- Harness note: the land-chunk scan finds output by trial; RARE features
+  (rarity_filter, e.g. `patch_tall_grass_2`) are slow to find producing chunks —
+  use a denser biome or widen the scan. Flowers (`flower_*`, weighted /
+  noise_threshold providers) are next, then dead bush / dry grass, then TREES.
+- NoiseThresholdProvider (flower_plain) and HeightProvider/`height_range` (ores)
+  are ported but not yet wired into this loader.
+
+**Session 56** (decoration track — first certified feature): built the decoration
 
 **Session 56** (decoration track — first certified feature): built the decoration
 ground-truth harness and certified the first vegetation feature end-to-end.
