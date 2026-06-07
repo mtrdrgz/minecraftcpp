@@ -303,7 +303,23 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 60 (decoration: OAK TREE certified 1:1)
+**Last updated**: Session 61 (decoration: 5 straight-trunk trees certified 1:1)
+
+**Session 61** (decoration track — more trees): generalized the tree foliage to
+dispatch by placer type. CERTIFIED 1:1 (`biome_decoration_parity --tree <id>`,
+mismatches=0, 32 land chunks × 2 seeds, ~10 trees/chunk with overlap):
+  - oak (13611), birch (13934), jungle_tree_no_vine (15481) — straight + blob
+  - spruce (16550) — spruce_foliage_placer (foliageHeight=max(4,treeH-trunkH.sample);
+    currentRadius=nextInt(2); no corner rng)
+  - pine (12653) — pine_foliage_placer (foliageRadius OVERRIDE adds
+    nextInt(max(trunkHeight+1,1)) — easy to miss; caused 90% drift until added)
+All share straight_trunk_placer. jungle_tree itself needs decorators (cocoa/vines)
+— deferred. NEXT trees (other trunk/foliage placers): acacia (forking +
+acacia_foliage), dark_oak/pale_oak (dark_oak placers), cherry, fancy_oak (fancy —
+complex), mega_* (giant). Then tree DECORATORS (bees/vines/cocoa/alter_ground),
+dead bush/dry grass, dual_noise_provider, ores.
+
+**Last updated prior**: Session 60 (decoration: OAK TREE certified 1:1)
 
 **Session 60** (decoration track — trees): ported the oak `tree` feature to the
 C++ data-driven loader and certified it 1:1, incl. multi-tree overlap.

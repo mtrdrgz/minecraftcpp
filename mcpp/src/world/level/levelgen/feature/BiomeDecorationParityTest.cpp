@@ -232,7 +232,9 @@ bool treeIsFree(WorldGenLevel& l, BlockPos p) {
 // Parsed oak-family tree (straight trunk + blob foliage + two-layers size).
 struct TreeCfg {
     int baseHeight, heightRandA, heightRandB;
-    int blobHeight;
+    int foliageType{0};        // 0 = blob, 1 = spruce
+    int blobHeight{0};         // blob only
+    IntProviderPtr trunkHeightProv;  // spruce only (foliageHeight)
     IntProviderPtr radius, offset;
     std::string trunkState, foliageState;
     std::vector<std::pair<std::function<bool(WorldGenLevel&, BlockPos)>, std::string>> belowRules;
@@ -268,9 +270,11 @@ PlacedFeature::FeaturePlacer loadFeature(const json& cfg) {
         tc->heightRandA = tp.at("height_rand_a").get<int>();
         tc->heightRandB = tp.at("height_rand_b").get<int>();
         const json& fp = cc.at("foliage_placer");
-        if (stripNs(fp.at("type").get<std::string>()) != "blob_foliage_placer")
-            throw std::runtime_error("unsupported foliage_placer: " + fp.at("type").get<std::string>());
-        tc->blobHeight = fp.at("height").get<int>();
+        const std::string fpt = stripNs(fp.at("type").get<std::string>());
+        if (fpt == "blob_foliage_placer") { tc->foliageType = 0; tc->blobHeight = fp.at("height").get<int>(); }
+        else if (fpt == "spruce_foliage_placer") { tc->foliageType = 1; tc->trunkHeightProv = loadIntProvider(fp.at("trunk_height")); }
+        else if (fpt == "pine_foliage_placer") { tc->foliageType = 2; tc->trunkHeightProv = loadIntProvider(fp.at("height")); }
+        else throw std::runtime_error("unsupported foliage_placer: " + fpt);
         tc->radius = loadIntProvider(fp.at("radius"));
         tc->offset = loadIntProvider(fp.at("offset"));
         tc->trunkState = stateName(cc.at("trunk_provider").at("state"));
@@ -293,8 +297,14 @@ PlacedFeature::FeaturePlacer loadFeature(const json& cfg) {
 
         return [tc](WorldGenLevel& level, RandomSource& rng, BlockPos origin) -> bool {
             const int treeHeight = tc->baseHeight + rng.nextInt(tc->heightRandA + 1) + rng.nextInt(tc->heightRandB + 1);
-            const int /*foliageHeight*/ fh = tc->blobHeight;          // BlobFoliagePlacer.foliageHeight (no rng)
-            const int leafRadius = tc->radius->sample(rng);           // foliageRadius
+            // foliageHeight (consumes rng for spruce: max(4, treeHeight - trunkHeight.sample))
+            const int fh = (tc->foliageType == 1) ? std::max(4, treeHeight - tc->trunkHeightProv->sample(rng))
+                          : (tc->foliageType == 2) ? tc->trunkHeightProv->sample(rng)
+                                                   : tc->blobHeight;
+            const int trunkHeight = treeHeight - fh;
+            int leafRadius = tc->radius->sample(rng);                  // foliageRadius (base)
+            if (tc->foliageType == 2)                                  // PineFoliagePlacer override: + nextInt(max(trunkHeight+1,1))
+                leafRadius += rng.nextInt(std::max(trunkHeight + 1, 1));
             const int clipped = getMaxFreeTreeHeight(level, treeHeight, origin, *tc);
             if (!(clipped >= treeHeight || (tc->hasMinClipped && clipped >= tc->minClipped))) return false;
 
@@ -311,22 +321,45 @@ PlacedFeature::FeaturePlacer loadFeature(const json& cfg) {
             }
             const BlockPos attach{ origin.x, origin.y + clipped, origin.z };
 
-            // createFoliage (blob).
-            const int off = tc->offset->sample(rng);                  // FoliagePlacer.offset (no rng for const)
-            for (int yo = off; yo >= off - fh; --yo) {
-                const int currentRadius = std::max(leafRadius + 0 - 1 - yo / 2, 0);
-                for (int dx = -currentRadius; dx <= currentRadius; ++dx) {
-                    for (int dz = -currentRadius; dz <= currentRadius; ++dz) {
-                        // shouldSkipLocationSigned -> shouldSkipLocation(abs(dx),yo,abs(dz),r)
-                        const int mdx = std::abs(dx), mdz = std::abs(dz);
-                        bool skip = false;
-                        if (mdx == currentRadius && mdz == currentRadius)
-                            skip = (rng.nextInt(2) == 0 || yo == 0);   // corner: consume nextInt(2)
-                        if (skip) continue;
-                        BlockPos lp{ attach.x + dx, attach.y + yo, attach.z + dz };
-                        if (treeValidPos(level, lp)) level.setBlock(lp, tc->foliageState, 19); // tryPlaceLeaf
+            // A leaf row; corner-skip behaviour differs per foliage placer.
+            auto leavesRow = [&](int r, int yo, bool blobCorner) {
+                for (int dx = -r; dx <= r; ++dx) for (int dz = -r; dz <= r; ++dz) {
+                    const int mdx = std::abs(dx), mdz = std::abs(dz);
+                    bool skip = false;
+                    if (blobCorner) {
+                        if (mdx == r && mdz == r) skip = (rng.nextInt(2) == 0 || yo == 0);
+                    } else { // spruce: shouldSkipLocation = dx==r && dz==r && r>0 (no rng)
+                        if (mdx == r && mdz == r && r > 0) skip = true;
                     }
+                    if (skip) continue;
+                    BlockPos lp{ attach.x + dx, attach.y + yo, attach.z + dz };
+                    if (treeValidPos(level, lp)) level.setBlock(lp, tc->foliageState, 19);
                 }
+            };
+
+            const int off = tc->offset->sample(rng); // FoliagePlacer.offset
+            if (tc->foliageType == 2) {
+                // PineFoliagePlacer.createFoliage
+                int currentRadius = 0;
+                for (int yo = off; yo >= off - fh; --yo) {
+                    leavesRow(currentRadius, yo, false);
+                    if (currentRadius >= 1 && yo == off - fh + 1) --currentRadius;
+                    else if (currentRadius < leafRadius /*+ radiusOffset 0*/) ++currentRadius;
+                }
+            } else if (tc->foliageType == 1) {
+                // SpruceFoliagePlacer.createFoliage
+                int currentRadius = rng.nextInt(2);
+                int maxRadius = 1, minRadius = 0;
+                for (int yo = off; yo >= -fh; --yo) {
+                    leavesRow(currentRadius, yo, false);
+                    if (currentRadius >= maxRadius) { currentRadius = minRadius; minRadius = 1;
+                        maxRadius = std::min(maxRadius + 1, leafRadius /*+ radiusOffset 0*/); }
+                    else ++currentRadius;
+                }
+            } else {
+                // BlobFoliagePlacer.createFoliage
+                for (int yo = off; yo >= off - fh; --yo)
+                    leavesRow(std::max(leafRadius + 0 - 1 - yo / 2, 0), yo, true);
             }
             return true;
         };
