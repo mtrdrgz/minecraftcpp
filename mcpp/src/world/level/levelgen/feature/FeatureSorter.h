@@ -12,21 +12,6 @@
 
 namespace mc::levelgen::feature {
 
-// Port foundation for net.minecraft.world.level.biome.FeatureSorter.
-//
-// Java builds a global per-step PlacedFeature order once from
-// List.copyOf(biomeSource.possibleBiomes()). Later applyBiomeDecoration collects
-// possible biomes around the current chunk, maps their features to the sorted
-// step-local indices, sorts those indices, and calls:
-//
-//   random.setFeatureSeed(decorationSeed, globalIndexOfFeature, step)
-//
-// where globalIndexOfFeature is the feature's index within StepFeatureData for
-// that generation step. A local per-chunk merged list is not equivalent.
-//
-// This header intentionally works on placed-feature keys instead of live
-// PlacedFeature objects so the ordering foundation can be validated before
-// re-enabling feature placement runtime.
 class FeatureSorter {
 public:
     struct StepFeatureData {
@@ -89,9 +74,6 @@ public:
                 throw std::logic_error("FeatureSorter DFS finished with non-empty visiting set");
             }
             if (!discovered.contains(feature) && dfs(edges, discovered, visiting, sortedFeatures, feature)) {
-                // Java tries to reduce the involved sources before throwing. We keep
-                // the same strict behavior for now and preserve the flag in the API so
-                // a later diagnostic port can report the reduced source set.
                 (void)tryReducingError;
                 throw std::logic_error("Feature order cycle found");
             }
@@ -113,9 +95,6 @@ public:
         return out;
     }
 
-    // Mirrors the inner feature-selection part of ChunkGenerator.applyBiomeDecoration:
-    // collect all features listed by the 3x3 possible biomes for this step, map to
-    // StepFeatureData indices, then sort ascending before seeding/placing.
     static std::vector<int> selectFeatureIndicesForStep(const std::vector<std::string>& possibleBiomes,
                                                          const BiomeFeatures& biomeFeatures,
                                                          const StepFeatureData& stepFeatureData,

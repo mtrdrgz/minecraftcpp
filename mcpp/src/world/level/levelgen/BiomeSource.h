@@ -15,6 +15,8 @@ public:
     std::string getNoiseBiome(int quartX, int quartY, int quartZ) const;
 
     // Mirrors MultiNoiseBiomeSource.collectPossibleBiomes() for the built-in
+    // overworld preset: first distinct biome id from the preset parameter list,
+    // in encounter order. ChunkGenerator feeds exactly this source set to
     // overworld preset: the first distinct biome id from the preset parameter
     // list, in encounter order. ChunkGenerator feeds exactly this source set to
     // FeatureSorter before decoration.

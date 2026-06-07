@@ -1,12 +1,18 @@
 #include "BiomeSource.h"
 #include "OverworldBiomeBuilder.h"
 
+#include <set>
 #include <algorithm>
 
 namespace mc::levelgen {
 
 namespace {
 std::vector<std::string> distinctBiomeIdsInEncounterOrder(const std::vector<Climate::ParameterList<std::string>::Entry>& entries) {
+    std::set<std::string> seen;
+    std::vector<std::string> out;
+    for (const auto& entry : entries) {
+        const std::string& biome = entry.second;
+        if (seen.insert(biome).second) {
     std::vector<std::string> out;
     for (const auto& entry : entries) {
         const std::string& biome = entry.second;
