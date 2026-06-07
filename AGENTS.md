@@ -303,7 +303,30 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 58 (decoration: vanilla seeding + 8 vegetation features certified)
+**Last updated**: Session 59 (decoration: trees investigation — open blocker)
+
+**Session 59** (decoration track — trees, IN PROGRESS, not certified): added a tree
+ground-truth mode to `BiomeDecorationParity.java` ("tree:minecraft:oak" wraps the
+configured feature in a synthetic [count, in_square, heightmap OCEAN_FLOOR] and
+runs the REAL Java `TreeFeature` via the Proxy WorldGenLevel; added the proxy
+methods `isStateAtPosition` / `isFluidAtPosition` that trees need). Read and
+understood the oak RNG order: `StraightTrunkPlacer.getTreeHeight` (base +
+nextInt(a+1) + nextInt(b+1)), `BlobFoliagePlacer` (foliageHeight const, radius/
+offset providers, `createFoliage` leaf rows, corner-skip `nextInt(2)` in
+`shouldSkipLocation`), `TwoLayersFeatureSize`, `rule_based_state_provider`,
+validTreePos = air|#replaceable_by_trees, isFree adds #logs. Block-name parity
+means `updateLeaves` (distance property) is a no-op.
+- OPEN BLOCKER: the REAL Java `TreeFeature` returns false at the heightmap origin
+  in the isolated harness — `getMaxFreeTreeHeight` at y=0 checks the trunk origin,
+  which is the surface block (grass_block, NOT in #replaceable_by_trees → not
+  free) → returns -2 → no tree. So real `trees_plains` placed 0 over 32 land
+  chunks here. Tree origin must effectively be surface+1 (air), but the heightmap
+  getHeight returns the top-solid y (confirmed: grass certification matches with
+  getHeight = topmost-non-air). Resolve this origin/anchor detail (how vanilla
+  anchors the trunk one above the heightmap) before porting the C++ tree feature.
+  NO faked tree code was committed; the C++ loader still throws on `tree`.
+
+**Last updated prior**: Session 58 (decoration: vanilla seeding + 8 vegetation features certified)
 
 **Session 58** (decoration track — flowers + correct seeding): fixed the decoration
 seeding to be vanilla-faithful and extended the loader through the flower features.

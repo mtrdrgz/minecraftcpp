@@ -159,8 +159,24 @@ public class BiomeDecorationParity {
         final int maxY = minY + height.getHeight();
 
         HolderLookup.RegistryLookup<PlacedFeature> placedFeatures = provider.lookupOrThrow(Registries.PLACED_FEATURE);
-        Holder<PlacedFeature> placed = placedFeatures.getOrThrow(
-            ResourceKey.create(Registries.PLACED_FEATURE, Identifier.parse(featureId)));
+        // Tree mode: "tree:minecraft:oak" wraps the configured feature in a synthetic
+        // surface placement [count(10), in_square, heightmap OCEAN_FLOOR] and places it
+        // directly (no biome filter), so the tree feature can be certified in isolation.
+        final boolean treeMode = featureId.startsWith("tree:");
+        final PlacedFeature placed;
+        if (treeMode) {
+            String cfgId = featureId.substring("tree:".length());
+            Holder<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> cf =
+                provider.lookupOrThrow(Registries.CONFIGURED_FEATURE)
+                    .getOrThrow(ResourceKey.create(Registries.CONFIGURED_FEATURE, Identifier.parse(cfgId)));
+            placed = new PlacedFeature(cf, List.of(
+                net.minecraft.world.level.levelgen.placement.CountPlacement.of(10),
+                net.minecraft.world.level.levelgen.placement.InSquarePlacement.spread(),
+                net.minecraft.world.level.levelgen.placement.HeightmapPlacement.onHeightmap(Heightmap.Types.OCEAN_FLOOR)));
+        } else {
+            placed = placedFeatures.getOrThrow(
+                ResourceKey.create(Registries.PLACED_FEATURE, Identifier.parse(featureId))).value();
+        }
         final Holder<Biome> forcedBiome = provider.lookupOrThrow(Registries.BIOME)
             .getOrThrow(ResourceKey.create(Registries.BIOME, Identifier.parse(biomeId)));
 
@@ -221,7 +237,9 @@ public class BiomeDecorationParity {
                 WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(seed));
                 long deco = random.setDecorationSeed(seed, cx * 16, cz * 16);
                 random.setFeatureSeed(deco, 0, 0);
-                boolean ok = placed.value().placeWithBiomeCheck(level, generator, random, new BlockPos(cx * 16, 0, cz * 16));
+                boolean ok = treeMode
+                    ? placed.place(level, generator, random, new BlockPos(cx * 16, 0, cz * 16))
+                    : placed.placeWithBiomeCheck(level, generator, random, new BlockPos(cx * 16, 0, cz * 16));
                 if (System.getenv("DECO_DEBUG") != null) System.err.println("DBG place ok="+ok);
 
                 // Collect PUT (changed/added blocks).
@@ -259,6 +277,8 @@ public class BiomeDecorationParity {
                 String n = m.getName();
                 switch (n) {
                     case "getBlockState": { BlockPos p=(BlockPos)a[0]; return (p.getX()>>4==cx && p.getZ()>>4==cz) ? chunk.getBlockState(p) : AIR; }
+                    case "isStateAtPosition": { BlockPos p=(BlockPos)a[0]; BlockState st=(p.getX()>>4==cx && p.getZ()>>4==cz)?chunk.getBlockState(p):AIR; @SuppressWarnings("unchecked") java.util.function.Predicate<BlockState> pr=(java.util.function.Predicate<BlockState>)a[1]; return pr.test(st); }
+                    case "isFluidAtPosition": { BlockPos p=(BlockPos)a[0]; BlockState st=(p.getX()>>4==cx && p.getZ()>>4==cz)?chunk.getBlockState(p):AIR; @SuppressWarnings("unchecked") java.util.function.Predicate<net.minecraft.world.level.material.FluidState> pr=(java.util.function.Predicate<net.minecraft.world.level.material.FluidState>)a[1]; return pr.test(st.getFluidState()); }
                     case "getFluidState": return chunk.getFluidState((BlockPos) a[0]);
                     case "setBlock": {
                         BlockPos p=(BlockPos)a[0];
