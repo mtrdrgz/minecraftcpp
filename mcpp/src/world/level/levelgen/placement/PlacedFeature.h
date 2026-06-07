@@ -57,21 +57,26 @@ public:
 
     bool place(WorldGenLevel& level, RandomSource& random, BlockPos origin, int minGenY, int genDepth) const {
         PlacementContext context(&level, minGenY, genDepth);
-        std::vector<BlockPos> positions{ origin };
-        for (const auto& modifier : m_placement) {
-            std::vector<BlockPos> next;
-            for (const BlockPos& p : positions) {
-                std::vector<BlockPos> produced = modifier->getPositions(&context, random, p);
-                next.insert(next.end(), produced.begin(), produced.end());
-            }
-            positions.swap(next);
-        }
+        // Java composes the modifiers as lazy Stream.flatMap chains terminated by
+        // forEach(feature). Laziness makes evaluation DEPTH-FIRST: modifier[i]
+        // produces its list for one upstream position, then each produced position
+        // is driven through modifiers[i+1..] and the feature before the next
+        // upstream position is processed. This ordering is RNG-observable (ores,
+        // for instance, consume RNG in in_square + height_range per position and
+        // then in the feature), so it must match Java exactly — a breadth-first
+        // pass over the whole vector would consume RNG in the wrong order.
         bool placedAny = false;
-        for (const BlockPos& pos : positions) {
-            if (m_feature(level, random, pos)) {
-                placedAny = true;
-            }
-        }
+        const std::size_t modCount = m_placement.size();
+        std::function<void(std::size_t, const BlockPos&)> drive =
+            [&](std::size_t i, const BlockPos& pos) {
+                if (i == modCount) {
+                    if (m_feature(level, random, pos)) placedAny = true;
+                    return;
+                }
+                std::vector<BlockPos> produced = m_placement[i]->getPositions(&context, random, pos);
+                for (const BlockPos& p : produced) drive(i + 1, p);
+            };
+        drive(0, origin);
         return placedAny;
     }
 

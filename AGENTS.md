@@ -303,7 +303,29 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 54 (per-biome surface rules certified 1:1)
+**Last updated**: Session 55 (decoration: fixed lazy-stream placement order)
+
+**Session 55** (decoration track — foundation): the user asked to port all biome
+decorations. State check first: `applyBiomeDecoration` is a deliberate **no-op**
+(Sessions 40–42 removed the approximate feature output rather than violate RULE #0;
+only the FeatureSorter ordering is wired, certified Session 53). Porting all 258
+placed / 221 configured features (≈30 feature types, each with exact RNG order) is
+the largest remaining subsystem and must be done family-by-family, each certified.
+- FIXED a foundational correctness bug blocking ALL decoration parity:
+  `placement/PlacedFeature.place` composed modifiers BREADTH-first (each modifier
+  applied to the whole position vector) but Java's lazy `Stream.flatMap` chain is
+  DEPTH-first (each origin flows through modifiers[i+1..] and the feature before
+  the next origin). This is RNG-observable for any feature with ≥2 RNG-consuming
+  modifiers (e.g. ores: in_square + height_range + feature). Reimplemented as a
+  depth-first recursive drive that matches Java's evaluation order exactly.
+  Verified: `placement_parity` and `world_placement_parity` still pass.
+- NOT done: actual feature ports remain. Next target is the ore family
+  (`OreFeature.place` is read/understood; needs `RuleTest` tag_match/block_match,
+  the `height_range` modifier, a WorldGenLevel-over-LevelChunk, and a per-feature
+  decoration parity harness that feeds vanilla base+surface terrain in — same
+  isolation trick as Session 54, since base terrain is not FP-exact on Linux).
+
+**Session 54** (biomes → terrain track): the user asked to make biomes affect
 
 **Session 54** (biomes → terrain track): the user asked to make biomes affect
 terrain and certify it one by one. Confirmed from the 26.1.2 source that terrain
