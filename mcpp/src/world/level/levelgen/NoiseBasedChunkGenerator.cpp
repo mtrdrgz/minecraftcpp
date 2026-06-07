@@ -422,6 +422,14 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk) const {
 }
 
 void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
+    buildSurface(chunk, [this](int bx, int by, int bz) -> std::string {
+        return m_biomeManager ? m_biomeManager->getBiome(bx, by, bz) : "";
+    });
+}
+
+void NoiseBasedChunkGenerator::buildSurface(
+    LevelChunk& chunk,
+    const std::function<std::string(int, int, int)>& biomeOverride) const {
     // Ensure heightmap is accurate before SurfaceSystem reads it (for steep condition)
     chunk.computeHeightmap();
 
@@ -445,11 +453,7 @@ void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
         return samplePreliminarySurfaceLevel(bx, bz);
     };
 
-    auto biomeGetter = [this](int bx, int by, int bz) -> std::string {
-        return m_biomeManager ? m_biomeManager->getBiome(bx, by, bz) : "";
-    };
-
-    system.buildSurface(randomState, chunk, prelimSurf, biomeGetter, genCtx, m_surfaceRuleSource);
+    system.buildSurface(randomState, chunk, prelimSurf, biomeOverride, genCtx, m_surfaceRuleSource);
 
     chunk.computeHeightmap();
     chunk.setLoaded(true);

@@ -3,6 +3,7 @@
 #include "FeatureSorter.h"
 #include "../BiomeSource.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
 #include <vector>
@@ -34,6 +35,10 @@ std::vector<std::string> collectPossibleBiomesAroundChunk(
     std::set<std::string> found;
     const ChunkPos center = chunk.pos();
 
+    // Java reads all 4x4x4 biome palette cells from every section in the 3x3
+    // chunk area around the decorated chunk, then retains only source biomes.
+    // Until ChunkSection biome palettes are fully populated, sample the same
+    // quart-cell world positions through the engine biome resolver.
     for (int chunkZ = center.z - 1; chunkZ <= center.z + 1; ++chunkZ) {
         for (int chunkX = center.x - 1; chunkX <= center.x + 1; ++chunkX) {
             for (int sectionY = 0; sectionY < CHUNK_SECTION_COUNT; ++sectionY) {
@@ -73,6 +78,11 @@ void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
     (void)worldgenDir;
     (void)chunkAt;
 
+    // Runtime decoration is now wired through Java's FeatureSorter foundation.
+    // This establishes the exact global per-step placed-feature order and the
+    // local per-step feature indices that will be fed to setFeatureSeed once each
+    // placed_feature/configured_feature implementation is ported. Actual feature
+    // placement intentionally remains disabled instead of approximated.
     const auto& featuresPerStep = overworldFeaturesPerStep(biomeFeatures);
     const std::vector<std::string> possibleBiomes = collectPossibleBiomesAroundChunk(chunk, biomeGetter);
 
@@ -84,6 +94,10 @@ void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
             step);
         for (int globalIndexOfFeature : selectedFeatureIndices) {
             (void)globalIndexOfFeature;
+            // TODO(port): call PlacedFeature.placeWithBiomeCheck here after the
+            // corresponding placed_feature modifiers, configured_feature type and
+            // block predicates are ported and parity-tested. Do not substitute a
+            // visual or probabilistic fallback.
         }
     }
 
