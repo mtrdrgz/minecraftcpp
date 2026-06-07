@@ -316,15 +316,21 @@ offset providers, `createFoliage` leaf rows, corner-skip `nextInt(2)` in
 `shouldSkipLocation`), `TwoLayersFeatureSize`, `rule_based_state_provider`,
 validTreePos = air|#replaceable_by_trees, isFree adds #logs. Block-name parity
 means `updateLeaves` (distance property) is a no-op.
-- OPEN BLOCKER: the REAL Java `TreeFeature` returns false at the heightmap origin
-  in the isolated harness — `getMaxFreeTreeHeight` at y=0 checks the trunk origin,
-  which is the surface block (grass_block, NOT in #replaceable_by_trees → not
-  free) → returns -2 → no tree. So real `trees_plains` placed 0 over 32 land
-  chunks here. Tree origin must effectively be surface+1 (air), but the heightmap
-  getHeight returns the top-solid y (confirmed: grass certification matches with
-  getHeight = topmost-non-air). Resolve this origin/anchor detail (how vanilla
-  anchors the trunk one above the heightmap) before porting the C++ tree feature.
-  NO faked tree code was committed; the C++ loader still throws on `tree`.
+- RESOLVED (origin): the trunk origin must be the AIR block above the surface
+  (heightmap getHeight returns the top-solid y = 63; `getMaxFreeTreeHeight` needs a
+  free/air origin). With a synthetic placement [count(10), in_square, heightmap
+  OCEAN_FLOOR, random_offset vertical(+1)] the real Java oak places correctly:
+  1485 oak_log + 11862 oak_leaves + 264 dirt over 32 chunks. The tree
+  ground-truth harness (`tree:minecraft:oak`) is working and emits PRE/PUT.
+- NEXT (concrete): port the C++ tree feature into the data-driven loader —
+  `StraightTrunkPlacer` (getTreeHeight base+nextInt(a+1)+nextInt(b+1); placeTrunk:
+  placeBelowTrunkBlock via rule_based provider, logs, one foliage attachment),
+  `BlobFoliagePlacer` (foliageHeight const; radius/offset providers; createFoliage
+  rows; corner-skip nextInt(2)), `TwoLayersFeatureSize.getSizeAtHeight` +
+  `getMaxFreeTreeHeight`, `rule_based_state_provider`, validTreePos/isFree, and the
+  matching synthetic placement on the C++ side — then certify oak, then spruce/
+  birch (other placers). NO tree worldgen code committed yet (C++ loader throws on
+  `tree`); only the ground-truth tool. Nothing faked.
 
 **Last updated prior**: Session 58 (decoration: vanilla seeding + 8 vegetation features certified)
 
