@@ -10,6 +10,7 @@
 #include "feature/BiomeFeatures.h"
 #include "feature/FeatureSorter.h"
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -30,6 +31,12 @@ public:
     int getBaseHeight(int blockX, int blockZ) const;
     void fillFromNoise(LevelChunk& chunk) const;
     void buildSurface(LevelChunk& chunk) const;
+    // Surface build with an explicit biome getter, overriding the BiomeManager
+    // zoomer. Used to certify the per-biome surface rules in isolation (force one
+    // biome over real terrain and compare against vanilla). Same path as the
+    // default overload otherwise.
+    void buildSurface(LevelChunk& chunk,
+                      const std::function<std::string(int, int, int)>& biomeOverride) const;
     void applyCarvers(LevelChunk& chunk) const;
 
     // Block-resolution biome at a world position (BiomeManager zoomer), as used by

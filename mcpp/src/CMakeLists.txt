@@ -416,6 +416,47 @@ set_target_properties(surface_terrain_column_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Per-biome surface-rule parity. Feeds the vanilla base-terrain column into the
+# ported SurfaceSystem with each overworld biome forced, and compares the surface
+# block at every (biome, seed, x, z, y) against tools/BiomeSurfaceParity.java.
+# Terrain is taken from the ground truth (BASE rows), so this isolates the
+# biome-dependent surface rules from any base-terrain/aquifer divergence.
+add_executable(biome_surface_parity
+    world/level/levelgen/BiomeSurfaceParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(biome_surface_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(biome_surface_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(biome_surface_parity PRIVATE bcrypt)
+endif()
+set_target_properties(biome_surface_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Carved terrain column parity after Java buildSurface+applyCarvers and before
 # structures/features/decoration. This is expected to fail until the C++ carver
 # port is wired.

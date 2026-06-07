@@ -303,7 +303,42 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 53 (FeatureSorter + structure placement certified 1:1)
+**Last updated**: Session 54 (per-biome surface rules certified 1:1)
+
+**Session 54** (biomes → terrain track): the user asked to make biomes affect
+terrain and certify it one by one. Confirmed from the 26.1.2 source that terrain
+*shape* is biome-independent (`NoiseChunk` imports only `Climate`, not `Biome`);
+the biome-dependent part of terrain is the **surface rules** (`SurfaceSystem` /
+`SurfaceRules`). Built a per-biome surface certification for all 54 overworld
+biomes.
+
+- New `NoiseBasedChunkGenerator::buildSurface(chunk, biomeOverride)` overload to
+  force one biome over a column in isolation (the default overload delegates to it
+  with the BiomeManager getter — behaviour unchanged).
+- `tools/BiomeSurfaceParity.java` emits the biome-independent base column (BASE
+  rows) once per (seed,col), then forces each overworld biome over that exact base
+  terrain and runs the real vanilla `SurfaceSystem.buildSurface` (SURF rows).
+  `BiomeSurfaceParityTest` loads BASE into a `LevelChunk` and runs the ported
+  surface system with the same forced biome.
+- CERTIFIED: `biome_surface_parity` → `biomes=54 cases=248832 mismatches=0` for
+  all 54 overworld biomes (2 seeds × 6 columns × full column). The ported surface
+  rules — badlands clay bands (`generateBands`/`getBand`), desert sand/sandstone,
+  snow/ice, gravel/stony shores, swamp/mangrove mud, frozen-ocean & eroded-badlands
+  extensions, deepslate/bedrock — are bit-exact given identical base terrain.
+
+- IMPORTANT FINDING (Linux toolchain): the base-terrain/aquifer stage is NOT
+  bit-exact on the Linux g++ build. `base_terrain_column_parity` = 202/21504 and
+  `surface_terrain_column_parity` = 299/21504 mismatches here, all FP-sensitive
+  aquifer water/stone cells. `density_parity` (router functions) is still 0 on
+  Linux, so the divergence is in `fillFromNoise` cell interpolation / aquifer
+  float ordering, not the noise. These were certified 0 on the Windows llvm-mingw
+  toolchain (Sessions 50–52). The per-biome surface certification feeds vanilla
+  base terrain in precisely to factor this out; closing the terrain FP gap on
+  Linux (or confirming it stays 0 on Windows) is a separate terrain-track task.
+  NOTE for parity work on a fresh clone: `26.1.2/` and `mcpp/src/assets/*.json`
+  are git-LFS; run `git lfs pull` + re-extract `data/` from the real jar first.
+
+**Session 53** (feature ordering + structure placement track): integrated the
 
 **Session 53** (feature ordering + structure placement track): integrated the
 FeatureSorter parity work from PR #7 (`continue-feature-sorter-parity`) into the
