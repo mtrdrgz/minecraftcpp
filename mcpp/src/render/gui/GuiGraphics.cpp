@@ -1,6 +1,7 @@
 #include "GuiGraphics.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
 
 namespace mc::render {
 
@@ -82,16 +83,37 @@ void GuiGraphics::blit(ITexture* tex, int x, int y, float u, float v, int w, int
     blitAlpha(tex, x, y, u, v, w, h, {1,1,1,1}, tw, th);
 }
 
-void GuiGraphics::blitAlpha(ITexture* tex, int x, int y, float u, float v, int w, int h, const glm::vec4& col, int tw, int th) {
-    float u0_f = u / (float)tw;
-    float v0_f = v / (float)th;
-    float u1_f = (u + w) / (float)tw;
-    float v1_f = (v + h) / (float)th;
+void GuiGraphics::blitSized(ITexture* tex, int x, int y, int dstW, int dstH,
+                            float u, float v, int srcW, int srcH, int tw, int th) {
+    blitAlphaSized(tex, x, y, dstW, dstH, u, v, srcW, srcH, {1,1,1,1}, tw, th);
+}
 
-    GuiVertex v0_v{{(float)x,   (float)y,   0.0f}, {u0_f, v0_f}, col};
-    GuiVertex v1_v{{(float)x+w, (float)y,   0.0f}, {u1_f, v0_f}, col};
-    GuiVertex v2_v{{(float)x+w, (float)y+h, 0.0f}, {u1_f, v1_f}, col};
-    GuiVertex v3_v{{(float)x,   (float)y+h, 0.0f}, {u0_f, v1_f}, col};
+void GuiGraphics::blitAlpha(ITexture* tex, int x, int y, float u, float v, int w, int h, const glm::vec4& col, int tw, int th) {
+    blitAlphaSized(tex, x, y, w, h, u, v, w, h, col, tw, th);
+}
+
+void GuiGraphics::blitAlphaSized(ITexture* tex, int x, int y, int dstW, int dstH,
+                                 float u, float v, int srcW, int srcH,
+                                 const glm::vec4& col, int tw, int th) {
+    if (!tex || dstW <= 0 || dstH <= 0 || srcW <= 0 || srcH <= 0 || tw <= 0 || th <= 0) return;
+
+    // Clamp the sampled rectangle to the source texture. Buttons are commonly
+    // drawn 204px wide from a 200px PNG; without this, u1 > 1 samples wrapped or
+    // border garbage and produces the small artifacts seen at the right edge.
+    const float u0 = std::clamp(u, 0.0f, (float)tw);
+    const float v0 = std::clamp(v, 0.0f, (float)th);
+    const float u1 = std::clamp(u + (float)srcW, 0.0f, (float)tw);
+    const float v1 = std::clamp(v + (float)srcH, 0.0f, (float)th);
+
+    float u0_f = u0 / (float)tw;
+    float v0_f = v0 / (float)th;
+    float u1_f = u1 / (float)tw;
+    float v1_f = v1 / (float)th;
+
+    GuiVertex v0_v{{(float)x,      (float)y,      0.0f}, {u0_f, v0_f}, col};
+    GuiVertex v1_v{{(float)x+dstW, (float)y,      0.0f}, {u1_f, v0_f}, col};
+    GuiVertex v2_v{{(float)x+dstW, (float)y+dstH, 0.0f}, {u1_f, v1_f}, col};
+    GuiVertex v3_v{{(float)x,      (float)y+dstH, 0.0f}, {u0_f, v1_f}, col};
     addQuad(v0_v, v1_v, v2_v, v3_v, tex);
 }
 
