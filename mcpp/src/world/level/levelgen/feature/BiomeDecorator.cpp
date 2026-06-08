@@ -16,6 +16,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -56,6 +57,11 @@ std::optional<std::string> readJson(const std::string& worldgenDir, const std::s
     return std::nullopt;
 }
 
+std::string keyToPathStem(std::string key) {
+    if (key.starts_with("minecraft:")) key.erase(0, 10);
+    return key;
+}
+
 int sampleIntProvider(const nlohmann::json& value, WorldgenRandom& rng) {
     if (value.is_number_integer()) {
         return value.get<int>();
@@ -71,6 +77,12 @@ int sampleIntProvider(const nlohmann::json& value, WorldgenRandom& rng) {
         const int lo = value.value("min_inclusive", 0);
         const int hi = value.value("max_inclusive", lo);
         return lo + rng.nextInt(std::max(hi - lo + 1, 1));
+    }
+    if (type == "minecraft:clamped") {
+        const int sampled = sampleIntProvider(value.at("source"), rng);
+        const int lo = value.value("min_inclusive", sampled);
+        const int hi = value.value("max_inclusive", sampled);
+        return std::clamp(sampled, lo, hi);
     }
     if (type == "minecraft:weighted_list") {
         const auto& dist = value.at("distribution");
@@ -143,8 +155,7 @@ TreeConfig* selectTreeConfigFromConfiguredFeature(const std::string& worldgenDir
                                                   WorldgenRandom& rng) {
     if (TreeConfig* direct = builtinTreeConfigForConfiguredFeature(configuredKey)) return direct;
 
-    const std::string id = configuredKey.starts_with("minecraft:") ? configuredKey.substr(10) : configuredKey;
-    const auto text = readJson(worldgenDir, "configured_feature/" + id + ".json");
+    const auto text = readJson(worldgenDir, "configured_feature/" + keyToPathStem(configuredKey) + ".json");
     if (!text) return nullptr;
 
     nlohmann::json j;
@@ -166,29 +177,14 @@ TreeConfig* selectTreeConfigFromConfiguredFeature(const std::string& worldgenDir
     return builtinTreeConfigForConfiguredFeature(featureKeyFromPlacedFeatureValue(cfg.at("default")));
 }
 
-void placeTreesPlains(LevelChunk& chunk, std::int64_t worldSeed,
-                      const std::function<std::string(int, int, int)>& biomeGetter,
-                      const BiomeFeatures& biomeFeatures,
-                      const std::string& worldgenDir,
-                      const std::function<LevelChunk*(int, int)>& chunkAt,
-                      int globalFeatureIndex,
-                      int stepIndex) {
-    const auto placedText = readJson(worldgenDir, "placed_feature/trees_plains.json");
-    if (!placedText) return;
-    nlohmann::json placed;
-    try { placed = nlohmann::json::parse(*placedText); } catch (...) { return; }
-
-    const ChunkPos pos = chunk.pos();
-    const int minX = pos.x * 16;
-    const int minZ = pos.z * 16;
-
-    WorldgenRandom rng(RandomSource::create(0));
-    const std::int64_t decorationSeed = rng.setDecorationSeed(worldSeed, minX, minZ);
-    rng.setFeatureSeed(decorationSeed, globalFeatureIndex, stepIndex);
-
-    std::vector<std::array<int, 3>> positions;
-    positions.push_back({minX, 0, minZ});
-
+bool applyPlacementModifiers(LevelChunk& chunk,
+                             const std::function<std::string(int, int, int)>& biomeGetter,
+                             const BiomeFeatures& biomeFeatures,
+                             const nlohmann::json& placed,
+                             const std::string& placedFeatureKey,
+                             int stepIndex,
+                             WorldgenRandom& rng,
+                             std::vector<std::array<int, 3>>& positions) {
     for (const auto& modifier : placed.at("placement")) {
         const std::string type = modifier.value("type", "");
         std::vector<std::array<int, 3>> out;
@@ -213,23 +209,73 @@ void placeTreesPlains(LevelChunk& chunk, std::int64_t worldSeed,
         } else if (type == "minecraft:biome") {
             for (const auto& p : positions) {
                 const std::string biome = biomeGetter(p[0], p[1], p[2]);
-                if (biomeFeatures.biomeHasFeature(biome, stepIndex, "minecraft:trees_plains")) out.push_back(p);
+                if (biomeFeatures.biomeHasFeature(biome, stepIndex, placedFeatureKey)) out.push_back(p);
             }
         } else {
-            return;
+            return false;
         }
         positions.swap(out);
-        if (positions.empty()) return;
+        if (positions.empty()) return true;
     }
+    return true;
+}
+
+int placeTreePlacedFeature(LevelChunk& chunk, std::int64_t worldSeed,
+                           const std::function<std::string(int, int, int)>& biomeGetter,
+                           const BiomeFeatures& biomeFeatures,
+                           const std::string& worldgenDir,
+                           const std::function<LevelChunk*(int, int)>& chunkAt,
+                           const std::string& placedFeatureKey,
+                           int globalFeatureIndex,
+                           int stepIndex) {
+    const auto placedText = readJson(worldgenDir, "placed_feature/" + keyToPathStem(placedFeatureKey) + ".json");
+    if (!placedText) return 0;
+    nlohmann::json placed;
+    try { placed = nlohmann::json::parse(*placedText); } catch (...) { return 0; }
+
+    const ChunkPos pos = chunk.pos();
+    const int minX = pos.x * 16;
+    const int minZ = pos.z * 16;
+
+    WorldgenRandom rng(RandomSource::create(0));
+    const std::int64_t decorationSeed = rng.setDecorationSeed(worldSeed, minX, minZ);
+    rng.setFeatureSeed(decorationSeed, globalFeatureIndex, stepIndex);
+
+    std::vector<std::array<int, 3>> positions;
+    positions.push_back({minX, 0, minZ});
+    if (!applyPlacementModifiers(chunk, biomeGetter, biomeFeatures, placed, placedFeatureKey, stepIndex, rng, positions)) {
+        return 0;
+    }
+    if (positions.empty()) return 0;
 
     TreeWorld world{chunk, minX, minZ, &chunkAt};
-    const std::string configured = placed.value("feature", "");
+    const std::string configured = featureKeyFromPlacedFeatureValue(placed.at("feature"));
+    int placedCount = 0;
     for (const auto& p : positions) {
         TreeConfig* cfg = selectTreeConfigFromConfiguredFeature(worldgenDir, configured, rng);
         if (!cfg) continue;
-        placeTree(world, rng, p[0], p[1], p[2], *cfg);
+        if (placeTree(world, rng, p[0], p[1], p[2], *cfg)) ++placedCount;
     }
-    chunk.computeHeightmap();
+    if (placedCount > 0) chunk.computeHeightmap();
+    return placedCount;
+}
+
+const std::array<std::string_view, 12>& supportedTreePlacedFeatureKeys() {
+    static constexpr std::array<std::string_view, 12> keys{
+        "minecraft:trees_plains",
+        "minecraft:trees_flower_forest",
+        "minecraft:trees_taiga",
+        "minecraft:trees_grove",
+        "minecraft:trees_snowy",
+        "minecraft:trees_savanna",
+        "minecraft:trees_windswept_savanna",
+        "minecraft:trees_birch",
+        "minecraft:trees_windswept_forest",
+        "minecraft:trees_windswept_hills",
+        "minecraft:trees_water",
+        "minecraft:trees_old_growth_pine_taiga"
+    };
+    return keys;
 }
 } // namespace
 
@@ -246,12 +292,17 @@ void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
     (void)tags;
     const auto& features = overworldFeaturesPerStep(biomeFeatures);
     constexpr int step = GenerationStep::VEGETAL_DECORATION;
+    int placedAny = 0;
     if (step < static_cast<int>(features.size())) {
-        const int index = features[step].indexOf("minecraft:trees_plains");
-        if (index >= 0) {
-            placeTreesPlains(chunk, worldSeed, biomeGetter, biomeFeatures, worldgenDir, chunkAt, index, step);
+        for (std::string_view keyView : supportedTreePlacedFeatureKeys()) {
+            const std::string key(keyView);
+            const int index = features[step].indexOf(key);
+            if (index >= 0) {
+                placedAny += placeTreePlacedFeature(chunk, worldSeed, biomeGetter, biomeFeatures, worldgenDir, chunkAt, key, index, step);
+            }
         }
     }
+    (void)placedAny;
     chunk.decorated = true;
 }
 
