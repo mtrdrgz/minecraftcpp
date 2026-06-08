@@ -11,8 +11,10 @@ void Button::render(render::GuiGraphics& g, render::Font& font, int mouseX, int 
 
     render::ITexture* tex = m_hovered ? m_texHighlight : m_texNormal;
     if (tex) {
-        // Simple scaling for now (Stretch)
-        g.blit(tex, m_x, m_y, 0, 0, m_w, m_h, 200, 20); // Assumption: button.png is 200x20
+        // Destination can be 204x20, but the vanilla button texture source is
+        // 200x20. Sample only the real source rect and stretch it to m_w/m_h;
+        // sampling 204 pixels from a 200-pixel texture caused edge artifacts.
+        g.blitSized(tex, m_x, m_y, m_w, m_h, 0, 0, 200, 20, 200, 20);
     } else {
         // Fallback
         g.fill(m_x, m_y, m_x + m_w, m_y + m_h, m_hovered ? glm::vec4{0.7f, 0.7f, 1.0f, 1.0f} : glm::vec4{0.4f, 0.4f, 0.4f, 1.0f});
