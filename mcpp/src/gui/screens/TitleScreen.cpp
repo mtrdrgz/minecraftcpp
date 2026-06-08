@@ -39,7 +39,7 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
 
     // createNormalMenuOptions(topPos, 24): Singleplayer / Multiplayer / Realms.
     addButton(w / 2 - 100, topPos, 200, 20, "Singleplayer",
-              [this]() { m_minecraft->startLocalGame(0); });
+              [this]() { m_minecraft->startLocalGameFast(0); });
     addButton(w / 2 - 100, topPos + spacing, 200, 20, "Multiplayer", []() {});      // JoinMultiplayerScreen — not ported
     addButton(w / 2 - 100, topPos + 2 * spacing, 200, 20, "Minecraft Realms", []() {}); // RealmsMainScreen — not ported
     topPos = topPos + 2 * spacing; // y of the Realms button (createNormalMenuOptions return)
