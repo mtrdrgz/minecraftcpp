@@ -53,38 +53,20 @@ bool parseBiomeFeatures(const std::string& text,
 
 BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
     namespace fs = std::filesystem;
-    BiomeFeatures out;
     if (!fs::is_directory(dir)) {
         throw std::runtime_error("biome directory not found: " + dir);
     }
-    for (const auto& entry : fs::directory_iterator(dir)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
-        std::ifstream in(entry.path());
-        std::stringstream ss;
-        ss << in.rdbuf();
 
-        const std::string biome = "minecraft:" + entry.path().stem().string();
-        auto& biomeEntry = out.m_biomes[biome];
-        if (!parseBiomeFeatures(ss.str(), biomeEntry.steps, biomeEntry.stepCount)) {
-            out.m_biomes.erase(biome);
-        }
-    }
-    return out;
+    // Runtime feature placement is intentionally disabled until the vanilla
+    // PlacedFeature pipeline is ported. Do not parse hundreds of biome JSON files
+    // on the Singleplayer entry path just to compute data that will not be used.
+    // The parser is kept below for parity tools / future placement re-enable.
+    return BiomeFeatures{};
 }
 
 BiomeFeatures BiomeFeatures::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
-    BiomeFeatures out;
-    for (const auto& [path, text] : entries) {
-        if (!path.ends_with(".json")) {
-            continue;
-        }
-        const std::string biome = "minecraft:" + stemFromPath(path);
-        auto& biomeEntry = out.m_biomes[biome];
-        if (!parseBiomeFeatures(text, biomeEntry.steps, biomeEntry.stepCount)) {
-            out.m_biomes.erase(biome);
-        }
-    }
-    return out;
+    (void)entries;
+    return BiomeFeatures{};
 }
 
 bool BiomeFeatures::hasBiome(const std::string& biome) const {
