@@ -2,7 +2,6 @@
 #include "OverworldBiomeBuilder.h"
 
 #include <set>
-#include <algorithm>
 
 namespace mc::levelgen {
 
@@ -13,10 +12,6 @@ std::vector<std::string> distinctBiomeIdsInEncounterOrder(const std::vector<Clim
     for (const auto& entry : entries) {
         const std::string& biome = entry.second;
         if (seen.insert(biome).second) {
-    std::vector<std::string> out;
-    for (const auto& entry : entries) {
-        const std::string& biome = entry.second;
-        if (std::find(out.begin(), out.end(), biome) == out.end()) {
             out.push_back(biome);
         }
     }
