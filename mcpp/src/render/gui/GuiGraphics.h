@@ -24,7 +24,12 @@ public:
     
     // Texture drawing
     void blit(ITexture* texture, int x, int y, float u, float v, int w, int h, int texW = 256, int texH = 256);
+    void blitSized(ITexture* texture, int x, int y, int dstW, int dstH,
+                   float u, float v, int srcW, int srcH, int texW, int texH);
     void blitAlpha(ITexture* texture, int x, int y, float u, float v, int w, int h, const glm::vec4& color, int texW = 256, int texH = 256);
+    void blitAlphaSized(ITexture* texture, int x, int y, int dstW, int dstH,
+                        float u, float v, int srcW, int srcH, const glm::vec4& color,
+                        int texW, int texH);
 
     // Coordinate system management
     void push() { m_poseStack.push_back(m_poseStack.back()); }
