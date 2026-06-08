@@ -18,10 +18,12 @@
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -37,6 +39,35 @@ struct Entry {
     std::string hash; // Used for index files, empty for src_assets
     std::vector<uint8_t> data;
 };
+
+static fs::path findRepoRoot(fs::path start) {
+    std::error_code ec;
+    start = fs::absolute(start, ec);
+    if (ec) return {};
+    for (int i = 0; i < 8 && !start.empty(); ++i) {
+        if (fs::exists(start / ".git", ec)) return start;
+        fs::path parent = start.parent_path();
+        if (parent == start) break;
+        start = parent;
+    }
+    return {};
+}
+
+static void pullGitLfsIfAvailable(const fs::path& repoRoot) {
+    if (repoRoot.empty()) return;
+    std::error_code ec;
+    fs::path oldCwd = fs::current_path(ec);
+    fs::current_path(repoRoot, ec);
+    if (ec) return;
+
+    std::cout << "Refreshing Git LFS assets from: " << repoRoot << "\n";
+    const int code = std::system("git lfs pull");
+    if (code != 0) {
+        std::cerr << "WARNING: git lfs pull failed; continuing with checked-out files\n";
+    }
+
+    if (!oldCwd.empty()) fs::current_path(oldCwd, ec);
+}
 
 static void addDirectory(std::vector<Entry>& entries,
                          const fs::path& root,
@@ -96,6 +127,13 @@ int main(int argc, char* argv[]) {
     fs::path data_minecraft_dir;
     if (argc == 5) {
         data_minecraft_dir = argv[4];
+    }
+
+    // CI can check out LFS-tracked resources as small pointer files. The packer is
+    // the first build step that needs those files, so refresh them here before
+    // reading src/assets and before the mcpp resource compiler embeds them.
+    if (fs::path repoRoot = findRepoRoot(src_assets_dir); !repoRoot.empty()) {
+        pullGitLfsIfAvailable(repoRoot);
     }
 
     std::vector<Entry> entries;
