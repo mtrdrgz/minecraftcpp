@@ -2,6 +2,8 @@
 
 #include "FeatureSorter.h"
 #include "TreeGen.h"
+#include "../../block/Blocks.h"
+#include "../../block/BlockState.h"
 #include "../BiomeSource.h"
 #include "../RandomSource.h"
 
