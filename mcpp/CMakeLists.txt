@@ -70,3 +70,37 @@ endif()
 
 add_subdirectory(tools/asset_packer)
 add_subdirectory(src)
+
+# ── Runtime asset pack ───────────────────────────────────────────────────────
+# The checked-in src/assets/assets.bin may be a tiny placeholder. Always rebuild
+# it before compiling mcpp so the Windows resource compiler embeds the real pack.
+set(MCPP_RUNTIME_ASSET_PACK "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/assets.bin")
+set(MCPP_SRC_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/assets")
+set(MCPP_EXTERNAL_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets")
+set(MCPP_WORLDGEN_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../26.1.2/data/minecraft")
+
+set(MCPP_ASSET_PACK_COMMAND
+    asset_packer
+    "${MCPP_EXTERNAL_ASSETS_DIR}"
+    "${MCPP_SRC_ASSETS_DIR}"
+    "${MCPP_RUNTIME_ASSET_PACK}"
+)
+if(EXISTS "${MCPP_WORLDGEN_DATA_DIR}")
+    list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_WORLDGEN_DATA_DIR}")
+endif()
+
+add_custom_command(
+    OUTPUT "${MCPP_RUNTIME_ASSET_PACK}"
+    COMMAND ${MCPP_ASSET_PACK_COMMAND}
+    COMMAND "${CMAKE_COMMAND}" -DASSET_BIN="${MCPP_RUNTIME_ASSET_PACK}" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
+    DEPENDS asset_packer
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Packing runtime assets into src/assets/assets.bin"
+    VERBATIM
+)
+
+add_custom_target(pack_runtime_assets DEPENDS "${MCPP_RUNTIME_ASSET_PACK}")
+add_dependencies(mcpp pack_runtime_assets)
+set_source_files_properties(src/assets/assets.rc PROPERTIES
+    OBJECT_DEPENDS "${MCPP_RUNTIME_ASSET_PACK}"
+)
