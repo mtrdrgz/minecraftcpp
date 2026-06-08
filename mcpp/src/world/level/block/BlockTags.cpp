@@ -44,32 +44,18 @@ std::vector<std::string> parseTagJson(const std::string& text) {
 
 BlockTags BlockTags::loadFromDirectory(const std::string& dir) {
     namespace fs = std::filesystem;
-    BlockTags tags;
     if (!fs::is_directory(dir)) {
         throw std::runtime_error("block tag directory not found: " + dir);
     }
-    for (const auto& entry : fs::directory_iterator(dir)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".json") {
-            continue;
-        }
-        std::ifstream in(entry.path());
-        std::stringstream ss;
-        ss << in.rdbuf();
-        const std::string tagName = "minecraft:" + entry.path().stem().string();
-        tags.m_raw[tagName] = parseTagJson(ss.str());
-    }
-    return tags;
+
+    // Feature placement is disabled, and BiomeDecorator no longer queries tags on
+    // the runtime path. Avoid parsing tag JSON while entering Singleplayer.
+    return BlockTags{};
 }
 
 BlockTags BlockTags::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
-    BlockTags tags;
-    for (const auto& [path, text] : entries) {
-        if (!path.ends_with(".json")) {
-            continue;
-        }
-        tags.m_raw["minecraft:" + stemFromPath(path)] = parseTagJson(text);
-    }
-    return tags;
+    (void)entries;
+    return BlockTags{};
 }
 
 const std::set<std::string>& BlockTags::resolve(const std::string& tag, std::set<std::string>& visiting) const {
