@@ -6,6 +6,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace mc::render {
 
@@ -185,18 +186,50 @@ void LevelRenderer::updateCamera(float dtSec) {
 }
 
 void LevelRenderer::rebuildDirtyChunks() {
-    constexpr int MAX_REBUILDS = 4; int rebuilt = 0;
+    struct DirtyCandidate {
+        int64_t key;
+        int distSq;
+    };
+
+    std::vector<DirtyCandidate> dirty;
+    dirty.reserve(32);
+    const int camChunkX = (int)std::floor(m_camPos.x / 16.0f);
+    const int camChunkZ = (int)std::floor(m_camPos.z / 16.0f);
+
     for (auto& [posKey, chunk] : m_mc->chunks()) {
         if (!chunk || !chunk->isLoaded() || !chunk->meshDirty) continue;
-        MC_LOG_INFO("Rebuilding chunk at key {}", posKey);
+        const ChunkPos cp = chunk->pos();
+        const int dx = cp.x - camChunkX;
+        const int dz = cp.z - camChunkZ;
+        dirty.push_back({ posKey, dx * dx + dz * dz });
+    }
+    if (dirty.empty()) return;
+
+    std::sort(dirty.begin(), dirty.end(), [](const DirtyCandidate& a, const DirtyCandidate& b) {
+        return a.distSq < b.distSq;
+    });
+
+    constexpr int MAX_REBUILDS = 1;
+    int rebuilt = 0;
+    for (const DirtyCandidate& cand : dirty) {
+        auto chunkIt = m_mc->chunks().find(cand.key);
+        if (chunkIt == m_mc->chunks().end()) continue;
+        LevelChunk* chunk = chunkIt->second.get();
+        if (!chunk || !chunk->isLoaded() || !chunk->meshDirty) continue;
+
         ChunkPos cp = chunk->pos();
-        const LevelChunk* n[4] = { m_mc->getChunk({cp.x+1, cp.z}), m_mc->getChunk({cp.x-1, cp.z}), m_mc->getChunk({cp.x, cp.z+1}), m_mc->getChunk({cp.x, cp.z-1}) };
+        const LevelChunk* n[4] = {
+            m_mc->getChunk({cp.x + 1, cp.z}),
+            m_mc->getChunk({cp.x - 1, cp.z}),
+            m_mc->getChunk({cp.x, cp.z + 1}),
+            m_mc->getChunk({cp.x, cp.z - 1})
+        };
         auto meshes = ChunkMesher::buildChunk(*chunk, n, m_atlas.isLoaded() ? &m_atlas : nullptr);
         chunk->meshDirty = false;
-        auto& rd = m_renderData[posKey];
+        auto& rd = m_renderData[cand.key];
         for (auto& old : rd.sections) old.destroy(m_device);
-        rd.sections = std::move(meshes); rd.built = true;
-        MC_LOG_INFO("Chunk rebuilt, {} sections created", rd.sections.size());
+        rd.sections = std::move(meshes);
+        rd.built = true;
         if (++rebuilt >= MAX_REBUILDS) break;
     }
 }
@@ -222,7 +255,6 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
     auto now = Clock::now();
     float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.1f);
     m_lastFrame = now; updateCamera(dtSec); rebuildDirtyChunks();
-
 
     // Clean up render data for unloaded chunks to prevent memory leaks
     {
