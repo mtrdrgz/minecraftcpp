@@ -45,7 +45,7 @@ add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE vendor/vma)
 
 # volk (Vulkan meta-loader)
-add_library(volk STATIC vendor/volk/volk.c vendor/volk.h)
+add_library(volk STATIC vendor/volk/volk.c vendor/volk/volk.h)
 target_include_directories(volk PUBLIC vendor/volk vendor)
 if(WIN32)
     target_compile_definitions(volk PUBLIC VK_USE_PLATFORM_WIN32_KHR)
