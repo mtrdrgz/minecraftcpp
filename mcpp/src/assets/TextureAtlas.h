@@ -28,6 +28,8 @@ public:
     const AtlasUV& missingUV() const { return m_missing; }
 
 private:
+    bool loadFromAssetPack(render::IRenderDevice* dev, render::ICommandList* cmd);
+
     render::ITexture* m_texture = nullptr;
     bool              m_loaded  = false;
     std::unordered_map<std::string, AtlasUV> m_uvMap;
