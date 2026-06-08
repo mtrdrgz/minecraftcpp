@@ -1,9 +1,16 @@
 #include "ThreadPool.h"
 
+#include <algorithm>
+
 namespace mc {
 
 ThreadPool::ThreadPool(size_t threads) : stop(false) {
-    for (size_t i = 0; i < threads; ++i) {
+    // Terrain generation is CPU-heavy. Using hardware_concurrency()-1 workers can
+    // still starve the render/input thread on typical desktop CPUs. Cap workers so
+    // local chunk generation stays asynchronous without making the whole game feel
+    // frozen while the queue drains.
+    const size_t workerCount = std::max<size_t>(1, std::min<size_t>(threads, 4));
+    for (size_t i = 0; i < workerCount; ++i) {
         workers.emplace_back([this]() {
             for (;;) {
                 std::function<void()> task;
