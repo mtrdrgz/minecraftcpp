@@ -2,17 +2,8 @@
 // asset_packer — offline tool
 // Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir]
 //
-// Reads assets/indexes/<id>.json, maps hash -> original path, and writes:
-//
-//   [4B]  magic   0x4D434153 ("MCAS")
-//   [4B]  version 1
-//   [4B]  entry_count
-//   per entry:
-//     [2B]  path_len
-//     [N B] path (UTF-8, e.g. "minecraft/textures/block/stone.png")
-//     [4B]  data_offset  (from start of data section)
-//     [4B]  data_size
-//   [data section: raw file bytes, concatenated]
+// Writes a small runtime-only MCAS pack. Deliberately excludes audio, lang files,
+// models, entity textures, etc. until the C++ client actually uses them.
 //
 
 #include <cstdint>
@@ -39,6 +30,25 @@ struct Entry {
     std::string hash; // Used for index files, empty for src_assets
     std::vector<uint8_t> data;
 };
+
+static bool startsWith(std::string_view s, std::string_view prefix) {
+    return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
+}
+
+static bool endsWith(std::string_view s, std::string_view suffix) {
+    return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
+}
+
+static bool shouldPackIndexedAsset(const std::string& path) {
+    // Currently used by runtime:
+    // - block textures for the terrain atlas fallback
+    // - HUD sprites loaded by Gui
+    // - title panorama loaded by PanoramaRenderer
+    if (startsWith(path, "minecraft/textures/block/") && endsWith(path, ".png")) return true;
+    if (startsWith(path, "minecraft/textures/gui/sprites/hud/") && endsWith(path, ".png")) return true;
+    if (startsWith(path, "minecraft/textures/gui/title/background/") && endsWith(path, ".png")) return true;
+    return false;
+}
 
 static fs::path findRepoRoot(fs::path start) {
     std::error_code ec;
@@ -69,23 +79,39 @@ static void pullGitLfsIfAvailable(const fs::path& repoRoot) {
     if (!oldCwd.empty()) fs::current_path(oldCwd, ec);
 }
 
+static bool isExcludedFile(const fs::path& file, const fs::path& excludeAbs) {
+    if (file.filename() == "assets.bin") return true;
+    if (excludeAbs.empty()) return false;
+    std::error_code ec;
+    fs::path abs = fs::absolute(file, ec);
+    if (!ec && abs == excludeAbs) return true;
+    ec.clear();
+    if (fs::exists(file, ec) && fs::exists(excludeAbs, ec) && fs::equivalent(file, excludeAbs, ec)) return true;
+    return false;
+}
+
 static void addDirectory(std::vector<Entry>& entries,
                          const fs::path& root,
                          const std::string& prefix,
-                         bool recursive = true) {
+                         bool recursive = true,
+                         const fs::path& exclude = {}) {
     if (!fs::exists(root)) {
         return;
     }
+
+    std::error_code ec;
+    const fs::path excludeAbs = exclude.empty() ? fs::path{} : fs::absolute(exclude, ec);
+
     std::vector<fs::path> files;
     if (recursive) {
         for (auto& e : fs::recursive_directory_iterator(root)) {
-            if (e.is_regular_file()) {
+            if (e.is_regular_file() && !isExcludedFile(e.path(), excludeAbs)) {
                 files.push_back(e.path());
             }
         }
     } else {
         for (auto& e : fs::directory_iterator(root)) {
-            if (e.is_regular_file()) {
+            if (e.is_regular_file() && !isExcludedFile(e.path(), excludeAbs)) {
                 files.push_back(e.path());
             }
         }
@@ -138,7 +164,7 @@ int main(int argc, char* argv[]) {
 
     std::vector<Entry> entries;
 
-    // 1. Find the newest .json index in assets/indexes/
+    // 1. Read the asset index, but keep only assets the current renderer uses.
     fs::path indexes_dir = assets_dir / "indexes";
     if (fs::exists(indexes_dir)) {
         fs::path index_file;
@@ -153,7 +179,13 @@ int main(int argc, char* argv[]) {
             std::ifstream idx_stream(index_file);
             json idx = json::parse(idx_stream);
 
+            int kept = 0;
+            int skipped = 0;
             for (auto& [path, info] : idx["objects"].items()) {
+                if (!shouldPackIndexedAsset(path)) {
+                    ++skipped;
+                    continue;
+                }
                 std::string hash = info["hash"].get<std::string>();
                 fs::path src = assets_dir / "objects" / hash.substr(0, 2) / hash;
                 if (!fs::exists(src)) {
@@ -166,14 +198,17 @@ int main(int argc, char* argv[]) {
                 std::vector<uint8_t> buf(static_cast<size_t>(sz));
                 f.read(reinterpret_cast<char*>(buf.data()), sz);
                 entries.push_back({path, hash, std::move(buf)});
+                ++kept;
             }
+            std::cout << "Runtime asset index filter: kept " << kept << ", skipped " << skipped << "\n";
         }
     }
 
-    // 2. Add files from src_assets_dir (e.g. 26.1.2/src/assets)
+    // 2. Add C++ runtime resources from src_assets_dir, but never embed assets.bin
+    // into itself. That self-embedding was making each CI build grow massively.
     if (fs::exists(src_assets_dir)) {
         std::cout << "Packing from src_assets_dir: " << src_assets_dir << "\n";
-        addDirectory(entries, src_assets_dir, "");
+        addDirectory(entries, src_assets_dir, "", true, output_path);
     }
 
     // 3. Add data-driven worldgen JSON needed by standalone terrain decoration.
@@ -195,7 +230,7 @@ int main(int argc, char* argv[]) {
 
     // Write output
     fs::create_directories(output_path.parent_path());
-    std::ofstream out(output_path, std::ios::binary);
+    std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
     if (!out) {
         std::cerr << "Cannot open output: " << output_path << "\n";
         return 1;
