@@ -45,7 +45,7 @@ add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE vendor/vma)
 
 # volk (Vulkan meta-loader)
-add_library(volk STATIC vendor/volk/volk.c vendor/volk/volk.h)
+add_library(volk STATIC vendor/volk/volk.c vendor/volk.h)
 target_include_directories(volk PUBLIC vendor/volk vendor)
 if(WIN32)
     target_compile_definitions(volk PUBLIC VK_USE_PLATFORM_WIN32_KHR)
@@ -92,7 +92,7 @@ endif()
 add_custom_command(
     OUTPUT "${MCPP_RUNTIME_ASSET_PACK}"
     COMMAND ${MCPP_ASSET_PACK_COMMAND}
-    COMMAND "${CMAKE_COMMAND}" -DASSET_BIN="${MCPP_RUNTIME_ASSET_PACK}" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
+    COMMAND "${CMAKE_COMMAND}" -DASSET_BIN=${MCPP_RUNTIME_ASSET_PACK} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
     DEPENDS asset_packer
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Packing runtime assets into src/assets/assets.bin"
