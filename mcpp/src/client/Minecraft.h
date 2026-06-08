@@ -13,6 +13,7 @@
 #include "../core/ThreadPool.h"
 #include "Options.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <string>
 #include <atomic>
@@ -153,6 +154,7 @@ private:
         std::future<std::unique_ptr<LevelChunk>> future;
     };
     std::vector<ChunkGenTask>            m_generationTasks;
+    std::unordered_set<int64_t>          m_queuedChunks;
 
     std::unordered_map<int64_t, std::unique_ptr<LevelChunk>> m_chunks;
     std::unordered_map<UUID, PlayerInfo, UUIDHash> m_playerInfo;
