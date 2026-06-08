@@ -57,16 +57,51 @@ BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
         throw std::runtime_error("biome directory not found: " + dir);
     }
 
-    // Runtime feature placement is intentionally disabled until the vanilla
-    // PlacedFeature pipeline is ported. Do not parse hundreds of biome JSON files
-    // on the Singleplayer entry path just to compute data that will not be used.
-    // The parser is kept below for parity tools / future placement re-enable.
-    return BiomeFeatures{};
+    BiomeFeatures out;
+    std::vector<fs::path> files;
+    for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            files.push_back(entry.path());
+        }
+    }
+    std::sort(files.begin(), files.end());
+
+    for (const fs::path& file : files) {
+        std::ifstream in(file);
+        if (!in) continue;
+        std::ostringstream ss;
+        ss << in.rdbuf();
+
+        BiomeEntry biome;
+        if (!parseBiomeFeatures(ss.str(), biome.steps, biome.stepCount)) {
+            continue;
+        }
+
+        fs::path rel = fs::relative(file, dir);
+        std::string id = rel.generic_string();
+        if (id.ends_with(".json")) id.resize(id.size() - 5);
+        out.m_biomes.emplace(normalizeId(id), std::move(biome));
+    }
+    return out;
 }
 
 BiomeFeatures BiomeFeatures::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
-    (void)entries;
-    return BiomeFeatures{};
+    BiomeFeatures out;
+    for (const auto& [path, text] : entries) {
+        BiomeEntry biome;
+        if (!parseBiomeFeatures(text, biome.steps, biome.stepCount)) {
+            continue;
+        }
+
+        std::string id = path;
+        constexpr std::string_view prefix = "data/minecraft/worldgen/biome/";
+        if (id.rfind(prefix, 0) == 0) {
+            id.erase(0, prefix.size());
+        }
+        if (id.ends_with(".json")) id.resize(id.size() - 5);
+        out.m_biomes.emplace(normalizeId(id), std::move(biome));
+    }
+    return out;
 }
 
 bool BiomeFeatures::hasBiome(const std::string& biome) const {
