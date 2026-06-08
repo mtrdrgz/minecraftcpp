@@ -2,7 +2,9 @@
 
 #include "../core/Log.h"
 #include "../world/entity/Entities.h"
+#include "../world/level/block/BlockTags.h"
 #include "../world/level/levelgen/NoiseBasedChunkGenerator.h"
+#include "../world/level/levelgen/feature/BiomeFeatures.h"
 
 namespace mc {
 
