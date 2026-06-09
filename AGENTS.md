@@ -303,7 +303,43 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 65 (worldgen 1:1 — 3×3 decoration driver; ORE family ~92.5% server byte-match)
+**Last updated**: Session 66 (worldgen 1:1 — Java decoration ground truth = FULL-CHUNK SERVER BYTE-MATCH, 6/6 chunks 100%)
+
+**Session 66** (worldgen 1:1 — decoration track): the fixed-order Java ground truth
+`mcpp/tools/FullChunkDecorateParity.java` now reproduces the real server.jar's saved chunks
+**byte-for-byte** — all 6 primary chunks (seed 1) match 98304/98304 cells each, full content
+(terrain + carvers + ALL decoration + FULL-promotion post-processing). 13/18 on an extended
+sweep; the 5 misses are pure cross-chunk border-spill ORDER (server scheduler artifact).
+- THE HARNESS (the spec for the C++ port): 5×5 real ProtoChunks via `fillFromNoise` (NOT
+  `getBaseColumn` — its width-1 NoiseChunk aquifer can't reproduce 3D fluid pockets) +
+  `buildSurface` + `applyCarvers` + `fillBiomesFromNoise` + `setPersistedStatus(CARVERS)`;
+  prime non-WG heightmaps exactly as `ChunkStatusTasks.generateFeatures`; decorate the inner
+  3×3 in **xz order** (x outer asc, z inner asc — matches the server's forceload FIFO) via a
+  verbatim `applyBiomeDecoration`; a multi-chunk WorldGenLevel Proxy mirrors `WorldGenRegion`
+  exactly (getHeight = chunk+1, ensureCanWrite Chebyshev≤1 from the DECORATING center,
+  chunk-cache-first BiomeManager, brightness 0, DUMMY block-entity nbt + lazy getBlockEntity,
+  `getPostProcessPos` marking); finally a `LevelChunk.postProcessGeneration` mirror (bubble
+  columns via the real `BubbleColumnBlock.updateColumn`).
+- THE FIVE BUGS that were the last 537 cells (all 1:1 fixes, no tuning): (1) vanilla FLUID
+  tags must be bound — `TallSeagrassBlock.canSurvive` consults `FluidTags.WATER`; an unbound
+  tag silently tests false, killing tall seagrass and desyncing the aquatic-vegetal RNG.
+  (2) The decoration BiomeManager must read the chunk's CACHED noise biome (quartY clamp).
+  (3) `fillFromNoise` vs `getBaseColumn` (aquifer). (4) the server run must `tick freeze`
+  BEFORE forceloading or fluids flow into the .mca (generation still completes frozen).
+  (5) post-processing runs at FULL promotion even frozen (bubble columns; dungeon-chest
+  `setLootTable` consumes `random.nextLong` → block-entity path affects the RNG stream).
+- CERTIFICATION CHAIN (reproducible): `run_server_gen.ps1` (tick freeze + forceload rect
+  (-1,-1)..(12,12), generate-structures=false) → `ServerChunkDump <seed> [cx,cz ...]` →
+  `compare_deco.sh <harness.tsv> <server.tsv> <cx> <cz>`; harness:
+  `FullChunkDecorateParity <seed> <cx> <cz> xz` (driver: `run_deco_parity.sh`).
+- C++ NEXT: certify the C++ port against the Java GT TSVs (scheduler-independent), porting
+  family-by-family: shared deps (fluid tags, block predicates, state providers, placement
+  modifiers) → vegetal/aquatic → disks/springs/lakes → TREES (biggest) → underground
+  (dungeons/magma/lichen) → top_layer + postProcessGeneration. C++ driver already decorates
+  in the server-proven xz order (its ore-only metric vs the full GT is border-confounded by
+  unported families — do NOT tune against it).
+
+**Last updated prior**: Session 65 (worldgen 1:1 — 3×3 decoration driver; ORE family ~92.5% server byte-match)
 
 **Session 65** (worldgen 1:1 — decoration track): built the whole-chunk decoration driver
 and got the first feature FAMILY (ores) substantially byte-matching the real no-structures
