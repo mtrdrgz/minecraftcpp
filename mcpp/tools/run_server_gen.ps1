@@ -41,6 +41,13 @@ $nl = [byte[]](13, 10)
 $p.StandardInput.BaseStream.Write($nl, 0, 2)
 $p.StandardInput.BaseStream.Flush()
 Start-Sleep -Seconds 1
+# Freeze gameplay ticking BEFORE forceloading so the generated chunks never tick: chunk
+# generation still proceeds (it is driven by the chunk system, not the frozen game tick),
+# but fluids do NOT flow, random ticks do not fire, etc. Without this the forced/spawn
+# chunks tick for ~70s and lava/water flow into carved caves (and lava+water -> cobblestone),
+# contaminating the .mca with runtime state that pure worldgen never produces.
+Send-Cmd 'tick freeze'
+Start-Sleep -Seconds 1
 # forceload uses BLOCK coords; *16 converts chunk coords to the min block of each chunk.
 $x1 = $FromChunkX * 16; $z1 = $FromChunkZ * 16; $x2 = $ToChunkX * 16; $z2 = $ToChunkZ * 16
 Send-Cmd "forceload add $x1 $z1 $x2 $z2"
