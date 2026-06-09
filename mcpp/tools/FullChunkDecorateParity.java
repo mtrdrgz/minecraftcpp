@@ -18,9 +18,28 @@
 // this ground truth matches the server .mca byte-for-byte.
 //
 //   tools/run_groundtruth.ps1 -Tool FullChunkDecorateParity -Out mcpp/build/deco_gt.tsv -ToolArgs "1 0 0 xz"
-//     args: <seed> <centerChunkX> <centerChunkZ> <order>   order in {xz, zx}
-//       xz = x outer / z inner (the ForceLoadCommand iteration order)
+//     args: <seed> <centerChunkX> <centerChunkZ> <order> [debug] [watch:x,y,z;...]
+//       order in {xz, zx, perm:dx,dz;dx,dz;...}
+//       xz = x outer / z inner over the inner 3x3 (ChunkGenerationTask.scheduleLayer
+//            iteration order, ChunkGenerationTask.java:120-121; NOTE ForceLoadCommand /
+//            ChunkPos.rangeClosed is z-outer/x-inner — but each generation TASK's layer
+//            is xz, which is what decides decoration order)
 //       zx = z outer / x inner (raster)
+//       perm: = explicit turn order, deltas relative to the center, |delta| <= 2 (or 3 —
+//            the build radius adapts). This is how the real server order is reproduced.
+//
+// SERVER DECORATION ORDER (seed 1, proven byte-exact on 6 forest + 6 ocean chunks):
+//   The seed-1 world spawn is chunk (10,10) (level.dat spawn pos 160,70,160;
+//   Climate.Sampler.findSpawnPosition -> block 163,0,170). World CREATION
+//   (MinecraftServer.setInitialSpawn -> PlayerSpawnFinder.getSpawnPosInChunk ->
+//   level.getChunk(10,10) at FULL) therefore decorates the spawn 3x3 (9..11)^2 FIRST
+//   ("phase 1"), before any forceload: empirically in xz order EXCEPT (10,11) decorates
+//   first: (10,11),(9,9),(9,10),(9,11),(10,9),(10,10),(11,9),(11,10),(11,11).
+//   All later chunks ("phase 2", the forceload-rect promotion cascade) decorate AFTER
+//   all of phase 1, in xz order among themselves. Chunks outside any spawn influence
+//   (the 6 ocean GT chunks) are pure phase 2 = plain xz, which is why the legacy 3x3 xz
+//   mode certified them. Residual: 2 cells in (9,11) (see session notes) from
+//   second-order phase-2 interleaving inside the uncertified neighbour turns (8,11)/(9,12).
 import com.mojang.serialization.Lifecycle;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -104,6 +123,9 @@ import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 
 public class FullChunkDecorateParity {
+    // Real stderr, captured at class load BEFORE Bootstrap.bootStrap() wraps System.err
+    // into the Mojang logger (which would re-route debug lines onto stdout as INFO).
+    static final java.io.PrintStream ERR = System.err;
     // ----- shared state set up in main(), read by decorate()/the proxy -----
     static Map<Long, ProtoChunk> CHUNKS;
     static int CUR_CX, CUR_CZ;            // currently-decorating (center) chunk
@@ -119,6 +141,33 @@ public class FullChunkDecorateParity {
     static String CUR_FEATURE_ID = "?";   // feature currently placing (for setBlock attribution)
     static int CUR_STEP = -1;
     static boolean POSTPROCESSING = false; // FULL-promotion writes hit a LevelChunk: no re-marking
+    // WorldGenRegion.random (WorldGenRegion.java:77,86): a DETERMINISTIC positional random,
+    // created per region (= per decorated chunk per step) at the center chunk's world position:
+    //   level.getChunkSource().randomState().getOrCreateRandomFactory(
+    //       Identifier.withDefaultNamespace("worldgen_region_random"))
+    //     .at(center.getPos().getWorldPosition())            // = (minBlockX, 0, minBlockZ)
+    // getRandom() (WorldGenRegion.java:386-388) returns that instance. decorate() re-creates it
+    // when the decorating chunk switches, exactly like the server building a fresh WorldGenRegion
+    // for each chunk's FEATURES step.
+    static net.minecraft.world.level.levelgen.PositionalRandomFactory REGION_RANDOM_FACTORY;
+    static RandomSource REGION_RANDOM;
+    // forensic watch list: poll these cells after every placed feature (catches raw
+    // section writes that bypass setBlock, e.g. OreFeature via BulkSectionAccess)
+    static List<BlockPos> WATCH = new ArrayList<>();
+    static BlockState[] WATCH_LAST;
+
+    static void watchPoll(String where) {
+        for (int i = 0; i < WATCH.size(); i++) {
+            BlockPos p = WATCH.get(i);
+            ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4);
+            BlockState bs = c == null ? null : c.getBlockState(p);
+            if (bs != WATCH_LAST[i]) {
+                ERR.println("CELLCHG\t" + where + "\t" + p.getX() + "," + p.getY() + "," + p.getZ()
+                    + "\t" + (WATCH_LAST[i] == null ? "?" : blockId(WATCH_LAST[i])) + " -> " + (bs == null ? "?" : blockId(bs)));
+                WATCH_LAST[i] = bs;
+            }
+        }
+    }
 
     static long ckey(int cx, int cz) { return ChunkPos.pack(cx, cz); }
     static ProtoChunk chunkAt(int cx, int cz) { return CHUNKS.get(ckey(cx, cz)); }
@@ -221,20 +270,6 @@ public class FullChunkDecorateParity {
         Aquifer.FluidStatus seaStatus = new Aquifer.FluidStatus(seaLevel, settings.defaultFluid());
         return (x, y, z) -> y < Math.min(-54, seaLevel) ? lavaStatus : seaStatus;
     }
-    static ProtoChunk makeChunk(NoiseBasedChunkGenerator generator, RandomState randomState,
-            NoiseGeneratorSettings settings, RegistryAccess registries, LevelHeightAccessor height, int chunkX, int chunkZ,
-            StructureManager noStructures) throws Exception {
-        ProtoChunk chunk = new ProtoChunk(new ChunkPos(chunkX, chunkZ), UpgradeData.EMPTY, height,
-            PalettedContainerFactory.create(registries), null);
-        // Real NOISE step. fillFromNoise fills the whole chunk via the full-width (16)
-        // NoiseChunk + aquifer and primes WORLD_SURFACE_WG/OCEAN_FLOOR_WG. getBaseColumn
-        // (used previously) builds a width-1 NoiseChunk whose aquifer cannot reproduce the
-        // server's 3D fluid pockets, leaving caves empty where the server has lava/water.
-        // Structures are off, so Beardifier.forStructuresInChunk -> EMPTY.
-        generator.fillFromNoise(Blender.empty(), randomState, noStructures, chunk).get();
-        return chunk;
-    }
-
     // A StructureManager that reports no structures (generate-structures=false), so the
     // Beardifier is EMPTY and no level access is needed during fillFromNoise.
     static StructureManager noStructuresManager() {
@@ -286,6 +321,15 @@ public class FullChunkDecorateParity {
         final int Cz = args.length > 2 ? Integer.parseInt(args[2]) : 0;
         final String order = args.length > 3 ? args[3] : "xz";
         DEBUG = args.length > 4 && args[4].equalsIgnoreCase("debug");
+        // optional 6th arg: watch:x,y,z;x,y,z;...  -> log every block change at these cells
+        // (catches BulkSectionAccess writes, e.g. ores, that bypass WorldGenLevel.setBlock)
+        if (args.length > 5 && args[5].startsWith("watch:")) {
+            for (String c : args[5].substring(6).split(";")) {
+                String[] p = c.split(",");
+                WATCH.add(new BlockPos(Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2])));
+            }
+            WATCH_LAST = new BlockState[WATCH.size()];
+        }
 
         HolderLookup.Provider provider = VanillaRegistries.createLookup();
         Registry<Biome> biomeRegistry = copyBiomeRegistry(provider.lookupOrThrow(Registries.BIOME));
@@ -306,29 +350,76 @@ public class FullChunkDecorateParity {
         MIN_SECTION_Y = SectionPos.blockToSectionCoord(minY);
 
         RandomState randomState = RandomState.create(provider, NoiseGeneratorSettings.OVERWORLD, SEED);
-        BiomeManager biomeManager = new BiomeManager(
-            (qx, qy, qz) -> BIOMES.getNoiseBiome(qx, qy, qz, randomState.sampler()), BiomeManager.obfuscateSeed(SEED));
 
-        // ---- build the 5x5 block: terrain + surface + carvers + real biomes ----
+        // ---- build the chunk block: biomes, then terrain + surface + carvers ----
+        // (sized so that "perm:" orders may decorate any chunk with |delta| <= decoRadius:
+        // each decorated chunk needs its full ring-1 neighbourhood built at CARVERS, exactly
+        // like the server, where the creation/forceload tasks decorate a wider area than
+        // the 3x3 around the dumped chunk.)
         StructureManager noStructures = noStructuresManager();
         CHUNKS = new HashMap<>();
-        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+        // Chunk-cache-first BiomeManager, mirroring WorldGenRegion.getBiomeManager(): the
+        // vanilla SURFACE step passes region.getBiomeManager() to the surface system
+        // (NoiseBasedChunkGenerator.buildSurface:267-278), whose zoomed lookups resolve to
+        // the CHUNK-CACHED noise biome (LevelReader.getNoiseBiome -> ChunkAccess).
+        BiomeManager chunkCacheBiomeManager = new BiomeManager((qx, qy, qz) -> {
+            ProtoChunk cc = chunkAt(QuartPos.toSection(qx), QuartPos.toSection(qz));
+            return cc != null ? cc.getNoiseBiome(qx, qy, qz)
+                              : BIOMES.getNoiseBiome(qx, qy, qz, randomState.sampler());
+        }, BiomeManager.obfuscateSeed(SEED));
+        // PASS A — the vanilla BIOMES step (ChunkStatusTasks.generateBiomes ->
+        // NoiseBasedChunkGenerator.doCreateBiomes:93-97): fill the chunk's noise-biome
+        // palette from the NoiseChunk's CACHED climate sampler (router noises wrapped
+        // through the NoiseChunk caches, NoiseChunk.cachedClimateSampler:168-178), NOT the
+        // raw randomState.sampler(): at climate boundaries (e.g. beach vs stony_shore) the
+        // two disagree, flipping the surface material (sand/sandstone vs stone) and biome
+        // gates. Radius 4 = one ring beyond the built terrain so zoomed biome lookups from
+        // ring-3 chunks still resolve against a filled chunk, exactly as on the server
+        // (SURFACE step depends on BIOMES at radius 1, ChunkPyramid).
+        // Build radius adapts to the requested decoration set: every decorated chunk needs
+        // its ring-1 terrain (CARVERS) built, and every built chunk needs ring-1 biomes.
+        int decoRadius = 1;
+        if (order.startsWith("perm:")) {
+            for (String t : order.substring(5).split(";")) {
+                String[] p = t.split(",");
+                decoRadius = Math.max(decoRadius, Math.max(Math.abs(Integer.parseInt(p[0])), Math.abs(Integer.parseInt(p[1]))));
+            }
+        }
+        final int terrainRadius = decoRadius + 1;
+        final int biomeRadius = terrainRadius + 1;
+        java.lang.reflect.Method cachedClimateSampler = NoiseChunk.class.getDeclaredMethod(
+            "cachedClimateSampler", net.minecraft.world.level.levelgen.NoiseRouter.class, java.util.List.class);
+        cachedClimateSampler.setAccessible(true);
+        for (int dx = -biomeRadius; dx <= biomeRadius; dx++) for (int dz = -biomeRadius; dz <= biomeRadius; dz++) {
             int ncx = Cx + dx, ncz = Cz + dz;
-            ProtoChunk chunk = makeChunk(GEN, randomState, settings, registries, height, ncx, ncz, noStructures);
-            GEN.buildSurface(chunk, surfaceContext, randomState, null, biomeManager, biomeRegistry, Blender.empty());
-            applyCarvers(GEN, BIOMES, registries, height, settings, SEED, randomState, biomeManager, chunk);
-            chunk.fillBiomesFromNoise(BIOMES, randomState.sampler());
-            // EXACTLY as ChunkStatusTasks.generateFeatures (the FEATURES step) does right
-            // before applyBiomeDecoration: prime the non-WG heightmaps. WORLD_SURFACE_WG/
-            // OCEAN_FLOOR_WG were primed in makeChunk and kept live through surface+carvers.
-            // Features read both families (e.g. SeagrassFeature uses non-WG OCEAN_FLOOR).
-            Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.MOTION_BLOCKING,
-                Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE));
+            ProtoChunk chunk = new ProtoChunk(new ChunkPos(ncx, ncz), UpgradeData.EMPTY, height,
+                PalettedContainerFactory.create(registries), null);
+            // Same NoiseChunk the server's BIOMES step creates (createNoiseChunk:99-103,
+            // structures off => Beardifier EMPTY); fillFromNoise/buildSurface/carvers all
+            // reuse this exact instance via getOrCreateNoiseChunk, as on the server.
+            NoiseChunk noiseChunk = chunk.getOrCreateNoiseChunk(c -> NoiseChunk.forChunk(c, randomState,
+                Beardifier.EMPTY, settings, fluidPicker(settings), Blender.empty()));
+            chunk.fillBiomesFromNoise(BIOMES, (net.minecraft.world.level.biome.Climate.Sampler)
+                cachedClimateSampler.invoke(noiseChunk, randomState.router(), settings.spawnTarget()));
+            chunk.setPersistedStatus(ChunkStatus.BIOMES);
+            CHUNKS.put(ckey(ncx, ncz), chunk);
+        }
+        // PASS B — NOISE + SURFACE + CARVERS for the terrain square.
+        for (int dx = -terrainRadius; dx <= terrainRadius; dx++) for (int dz = -terrainRadius; dz <= terrainRadius; dz++) {
+            int ncx = Cx + dx, ncz = Cz + dz;
+            ProtoChunk chunk = chunkAt(ncx, ncz);
+            // Real NOISE step. fillFromNoise fills the whole chunk via the full-width (16)
+            // NoiseChunk + aquifer and primes WORLD_SURFACE_WG/OCEAN_FLOOR_WG.
+            GEN.fillFromNoise(Blender.empty(), randomState, noStructures, chunk).get();
+            GEN.buildSurface(chunk, surfaceContext, randomState, null, chunkCacheBiomeManager, biomeRegistry, Blender.empty());
+            applyCarvers(GEN, BIOMES, registries, height, settings, SEED, randomState, chunkCacheBiomeManager, chunk);
+            // NOTE: the non-WG heightmaps are primed PER CHUNK at its own decoration turn
+            // (inside decorate(), exactly as ChunkStatusTasks.generateFeatures does), NOT
+            // here at build time.
             // At the FEATURES step the server's chunk has highestGeneratedStatus >= BIOMES (it
             // passed CREATE_BIOMES); ProtoChunk.getNoiseBiome guards on that. Match it so the
             // chunk-cache biome path used by the decoration BiomeManager works.
             chunk.setPersistedStatus(ChunkStatus.CARVERS);
-            CHUNKS.put(ckey(ncx, ncz), chunk);
         }
 
         // ---- shared multi-chunk WorldGenLevel (WorldGenRegion-faithful) ----
@@ -345,6 +436,7 @@ public class FullChunkDecorateParity {
                               : BIOMES.getNoiseBiome(qx, qy, qz, randomState.sampler());
         }, BiomeManager.obfuscateSeed(SEED));
         LEVEL = makeMultiProxy(height, registries, randomState, decoBiomeManager, minY, maxY);
+        REGION_RANDOM_FACTORY = randomState.getOrCreateRandomFactory(Identifier.withDefaultNamespace("worldgen_region_random"));
 
         // ---- global feature ordering (identical to ChunkGenerator.featuresPerStep) ----
         FEATURE_LIST = FeatureSorter.buildFeaturesPerStep(
@@ -359,7 +451,13 @@ public class FullChunkDecorateParity {
 
         // ---- decorate the inner 3x3 in the caller-specified order ----
         int[] ds = { -1, 0, 1 };
-        if (order.equalsIgnoreCase("zx")) {
+        if (order.startsWith("perm:")) {
+            // explicit turn order: perm:dx,dz;dx,dz;... (deltas relative to center)
+            for (String t : order.substring(5).split(";")) {
+                String[] p = t.split(",");
+                decorate(Cx + Integer.parseInt(p[0]), Cz + Integer.parseInt(p[1]));
+            }
+        } else if (order.equalsIgnoreCase("zx")) {
             for (int dz : ds) for (int dx : ds) decorate(Cx + dx, Cz + dz);
         } else { // "xz" default: x outer, z inner (ForceLoadCommand order)
             for (int dx : ds) for (int dz : ds) decorate(Cx + dx, Cz + dz);
@@ -420,7 +518,7 @@ public class FullChunkDecorateParity {
         }
         POSTPROCESSING = false;
         if (skippedFluidTicks > 0)
-            System.err.println("POSTPROCESS chunk=" + c.getPos() + " fluid-spread ticks skipped (no ServerLevel): " + skippedFluidTicks);
+            ERR.println("POSTPROCESS chunk=" + c.getPos() + " fluid-spread ticks skipped (no ServerLevel): " + skippedFluidTicks);
     }
 
     // ChunkGenerator.applyBiomeDecoration (26.1.2 ChunkGenerator.java:314) reimplemented
@@ -428,6 +526,14 @@ public class FullChunkDecorateParity {
     // feature seeds are independent of structure indices). The center chunk is (ncx,ncz).
     static void decorate(int ncx, int ncz) {
         CUR_CX = ncx; CUR_CZ = ncz;
+        // Fresh per-region random for this chunk's FEATURES step (WorldGenRegion ctor, :86).
+        REGION_RANDOM = REGION_RANDOM_FACTORY.at(new ChunkPos(ncx, ncz).getWorldPosition());
+        if (DEBUG) ERR.println("TURN\t" + ncx + "," + ncz);
+        // ChunkStatusTasks.generateFeatures: prime the non-WG heightmaps at the START of
+        // this chunk's FEATURES step — the frozen snapshot must include spill already
+        // written by earlier-decorated neighbours (e.g. tree canopy over the border).
+        Heightmap.primeHeightmaps(chunkAt(ncx, ncz), EnumSet.of(Heightmap.Types.MOTION_BLOCKING,
+            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE));
         SectionPos sectionPos = SectionPos.of(new ChunkPos(ncx, ncz), MIN_SECTION_Y);
         BlockPos origin = sectionPos.origin();
         WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
@@ -443,7 +549,7 @@ public class FullChunkDecorateParity {
         if (DEBUG && ncx == DBG_CX && ncz == DBG_CZ) {
             TreeSet<String> ids = new TreeSet<>();
             for (Holder<Biome> b : possibleBiomes) ids.add(b.unwrapKey().map(k -> k.identifier().toString()).orElse("?"));
-            System.err.println("DBG possibleBiomes(" + ncx + "," + ncz + ") n=" + ids.size() + " " + ids);
+            ERR.println("DBG possibleBiomes(" + ncx + "," + ncz + ") n=" + ids.size() + " " + ids);
         }
 
         int featureStepCount = FEATURE_LIST.size();
@@ -478,18 +584,21 @@ public class FullChunkDecorateParity {
                         for (net.minecraft.world.level.levelgen.placement.PlacementModifier mod : feature.placement()) {
                             java.util.List<BlockPos> next = new java.util.ArrayList<>();
                             for (BlockPos p : cur) mod.getPositions(pctx, r2, p).forEach(next::add);
-                            stages += " " + mod.getClass().getSimpleName() + "=" + next.size();
+                            stages += " " + mod.getClass().getSimpleName() + "=" + next.size()
+                                + (next.isEmpty() ? "" : "@" + next.get(0).getX() + "," + next.get(0).getY() + "," + next.get(0).getZ());
                             cur = next;
                             if (cur.isEmpty()) break;
                         }
-                        System.err.println("LAKEPROBE chunk=(" + ncx + "," + ncz + ") " + CUR_FEATURE_ID
+                        ERR.println("LAKEPROBE chunk=(" + ncx + "," + ncz + ") " + CUR_FEATURE_ID
                             + " final=" + (cur.isEmpty() ? "REJECT" : cur.get(0).toString()) + " |" + stages);
                     }
                     boolean ok = feature.placeWithBiomeCheck(LEVEL, GEN, random, origin);
+                    if (!WATCH.isEmpty()) watchPoll("turn=" + ncx + "," + ncz + " step=" + stepIndex + " gi=" + globalIndexOfFeature
+                        + " " + (PF_ID != null ? PF_ID.getOrDefault(feature, "?") : "?"));
                     if (DEBUG && ncx == DBG_CX && ncz == DBG_CZ) {
                         String id = PF_ID.getOrDefault(feature, "?#" + globalIndexOfFeature);
                         if (id.contains("lake") || id.contains("seagrass") || id.contains("spring") || id.contains("kelp"))
-                            System.err.println("DBG step=" + stepIndex + " gi=" + globalIndexOfFeature + " ok=" + ok + " " + id);
+                            ERR.println("DBG step=" + stepIndex + " gi=" + globalIndexOfFeature + " ok=" + ok + " " + id);
                     }
                 }
             }
@@ -505,7 +614,7 @@ public class FullChunkDecorateParity {
                 String n = m.getName();
                 switch (n) {
                     case "getBlockState": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); BlockState bs = c != null ? c.getBlockState(p) : AIR;
-                        if (DEBUG && CUR_CX==DBG_CX && CUR_CZ==DBG_CZ && CUR_FEATURE_ID.equals("minecraft:seagrass_deep")) System.err.println("SGB " + p.getX() + "," + p.getY() + "," + p.getZ() + "=" + bs.getBlock().builtInRegistryHolder().key().identifier());
+                        if (DEBUG && CUR_CX==DBG_CX && CUR_CZ==DBG_CZ && CUR_FEATURE_ID.equals("minecraft:seagrass_deep")) ERR.println("SGB " + p.getX() + "," + p.getY() + "," + p.getZ() + "=" + bs.getBlock().builtInRegistryHolder().key().identifier());
                         return bs; }
                     case "getFluidState": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); return c != null ? c.getFluidState(p) : AIR.getFluidState(); }
                     case "isStateAtPosition": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); BlockState st = c != null ? c.getBlockState(p) : AIR; @SuppressWarnings("unchecked") java.util.function.Predicate<BlockState> pr = (java.util.function.Predicate<BlockState>) a[1]; return pr.test(st); }
@@ -516,7 +625,7 @@ public class FullChunkDecorateParity {
                         ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4);
                         if (c == null) return false;
                         if (DEBUG && (p.getX() >> 4) == DBG_CX && (p.getZ() >> 4) == DBG_CZ)
-                            System.err.println("PUT\t" + CUR_STEP + "\t" + CUR_FEATURE_ID + "\t" + p.getX() + "\t" + p.getY() + "\t" + p.getZ()
+                            ERR.println("PUT\t" + CUR_CX + "," + CUR_CZ + "\t" + CUR_STEP + "\t" + CUR_FEATURE_ID + "\t" + p.getX() + "\t" + p.getY() + "\t" + p.getZ()
                                 + "\t" + ((BlockState) a[1]).getBlock().builtInRegistryHolder().key().identifier());
                         BlockState st = (BlockState) a[1];
                         int flags = (a.length > 2 && a[2] instanceof Integer) ? (Integer) a[2] : 0;
@@ -552,7 +661,7 @@ public class FullChunkDecorateParity {
                         if (a != null && a.length == 3) {
                             int x = (Integer) a[1], z = (Integer) a[2];
                             int hv = chunkAt(x >> 4, z >> 4).getHeight((Heightmap.Types) a[0], x & 15, z & 15) + 1; // WorldGenRegion +1
-                            if (DEBUG && CUR_CX==DBG_CX && CUR_CZ==DBG_CZ && CUR_FEATURE_ID.equals("minecraft:seagrass_deep")) System.err.println("SGH " + a[0] + " " + x + "," + z + "=" + hv);
+                            if (DEBUG && CUR_CX==DBG_CX && CUR_CZ==DBG_CZ && CUR_FEATURE_ID.equals("minecraft:seagrass_deep")) ERR.println("SGH " + a[0] + " " + x + "," + z + "=" + hv);
                             return hv;
                         }
                         return height.getHeight();
@@ -594,7 +703,7 @@ public class FullChunkDecorateParity {
                     case "getNoiseBiome": { int qx = (Integer) a[0], qy = (Integer) a[1], qz = (Integer) a[2]; ProtoChunk c = chunkAt(QuartPos.toSection(qx), QuartPos.toSection(qz)); return c != null ? c.getNoiseBiome(qx, qy, qz) : BIOMES.getNoiseBiome(qx, qy, qz, randomState.sampler()); }
                     case "getUncachedNoiseBiome": return BIOMES.getNoiseBiome((Integer) a[0], (Integer) a[1], (Integer) a[2], randomState.sampler());
                     case "registryAccess": return registries;
-                    case "getRandom": return RandomSource.create();
+                    case "getRandom": return REGION_RANDOM; // WorldGenRegion.java:386-388
                     case "setCurrentlyGenerating": return null;
                     case "isOutsideBuildHeight":
                         if (a[0] instanceof BlockPos) { int y = ((BlockPos) a[0]).getY(); return y < minY || y >= maxY; }
