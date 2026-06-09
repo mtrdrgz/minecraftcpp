@@ -303,7 +303,36 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 63 (worldgen 1:1 — FULL-CHUNK terrain byte-match vs the real generator; OreVeinifier fix)
+**Last updated**: Session 64 (worldgen 1:1 — SERVER .mca byte-match ground truth; decoration gap quantified + plan)
+
+**Session 64** (worldgen 1:1 — decoration track, toward server byte-match): goal set by
+the user — port ALL decorations + biome characteristics 1:1 (everything EXCEPT structures)
+and prove it with the server test. Built the server ground-truth and the porting plan.
+- SERVER GROUND TRUTH ("la prueba del server"): `mcpp/tools/run_server_gen.ps1` runs the
+  real `server.jar` (JDK25) with `generate-structures=false`, forceloads a chunk rectangle
+  to FULL status, flushes, stops (writes stdin as raw ASCII with a leading-newline BOM
+  absorber — the server otherwise parses a U+FEFF as part of the first command).
+  `mcpp/tools/ServerChunkDump.java` reads the `.mca` (manual region container parse + real
+  `NbtIo` + 1.16+ paletted section unpack) and dumps every block as TSV in FullChunkParity
+  format. Restored the `biome_decoration_parity` target (dropped by c7abe591).
+- GAP QUANTIFIED + decoder VALIDATED: terrain-only C++ vs the server's full chunks =
+  `24905 / 589824 (4.2%)` over 6 chunks. The 95.8% match proves the `.mca` decode is
+  correct; the 4.2% is exactly the un-ported decoration. Gap dominated by the ORE family
+  (tuff/andesite/gravel/diorite/granite + iron/lapis) → ores are the first port.
+- KEY FINDING: edge-spilling features (ore/lakes/big trees) CANNOT be cleanly certified in
+  the single-chunk `BiomeDecorationParity` harness — its Proxy `getChunk` returns the center
+  chunk for all coords and `OreFeature` writes via `section.setBlockState` (bypassing the
+  out-of-chunk drop), so blobs past the edge wrap into the center chunk (artifact). Ore et al.
+  must be certified in the real **3×3 WorldGenRegion vs the server**. Surface features that
+  write only via `level.setBlock` (grass/flowers/small trees) stay fine in isolation.
+- PLAN: `mcpp/docs/DECORATION_PLAN.md` — trustworthy-to-reuse infra (FeatureSorter,
+  DecorationDriver seeds, PlacedFeature pipeline, BiomeFeatures), the 3×3-region byte-match
+  design (5×5 terrain / 3×3 decorate, shared region, multi-heightmap WG-vs-frozen), and the
+  coverage-ordered feature porting list (ores → modifiers → vegetal → trees → lakes/springs →
+  local mods → underground/top-layer). NEXT: build the `full_chunk_parity --decorate` 3×3
+  driver + port the ore family, drive the server mismatch count to 0 family-by-family.
+
+**Last updated prior**: Session 63 (worldgen 1:1 — FULL-CHUNK terrain byte-match vs the real generator; OreVeinifier fix)
 
 **Session 63** (worldgen 1:1 — full-chunk parity track): the user asked for terrain
 that is provably 1:1 with the real generator, the acid test being the server jar
