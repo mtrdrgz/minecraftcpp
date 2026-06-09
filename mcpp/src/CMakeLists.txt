@@ -294,3 +294,28 @@ set_target_properties(full_chunk_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# Per-feature decoration parity (restored; dropped by c7abe591). Certifies one
+# placed/configured feature 1:1 against the real Java PlacedFeature.placeWithBiomeCheck
+# via tools/BiomeDecorationParity.java. Used to certify each decoration family before
+# wiring it into the whole-chunk applyBiomeDecoration path.
+add_executable(biome_decoration_parity
+    world/level/levelgen/feature/BiomeDecorationParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(biome_decoration_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(biome_decoration_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(biome_decoration_parity PRIVATE bcrypt)
+endif()
+set_target_properties(biome_decoration_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
