@@ -4,34 +4,47 @@
 // target chunk C, builds one shared MultiChunkLevel (WorldGenRegion-style: reads any
 // chunk, writes radius-1 around the chunk currently being decorated), runs the real
 // applyBiomeDecoration loop (FeatureSorter global order + setFeatureSeed(decoSeed,index,
-// step)) over the inner 3x3 — but only for PORTED feature types (others are skipped;
-// each feature reseeds independently, so skipping does not perturb RNG) — then compares
-// chunk C against the server dump.
+// step)) over the inner 3x3 — but only for PORTED feature types (others are hard no-ops,
+// logged+counted; each feature reseeds independently, so skipping does not perturb RNG)
+// — then compares chunk C against the server dump.
 //
-// This certifies one decoration FAMILY at a time against the server. The first family is
-// ORES (highest cross-biome coverage). Ore blobs spill across chunk borders, so the 3x3
-// decoration is required (the single-chunk harness cannot certify them).
+// This certifies one decoration FAMILY at a time against the server:
+//   ore     — the 20 ore blocks (ore configured features)
+//   vegetal — seagrass / tall_seagrass / kelp / kelp_plant (aquatic vegetation)
 //
-//   full_chunk_decorate_parity --cases <server_chunk_cases.tsv> --family ore [--datadir <dir>]
+//   full_chunk_decorate_parity --cases <server_chunk_cases.tsv> [--family ore|vegetal]
+//                              [--datadir <dir>]
 //
-// Reports: ore-family cells (server has an ore block OR we placed one) matched/total, and
-// the count of cells differing due to OTHER (un-ported) features (expected until ported).
+// Heightmap model (mirrors the Java ground truth FullChunkDecorateParity.java +
+// ChunkStatusTasks.generateFeatures): WorldGenRegion.getHeight(type,x,z) returns
+// chunk.getHeight()+1 == Heightmap.getFirstAvailable (WorldGenRegion.java:391-393,
+// ChunkAccess.java:182-194). The non-WG maps (OCEAN_FLOOR, WORLD_SURFACE) are primed
+// at the FEATURES step start and then FROZEN: ProtoChunk.setBlockState only updates
+// getPersistedStatus().heightmapsAfter(), which at CARVERS status is the *_WG pair
+// (ProtoChunk.java:116-161). The *_WG maps stay live. Heightmap predicates:
+// WORLD_SURFACE* = !isAir, OCEAN_FLOOR* = blocksMotion (Heightmap.java:147-150).
 
 #include "../RandomSource.h"
 #include "../IntProvider.h"
 #include "../NoiseBasedChunkGenerator.h"
 #include "../BiomeSource.h"
+#include "../BiomeManager.h"
 #include "../placement/PlacedFeature.h"
 #include "../placement/PlacementModifier.h"
 #include "../placement/NoiseCountPlacement.h"
 #include "../placement/HeightmapPlacement.h"  // transitively brings HeightProvider.h + VerticalAnchor.h
 #include "OreFeature.h"
+#include "SeagrassFeature.h"
+#include "KelpFeature.h"
 #include "FeatureSorter.h"
 #include "BiomeFeatures.h"
 #include "GenerationStep.h"
 #include "../../block/Blocks.h"
 #include "../../block/BlockState.h"
+#include "../../block/BlockStates.h"
 #include "../../block/BlockTags.h"
+#include "../../block/BlockBehaviour.h"
+#include "../../material/Fluids.h"
 #include "../../chunk/LevelChunk.h"
 
 #include <nlohmann/json.hpp>
@@ -40,6 +53,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -86,11 +100,52 @@ std::string findDataDir() {
     return "26.1.2/data/minecraft";
 }
 
-const mc::block::BlockTags* g_tags = nullptr;
-long long g_oreRuns = 0, g_orePlacedOk = 0;   // diagnostics
+const mc::block::BlockTags* g_tags = nullptr;        // data/minecraft/tags/block
+const mc::block::BlockTags* g_fluidTags = nullptr;   // data/minecraft/tags/fluid
+long long g_oreRuns = 0, g_orePlacedOk = 0;          // diagnostics
+long long g_vegRuns = 0, g_vegPlacedOk = 0;
+std::map<std::string, std::string> g_unportedType;   // featureKey -> configured type (hard no-ops)
+std::map<std::string, long long> g_unportedSkips;    // configured type -> skipped RUNS
+std::set<std::string> g_blocksMotionDefaulted;       // block ids the table defaulted (must be empty)
 std::string stateName(const json& s) { return s.at("Name").get<std::string>(); }
 
-// ---- minimal loaders for the ORE family (throw on anything else: fail-closed) ----
+// BlockStateBase.blocksMotion memoised by engine state id (the scan visits every
+// block of every column; see BlockBehaviour.h for the Java-grounded table).
+bool blocksMotionForStateId(std::uint32_t id) {
+    static std::vector<std::int8_t> memo;   // -1 unknown, 0 false, 1 true
+    if (id >= memo.size()) memo.resize(id + 1, -1);
+    if (memo[id] < 0) {
+        const mc::BlockState* s = mc::getBlockState(id);
+        const std::string name = (s && s->block && !s->block->name.empty())
+            ? "minecraft:" + s->block->name : std::string("minecraft:air");
+        bool defaulted = false;
+        memo[id] = mc::block::blocksMotion(name, &defaulted) ? 1 : 0;
+        if (defaulted) g_blocksMotionDefaulted.insert(name);
+    }
+    return memo[id] == 1;
+}
+
+// ---- per-case biome lookup for the minecraft:biome placement filter ----
+// BiomeFilter.shouldPlace (BiomeFilter.java:21-26): biome = level.getBiome(pos)
+// (the BiomeManager fuzzed lookup over the chunk-cached quart biomes), then
+// generator.getBiomeGenerationSettings(biome).hasFeature(placedFeature).
+struct DecoBiomeContext {
+    std::int64_t zoomSeed = 0;                                  // BiomeManager.obfuscateSeed(seed)
+    std::function<std::string(int, int, int)> noiseBiome;       // quart -> biome (chunk-cache clamped)
+    const BiomeFeatures* features = nullptr;
+
+    bool hasFeatureAt(const std::string& featureKey, mc::BlockPos pos) const {
+        const std::array<int, 3> q = BiomeManager::debugSelectQuart(zoomSeed, pos.x, pos.y, pos.z);
+        const std::string biome = noiseBiome(q[0], q[1], q[2]);
+        // BiomeGenerationSettings.hasFeature: the flattened feature set over all steps.
+        for (int step = 0; step < GenerationStep::COUNT; ++step)
+            if (features->biomeHasFeature(biome, step, featureKey)) return true;
+        return false;
+    }
+};
+const DecoBiomeContext* g_biomeCtx = nullptr;   // set per case before decorating
+
+// ---- minimal loaders (throw on anything else: fail-closed) ----
 IntProviderPtr loadIntProvider(const json& j) {
     if (j.is_number_integer()) return ConstantInt::of(j.get<int>());
     const std::string t = stripNs(j.at("type").get<std::string>());
@@ -130,23 +185,29 @@ mc::levelgen::feature::OreRuleTest loadRuleTest(const json& j) {
         return [b, p](const std::string& s, RandomSource& r) { return s == b && r.nextFloat() < p; }; }
     throw std::runtime_error("unsupported rule_test: " + t);
 }
-std::shared_ptr<const PlacementModifier> loadModifier(const json& j) {
+Heightmap::Types parseHeightmapType(const std::string& s) {
+    if (s == "WORLD_SURFACE_WG") return Heightmap::Types::WORLD_SURFACE_WG;
+    if (s == "WORLD_SURFACE") return Heightmap::Types::WORLD_SURFACE;
+    if (s == "OCEAN_FLOOR_WG") return Heightmap::Types::OCEAN_FLOOR_WG;
+    if (s == "OCEAN_FLOOR") return Heightmap::Types::OCEAN_FLOOR;
+    if (s == "MOTION_BLOCKING") return Heightmap::Types::MOTION_BLOCKING;
+    if (s == "MOTION_BLOCKING_NO_LEAVES") return Heightmap::Types::MOTION_BLOCKING_NO_LEAVES;
+    throw std::runtime_error("unsupported heightmap type: " + s);
+}
+// `featureKey` (ns-qualified placed feature id) backs the minecraft:biome filter.
+std::shared_ptr<const PlacementModifier> loadModifier(const json& j, const std::string& featureKey) {
     const std::string t = stripNs(j.at("type").get<std::string>());
     if (t == "count") return std::make_shared<CountPlacement>(loadIntProvider(j.at("count")));
     if (t == "rarity_filter") return std::make_shared<RarityFilter>(j.at("chance").get<int>());
     if (t == "in_square") return std::make_shared<InSquarePlacement>();
     if (t == "height_range") return std::make_shared<HeightRangePlacement>(loadHeightProvider(j.at("height")));
-    if (t == "biome") return nullptr;  // ores are listed in all overworld biomes => pass-through
-    throw std::runtime_error("unsupported placement modifier (ore family): " + t);
+    if (t == "heightmap") return std::make_shared<HeightmapPlacement>(parseHeightmapType(j.at("heightmap").get<std::string>()));
+    if (t == "noise_based_count") return std::make_shared<NoiseBasedCountPlacement>(
+        j.at("noise_to_count_ratio").get<int>(), j.at("noise_factor").get<double>(), j.value("noise_offset", 0.0));
+    if (t == "biome") return std::make_shared<BiomeFilter>(
+        [featureKey](WorldGenLevel&, BlockPos pos) { return g_biomeCtx->hasFeatureAt(featureKey, pos); });
+    throw std::runtime_error("unsupported placement modifier: " + t);
 }
-
-// A resolved ore placed_feature ready to run, plus its (step, globalIndex) seed key.
-struct OrePlaced {
-    std::shared_ptr<PlacedFeature> placed;
-    int step = 0;
-    int index = 0;
-    std::string key;
-};
 
 // MultiChunkLevel: WorldGenRegion-style level over a fixed grid of generated chunks.
 class MultiChunkLevel final : public WorldGenLevel {
@@ -156,33 +217,47 @@ public:
         : m_chunks(chunks), m_minY(minY), m_maxY(maxY) { m_airId = mc::getDefaultBlockStateId("air", 0); }
 
     void setDecorating(int cx, int cz) { m_dcx = cx; m_dcz = cz; }
-    // Frozen OCEAN_FLOOR snapshot (pre-decoration) for every chunk in the grid.
+
+    // Heightmap.primeHeightmaps for the non-WG maps at the FEATURES step start; they
+    // FREEZE afterwards (ProtoChunk at CARVERS status only live-updates the WG pair).
+    // Stored as the highest passing y per column (the +1 to getFirstAvailable happens
+    // in getHeight, mirroring WorldGenRegion.getHeight = chunk.getHeight()+1).
     void freezeHeights() {
         for (auto& [key, chunkPtr] : *m_chunks) {
             const int cx = static_cast<int>(key >> 32);
             const int cz = static_cast<int>(static_cast<std::int32_t>(key & 0xffffffff));
-            auto& frozen = m_frozen[key];
-            for (int i = 0; i < 256; ++i) frozen[i] = scan(chunkPtr.get(), cx * 16 + (i & 15), cz * 16 + (i >> 4), true);
+            auto& fr = m_frozen[key];
+            for (int i = 0; i < 256; ++i) {
+                const int x = cx * 16 + (i & 15), z = cz * 16 + (i >> 4);
+                fr.oceanFloor[i] = scan(chunkPtr.get(), x, z, /*motionBlocking=*/true);
+                fr.worldSurface[i] = scan(chunkPtr.get(), x, z, /*motionBlocking=*/false);
+            }
         }
     }
 
     int getMinY() const override { return m_minY; }
 
-    // NOTE: returns scan() directly (NOT WorldGenRegion's stored+1) — empirically this
-    // matches the server's ore placement better here; the scan already yields the
-    // first-empty semantics the ore pre-check expects. Adding +1 regressed ore parity.
+    // WorldGenRegion.getHeight (WorldGenRegion.java:391-393): chunk heightmap value
+    // + 1 == Heightmap.getFirstAvailable. *_WG live (scan), non-WG frozen snapshot.
     int getHeight(Heightmap::Types type, int x, int z) const override {
-        mc::LevelChunk* c = at(floorDiv(x, 16), floorDiv(z, 16));
-        if (!c) return m_minY - 1;
+        const int cx = floorDiv(x, 16), cz = floorDiv(z, 16);
+        mc::LevelChunk* c = at(cx, cz);
+        if (!c) return m_minY;   // empty column: getFirstAvailable == minY
         switch (type) {
-            case Heightmap::Types::WORLD_SURFACE_WG: return scan(c, x, z, false);
-            case Heightmap::Types::OCEAN_FLOOR_WG:   return scan(c, x, z, true);
-            case Heightmap::Types::OCEAN_FLOOR: {
-                auto it = m_frozen.find(packChunk(floorDiv(x, 16), floorDiv(z, 16)));
-                if (it == m_frozen.end()) return scan(c, x, z, true);
-                return it->second[(z - floorDiv(z, 16) * 16) * 16 + (x - floorDiv(x, 16) * 16)];
+            case Heightmap::Types::WORLD_SURFACE_WG: return scan(c, x, z, false) + 1;
+            case Heightmap::Types::OCEAN_FLOOR_WG:   return scan(c, x, z, true) + 1;
+            case Heightmap::Types::OCEAN_FLOOR:
+            case Heightmap::Types::WORLD_SURFACE: {
+                auto it = m_frozen.find(packChunk(cx, cz));
+                if (it == m_frozen.end()) throw std::logic_error("non-WG heightmap read before freezeHeights()");
+                const int idx = ((z - cz * 16) << 4) | (x - cx * 16);
+                return (type == Heightmap::Types::OCEAN_FLOOR ? it->second.oceanFloor[idx]
+                                                              : it->second.worldSurface[idx]) + 1;
             }
-            default: return scan(c, x, z, false);
+            default:
+                // MOTION_BLOCKING* need the fluid-inclusive predicate; no ported
+                // feature reads them — fail closed instead of guessing.
+                throw std::logic_error("MOTION_BLOCKING heightmaps not ported");
         }
     }
     std::string getBlockState(BlockPos p) const override {
@@ -193,10 +268,45 @@ public:
     void setBlock(BlockPos p, const std::string& state, int) override {
         if (!ensureCanWrite(p)) return;
         mc::LevelChunk* c = at(floorDiv(p.x, 16), floorDiv(p.z, 16));
-        if (c) c->setBlock(p.x, p.y, p.z, mc::getDefaultBlockStateId(stripNs(state), m_airId));
+        // The grid stores block ids (default states); properties ([half=upper],
+        // [age=N]) are not byte-compared (the server dump records block ids).
+        if (c) c->setBlock(p.x, p.y, p.z, mc::getDefaultBlockStateId(stripNs(mc::block::blockName(state)), m_airId));
     }
     bool isEmptyBlock(BlockPos p) const override { return getBlockState(p) == "minecraft:air"; }
-    bool canSurvive(const std::string&, BlockPos) const override { return true; }   // ores never call canSurvive
+
+    // BlockState.canSurvive(level, pos) for the block set the ported features gate
+    // on. Fail-closed: anything else throws.
+    bool canSurvive(const std::string& state, BlockPos pos) const override {
+        const std::string block = mc::block::blockName(state);
+        const BlockPos belowPos{ pos.x, pos.y - 1, pos.z };
+        if (block == "minecraft:seagrass") {
+            // VegetationBlock.canSurvive (VegetationBlock.java:44-47) with
+            // SeagrassBlock.mayPlaceOn (SeagrassBlock.java:46-48).
+            return seagrassMayPlaceOn(belowPos);
+        }
+        if (block == "minecraft:tall_seagrass") {
+            // TallSeagrassBlock.canSurvive, LOWER branch (TallSeagrassBlock.java:67-76):
+            // super.canSurvive (DoublePlantBlock.java:77-84 -> VegetationBlock with
+            // TallSeagrassBlock.mayPlaceOn, identical to seagrass) && the fluid at pos
+            // is(FluidTags.WATER) && isFull. (The UPPER half is never canSurvive-checked
+            // during feature placement.)
+            const mc::material::FluidState fs = mc::material::fluidStateOf(getBlockState(pos));
+            return seagrassMayPlaceOn(belowPos) && fs.is(*g_fluidTags, "minecraft:water") && fs.isFull();
+        }
+        if (block == "minecraft:kelp" || block == "minecraft:kelp_plant") {
+            // GrowingPlantBlock.canSurvive (GrowingPlantBlock.java:47-55); for both kelp
+            // blocks head=KELP, body=KELP_PLANT, growthDirection=UP, and canAttachTo =
+            // !is(CANNOT_SUPPORT_KELP) (KelpBlock.java:46-48, KelpPlantBlock.java:40-42).
+            const std::string attached = mc::block::blockName(getBlockState(belowPos));
+            if (g_tags->isInTag(attached, "minecraft:cannot_support_kelp")) return false;
+            if (attached == "minecraft:kelp" || attached == "minecraft:kelp_plant") return true;
+            bool defaulted = false;
+            const bool sturdy = mc::block::isFaceSturdyUp(attached, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(attached);
+            return sturdy;
+        }
+        throw std::logic_error("canSurvive not ported for " + block);
+    }
     bool ensureCanWrite(BlockPos p) const override {
         if (p.y < m_minY || p.y >= m_maxY) return false;
         const int cx = floorDiv(p.x, 16), cz = floorDiv(p.z, 16);
@@ -209,21 +319,36 @@ public:
         return "minecraft:" + s->block->name;
     }
 private:
+    // SeagrassBlock/TallSeagrassBlock.mayPlaceOn (SeagrassBlock.java:46-48,
+    // TallSeagrassBlock.java:45-47): belowState.isFaceSturdy(level, below, UP)
+    // && !belowState.is(BlockTags.CANNOT_SUPPORT_SEAGRASS).
+    bool seagrassMayPlaceOn(BlockPos belowPos) const {
+        const std::string below = mc::block::blockName(getBlockState(belowPos));
+        bool defaulted = false;
+        const bool sturdy = mc::block::isFaceSturdyUp(below, &defaulted);
+        if (defaulted) g_blocksMotionDefaulted.insert(below);
+        return sturdy && !g_tags->isInTag(below, "minecraft:cannot_support_seagrass");
+    }
     mc::LevelChunk* at(int cx, int cz) const {
         auto it = m_chunks->find(packChunk(cx, cz));
         return it == m_chunks->end() ? nullptr : it->second.get();
     }
-    int scan(mc::LevelChunk* c, int x, int z, bool opaque) const {
+    // Top-down scan: highest y whose state passes the heightmap predicate
+    // (Heightmap.java:147-150 — WORLD_SURFACE* = !isAir, OCEAN_FLOOR* = blocksMotion),
+    // or minY-1 when the column has none (getHeight adds 1 -> minY, matching an
+    // unset Heightmap entry).
+    int scan(mc::LevelChunk* c, int x, int z, bool motionBlocking) const {
         for (int y = m_maxY - 1; y >= m_minY; --y) {
             const std::uint32_t id = c->getBlock(x, y, z);
             if (id == m_airId) continue;
-            if (opaque) { const mc::BlockState* s = mc::getBlockState(id); if (!s || s->isFluid() || !s->isOpaque()) continue; }
+            if (motionBlocking && !blocksMotionForStateId(id)) continue;
             return y;
         }
         return m_minY - 1;
     }
+    struct FrozenMaps { std::array<int, 256> oceanFloor; std::array<int, 256> worldSurface; };
     std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>>* m_chunks;
-    std::map<std::int64_t, std::array<int, 256>> m_frozen;
+    std::map<std::int64_t, FrozenMaps> m_frozen;
     int m_minY, m_maxY, m_dcx = 0, m_dcz = 0; std::uint32_t m_airId{};
 };
 
@@ -237,14 +362,19 @@ int main(int argc, char** argv) {
         else if (a == "--datadir" && i + 1 < argc) dataDir = argv[++i];
         else if (a == "--family" && i + 1 < argc) family = argv[++i];
     }
-    if (casesPath.empty()) { std::cerr << "usage: full_chunk_decorate_parity --cases <server tsv> [--family ore]\n"; return 2; }
+    if (casesPath.empty()) { std::cerr << "usage: full_chunk_decorate_parity --cases <server tsv> [--family ore|vegetal]\n"; return 2; }
     if (dataDir.empty()) dataDir = findDataDir();
-    if (family != "ore") { std::cerr << "only --family ore supported so far\n"; return 2; }
+    if (family != "ore" && family != "vegetal") { std::cerr << "--family must be ore or vegetal\n"; return 2; }
 
     installBlockStatesEnv();
     mc::initBlocks();
     static mc::block::BlockTags tags = mc::block::BlockTags::loadFromDirectory(dataDir + "/tags/block");
     g_tags = &tags;
+    // Fluid tags: TallSeagrassBlock.canSurvive consults FluidTags.WATER (the Java
+    // ground truth binds them too — unbound tags silently test false and tall
+    // seagrass never places).
+    static mc::block::BlockTags fluidTags = mc::block::BlockTags::loadFromDirectory(dataDir + "/tags/fluid");
+    g_fluidTags = &fluidTags;
     BiomeFeatures biomeFeatures = BiomeFeatures::loadFromDirectory(dataDir + "/worldgen/biome");
 
     // Global per-step feature order/index (== the setFeatureSeed index), over all biomes.
@@ -252,38 +382,55 @@ int main(int argc, char** argv) {
     const std::set<std::string> sourcesSet(sources.begin(), sources.end());
     const auto stepData = FeatureSorter::buildFeaturesPerStep(sources, biomeFeatures, true);
 
-    // Resolve every ORE placed_feature once: parse placement + the ore configured feature.
-    // Cache by feature key. Records the set of ore-family block ids (for the comparison).
+    // Resolve every placed_feature whose configured type is ported (ore, seagrass,
+    // kelp) once; cache by feature key. Unported types are hard no-ops, counted.
     std::set<std::string> oreFamily;
-    std::map<std::string, std::shared_ptr<PlacedFeature>> oreCache;   // key -> placed (nullptr if not ore)
-    auto resolveOre = [&](const std::string& featureKey) -> std::shared_ptr<PlacedFeature> {
-        auto it = oreCache.find(featureKey);
-        if (it != oreCache.end()) return it->second;
+    const std::set<std::string> vegetalFamily = {
+        "minecraft:seagrass", "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:kelp_plant",
+    };
+    std::map<std::string, std::shared_ptr<PlacedFeature>> cache;   // key -> placed (nullptr if unported)
+    auto resolveFeature = [&](const std::string& featureKey) -> std::shared_ptr<PlacedFeature> {
+        auto it = cache.find(featureKey);
+        if (it != cache.end()) return it->second;
         std::shared_ptr<PlacedFeature> result;
         try {
             const std::string pname = stripNs(featureKey);
             json placedJson; { std::ifstream f(dataDir + "/worldgen/placed_feature/" + pname + ".json"); if (!f) throw std::runtime_error("no placed_feature"); f >> placedJson; }
             const std::string cfgId = stripNs(placedJson.at("feature").get<std::string>());
             json cfgJson; { std::ifstream f(dataDir + "/worldgen/configured_feature/" + cfgId + ".json"); if (!f) throw std::runtime_error("no configured_feature"); f >> cfgJson; }
-            if (stripNs(cfgJson.at("type").get<std::string>()) != "ore") { oreCache[featureKey] = nullptr; return nullptr; }
-            const json& cc = cfgJson.at("config");
-            const int size = cc.at("size").get<int>();
-            const float discard = cc.at("discard_chance_on_air_exposure").get<float>();
-            std::vector<mc::levelgen::feature::OreTarget> targets;
-            for (const auto& tj : cc.at("targets")) {
-                const std::string st = stateName(tj.at("state"));
-                oreFamily.insert(st);
-                targets.push_back({ loadRuleTest(tj.at("target")), st });
+            const std::string type = stripNs(cfgJson.at("type").get<std::string>());
+
+            PlacedFeature::FeaturePlacer placer;
+            if (type == "ore") {
+                const json& cc = cfgJson.at("config");
+                const int size = cc.at("size").get<int>();
+                const float discard = cc.at("discard_chance_on_air_exposure").get<float>();
+                std::vector<mc::levelgen::feature::OreTarget> targets;
+                for (const auto& tj : cc.at("targets")) {
+                    const std::string st = stateName(tj.at("state"));
+                    oreFamily.insert(st);
+                    targets.push_back({ loadRuleTest(tj.at("target")), st });
+                }
+                placer = mc::levelgen::feature::makeOrePlacer(std::move(targets), size, discard);
+            } else if (type == "seagrass") {
+                // ProbabilityFeatureConfiguration (seagrass_short=0.3 / mid=0.6 / tall=0.8)
+                placer = mc::levelgen::feature::makeSeagrassPlacer(cfgJson.at("config").at("probability").get<double>());
+            } else if (type == "kelp") {
+                placer = mc::levelgen::feature::makeKelpPlacer();
+            } else {
+                // Hard no-op: not yet ported. Counted per run at the call site; never "pass".
+                g_unportedType[featureKey] = type;
+                cache[featureKey] = nullptr;
+                return nullptr;
             }
             std::vector<std::shared_ptr<const PlacementModifier>> mods;
-            for (const auto& m : placedJson.at("placement")) { auto mod = loadModifier(m); if (mod) mods.push_back(mod); }
-            auto placer = mc::levelgen::feature::makeOrePlacer(std::move(targets), size, discard);
+            for (const auto& m : placedJson.at("placement")) mods.push_back(loadModifier(m, featureKey));
             result = std::make_shared<PlacedFeature>(placer, mods);
         } catch (const std::exception& e) {
-            std::cerr << "UNPORTED ore " << featureKey << ": " << e.what() << "\n";
-            oreCache[featureKey] = nullptr; return nullptr;
+            std::cerr << "FAILED-TO-PORT " << featureKey << ": " << e.what() << "\n";
+            cache[featureKey] = nullptr; return nullptr;
         }
-        oreCache[featureKey] = result;
+        cache[featureKey] = result;
         return result;
     };
 
@@ -302,7 +449,9 @@ int main(int argc, char** argv) {
       } }
 
     const int minY = mc::CHUNK_MIN_Y, maxY = mc::CHUNK_MAX_Y;
-    long long oreCells = 0, oreMism = 0, otherFeatureCells = 0; int shown = 0;
+    long long oreCells = 0, oreMism = 0, vegCells = 0, vegMism = 0, otherFeatureCells = 0; int shown = 0;
+    struct PerChunk { long long vegCells = 0, vegMism = 0; };
+    std::map<std::tuple<long long,int,int>, PerChunk> perChunk;
 
     for (const auto& [key, cells] : server) {
         const long long seed = std::get<0>(key);
@@ -317,6 +466,8 @@ int main(int argc, char** argv) {
             chunks.emplace(packChunk(Cx + dx, Cz + dz), std::move(chunk));
         }
         MultiChunkLevel level(&chunks, minY, maxY);
+        // EXACTLY as ChunkStatusTasks.generateFeatures: prime the non-WG heightmaps
+        // for every chunk before any decoration runs; they freeze from here on.
         level.freezeHeights();
 
         // Cached quart-resolution noise biome (matches the section biome containers
@@ -329,14 +480,30 @@ int main(int argc, char** argv) {
             return biomeCache.emplace(k, gen.getNoiseBiome(qx, qy, qz)).first->second;
         };
 
+        // The biome filter's level.getBiome goes through the chunk-cached biomes:
+        // ChunkAccess.getNoiseBiome CLAMPS quartY to the chunk's section range. For
+        // quarts outside the 5x5 grid the Java proxy falls back to the unclamped
+        // sampler — replicate both paths.
+        const int qyMin = minY >> 2, qyMax = (maxY >> 2) - 1;
+        DecoBiomeContext biomeCtx;
+        biomeCtx.zoomSeed = BiomeManager::obfuscateSeed(seed);
+        biomeCtx.features = &biomeFeatures;
+        biomeCtx.noiseBiome = [&, qyMin, qyMax](int qx, int qy, int qz) -> std::string {
+            const int scx = qx >> 2, scz = qz >> 2;   // QuartPos.toSection
+            const bool inGrid = chunks.count(packChunk(scx, scz)) != 0;
+            const int cqy = inGrid ? std::max(qyMin, std::min(qyMax, qy)) : qy;
+            return nb(qx, cqy, qz);
+        };
+        g_biomeCtx = &biomeCtx;
+
         // Decorate the inner 3x3 in xz order (x outer asc, z inner asc) — the order under
         // which the Java ground truth (FullChunkDecorateParity.java) byte-matches the real
         // server .mca (6/6 primary chunks, commit 2772bdb6). Cross-chunk spill overlap is
         // last-writer-wins, so the order must match the ground truth exactly.
-        // NOTE: while only the ore family is ported, the ore mismatch count vs the FULL
-        // ground truth is confounded at borders by unported later families (disks, springs,
-        // dungeons...) overwriting ore cells; it converges to a true 1:1 measure only as
-        // the remaining families are ported. Do not tune the order against this number.
+        // NOTE: while only part of the families is ported, mismatch counts vs the FULL
+        // ground truth are confounded at borders by unported families overwriting cells;
+        // they converge to a true 1:1 measure only as the remaining families are ported.
+        // Do not tune the order against these numbers.
         for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
             const int nx = Cx + dx, nz = Cz + dz;
             level.setDecorating(nx, nz);
@@ -362,17 +529,25 @@ int main(int argc, char** argv) {
                 const std::vector<int> indices = FeatureSorter::selectFeatureIndicesForStep(possibleBiomes, biomeFeatures, stepData[step], step);
                 for (int index : indices) {
                     const std::string& featureKey = stepData[step].features[static_cast<std::size_t>(index)];
-                    std::shared_ptr<PlacedFeature> placed = resolveOre("minecraft:" + stripNs(featureKey));
-                    if (!placed) continue;   // not an ore (skip; reseeded next feature)
+                    const std::string normKey = "minecraft:" + stripNs(featureKey);
+                    std::shared_ptr<PlacedFeature> placed = resolveFeature(normKey);
+                    if (!placed) {   // unported type (hard no-op; reseeded next feature)
+                        auto ut = g_unportedType.find(normKey);
+                        ++g_unportedSkips[ut != g_unportedType.end() ? ut->second : "load-failed"];
+                        continue;
+                    }
                     random.setFeatureSeed(deco, index, step);
                     const bool any = placed->place(level, random, BlockPos{ nx * 16, 0, nz * 16 }, minY, maxY - minY);
-                    ++g_oreRuns; if (any) ++g_orePlacedOk;
+                    if (step == (int)GenerationStep::VEGETAL_DECORATION) { ++g_vegRuns; if (any) ++g_vegPlacedOk; }
+                    else { ++g_oreRuns; if (any) ++g_orePlacedOk; }
                 }
             }
         }
+        g_biomeCtx = nullptr;
 
-        // Compare chunk C: every ore-family cell (server or ours) must match.
+        // Compare chunk C: every family cell (server or ours) must match.
         mc::LevelChunk* c = chunks[packChunk(Cx, Cz)].get();
+        PerChunk& pc = perChunk[key];
         for (int lx = 0; lx < 16; ++lx) for (int lz = 0; lz < 16; ++lz) {
             const int bx = Cx * 16 + lx, bz = Cz * 16 + lz;
             for (int y = minY; y < maxY; ++y) {
@@ -380,23 +555,46 @@ int main(int argc, char** argv) {
                 auto sit = cells.find({bx, y, bz});
                 const std::string srv = (sit != cells.end()) ? sit->second : std::string("minecraft:air");
                 const bool srvOre = oreFamily.count(srv) != 0, myOre = oreFamily.count(mine) != 0;
+                const bool srvVeg = vegetalFamily.count(srv) != 0, myVeg = vegetalFamily.count(mine) != 0;
                 if (srvOre || myOre) {
                     ++oreCells;
                     if (mine != srv) {
                         ++oreMism;
-                        if (shown++ < 200) std::cerr << "ORE-MISMATCH seed=" << seed << " (" << bx << "," << y << "," << bz
+                        if (family == "ore" && shown++ < 200) std::cerr << "ORE-MISMATCH seed=" << seed << " (" << bx << "," << y << "," << bz
                             << ") got=" << mine << " server=" << srv << "\n";
                     }
-                } else if (mine != srv) {
+                }
+                if (srvVeg || myVeg) {
+                    ++vegCells; ++pc.vegCells;
+                    if (mine != srv) {
+                        ++vegMism; ++pc.vegMism;
+                        if (family == "vegetal" && shown++ < 200) std::cerr << "VEG-MISMATCH seed=" << seed << " (" << bx << "," << y << "," << bz
+                            << ") got=" << mine << " server=" << srv << "\n";
+                    }
+                }
+                if (!srvOre && !myOre && !srvVeg && !myVeg && mine != srv) {
                     ++otherFeatureCells;   // un-ported feature (expected until ported)
                 }
             }
         }
     }
 
+    for (const auto& [key, pc] : perChunk)
+        std::cout << "DecorateVegetalChunk seed=" << std::get<0>(key) << " chunk=(" << std::get<1>(key) << "," << std::get<2>(key)
+                  << ") veg_cells=" << pc.vegCells << " veg_mismatches=" << pc.vegMism << "\n";
     std::cout << "DecorateOre ore_cells=" << oreCells << " ore_mismatches=" << oreMism
               << " other_feature_cells=" << otherFeatureCells
               << " | oreRuns=" << g_oreRuns << " orePlacedOk=" << g_orePlacedOk
               << " oreFamilySize=" << oreFamily.size() << "\n";
-    return oreMism == 0 ? 0 : 1;
+    std::cout << "DecorateVegetal veg_cells=" << vegCells << " veg_mismatches=" << vegMism
+              << " | vegRuns=" << g_vegRuns << " vegPlacedOk=" << g_vegPlacedOk << "\n";
+    for (const auto& [type, n] : g_unportedSkips)
+        std::cout << "UNPORTED-FEATURE-TYPE " << type << " skipped_placed_features=" << n << "\n";
+    if (!g_blocksMotionDefaulted.empty()) {
+        std::cout << "BLOCKSMOTION-DEFAULTED (verify each vs Blocks.java and add to the table):";
+        for (const auto& b : g_blocksMotionDefaulted) std::cout << " " << b;
+        std::cout << "\n";
+    }
+    const long long famMism = (family == "vegetal") ? vegMism : oreMism;
+    return famMism == 0 ? 0 : 1;
 }

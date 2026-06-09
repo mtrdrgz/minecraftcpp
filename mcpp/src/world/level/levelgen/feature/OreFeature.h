@@ -93,6 +93,9 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeOrePlacer(
         const int sizeXZ = 2 * (mth::ceil(spreadXY) + maxRadius);
         const int sizeY  = 2 * (2 + maxRadius);
 
+        // OreFeature.place pre-check (OreFeature.java:44-50): the blob runs iff any
+        // probe column's OCEAN_FLOOR_WG height (WorldGenRegion semantics: heightmap
+        // value + 1) reaches yStart; first passing column short-circuits.
         bool found = false;
         for (int xp = xStart; xp <= xStart + sizeXZ && !found; ++xp)
             for (int zp = zStart; zp <= zStart + sizeXZ; ++zp)

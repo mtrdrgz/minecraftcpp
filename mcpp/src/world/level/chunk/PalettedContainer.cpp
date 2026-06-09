@@ -33,6 +33,22 @@ uint32_t PalettedContainer::getRaw(int index) const {
 }
 
 void PalettedContainer::setRaw(int index, uint32_t paletteIdx) {
+    if (isDirect()) {
+        // Direct: 15-bit values SPAN long boundaries (must mirror getRaw exactly).
+        int longIndex = (index * 15) / 64;
+        int bitOffset = (index * 15) % 64;
+        if (longIndex >= (int)m_data.size()) return;
+        uint64_t mask = 0x7FFFULL;
+        m_data[longIndex] = (m_data[longIndex] & ~(mask << bitOffset))
+                            | ((uint64_t)(paletteIdx & mask) << bitOffset);
+        if (bitOffset + 15 > 64 && longIndex + 1 < (int)m_data.size()) {
+            int lowBits = 64 - bitOffset;        // bits that fit in the first long
+            uint64_t hiMask = mask >> lowBits;   // remaining high bits in the next long
+            m_data[longIndex + 1] = (m_data[longIndex + 1] & ~hiMask)
+                                    | ((uint64_t)(paletteIdx & mask) >> lowBits);
+        }
+        return;
+    }
     int valuesPerLong = 64 / m_bitsPerEntry;
     int longIndex  = index / valuesPerLong;
     int bitOffset  = (index % valuesPerLong) * m_bitsPerEntry;
@@ -42,12 +58,25 @@ void PalettedContainer::setRaw(int index, uint32_t paletteIdx) {
 }
 
 void PalettedContainer::resize(int newBits) {
-    // Rebuild packed array with new bits-per-entry
-    std::vector<uint32_t> old(SECTION_SIZE);
-    for (int i = 0; i < SECTION_SIZE; ++i) old[i] = getRaw(i);
+    // Repack the RAW palette indices at the new bit width. The stored values are
+    // indices into the (unchanged) palette — resolving them via getRaw (which
+    // returns m_palette[idx]) and re-storing the resolved STATE IDS as indices
+    // scrambled every cell of the section once a palette grew past 16 entries
+    // (the bug behind the chunk-wide block shuffle the decoration parity caught).
+    // Only meaningful in palette mode (direct mode never resizes).
+    const int oldBits = m_bitsPerEntry;
+    const int oldValuesPerLong = 64 / oldBits;
+    const uint64_t oldMask = (1ULL << oldBits) - 1;
+    std::vector<uint64_t> oldData = std::move(m_data);
     m_bitsPerEntry = newBits;
     m_data.assign(calcLongsNeeded(newBits), 0ULL);
-    for (int i = 0; i < SECTION_SIZE; ++i) setRaw(i, old[i]);
+    for (int i = 0; i < SECTION_SIZE; ++i) {
+        const int li = i / oldValuesPerLong;
+        const uint32_t palIdx = li < (int)oldData.size()
+            ? (uint32_t)((oldData[li] >> ((i % oldValuesPerLong) * oldBits)) & oldMask)
+            : 0;
+        setRaw(i, palIdx);
+    }
 }
 
 uint32_t PalettedContainer::get(int x, int y, int z) const {
@@ -73,12 +102,14 @@ void PalettedContainer::set(int x, int y, int z, uint32_t stateId) {
         int needed = 1;
         while ((1 << needed) < (int)m_palette.size()) ++needed;
         needed = std::max(needed, 4);
-        if (needed > 8) { // switch to direct
+        if (needed > 8) { // switch to direct (15-bit raw state ids)
+            // Snapshot the RESOLVED state ids while still in palette mode (the old
+            // code wiped m_data first and then read it back through the palette,
+            // zeroing the entire section).
+            std::vector<uint32_t> old(SECTION_SIZE);
+            for (int i = 0; i < SECTION_SIZE; ++i) old[i] = getRaw(i);
             m_bitsPerEntry = 15;
             m_data.assign(calcLongsNeeded(15), 0ULL);
-            // Rebuild in direct mode
-            std::vector<uint32_t> old(SECTION_SIZE);
-            for (int i = 0; i < SECTION_SIZE; ++i) old[i] = m_palette[getRaw(i)];
             m_palette.clear();
             for (int i = 0; i < SECTION_SIZE; ++i) setRaw(i, old[i]);
             setRaw(index, stateId);

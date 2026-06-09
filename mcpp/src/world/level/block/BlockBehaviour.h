@@ -70,4 +70,67 @@ inline bool dryVegetationBlockCanSurvive(const std::string& belowBlock, const Bl
     return tags.isInTag(belowBlock, "minecraft:supports_dry_vegetation");
 }
 
+// ---------------------------------------------------------------------------
+// BlockStateBase.blocksMotion() (BlockBehaviour.java:540-543):
+//   block != COBWEB && block != BAMBOO_SAPLING && legacySolid
+// legacySolid = calculateSolid() (BlockBehaviour.java:482-502): forceSolidOn ->
+// true; forceSolidOff -> false; empty collision shape -> false; else solid if the
+// collision bounds are (near-)full. Evaluated here over the closed set of blocks
+// the worldgen pipeline can produce, each entry grounded in its Blocks.java
+// registration:
+//   FALSE - air/cave_air/void_air        isAir, no collision
+//         - water/lava                   LiquidBlock, empty collision shape
+//         - seagrass (Blocks.java:769-778), tall_seagrass (:780-790),
+//           kelp (:4788-4797), kelp_plant (:4799-4802),
+//           glow_lichen (:2464-2475), bubble_column (:5236-5241): .noCollission()
+//         - snow (:1999-2004): .forceSolidOff()
+//         - cobweb / bamboo_sapling: explicit exclusions in blocksMotion()
+//   TRUE  - every other block the overworld generator/carvers/surface rules and
+//           the ported features emit (stone family, deepslate, bedrock, sand,
+//           gravel, dirt/grass_block, clay, sandstone, ice/packed_ice/blue_ice,
+//           magma_block, obsidian, the ore blocks, ...): all registered as
+//           full-cube colliding blocks.
+// Blocks outside the enumerated sets default to TRUE (full cubes are the worldgen
+// default); pass `defaulted` to surface such ids for verification instead of
+// trusting the default silently.
+inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = nullptr) {
+    static const std::set<std::string> nonMotionBlocking = {
+        "minecraft:air", "minecraft:cave_air", "minecraft:void_air",
+        "minecraft:water", "minecraft:lava",
+        "minecraft:seagrass", "minecraft:tall_seagrass",
+        "minecraft:kelp", "minecraft:kelp_plant",
+        "minecraft:glow_lichen", "minecraft:bubble_column",
+        "minecraft:snow",
+        "minecraft:cobweb", "minecraft:bamboo_sapling",
+    };
+    static const std::set<std::string> knownMotionBlocking = {
+        "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
+        "minecraft:tuff", "minecraft:deepslate", "minecraft:bedrock", "minecraft:obsidian",
+        "minecraft:gravel", "minecraft:sand", "minecraft:red_sand", "minecraft:sandstone",
+        "minecraft:dirt", "minecraft:grass_block", "minecraft:coarse_dirt", "minecraft:podzol",
+        "minecraft:clay", "minecraft:mud", "minecraft:magma_block", "minecraft:snow_block",
+        "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice",
+        "minecraft:coal_ore", "minecraft:copper_ore", "minecraft:iron_ore", "minecraft:gold_ore",
+        "minecraft:redstone_ore", "minecraft:lapis_ore", "minecraft:diamond_ore", "minecraft:emerald_ore",
+        "minecraft:deepslate_coal_ore", "minecraft:deepslate_copper_ore", "minecraft:deepslate_iron_ore",
+        "minecraft:deepslate_gold_ore", "minecraft:deepslate_redstone_ore", "minecraft:deepslate_lapis_ore",
+        "minecraft:deepslate_diamond_ore", "minecraft:deepslate_emerald_ore",
+    };
+    const std::string block = blockName(blockOrState);
+    if (nonMotionBlocking.count(block) != 0) return false;
+    if (knownMotionBlocking.count(block) == 0 && defaulted != nullptr) *defaulted = true;
+    return true;
+}
+
+// BlockStateBase.isFaceSturdy(level, pos, Direction.UP) with SupportType.FULL:
+// Block.isFaceFull(state.getBlockSupportShape(...), UP). For the worldgen block
+// set this coincides with blocksMotion(): every motion-blocking block the
+// pipeline emits is a full cube (sturdy on all faces), and the non-colliding /
+// liquid / air blocks have no support shape. Non-full-cube colliding blocks
+// (slabs, stairs, snow layers>=8, ...) never occur as worldgen ground here; if
+// one ever does, `defaulted` flags it for review.
+inline bool isFaceSturdyUp(const std::string& blockOrState, bool* defaulted = nullptr) {
+    return blocksMotion(blockOrState, defaulted);
+}
+
 } // namespace mc::block
