@@ -233,6 +233,26 @@ mc::levelgen::feature::OreRuleTest loadRuleTest(const json& j) {
     throw std::runtime_error("unsupported rule_test: " + t);
 }
 
+mc::levelgen::VerticalAnchorPtr loadVerticalAnchor(const json& j) {
+    if (j.contains("absolute")) return mc::levelgen::VerticalAnchors::absolute(j.at("absolute").get<int>());
+    if (j.contains("above_bottom")) return mc::levelgen::VerticalAnchors::aboveBottom(j.at("above_bottom").get<int>());
+    if (j.contains("below_top")) return mc::levelgen::VerticalAnchors::belowTop(j.at("below_top").get<int>());
+    throw std::runtime_error("unsupported vertical_anchor");
+}
+
+mc::levelgen::heightproviders::HeightProviderPtr loadHeightProvider(const json& j) {
+    using namespace mc::levelgen::heightproviders;
+    if (j.contains("absolute") || j.contains("above_bottom") || j.contains("below_top"))
+        return std::make_shared<ConstantHeight>(loadVerticalAnchor(j));   // bare anchor => constant
+    const std::string t = stripNs(j.at("type").get<std::string>());
+    if (t == "constant") return std::make_shared<ConstantHeight>(loadVerticalAnchor(j.at("value")));
+    if (t == "uniform") return std::make_shared<UniformHeight>(loadVerticalAnchor(j.at("min_inclusive")), loadVerticalAnchor(j.at("max_inclusive")));
+    if (t == "biased_to_bottom") return std::make_shared<BiasedToBottomHeight>(loadVerticalAnchor(j.at("min_inclusive")), loadVerticalAnchor(j.at("max_inclusive")), j.value("inner", 1));
+    if (t == "very_biased_to_bottom") return std::make_shared<VeryBiasedToBottomHeight>(loadVerticalAnchor(j.at("min_inclusive")), loadVerticalAnchor(j.at("max_inclusive")), j.value("inner", 1));
+    if (t == "trapezoid") return std::make_shared<TrapezoidHeight>(loadVerticalAnchor(j.at("min_inclusive")), loadVerticalAnchor(j.at("max_inclusive")), j.value("plateau", 0));
+    throw std::runtime_error("unsupported height_provider: " + t);
+}
+
 std::shared_ptr<const PlacementModifier> loadModifier(const json& j); // fwd
 
 // TreeFeature.validTreePos / TrunkPlacer.isFree (block-behaviour boundary).
@@ -441,6 +461,8 @@ std::shared_ptr<const PlacementModifier> loadModifier(const json& j) {
     }
     if (t == "random_offset")
         return std::make_shared<RandomOffsetPlacement>(loadIntProvider(j.at("xz_spread")), loadIntProvider(j.at("y_spread")));
+    if (t == "height_range")
+        return std::make_shared<HeightRangePlacement>(loadHeightProvider(j.at("height")));
     if (t == "biome") return nullptr; // single forced biome => pass-through (no RNG)
     if (t == "block_predicate_filter") {
         Pred p = loadPredicate(j.at("predicate"));
