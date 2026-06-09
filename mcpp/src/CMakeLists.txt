@@ -362,3 +362,30 @@ set_target_properties(full_chunk_decorate_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     CXX_SCAN_FOR_MODULES OFF
 )
+
+# Climate biome parity (restored; dropped by c7abe591, added by a3cbc510): certifies
+# Climate.Sampler targets + MultiNoiseBiomeSource.findValue vs tools/ClimateBiomeParity.java.
+add_executable(climate_biome_parity
+    world/level/levelgen/ClimateBiomeParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+)
+target_include_directories(climate_biome_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(climate_biome_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(climate_biome_parity PRIVATE bcrypt)
+endif()
+set_target_properties(climate_biome_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)

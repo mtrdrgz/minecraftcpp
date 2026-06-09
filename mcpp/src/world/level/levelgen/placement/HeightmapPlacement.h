@@ -64,6 +64,26 @@ private:
     std::int64_t m_min, m_max;
 };
 
+// SurfaceWaterDepthFilter.shouldPlace (SurfaceWaterDepthFilter.java:30-35):
+// keep origin iff getHeight(WORLD_SURFACE) - getHeight(OCEAN_FLOOR) <= max_water_depth
+// (the water-column depth above the motion-blocking floor at origin's x/z).
+class SurfaceWaterDepthFilter final : public PlacementModifier {
+public:
+    explicit SurfaceWaterDepthFilter(int maxWaterDepth) : m_maxWaterDepth(maxWaterDepth) {}
+
+    std::vector<BlockPos> getPositions(PlacementContext* context, RandomSource&, BlockPos origin) const override {
+        const int oceanFloor = context->getHeight(Heightmap::Types::OCEAN_FLOOR, origin.x, origin.z);
+        const int worldSurface = context->getHeight(Heightmap::Types::WORLD_SURFACE, origin.x, origin.z);
+        if (worldSurface - oceanFloor <= m_maxWaterDepth) {
+            return { origin };
+        }
+        return {};
+    }
+
+private:
+    int m_maxWaterDepth;
+};
+
 class HeightRangePlacement final : public PlacementModifier {
 public:
     explicit HeightRangePlacement(HeightProviderPtr height) : m_height(std::move(height)) {}

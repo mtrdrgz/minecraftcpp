@@ -102,6 +102,14 @@ inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = null
         "minecraft:glow_lichen", "minecraft:bubble_column",
         "minecraft:snow",
         "minecraft:cobweb", "minecraft:bamboo_sapling",
+        // .noCollision() registrations (empty collision shape -> legacySolid false):
+        // short_grass (Blocks.java "short_grass"), bush ("bush"), lily_of_the_valley,
+        // brown_mushroom, red_mushroom, vine, lilac, rose_bush, peony, leaf_litter,
+        // oak/birch_sapling (SaplingBlock registrations) — all .noCollision().
+        "minecraft:short_grass", "minecraft:bush", "minecraft:lily_of_the_valley",
+        "minecraft:brown_mushroom", "minecraft:red_mushroom", "minecraft:vine",
+        "minecraft:lilac", "minecraft:rose_bush", "minecraft:peony",
+        "minecraft:leaf_litter", "minecraft:oak_sapling", "minecraft:birch_sapling",
     };
     static const std::set<std::string> knownMotionBlocking = {
         "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
@@ -115,11 +123,103 @@ inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = null
         "minecraft:deepslate_coal_ore", "minecraft:deepslate_copper_ore", "minecraft:deepslate_iron_ore",
         "minecraft:deepslate_gold_ore", "minecraft:deepslate_redstone_ore", "minecraft:deepslate_lapis_ore",
         "minecraft:deepslate_diamond_ore", "minecraft:deepslate_emerald_ore",
+        // Tree/dungeon family (Blocks.java registrations, all full-cube or near-full
+        // colliding):
+        //   oak_log/birch_log (logProperties full cubes), oak/birch_leaves (leaves
+        //   collide as full cubes; only .noOcclusion() — render-side), bee_nest
+        //   (BeehiveBlock full cube), cobblestone / mossy_cobblestone (full cubes),
+        //   spawner (full cube, .noOcclusion() only), chest (ChestBlock 14/16 box:
+        //   collision bounds avg size 0.875 >= 0.7291666 -> legacySolid TRUE,
+        //   BlockBehaviour.java:495-502).
+        "minecraft:oak_log", "minecraft:birch_log",
+        "minecraft:oak_leaves", "minecraft:birch_leaves",
+        "minecraft:bee_nest", "minecraft:cobblestone", "minecraft:mossy_cobblestone",
+        "minecraft:spawner", "minecraft:chest",
     };
     const std::string block = blockName(blockOrState);
     if (nonMotionBlocking.count(block) != 0) return false;
     if (knownMotionBlocking.count(block) == 0 && defaulted != nullptr) *defaulted = true;
     return true;
+}
+
+// BlockStateBase.isSolid() == legacySolid (BlockBehaviour.java:546-548), and
+// blocksMotion() == legacySolid minus the COBWEB/BAMBOO_SAPLING exceptions
+// (BlockBehaviour.java:540-543). Neither exception block is producible by the
+// worldgen pipeline here, so the blocksMotion table doubles as isSolid.
+// Used by MonsterRoomFeature's wall/floor solidity checks (MonsterRoomFeature.java).
+inline bool isSolid(const std::string& blockOrState, bool* defaulted = nullptr) {
+    return blocksMotion(blockOrState, defaulted);
+}
+
+// BlockStateBase.isSolidRender() (BlockBehaviour.java:655-657): cached
+// solidRender = Block.isShapeFullBlock(occlusionShape) where occlusionShape is
+// EMPTY unless canOcclude (initCache, BlockBehaviour.java:511-517). Consumed by
+// PlaceOnGroundDecorator.attemptToPlaceBlockAbove (PlaceOnGroundDecorator.java:81)
+// and StructurePiece.reorient. Per Blocks.java registration:
+//   NOT solid-render: all no-collision plants (no occlusion shape), water/lava
+//     (LiquidBlock), leaves (leavesProperties .noOcclusion()), spawner
+//     (.noOcclusion()), chest (non-full 14/16 shape), ice (.noOcclusion()),
+//     glow_lichen / bubble_column / snow layers (non-full shapes), air family.
+//   solid-render: the full opaque cubes (stone family, deepslate, tuff, bedrock,
+//     obsidian, sands/sandstone, gravel, dirt family, grass_block, clay, mud,
+//     magma_block, snow_block, packed/blue ice, all ores, logs, bee_nest,
+//     cobblestone/mossy_cobblestone).
+inline bool isSolidRender(const std::string& blockOrState, bool* defaulted = nullptr) {
+    static const std::set<std::string> notSolidRender = {
+        "minecraft:air", "minecraft:cave_air", "minecraft:void_air",
+        "minecraft:water", "minecraft:lava",
+        "minecraft:seagrass", "minecraft:tall_seagrass",
+        "minecraft:kelp", "minecraft:kelp_plant",
+        "minecraft:glow_lichen", "minecraft:bubble_column", "minecraft:snow",
+        "minecraft:ice",
+        "minecraft:oak_leaves", "minecraft:birch_leaves",
+        "minecraft:short_grass", "minecraft:bush", "minecraft:lily_of_the_valley",
+        "minecraft:brown_mushroom", "minecraft:red_mushroom", "minecraft:vine",
+        "minecraft:lilac", "minecraft:rose_bush", "minecraft:peony",
+        "minecraft:leaf_litter", "minecraft:oak_sapling", "minecraft:birch_sapling",
+        "minecraft:spawner", "minecraft:chest",
+    };
+    static const std::set<std::string> knownSolidRender = {
+        "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
+        "minecraft:tuff", "minecraft:deepslate", "minecraft:bedrock", "minecraft:obsidian",
+        "minecraft:gravel", "minecraft:sand", "minecraft:red_sand", "minecraft:sandstone",
+        "minecraft:dirt", "minecraft:grass_block", "minecraft:coarse_dirt", "minecraft:podzol",
+        "minecraft:clay", "minecraft:mud", "minecraft:magma_block", "minecraft:snow_block",
+        "minecraft:packed_ice", "minecraft:blue_ice",
+        "minecraft:coal_ore", "minecraft:copper_ore", "minecraft:iron_ore", "minecraft:gold_ore",
+        "minecraft:redstone_ore", "minecraft:lapis_ore", "minecraft:diamond_ore", "minecraft:emerald_ore",
+        "minecraft:deepslate_coal_ore", "minecraft:deepslate_copper_ore", "minecraft:deepslate_iron_ore",
+        "minecraft:deepslate_gold_ore", "minecraft:deepslate_redstone_ore", "minecraft:deepslate_lapis_ore",
+        "minecraft:deepslate_diamond_ore", "minecraft:deepslate_emerald_ore",
+        "minecraft:oak_log", "minecraft:birch_log",
+        "minecraft:bee_nest", "minecraft:cobblestone", "minecraft:mossy_cobblestone",
+    };
+    const std::string block = blockName(blockOrState);
+    if (notSolidRender.count(block) != 0) return false;
+    if (knownSolidRender.count(block) == 0 && defaulted != nullptr) *defaulted = true;
+    return true;
+}
+
+// The LeavesBlock subclasses (instanceof LeavesBlock): exactly the #minecraft:leaves
+// tag members (data/minecraft/tags/block/leaves.json), each registered with a
+// LeavesBlock-derived class in Blocks.java. Consumed by the MOTION_BLOCKING_NO_LEAVES
+// heightmap predicate (Heightmap.java:151-156) and LeavesBlock.getOptionalDistanceAt.
+inline bool isLeavesBlock(const std::string& blockOrState) {
+    static const std::set<std::string> leaves = {
+        "minecraft:jungle_leaves", "minecraft:oak_leaves", "minecraft:spruce_leaves",
+        "minecraft:pale_oak_leaves", "minecraft:dark_oak_leaves", "minecraft:acacia_leaves",
+        "minecraft:birch_leaves", "minecraft:azalea_leaves", "minecraft:flowering_azalea_leaves",
+        "minecraft:mangrove_leaves", "minecraft:cherry_leaves",
+    };
+    return leaves.count(blockName(blockOrState)) != 0;
+}
+
+// BlockStateBase.isAir (the three AirBlock registrations: air, void_air, cave_air —
+// Blocks.java .air()). The worldgen grid stores cave_air distinctly (MonsterRoom
+// writes Blocks.CAVE_AIR), so every isAir gate must accept all three.
+inline bool isAirBlock(const std::string& blockOrState) {
+    const std::string block = blockName(blockOrState);
+    return block == "minecraft:air" || block == "minecraft:cave_air" || block == "minecraft:void_air";
 }
 
 // BlockStateBase.isFaceSturdy(level, pos, Direction.UP) with SupportType.FULL:
