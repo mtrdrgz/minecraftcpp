@@ -303,7 +303,37 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 64 (worldgen 1:1 — SERVER .mca byte-match ground truth; decoration gap quantified + plan)
+**Last updated**: Session 65 (worldgen 1:1 — 3×3 decoration driver; ORE family ~92.5% server byte-match)
+
+**Session 65** (worldgen 1:1 — decoration track): built the whole-chunk decoration driver
+and got the first feature FAMILY (ores) substantially byte-matching the real no-structures
+server.
+- NEW: `full_chunk_decorate_parity` (`FullChunkDecorateParityTest.cpp`) — generates
+  terrain+carvers for a 5×5 of chunks, builds a `MultiChunkLevel` (WorldGenRegion-style:
+  reads any chunk, radius-1 writes, multi-heightmap WG-live/OCEAN_FLOOR-frozen), runs the
+  real `applyBiomeDecoration` loop (FeatureSorter global order + `setFeatureSeed(deco,index,
+  step)`, feature selection from the chunk's actual 3×3 noise biomes via `getNoiseBiome`),
+  and compares chunk C vs the server `.mca` — one feature FAMILY at a time.
+- FIXES (fast-start regressions / dead scaffolding uncovered while wiring): `BiomeFeatures::
+  loadFromDirectory` and `BlockTags::loadFromDirectory` were STUBS returning empty (broke all
+  tag/feature parity) — restored the real parsers; `NoiseBasedChunkGenerator::getNoiseBiome`
+  was declared-but-undefined — defined (delegates to BiomeSource, quart resolution); two
+  same-named `mc::levelgen::VerticalAnchor` types clashed once terrain+height-providers were
+  in one TU — renamed the SurfaceRules one to `SurfaceVerticalAnchor`; disabled CMake C++
+  module scanning (project uses headers, scan miscompiled multi-`..` includes).
+- RESULT: terrain stays byte-exact (`full_chunk_parity 2359296/0`); `DecorateOre
+  ore_cells=26185 ore_mismatches=1965` → **~92.5% of ore-family cells match the server**
+  (the prior whole-gap was 24905). Ore feature (`OreFeature.h`) + RuleTest + height_range
+  ported 1:1.
+- ORE RESIDUAL (next): `granite/tuff/deepslate` swaps = shifted ore positions ⇒ the
+  FeatureSorter GLOBAL index (hence per-feature seed) differs from the server. Prime suspect:
+  `collectOverworldPossibleBiomes()` order vs Java `possibleBiomes()` (FeatureSorter assigns
+  indices in source-encounter order). Also decoration overlap order across the 3×3 and the
+  `getHeight +1` (MultiChunkLevel lacks the real WorldGenRegion +1). Close → ore=0, then port
+  the next families (vegetal → trees → lakes/springs → local mods → underground/top-layer).
+  See `mcpp/docs/DECORATION_PLAN.md` + per-agent memory.
+
+**Last updated prior**: Session 64 (worldgen 1:1 — SERVER .mca byte-match ground truth; decoration gap quantified + plan)
 
 **Session 64** (worldgen 1:1 — decoration track, toward server byte-match): goal set by
 the user — port ALL decorations + biome characteristics 1:1 (everything EXCEPT structures)
