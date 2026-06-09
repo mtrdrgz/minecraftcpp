@@ -303,7 +303,30 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 66 (worldgen 1:1 — Java decoration ground truth = FULL-CHUNK SERVER BYTE-MATCH, 6/6 chunks 100%)
+**Last updated**: Session 66 (worldgen 1:1 — C++ FULL-CELL server byte-match on 6 chunks; forest GT certified; tree port in flight)
+
+**Session 66 continued — the day's full arc (commits 2772bdb6 → 8c1ab5be):**
+1. Java GT = server byte-match on the 6 ocean chunks (see below).
+2. **C++ engine reaches FULL-CELL parity: `DecorateAll cells=589824 mismatches=0`** on all
+   6 server-certified chunks (commits 1321bc56 + 8d6668ad): ore, seagrass/kelp (+fluid
+   model/tags), disks, springs, underwater magma, glow_lichen (multiface), bubble-column
+   post-processing, WorldGenRegion setBlock/getHeight semantics, blocksMotion/occlusion
+   tables. En route found+fixed a REAL engine bug: PalettedContainer resize/direct-mode
+   corruption scrambling any section whose palette grew past 16 entries.
+3. **Forest certification (commit 8c1ab5be)** — three 1:1 root causes: (a) the seed-1
+   world spawn IS chunk (10,10): world creation decorates the spawn 3×3 BEFORE any
+   forceload, xz except (10,11) first ("phase 1"; everything else is phase 2 = global xz)
+   — `perm:` harness mode reproduces it, header documents the model; (b) vanilla fills
+   biomes via `NoiseChunk.cachedClimateSampler`, NOT the raw `randomState.sampler()` —
+   they disagree at shore boundaries and flip surface rules ((11,9): 361→0); (c)
+   `WorldGenRegion.getRandom()` is a deterministic positional random
+   (worldgen_region_random @ chunk world pos) — the proxy's was time-seeded.
+   Verified vs the real server: oceans 6×0; (10,10)=0; (11,9)=0; (9,10),(10,9),(10,11)=0;
+   (9,11)=2 cells (second-order phase-2 interleaving in uncertified neighbour turns).
+4. NEXT (in flight): TREE family port to C++ (TreeFeature core, straight/fancy trunk,
+   blob/fancy foliage, fallen trees, beehive/place_on_ground decorators, random_selector,
+   patch_grass/bush) certified against plain-xz forest GTs (scheduler-independent; the
+   GT↔server link is proven separately). Then underground/top-layer (task #17).
 
 **Session 66** (worldgen 1:1 — decoration track): the fixed-order Java ground truth
 `mcpp/tools/FullChunkDecorateParity.java` now reproduces the real server.jar's saved chunks
