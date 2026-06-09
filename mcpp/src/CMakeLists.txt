@@ -10,6 +10,8 @@ set(MC_SOURCES
     # Core
     core/StbImpl.cpp
     core/ThreadPool.cpp
+    # Profiling
+    ../../profiling/src/Profiler.cpp
 
     # NBT
     nbt/Tag.cpp
@@ -144,6 +146,7 @@ target_include_directories(mcpp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/render/dx12
     ../vendor/vma
     ../vendor/d3d12ma
+    ../../profiling/include
 )
 
 target_link_libraries(mcpp PRIVATE
@@ -247,6 +250,47 @@ if(WIN32)
     target_link_libraries(placement_parity PRIVATE bcrypt)
 endif()
 set_target_properties(placement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Full-chunk terrain parity: proves the C++ generator is byte-for-byte identical to
+# the real Java generator over EVERY block of a chunk (not sampled columns), through
+# fillFromNoise + buildSurface + applyCarvers. Ground truth: tools/FullChunkParity.java.
+# Source list is the certified generator set (same as the removed Base/Surface/Carved
+# column targets, commit 0bfc8121) plus the new full-chunk test.
+add_executable(full_chunk_parity
+    world/level/levelgen/FullChunkParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(full_chunk_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(full_chunk_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(full_chunk_parity PRIVATE bcrypt)
+endif()
+set_target_properties(full_chunk_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

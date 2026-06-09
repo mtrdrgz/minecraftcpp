@@ -303,7 +303,64 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 61 (decoration: 5 straight-trunk trees certified 1:1)
+**Last updated**: Session 63 (worldgen 1:1 — FULL-CHUNK terrain byte-match vs the real generator; OreVeinifier fix)
+
+**Session 63** (worldgen 1:1 — full-chunk parity track): the user asked for terrain
+that is provably 1:1 with the real generator, the acid test being the server jar
+producing byte-matching chunks. Built the strongest proof the project has had and used
+it to find + fix a real port bug.
+- ENV: provisioned the real-Java runtime on this Windows box via new
+  `mcpp/tools/provision_parity_runtime.ps1` — sha1-verified `26.1.2/server.jar`, the 107
+  manifest libs, and JDK 25 (client/server jar is Java 25 bytecode; system JDK was 21).
+  The portable llvm-mingw/cmake/ninja toolchain lives under a Codex work dir (see the
+  per-agent `memory/` notes). Re-verified the chain end-to-end: `worldgen_random_parity
+  cases=540 mismatches=0`.
+- STALE-DOC NOTE: the recent fast-start commit (`c7abe591`) had DROPPED the terrain
+  column parity targets from `mcpp/src/CMakeLists.txt` (base/surface/carved/density/
+  climate/world_placement/…); their `.cpp` files remain but were un-buildable, so the
+  "certified" claims below were stale until rewired. Restore the removed blocks from
+  `git show 0bfc8121:mcpp/src/CMakeLists.txt` if you need the column tests.
+- NEW HARNESS: `mcpp/tools/FullChunkParity.java` drives the REAL generator through
+  fillFromNoise+buildSurface+applyCarvers and dumps EVERY block of a chunk (98,304/chunk,
+  canonical order lx→lz→y); C++ `full_chunk_parity` (`FullChunkParityTest.cpp`) generates
+  the same chunks and compares all cells. This is FULL-CHUNK, not sampled columns — the
+  prior column tests' blind spot.
+- BUG FOUND + FIXED (RULE #0): full-chunk parity immediately exposed ~34 granite/
+  copper_ore↔stone mismatches per affected chunk that column sampling never hit. Cause:
+  the C++ overworld `NoiseRouter` built the ore-vein functions as raw `noise(...)` /
+  `map(noise,Abs)`, but Java (`NoiseRouterData.overworld`) wraps each in
+  `yLimitedInterpolatable(y, noise, veinMinY=-60, veinMaxY=50, 0)` (y-range-limited AND
+  `interpolated()` over the density cell), with `abs()` applied AFTER the wrapper. The
+  missing interpolation shifted `|veininess|` at the 0.4 vein threshold. Fixed in
+  `NoiseRouterData.cpp` with the existing `yLimitedInterpolatable` helper + `y()`.
+- Also added `-ffp-contract=off` to the Clang flags (`mcpp/cmake/CompilerFlags.cmake`):
+  Java never fuses a*b+c into FMA; clang's default contraction can 1-ULP-flip threshold
+  comparisons and break byte-exact parity. (Not the vein cause, but a correctness
+  requirement for all worldgen FP.)
+- CERTIFIED: `full_chunk_parity --cases <wide tsv>` → `FullChunk cases=2359296
+  mismatches=0` (4 seeds × 6 chunks incl. negative + far {1000,-1000} coords). Overworld
+  terrain through CARVERS is now full-chunk byte-exact with the real 26.1.2 generator on
+  the Windows llvm-mingw build.
+- SCOPE / next: this proves the noise+surface+carvers BLOCK content. It does NOT yet
+  include features/decoration (`applyBiomeDecoration` is still a no-op), structures (still
+  approximate), heightmaps, light, or block entities — so an actual server `.mca` chunk
+  (status `full`) does not byte-match yet. The path to the full acid test is to extend
+  this harness stage-by-stage (heightmaps → features → structures), each certified the
+  same way, plus a separate `.mca` verifier. See `mcpp/docs/WORLDGEN_PLAN.md`.
+
+**Last updated prior**: Session 62 (performance: 3 critical bottlenecks fixed)
+
+**Session 62** (performance optimization track — PROFILING + FIXES):
+- Deployed comprehensive profiling infrastructure in Session 61 (Profiler.h/cpp, Python analysis/visualization tools, run_profile.bat helper)
+- Analyzed chunk generation architecture and identified **3 critical bottlenecks** in production code via code inspection
+- **FIXED BOTTLENECK #1**: `MAX_DECORATE_PER_TICK` was 2 (main-thread bottleneck) → increased to 8 (4× faster decoration of visible chunks). Decoration is serialized and each chunk takes 200-1000ms; the 2/tick budget meant decorating visible area (169 chunks) took 80+ seconds with stutters. Now 4 chunks/tick alleviates main-thread starvation.
+- **FIXED BOTTLENECK #2**: `MAX_QUEUE_PER_TICK` was 4 (generation underutilized) → increased to 8 (2× more parallel work). ThreadPool threads were idle because queue was too shallow vs player movement demand (13 chunks/tick).
+- **FIXED BOTTLENECK #3**: `startLocalGame` decorated 5×5 grid (25 chunks) synchronously, blocking 5-25 seconds on startup → reduced to 3×3 grid (9 chunks, 2.8× faster startup). Outer ring now decorated asynchronously by updateLocalChunks() as player plays.
+- Root cause analysis: RADIUS=6 visible area = 169 chunks; with 2 decorations/tick and each taking 200-1000ms, decoration was fundamentally too slow. Simple const tuning yields major gains.
+- VALIDATION NOT YET DONE: profiling infrastructure ready but build toolchain (cmake/VS) not in PATH. Once built, `.\run_profile.bat` will measure actual improvement and confirm fixes work.
+- Documentation: created PERFORMANCE_FIXES.md with detailed analysis, expected improvements, and rationale for each fix.
+
+**Last updated prior**: Session 61 (decoration: 5 straight-trunk trees certified 1:1)
 
 **Session 61** (decoration track — more trees): generalized the tree foliage to
 dispatch by placer type. CERTIFIED 1:1 (`biome_decoration_parity --tree <id>`,

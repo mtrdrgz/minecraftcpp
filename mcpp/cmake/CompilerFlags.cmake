@@ -20,6 +20,12 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
         -Wall -Wno-unused-variable -Wno-missing-field-initializers
         -fcolor-diagnostics
+        # WORLDGEN 1:1 CORRECTNESS — NOT optional. Java never fuses a*b+c into an
+        # FMA; clang defaults to -ffp-contract=on and will, producing 1-ULP
+        # differences that flip noise comparisons at thresholds (e.g. the ore-vein
+        # 0.4 cutoff), breaking byte-exact parity with the real generator. Force
+        # strict, non-contracted IEEE-754 double evaluation to match the JVM.
+        -ffp-contract=off
     )
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         add_compile_options(-O3 -flto=thin)

@@ -195,6 +195,18 @@ Port each `Feature` subclass + its configuration (counts from the inventory):
 
 ## Verification strategy
 
+- **Full-chunk byte-match (Session 63, the strongest gate).** `mcpp/tools/FullChunkParity.java`
+  runs the REAL generator through `fillFromNoise`+`buildSurface`+`applyCarvers` and dumps
+  EVERY block of a chunk; the C++ `full_chunk_parity` target regenerates the same chunks
+  and compares all 98,304 cells/chunk. This supersedes sampled-column parity (which has a
+  blind spot — it immediately caught an `OreVeinifier` vein-function port bug the column
+  tests missed). **Certified: overworld terrain through carvers is full-chunk byte-exact
+  (`cases=2359296 mismatches=0`, 4 seeds × 6 chunks).** Use this as the regression gate for
+  every terrain change, and extend it stage-by-stage (heightmaps → features → structures)
+  toward the ultimate acid test: a byte-match vs an actual server-generated `.mca` (which
+  is status `full`, so it needs every later stage ported first — a separate `.mca` verifier
+  is the final step). Run real-Java ground truth via `provision_parity_runtime.ps1` (fetches
+  JDK 25 + libs + server.jar) then `run_groundtruth.ps1 -Tool FullChunkParity`.
 - Pure-logic subsystems (placement RNG, modifiers, trunk/foliage placers,
   carver math) are parity-tested against the real decompiled code run on
   JDK 25 — the technique proven for `Climate::RTree` and the biome registry.

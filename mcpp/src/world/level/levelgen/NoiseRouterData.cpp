@@ -333,8 +333,36 @@ NoiseRouter overworld(RandomState& randomState, bool largeBiomes, bool amplified
     auto fullNoise = DensityFunctions::min(
         postProcess(slideOverworld(amplified, std::move(caves))),
         std::move(noodleFunction));
-    auto veinA = DensityFunctions::map(DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_VEIN_A), 4.0, 4.0), DensityFunctions::MapType::Abs);
-    auto veinB = DensityFunctions::map(DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_VEIN_B), 4.0, 4.0), DensityFunctions::MapType::Abs);
+    // Ore-vein density functions. Java (NoiseRouterData.overworld) wraps each vein
+    // noise in yLimitedInterpolatable(y, noise, veinMinY=-60, veinMaxY=50, 0): the
+    // noise is y-range-limited to [veinMinY, veinMaxY+1) AND interpolated() over the
+    // density cell, and abs() is applied to veinA/veinB AFTER that wrapper. Sampling
+    // the raw (non-interpolated) noise instead diverges from vanilla right at the
+    // |veininess| ~= 0.4 vein threshold (caught by full_chunk_parity). veinMinY /
+    // veinMaxY are the min/max of the OreVeinifier VeinType y-ranges (IRON.minY=-60,
+    // COPPER.maxY=50).
+    constexpr int veinMinY = -60;
+    constexpr int veinMaxY = 50;
+    auto veinY = DensityFunctions::y();
+    auto veinToggle = yLimitedInterpolatable(
+        veinY,
+        DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_VEININESS), 1.5, 1.5),
+        veinMinY, veinMaxY, 0.0);
+    auto veinA = DensityFunctions::map(
+        yLimitedInterpolatable(
+            veinY,
+            DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_VEIN_A), 4.0, 4.0),
+            veinMinY, veinMaxY, 0.0),
+        DensityFunctions::MapType::Abs);
+    auto veinB = DensityFunctions::map(
+        yLimitedInterpolatable(
+            std::move(veinY),
+            DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_VEIN_B), 4.0, 4.0),
+            veinMinY, veinMaxY, 0.0),
+        DensityFunctions::MapType::Abs);
+    auto veinRidged = DensityFunctions::add(
+        DensityFunctions::constant(-0.08),
+        DensityFunctions::max(std::move(veinA), std::move(veinB)));
 
     return NoiseRouter{
         DensityFunctions::noise(randomState.getOrCreateNoise(Noises::AQUIFER_BARRIER), 1.0, 0.5),
@@ -349,8 +377,8 @@ NoiseRouter overworld(RandomState& randomState, bool largeBiomes, bool amplified
         std::move(ridges),
         std::move(preliminary),
         std::move(fullNoise),
-        DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_VEININESS), 1.5, 1.5),
-        DensityFunctions::add(DensityFunctions::constant(-0.08), DensityFunctions::max(std::move(veinA), std::move(veinB))),
+        std::move(veinToggle),
+        std::move(veinRidged),
         DensityFunctions::noise(randomState.getOrCreateNoise(Noises::ORE_GAP))
     };
 }
