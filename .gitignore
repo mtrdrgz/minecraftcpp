@@ -29,6 +29,9 @@ mcpp/assets.txt
 mcpp/test_align.cpp
 mcpp/*.log
 
+# Profiling output (debug only)
+profiling/
+
 # Java/class outputs from local parity helpers
 *.class
 __pycache__/

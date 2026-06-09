@@ -1,5 +1,6 @@
 #include "Minecraft.h"
 #include "../core/Log.h"
+#include "../../profiling/include/Profiler.h"
 #include "../network/protocol/handshake/C2SHandshakePacket.h"
 #include "../network/protocol/login/LoginPackets.h"
 #include "../network/protocol/game/PlayPackets.h"
@@ -19,6 +20,8 @@
 #include <stb_image.h>
 #include <windows.h>
 #include <cmath>
+#include <ctime>
+#include <iomanip>
 #include <filesystem>
 #include <exception>
 #include <optional>
@@ -120,6 +123,15 @@ Minecraft::~Minecraft() {
     // Cancel or wait on any active generation tasks
     m_generationTasks.clear();
     m_threadPool.reset();
+    
+    // Flush profiling data
+    std::time_t now = std::time(nullptr);
+    std::tm* timeinfo = std::localtime(&now);
+    std::ostringstream filename;
+    filename << "profiling/profiles/profile_"
+             << std::put_time(timeinfo, "%Y%m%d_%H%M%S") << ".csv";
+    std::filesystem::create_directories("profiling/profiles");
+    profiling::Profiler::instance().flushToCSV(filename.str());
 }
 
 void Minecraft::setScreen(std::unique_ptr<gui::Screen> screen) {
@@ -340,6 +352,9 @@ void Minecraft::ensureWorldgenData() {
 
 void Minecraft::decorateChunk(LevelChunk& chunk) {
     if (!m_worldgenReady || !m_localGenerator) return;
+    
+    PROFILE_SCOPE_CHUNK("decorateChunk", chunk.pos().x, chunk.pos().z);
+    
     auto biomeGetter = [this](int x, int y, int z) {
         return m_localGenerator->getBiome(x, y, z);
     };
@@ -374,11 +389,17 @@ void Minecraft::tryDecorate(ChunkPos cp) {
 
     c->decorated = true;
     decorateChunk(*c);
-    runStructures(cp);
+    {
+        PROFILE_SCOPE_CHUNK("runStructures", cp.x, cp.z);
+        runStructures(cp);
+    }
     // Cross-chunk writes can touch the neighbours — re-mesh the 3x3.
-    for (int dz = -1; dz <= 1; ++dz)
-        for (int dx = -1; dx <= 1; ++dx)
-            if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz })) n->meshDirty = true;
+    {
+        PROFILE_SCOPE("remesh_9chunk_neighborhood");
+        for (int dz = -1; dz <= 1; ++dz)
+            for (int dx = -1; dx <= 1; ++dx)
+                if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz })) n->meshDirty = true;
+    }
 }
 
 void Minecraft::runStructures(ChunkPos active) {
@@ -430,21 +451,32 @@ void Minecraft::startLocalGame(uint64_t seed) {
     // neighbours present (deferred decoration → no trees clipped at chunk borders).
     constexpr int RADIUS = 2;
 
-    for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
-        for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
-            LevelChunk* chunk = getOrCreateChunk({cx, cz});
-            m_localGenerator->fillFromNoise(*chunk);
-            m_localGenerator->buildSurface(*chunk);
-            m_localGenerator->applyCarvers(*chunk);
+    {
+        PROFILE_SCOPE("startup_terrain_generation");
+        for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
+            for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
+                LevelChunk* chunk = getOrCreateChunk({cx, cz});
+                PROFILE_SCOPE_CHUNK("startup_fillFromNoise", cx, cz);
+                m_localGenerator->fillFromNoise(*chunk);
+                m_localGenerator->buildSurface(*chunk);
+                m_localGenerator->applyCarvers(*chunk);
+            }
         }
     }
 
     // Decoration + structures run on the main thread (feature caches aren't
     // thread-safe). tryDecorate only fires for chunks whose 8 neighbours exist, so
     // cross-chunk features (tree foliage, ore veins) write into real chunks.
-    for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
-        for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
-            tryDecorate({cx, cz});
+    // OPTIMIZATION: only decorate the central 3x3 area on startup to avoid long
+    // blocking stutter. The async updateLocalChunks() will handle the outer ring
+    // gradually as player plays.
+    {
+        PROFILE_SCOPE("startup_decoration_and_structures");
+        constexpr int DECORATE_RADIUS = 1;  // Only 3x3 on startup, not full 5x5
+        for (int cz = -DECORATE_RADIUS; cz <= DECORATE_RADIUS; ++cz) {
+            for (int cx = -DECORATE_RADIUS; cx <= DECORATE_RADIUS; ++cx) {
+                tryDecorate({cx, cz});
+            }
         }
     }
 
@@ -844,7 +876,7 @@ void Minecraft::updateLocalChunks() {
             return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
                  < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
         });
-        constexpr int MAX_DECORATE_PER_TICK = 2;
+        constexpr int MAX_DECORATE_PER_TICK = 8;  // Increased from 2: allows 4× faster decoration
         int done = 0;
         for (ChunkPos cp : ready) {
             LevelChunk* c = getChunk(cp);
@@ -892,7 +924,7 @@ void Minecraft::updateLocalChunks() {
     });
     
     int queued = 0;
-    constexpr int MAX_QUEUE_PER_TICK = 4;
+    constexpr int MAX_QUEUE_PER_TICK = 8;  // Increased from 4: allows more parallel generation
     for (const auto& cand : candidates) {
         if (!m_threadPool) break;
         
@@ -901,9 +933,18 @@ void Minecraft::updateLocalChunks() {
             m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed]() -> std::unique_ptr<LevelChunk> {
                 auto chunk = std::make_unique<LevelChunk>(pos);
                 levelgen::NoiseBasedChunkGenerator generator(seed);
-                generator.fillFromNoise(*chunk);
-                generator.buildSurface(*chunk);
-                generator.applyCarvers(*chunk);
+                {
+                    PROFILE_SCOPE_CHUNK("fillFromNoise", pos.x, pos.z);
+                    generator.fillFromNoise(*chunk);
+                }
+                {
+                    PROFILE_SCOPE_CHUNK("buildSurface", pos.x, pos.z);
+                    generator.buildSurface(*chunk);
+                }
+                {
+                    PROFILE_SCOPE_CHUNK("applyCarvers", pos.x, pos.z);
+                    generator.applyCarvers(*chunk);
+                }
                 return chunk;
             })
         });
