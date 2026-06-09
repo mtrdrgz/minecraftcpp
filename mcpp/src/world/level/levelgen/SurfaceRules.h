@@ -1,7 +1,7 @@
 #pragma once
 
 // Port of net.minecraft.world.level.levelgen.SurfaceRules
-// Port of net.minecraft.world.level.levelgen.VerticalAnchor
+// Port of net.minecraft.world.level.levelgen.SurfaceVerticalAnchor
 // Port of net.minecraft.world.level.levelgen.placement.CaveSurface
 
 #include "../chunk/LevelChunk.h"
@@ -22,9 +22,9 @@ class RandomState;
 
 enum class CaveSurface { CEILING, FLOOR };
 
-// ---------- VerticalAnchor ----------
+// ---------- SurfaceVerticalAnchor ----------
 
-struct VerticalAnchor {
+struct SurfaceVerticalAnchor {
     enum class Type { Absolute, AboveBottom, BelowTop };
     Type type  = Type::Absolute;
     int  value = 0;
@@ -38,11 +38,11 @@ struct VerticalAnchor {
         return value;
     }
 
-    static VerticalAnchor absolute(int y)    { return {Type::Absolute,    y}; }
-    static VerticalAnchor aboveBottom(int o) { return {Type::AboveBottom,  o}; }
-    static VerticalAnchor belowTop(int o)    { return {Type::BelowTop,     o}; }
-    static VerticalAnchor bottom()           { return aboveBottom(0); }
-    static VerticalAnchor top()              { return belowTop(0); }
+    static SurfaceVerticalAnchor absolute(int y)    { return {Type::Absolute,    y}; }
+    static SurfaceVerticalAnchor aboveBottom(int o) { return {Type::AboveBottom,  o}; }
+    static SurfaceVerticalAnchor belowTop(int o)    { return {Type::BelowTop,     o}; }
+    static SurfaceVerticalAnchor bottom()           { return aboveBottom(0); }
+    static SurfaceVerticalAnchor top()              { return belowTop(0); }
 };
 
 // ---------- WorldGenCtx (minimal port of WorldGenerationContext) ----------
@@ -166,15 +166,15 @@ ConditionSourcePtr stoneDepthCheck(int offset, bool addSurfaceDepth, CaveSurface
 ConditionSourcePtr stoneDepthCheck(int offset, bool addSurfaceDepth, int secondaryDepthRange,
                                     CaveSurface surface);
 ConditionSourcePtr notCond(ConditionSourcePtr target);
-ConditionSourcePtr yBlockCheck(VerticalAnchor anchor, int surfaceDepthMultiplier);
-ConditionSourcePtr yStartCheck(VerticalAnchor anchor, int surfaceDepthMultiplier);
+ConditionSourcePtr yBlockCheck(SurfaceVerticalAnchor anchor, int surfaceDepthMultiplier);
+ConditionSourcePtr yStartCheck(SurfaceVerticalAnchor anchor, int surfaceDepthMultiplier);
 ConditionSourcePtr waterBlockCheck(int offset, int surfaceDepthMultiplier);
 ConditionSourcePtr waterStartCheck(int offset, int surfaceDepthMultiplier);
 ConditionSourcePtr isBiome(std::vector<std::string> biomeKeys);
 ConditionSourcePtr noiseCondition(const std::string& noiseKey, double minRange,
                                    double maxRange = std::numeric_limits<double>::max());
-ConditionSourcePtr verticalGradient(std::string randomName, VerticalAnchor trueAtAndBelow,
-                                     VerticalAnchor falseAtAndAbove);
+ConditionSourcePtr verticalGradient(std::string randomName, SurfaceVerticalAnchor trueAtAndBelow,
+                                     SurfaceVerticalAnchor falseAtAndAbove);
 ConditionSourcePtr steepCond();
 ConditionSourcePtr holeCond();
 ConditionSourcePtr abovePreliminarySurfaceCond();

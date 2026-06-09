@@ -48,9 +48,26 @@ BlockTags BlockTags::loadFromDirectory(const std::string& dir) {
         throw std::runtime_error("block tag directory not found: " + dir);
     }
 
-    // Feature placement is disabled, and BiomeDecorator no longer queries tags on
-    // the runtime path. Avoid parsing tag JSON while entering Singleplayer.
-    return BlockTags{};
+    // Parse every tags/block/*.json into raw entries (resolve() expands #tag refs
+    // lazily). Required by canSurvive / RuleTest / placement predicates. (Had been
+    // stubbed out to skip parsing on the Singleplayer startup path; decoration parity
+    // needs the real tags, and parsing a few hundred tiny JSONs is negligible.)
+    BlockTags out;
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        if (!entry.is_regular_file()) continue;
+        const std::string path = entry.path().string();
+        if (path.size() < 5 || path.substr(path.size() - 5) != ".json") continue;
+        std::ifstream f(path, std::ios::binary);
+        if (!f) continue;
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        try {
+            out.m_raw.emplace(normalizeId(stemFromPath(path)), parseTagJson(ss.str()));
+        } catch (const std::exception&) {
+            // skip malformed tag JSON
+        }
+    }
+    return out;
 }
 
 BlockTags BlockTags::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {

@@ -57,11 +57,25 @@ BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
         throw std::runtime_error("biome directory not found: " + dir);
     }
 
-    // Runtime feature placement is intentionally disabled until the vanilla
-    // PlacedFeature pipeline is ported. Do not parse hundreds of biome JSON files
-    // on the Singleplayer entry path just to compute data that will not be used.
-    // The parser is kept below for parity tools / future placement re-enable.
-    return BiomeFeatures{};
+    // Parse every biome/*.json, recording its ordered features[step][i] keys. This
+    // is needed by the FeatureSorter + applyBiomeDecoration pipeline. (It had been
+    // stubbed out to skip parsing on the Singleplayer startup path; decoration parity
+    // requires the real data, and parsing 65 small JSONs is negligible.)
+    BiomeFeatures out;
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        if (!entry.is_regular_file()) continue;
+        const std::string path = entry.path().string();
+        if (path.size() < 5 || path.substr(path.size() - 5) != ".json") continue;
+        std::ifstream f(path, std::ios::binary);
+        if (!f) continue;
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        BiomeEntry be;
+        if (parseBiomeFeatures(ss.str(), be.steps, be.stepCount)) {
+            out.m_biomes.emplace(normalizeId(stemFromPath(path)), std::move(be));
+        }
+    }
+    return out;
 }
 
 BiomeFeatures BiomeFeatures::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {

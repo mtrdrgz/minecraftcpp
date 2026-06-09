@@ -1,8 +1,13 @@
 #pragma once
+#ifndef MCPP_LEVELGEN_VERTICALANCHOR_H
+#define MCPP_LEVELGEN_VERTICALANCHOR_H
 
 // Port of net.minecraft.world.level.levelgen.VerticalAnchor (Absolute /
 // AboveBottom / BelowTop) — resolves a Y coordinate relative to the world's
 // vertical bounds.
+// NOTE: a macro include guard is kept alongside #pragma once because some build
+// configs reached this header via two distinct relative (`..`) paths and double-
+// defined the class; the macro guard dedupes by token regardless of path.
 
 #include "WorldGenerationContext.h"
 
@@ -57,3 +62,5 @@ inline VerticalAnchorPtr top() { return belowTop(0); }
 } // namespace VerticalAnchors
 
 } // namespace mc::levelgen
+
+#endif // MCPP_LEVELGEN_VERTICALANCHOR_H

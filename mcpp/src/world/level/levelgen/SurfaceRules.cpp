@@ -237,7 +237,7 @@ private:
 // yStartCheck: addStoneDepth = true   (Java: YConditionSource(anchor, mult, true))
 class YConditionCS final : public IConditionSource {
 public:
-    YConditionCS(VerticalAnchor anchor, int multiplier, bool addStoneDepth) noexcept
+    YConditionCS(SurfaceVerticalAnchor anchor, int multiplier, bool addStoneDepth) noexcept
         : m_anchor(anchor)
         , m_multiplier(multiplier)
         , m_addStoneDepth(addStoneDepth) {}
@@ -246,7 +246,7 @@ public:
         return std::make_shared<YCondition>(&ctx, ay, m_multiplier, m_addStoneDepth);
     }
 private:
-    VerticalAnchor m_anchor;
+    SurfaceVerticalAnchor m_anchor;
     int            m_multiplier;
     bool           m_addStoneDepth;
 };
@@ -379,8 +379,8 @@ private:
 
 class VerticalGradientCS final : public IConditionSource {
 public:
-    VerticalGradientCS(std::string randomName, VerticalAnchor trueAtAndBelow,
-                        VerticalAnchor falseAtAndAbove)
+    VerticalGradientCS(std::string randomName, SurfaceVerticalAnchor trueAtAndBelow,
+                        SurfaceVerticalAnchor falseAtAndAbove)
         : m_randomName(std::move(randomName))
         , m_trueAt(trueAtAndBelow)
         , m_falseAt(falseAtAndAbove) {}
@@ -393,8 +393,8 @@ public:
     }
 private:
     std::string    m_randomName;
-    VerticalAnchor m_trueAt;
-    VerticalAnchor m_falseAt;
+    SurfaceVerticalAnchor m_trueAt;
+    SurfaceVerticalAnchor m_falseAt;
 };
 
 // ==========================================================================
@@ -609,11 +609,11 @@ ConditionSourcePtr notCond(ConditionSourcePtr target) {
     return std::make_shared<NotCS>(std::move(target));
 }
 
-ConditionSourcePtr yBlockCheck(VerticalAnchor anchor, int surfaceDepthMultiplier) {
+ConditionSourcePtr yBlockCheck(SurfaceVerticalAnchor anchor, int surfaceDepthMultiplier) {
     return std::make_shared<YConditionCS>(anchor, surfaceDepthMultiplier, false);
 }
 
-ConditionSourcePtr yStartCheck(VerticalAnchor anchor, int surfaceDepthMultiplier) {
+ConditionSourcePtr yStartCheck(SurfaceVerticalAnchor anchor, int surfaceDepthMultiplier) {
     return std::make_shared<YConditionCS>(anchor, surfaceDepthMultiplier, true);
 }
 
@@ -633,8 +633,8 @@ ConditionSourcePtr noiseCondition(const std::string& noiseKey, double minRange, 
     return std::make_shared<NoiseThresholdCS>(noiseKey, minRange, maxRange);
 }
 
-ConditionSourcePtr verticalGradient(std::string randomName, VerticalAnchor trueAtAndBelow,
-                                     VerticalAnchor falseAtAndAbove) {
+ConditionSourcePtr verticalGradient(std::string randomName, SurfaceVerticalAnchor trueAtAndBelow,
+                                     SurfaceVerticalAnchor falseAtAndAbove) {
     return std::make_shared<VerticalGradientCS>(std::move(randomName), trueAtAndBelow, falseAtAndAbove);
 }
 

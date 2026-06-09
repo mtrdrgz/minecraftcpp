@@ -1,6 +1,13 @@
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# This project uses headers, not C++20/23 modules. CMake's module dependency
+# scanning (the per-TU .modmap / clang header-unit BMIs) is pure overhead here and
+# has miscompiled headers reached via multiple `..` relative paths (spurious
+# "redefinition" that even an #ifndef guard can't stop, because the duplicate comes
+# from a stale header-unit BMI rather than a textual include). Turn it off globally.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 add_compile_definitions(
     NOMINMAX
     WIN32_LEAN_AND_MEAN

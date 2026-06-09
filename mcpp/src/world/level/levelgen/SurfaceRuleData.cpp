@@ -57,13 +57,13 @@ SR::RuleSourcePtr overworldLike(bool doPreliminarySurfaceCheck,
     const SR::RuleSourcePtr WATER            = rule("water");
 
     // ---- Named conditions ----
-    auto woodedBadlandsTop        = SR::yBlockCheck(VerticalAnchor::absolute(97),  2);
-    auto badlandsTop              = SR::yBlockCheck(VerticalAnchor::absolute(256), 0);
-    auto badlandsHeightCondition  = SR::yStartCheck(VerticalAnchor::absolute(63), -1);
-    auto badlandsMid              = SR::yStartCheck(VerticalAnchor::absolute(74),  1);
-    auto mangroveSwampPuddleLevel = SR::yBlockCheck(VerticalAnchor::absolute(60),  0);
-    auto swampPuddleLevel         = SR::yBlockCheck(VerticalAnchor::absolute(62),  0);
-    auto aboveOverworldSeaLevel   = SR::yBlockCheck(VerticalAnchor::absolute(63),  0);
+    auto woodedBadlandsTop        = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(97),  2);
+    auto badlandsTop              = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(256), 0);
+    auto badlandsHeightCondition  = SR::yStartCheck(SurfaceVerticalAnchor::absolute(63), -1);
+    auto badlandsMid              = SR::yStartCheck(SurfaceVerticalAnchor::absolute(74),  1);
+    auto mangroveSwampPuddleLevel = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(60),  0);
+    auto swampPuddleLevel         = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(62),  0);
+    auto aboveOverworldSeaLevel   = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(63),  0);
     auto notUnderwater            = SR::waterBlockCheck(-1,  0);
     auto aboveWater               = SR::waterBlockCheck( 0,  0);
     auto notUnderDeepWater        = SR::waterStartCheck(-6, -1);
@@ -301,7 +301,7 @@ SR::RuleSourcePtr overworldLike(bool doPreliminarySurfaceCheck,
         parts.push_back(
             SR::ifTrue(
                 SR::notCond(SR::verticalGradient("bedrock_roof",
-                    VerticalAnchor::belowTop(5), VerticalAnchor::top())),
+                    SurfaceVerticalAnchor::belowTop(5), SurfaceVerticalAnchor::top())),
                 BEDROCK));
     }
 
@@ -309,7 +309,7 @@ SR::RuleSourcePtr overworldLike(bool doPreliminarySurfaceCheck,
         parts.push_back(
             SR::ifTrue(
                 SR::verticalGradient("bedrock_floor",
-                    VerticalAnchor::bottom(), VerticalAnchor::aboveBottom(5)),
+                    SurfaceVerticalAnchor::bottom(), SurfaceVerticalAnchor::aboveBottom(5)),
                 BEDROCK));
     }
 
@@ -323,7 +323,7 @@ SR::RuleSourcePtr overworldLike(bool doPreliminarySurfaceCheck,
     parts.push_back(
         SR::ifTrue(
             SR::verticalGradient("deepslate",
-                VerticalAnchor::absolute(0), VerticalAnchor::absolute(8)),
+                SurfaceVerticalAnchor::absolute(0), SurfaceVerticalAnchor::absolute(8)),
             DEEPSLATE));
 
     return SR::sequence(std::move(parts));
@@ -343,11 +343,11 @@ SR::RuleSourcePtr nether() {
     const SR::RuleSourcePtr NETHER_WART_BLK= rule("nether_wart_block");
     const SR::RuleSourcePtr CRIMSON_NYLIUM = rule("crimson_nylium");
 
-    auto aboveNetherLavaLevel       = SR::yBlockCheck(VerticalAnchor::absolute(31), 0);
-    auto aboveNetherLavaSurface     = SR::yBlockCheck(VerticalAnchor::absolute(32), 0);
-    auto netherBandAroundBottom     = SR::yStartCheck(VerticalAnchor::absolute(30), 0);
-    auto netherBandAroundTop        = SR::notCond(SR::yStartCheck(VerticalAnchor::absolute(35), 0));
-    auto closeToCeiling             = SR::yBlockCheck(VerticalAnchor::belowTop(5), 0);
+    auto aboveNetherLavaLevel       = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(31), 0);
+    auto aboveNetherLavaSurface     = SR::yBlockCheck(SurfaceVerticalAnchor::absolute(32), 0);
+    auto netherBandAroundBottom     = SR::yStartCheck(SurfaceVerticalAnchor::absolute(30), 0);
+    auto netherBandAroundTop        = SR::notCond(SR::yStartCheck(SurfaceVerticalAnchor::absolute(35), 0));
+    auto closeToCeiling             = SR::yBlockCheck(SurfaceVerticalAnchor::belowTop(5), 0);
     auto hole                       = SR::holeCond();
     auto soulSandLayer              = SR::noiseCondition(Noises::SOUL_SAND_LAYER,  -0.012);
     auto gravelLayer                = SR::noiseCondition(Noises::GRAVEL_LAYER,     -0.012);
@@ -361,9 +361,9 @@ SR::RuleSourcePtr nether() {
 
     return SR::sequence({
         SR::ifTrue(SR::verticalGradient("bedrock_floor",
-                    VerticalAnchor::bottom(), VerticalAnchor::aboveBottom(5)), BEDROCK),
+                    SurfaceVerticalAnchor::bottom(), SurfaceVerticalAnchor::aboveBottom(5)), BEDROCK),
         SR::ifTrue(SR::notCond(SR::verticalGradient("bedrock_roof",
-                    VerticalAnchor::belowTop(5), VerticalAnchor::top())), BEDROCK),
+                    SurfaceVerticalAnchor::belowTop(5), SurfaceVerticalAnchor::top())), BEDROCK),
         SR::ifTrue(closeToCeiling, NETHERRACK),
         SR::ifTrue(SR::isBiome({"minecraft:basalt_deltas"}),
             SR::sequence({

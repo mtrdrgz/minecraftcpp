@@ -319,3 +319,46 @@ set_target_properties(biome_decoration_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# Whole-chunk DECORATION parity vs the no-structures server (.mca): generates terrain
+# for a 5x5, decorates the inner 3x3 (ported features only) into a shared region, and
+# compares chunk C vs the server dump. Same generator sources as full_chunk_parity, plus
+# the biome feature lists + block tags the decoration loop needs.
+add_executable(full_chunk_decorate_parity
+    world/level/levelgen/feature/FullChunkDecorateParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+)
+target_include_directories(full_chunk_decorate_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(full_chunk_decorate_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(full_chunk_decorate_parity PRIVATE bcrypt)
+endif()
+set_target_properties(full_chunk_decorate_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    CXX_SCAN_FOR_MODULES OFF
+)

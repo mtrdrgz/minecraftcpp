@@ -320,6 +320,13 @@ std::string NoiseBasedChunkGenerator::getBiome(int blockX, int blockY, int block
     return m_biomeManager ? m_biomeManager->getBiome(blockX, blockY, blockZ) : "";
 }
 
+std::string NoiseBasedChunkGenerator::getNoiseBiome(int quartX, int quartY, int quartZ) const {
+    // Quart-resolution noise biome (as stored in LevelChunkSection biome containers);
+    // this is what applyBiomeDecoration uses to collect possibleBiomes — NOT the
+    // block-resolution BiomeManager zoomer.
+    return m_biomeSource ? m_biomeSource->getNoiseBiome(quartX, quartY, quartZ) : "";
+}
+
 double NoiseBasedChunkGenerator::sampleFinalDensity(int blockX, int blockY, int blockZ) const {
     return m_router.finalDensity->compute(DensityFunctionContext{ blockX, blockY, blockZ });
 }
