@@ -118,6 +118,7 @@ public class FullChunkDecorateParity {
     static Map<PlacedFeature, String> PF_ID;
     static String CUR_FEATURE_ID = "?";   // feature currently placing (for setBlock attribution)
     static int CUR_STEP = -1;
+    static boolean POSTPROCESSING = false; // FULL-promotion writes hit a LevelChunk: no re-marking
 
     static long ckey(int cx, int cz) { return ChunkPos.pack(cx, cz); }
     static ProtoChunk chunkAt(int cx, int cz) { return CHUNKS.get(ckey(cx, cz)); }
@@ -171,6 +172,43 @@ public class FullChunkDecorateParity {
         for (Map.Entry<String, List<Holder<Block>>> e : resolved.entrySet())
             pending.put(TagKey.create(Registries.BLOCK, Identifier.parse(e.getKey())), e.getValue());
         BuiltInRegistries.BLOCK.prepareTagReload(new TagLoader.LoadResult<>(Registries.BLOCK, pending)).apply();
+    }
+    // Fluid tags must be bound too: block placement-survival checks consult them during
+    // worldgen (e.g. TallSeagrassBlock.canSurvive requires fluidState.is(FluidTags.WATER);
+    // unbound tags silently test false and tall seagrass never places).
+    static void bindVanillaFluidTags() throws Exception {
+        Path root = Path.of("26.1.2", "data", "minecraft", "tags", "fluid");
+        Map<String, List<String>> rawTags = new HashMap<>();
+        try (var stream = Files.walk(root)) {
+            for (Path file : stream.filter(p -> p.toString().endsWith(".json")).toList()) {
+                JsonObject obj = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+                JsonArray values = obj.getAsJsonArray("values");
+                List<String> entries = new ArrayList<>();
+                for (JsonElement value : values) entries.add(entryId(value));
+                rawTags.put(tagIdFromPath(root, file), entries);
+            }
+        }
+        Map<String, List<Holder<net.minecraft.world.level.material.Fluid>>> resolved = new HashMap<>();
+        for (String id : rawTags.keySet()) {
+            LinkedHashSet<Holder<net.minecraft.world.level.material.Fluid>> values = new LinkedHashSet<>();
+            java.util.ArrayDeque<String> work = new java.util.ArrayDeque<>(rawTags.get(id));
+            java.util.Set<String> seenNested = new HashSet<>();
+            while (!work.isEmpty()) {
+                String entry = work.poll();
+                if (entry.startsWith("#")) {
+                    String nested = entry.substring(1);
+                    if (seenNested.add(nested)) work.addAll(rawTags.getOrDefault(nested, List.of()));
+                } else {
+                    values.add(BuiltInRegistries.FLUID.get(ResourceKey.create(Registries.FLUID, Identifier.parse(entry)))
+                        .orElseThrow(() -> new IllegalStateException("unknown fluid in tag " + id + ": " + entry)));
+                }
+            }
+            resolved.put(id, List.copyOf(values));
+        }
+        Map<TagKey<net.minecraft.world.level.material.Fluid>, List<Holder<net.minecraft.world.level.material.Fluid>>> pending = new HashMap<>();
+        for (var e : resolved.entrySet())
+            pending.put(TagKey.create(Registries.FLUID, Identifier.parse(e.getKey())), e.getValue());
+        BuiltInRegistries.FLUID.prepareTagReload(new TagLoader.LoadResult<>(Registries.FLUID, pending)).apply();
     }
     static Registry<Biome> copyBiomeRegistry(HolderLookup.RegistryLookup<Biome> source) {
         MappedRegistry<Biome> registry = new MappedRegistry<>(Registries.BIOME, Lifecycle.stable());
@@ -241,6 +279,7 @@ public class FullChunkDecorateParity {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         bindVanillaBlockTags();
+        bindVanillaFluidTags();
 
         SEED = args.length > 0 ? Long.parseLong(args[0]) : 1L;
         final int Cx = args.length > 1 ? Integer.parseInt(args[1]) : 0;
@@ -326,6 +365,14 @@ public class FullChunkDecorateParity {
             for (int dx : ds) for (int dz : ds) decorate(Cx + dx, Cz + dz);
         }
 
+        // ---- FULL-promotion post-processing for the center chunk (LevelChunk.
+        // postProcessGeneration 1:1): for each position marked during generation, the
+        // server runs one fluid tick + a block tick for LiquidBlocks (whose only effect
+        // is BubbleColumnBlock.updateColumn) or updateFromNeighbourShapes otherwise.
+        // The fluid SPREAD tick needs a real ServerLevel; it is a logged hard no-op here
+        // (count printed; zero observed block deltas from it on all certified chunks).
+        postProcessChunk(chunkAt(Cx, Cz));
+
         // ---- dump center chunk C (FullChunkParity TSV order: lx outer, lz inner, y asc) ----
         ProtoChunk c = chunkAt(Cx, Cz);
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
@@ -337,6 +384,43 @@ public class FullChunkDecorateParity {
                     out.println(SEED + "\t" + bx + "\t" + bz + "\t" + y + "\t" + blockId(c.getBlockState(pos.set(bx, y, bz))));
             }
         }
+    }
+
+    // LevelChunk.postProcessGeneration (LevelChunk.java:566) mirrored for the worldgen
+    // harness. Marked positions come from WorldGenRegion.setBlock's getPostProcessPos
+    // marking + features'/carvers' explicit markPosForPostprocessing.
+    static void postProcessChunk(ProtoChunk c) {
+        CUR_CX = c.getPos().x(); CUR_CZ = c.getPos().z(); // allow updateColumn's setBlock writes
+        POSTPROCESSING = true;
+        it.unimi.dsi.fastutil.shorts.ShortList[] pp = c.getPostProcessing();
+        if (pp == null) return;
+        int skippedFluidTicks = 0;
+        for (int sectionIndex = 0; sectionIndex < pp.length; sectionIndex++) {
+            it.unimi.dsi.fastutil.shorts.ShortList list = pp[sectionIndex];
+            if (list == null) continue;
+            for (int i = 0; i < list.size(); i++) {
+                BlockPos bp = ProtoChunk.unpackOffsetCoordinates(list.getShort(i), c.getSectionYFromSectionIndex(sectionIndex), c.getPos());
+                BlockState bs = c.getBlockState(bp);
+                net.minecraft.world.level.material.FluidState fs = bs.getFluidState();
+                if (!fs.isEmpty() && !(bs.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock)) skippedFluidTicks++; // waterlogged-style
+                if (bs.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
+                    // fluid spread tick (ServerLevel-typed) — logged hard no-op:
+                    skippedFluidTicks++;
+                    // LiquidBlock.tick == if shouldBubbleColumnOccupy(state) -> updateColumn
+                    // (LiquidBlock.java:162-167, 191-193), both replicated exactly:
+                    if (fs.is(net.minecraft.tags.FluidTags.BUBBLE_COLUMN_CAN_OCCUPY) && fs.isSource() && fs.isFull()) {
+                        BlockState below = LEVEL.getBlockState(bp.below());
+                        net.minecraft.world.level.block.BubbleColumnBlock.updateColumn(Blocks.BUBBLE_COLUMN, LEVEL, bp, below);
+                    }
+                } else {
+                    BlockState ns = net.minecraft.world.level.block.Block.updateFromNeighbourShapes(bs, LEVEL, bp);
+                    if (ns != bs) LEVEL.setBlock(bp, ns, 276);
+                }
+            }
+        }
+        POSTPROCESSING = false;
+        if (skippedFluidTicks > 0)
+            System.err.println("POSTPROCESS chunk=" + c.getPos() + " fluid-spread ticks skipped (no ServerLevel): " + skippedFluidTicks);
     }
 
     // ChunkGenerator.applyBiomeDecoration (26.1.2 ChunkGenerator.java:314) reimplemented
@@ -420,7 +504,9 @@ public class FullChunkDecorateParity {
             @Override public Object invoke(Object proxy, Method m, Object[] a) throws Throwable {
                 String n = m.getName();
                 switch (n) {
-                    case "getBlockState": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); return c != null ? c.getBlockState(p) : AIR; }
+                    case "getBlockState": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); BlockState bs = c != null ? c.getBlockState(p) : AIR;
+                        if (DEBUG && CUR_CX==DBG_CX && CUR_CZ==DBG_CZ && CUR_FEATURE_ID.equals("minecraft:seagrass_deep")) System.err.println("SGB " + p.getX() + "," + p.getY() + "," + p.getZ() + "=" + bs.getBlock().builtInRegistryHolder().key().identifier());
+                        return bs; }
                     case "getFluidState": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); return c != null ? c.getFluidState(p) : AIR.getFluidState(); }
                     case "isStateAtPosition": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); BlockState st = c != null ? c.getBlockState(p) : AIR; @SuppressWarnings("unchecked") java.util.function.Predicate<BlockState> pr = (java.util.function.Predicate<BlockState>) a[1]; return pr.test(st); }
                     case "isFluidAtPosition": { BlockPos p = (BlockPos) a[0]; ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4); BlockState st = c != null ? c.getBlockState(p) : AIR; @SuppressWarnings("unchecked") java.util.function.Predicate<net.minecraft.world.level.material.FluidState> pr = (java.util.function.Predicate<net.minecraft.world.level.material.FluidState>) a[1]; return pr.test(st.getFluidState()); }
@@ -432,7 +518,27 @@ public class FullChunkDecorateParity {
                         if (DEBUG && (p.getX() >> 4) == DBG_CX && (p.getZ() >> 4) == DBG_CZ)
                             System.err.println("PUT\t" + CUR_STEP + "\t" + CUR_FEATURE_ID + "\t" + p.getX() + "\t" + p.getY() + "\t" + p.getZ()
                                 + "\t" + ((BlockState) a[1]).getBlock().builtInRegistryHolder().key().identifier());
-                        c.setBlockState(p, (BlockState) a[1], (a.length > 2 && a[2] instanceof Integer) ? (Integer) a[2] : 0);
+                        BlockState st = (BlockState) a[1];
+                        int flags = (a.length > 2 && a[2] instanceof Integer) ? (Integer) a[2] : 0;
+                        c.setBlockState(p, st, flags);
+                        // WorldGenRegion.setBlock block-entity handling (ProtoChunk branch):
+                        // record a DUMMY nbt so getBlockEntity can lazily create the real one.
+                        if (st.hasBlockEntity()) {
+                            net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+                            tag.putInt("x", p.getX()); tag.putInt("y", p.getY()); tag.putInt("z", p.getZ());
+                            tag.putString("id", "DUMMY");
+                            c.setBlockEntityNbt(tag);
+                        }
+                        // WorldGenRegion.setBlock: unless flag 16, ask the state for a
+                        // post-process pos and mark it (drives postProcessGeneration at FULL,
+                        // e.g. magma marking the water above for bubble-column formation).
+                        if ((flags & 16) == 0 && !POSTPROCESSING) {
+                            BlockPos pp = st.getPostProcessPos((net.minecraft.world.level.BlockGetter) proxy, p);
+                            if (pp != null) {
+                                ProtoChunk pc = chunkAt(pp.getX() >> 4, pp.getZ() >> 4);
+                                if (pc != null) pc.markPosForPostprocessing(pp);
+                            }
+                        }
                         return true;
                     }
                     case "getChunk": {
@@ -445,10 +551,34 @@ public class FullChunkDecorateParity {
                     case "getHeight":
                         if (a != null && a.length == 3) {
                             int x = (Integer) a[1], z = (Integer) a[2];
-                            return chunkAt(x >> 4, z >> 4).getHeight((Heightmap.Types) a[0], x & 15, z & 15) + 1; // WorldGenRegion +1
+                            int hv = chunkAt(x >> 4, z >> 4).getHeight((Heightmap.Types) a[0], x & 15, z & 15) + 1; // WorldGenRegion +1
+                            if (DEBUG && CUR_CX==DBG_CX && CUR_CZ==DBG_CZ && CUR_FEATURE_ID.equals("minecraft:seagrass_deep")) System.err.println("SGH " + a[0] + " " + x + "," + z + "=" + hv);
+                            return hv;
                         }
                         return height.getHeight();
                     case "ensureCanWrite": return ensureCanWrite((BlockPos) a[0]);
+                    // WorldGenRegion.getBlockEntity verbatim: lazily realize the DUMMY-tagged
+                    // block entity so e.g. RandomizableContainer.setBlockEntityLootTable finds
+                    // the container and consumes its random.nextLong() exactly like the server.
+                    case "getBlockEntity": {
+                        BlockPos p = (BlockPos) a[0];
+                        ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4);
+                        if (c == null) return null;
+                        net.minecraft.world.level.block.entity.BlockEntity be = c.getBlockEntity(p);
+                        if (be != null) return be;
+                        net.minecraft.nbt.CompoundTag tag = c.getBlockEntityNbt(p);
+                        BlockState state = c.getBlockState(p);
+                        if (tag != null) {
+                            if ("DUMMY".equals(tag.getStringOr("id", ""))) {
+                                if (!state.hasBlockEntity()) return null;
+                                be = ((net.minecraft.world.level.block.EntityBlock) state.getBlock()).newBlockEntity(p, state);
+                            } else {
+                                be = net.minecraft.world.level.block.entity.BlockEntity.loadStatic(p, state, tag, registries);
+                            }
+                            if (be != null) { c.setBlockEntity(be); return be; }
+                        }
+                        return null;
+                    }
                     case "getMinY": return minY;
                     case "getMaxY": return maxY - 1;
                     case "getMinSectionY": return MIN_SECTION_Y;
