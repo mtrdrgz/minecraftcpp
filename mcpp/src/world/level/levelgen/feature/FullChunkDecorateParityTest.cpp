@@ -168,6 +168,9 @@ public:
 
     int getMinY() const override { return m_minY; }
 
+    // NOTE: returns scan() directly (NOT WorldGenRegion's stored+1) — empirically this
+    // matches the server's ore placement better here; the scan already yields the
+    // first-empty semantics the ore pre-check expects. Adding +1 regressed ore parity.
     int getHeight(Heightmap::Types type, int x, int z) const override {
         mc::LevelChunk* c = at(floorDiv(x, 16), floorDiv(z, 16));
         if (!c) return m_minY - 1;
@@ -326,7 +329,11 @@ int main(int argc, char** argv) {
             return biomeCache.emplace(k, gen.getNoiseBiome(qx, qy, qz)).first->second;
         };
 
-        // Decorate the inner 3x3: each chunk runs its ore features with its own seed.
+        // Decorate the inner 3x3. NOTE: cross-chunk feature spill makes a chunk's
+        // border cells depend on the ORDER neighbours are decorated (the server uses
+        // its ChunkStatus-pyramid generation order). Raster order matches the interior
+        // exactly; the residual mismatches are concentrated in the outer 1-2 ring where
+        // this spill order differs from the server (the deep open challenge).
         for (int dz = -1; dz <= 1; ++dz) for (int dx = -1; dx <= 1; ++dx) {
             const int nx = Cx + dx, nz = Cz + dz;
             level.setDecorating(nx, nz);
