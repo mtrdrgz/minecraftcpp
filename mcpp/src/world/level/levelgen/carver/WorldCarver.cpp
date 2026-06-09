@@ -5,6 +5,7 @@
 #include "../VerticalAnchor.h"
 #include "../WorldGenerationContext.h"
 #include "../heightproviders/HeightProvider.h"
+#include "../Mth.h"
 #include "../../block/BlockState.h"
 #include "../../block/Blocks.h"
 
@@ -31,35 +32,16 @@ using mc::valueproviders::UniformFloat;
 
 constexpr float PI_F = 3.14159265358979323846f;
 constexpr double PI_D = 3.14159265358979323846264338327950288;
-constexpr float SIN_SCALE_F = 10430.378f;
 
 int floorToInt(double v) {
-    return static_cast<int>(std::floor(v));
+    return mc::levelgen::mth::floor(v);
 }
 
-float mthSin(float v) {
-    static const std::array<float, 65536> table = [] {
-        std::array<float, 65536> out{};
-        for (int i = 0; i < static_cast<int>(out.size()); ++i) {
-            out[static_cast<std::size_t>(i)] = static_cast<float>(std::sin(i * PI_D * 2.0 / 65536.0));
-        }
-        return out;
-    }();
-    const auto idx = static_cast<std::int32_t>(v * SIN_SCALE_F);
-    return table[static_cast<std::size_t>(static_cast<std::uint32_t>(idx) & 65535U)];
-}
-
-float mthCos(float v) {
-    static const std::array<float, 65536> table = [] {
-        std::array<float, 65536> out{};
-        for (int i = 0; i < static_cast<int>(out.size()); ++i) {
-            out[static_cast<std::size_t>(i)] = static_cast<float>(std::sin(i * PI_D * 2.0 / 65536.0));
-        }
-        return out;
-    }();
-    const auto idx = static_cast<std::int32_t>(v * SIN_SCALE_F + 16384.0f);
-    return table[static_cast<std::size_t>(static_cast<std::uint32_t>(idx) & 65535U)];
-}
+// Java Mth.sin/cos take a double (float args widen). Delegate to the shared 1:1
+// table — the previous local copy used a truncated float scale (10430.378f) and a
+// different table expression, which diverges from Java by ULPs at some args.
+float mthSin(float v) { return mc::levelgen::mth::sin(static_cast<double>(v)); }
+float mthCos(float v) { return mc::levelgen::mth::cos(static_cast<double>(v)); }
 
 float randomBetween(RandomSource& random, float min, float maxExclusive) {
     return random.nextFloat() * (maxExclusive - min) + min;
