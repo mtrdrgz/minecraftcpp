@@ -329,12 +329,15 @@ int main(int argc, char** argv) {
             return biomeCache.emplace(k, gen.getNoiseBiome(qx, qy, qz)).first->second;
         };
 
-        // Decorate the inner 3x3. NOTE: cross-chunk feature spill makes a chunk's
-        // border cells depend on the ORDER neighbours are decorated (the server uses
-        // its ChunkStatus-pyramid generation order). Raster order matches the interior
-        // exactly; the residual mismatches are concentrated in the outer 1-2 ring where
-        // this spill order differs from the server (the deep open challenge).
-        for (int dz = -1; dz <= 1; ++dz) for (int dx = -1; dx <= 1; ++dx) {
+        // Decorate the inner 3x3 in xz order (x outer asc, z inner asc) — the order under
+        // which the Java ground truth (FullChunkDecorateParity.java) byte-matches the real
+        // server .mca (6/6 primary chunks, commit 2772bdb6). Cross-chunk spill overlap is
+        // last-writer-wins, so the order must match the ground truth exactly.
+        // NOTE: while only the ore family is ported, the ore mismatch count vs the FULL
+        // ground truth is confounded at borders by unported later families (disks, springs,
+        // dungeons...) overwriting ore cells; it converges to a true 1:1 measure only as
+        // the remaining families are ported. Do not tune the order against this number.
+        for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
             const int nx = Cx + dx, nz = Cz + dz;
             level.setDecorating(nx, nz);
 
