@@ -34,6 +34,10 @@ public:
     virtual bool isEmptyBlock(BlockPos pos) const { (void)pos; throw std::logic_error("isEmptyBlock not implemented"); }
     // BlockState.canSurvive(level, pos): delegates to the block-behaviour subsystem.
     virtual bool canSurvive(const std::string& state, BlockPos pos) const { (void)state; (void)pos; throw std::logic_error("canSurvive not implemented"); }
+    // WorldGenRegion.ensureCanWrite: whether a feature may write at pos (radius-1 +
+    // build-height gating in the real region; Java's default and the single-chunk
+    // Proxy both return true).
+    virtual bool ensureCanWrite(BlockPos pos) const { (void)pos; return true; }
 };
 
 class PlacementContext : public WorldGenerationContext {

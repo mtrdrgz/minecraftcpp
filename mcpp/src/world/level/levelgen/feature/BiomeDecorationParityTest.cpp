@@ -17,6 +17,7 @@
 #include "../placement/HeightmapPlacement.h"
 #include "stateproviders/BlockStateProvider.h"
 #include "stateproviders/NoiseBasedStateProviders.h"
+#include "OreFeature.h"
 #include "../../block/Blocks.h"
 #include "../../block/BlockState.h"
 #include "../../block/BlockTags.h"
@@ -218,6 +219,20 @@ Pred loadPredicate(const json& j) {
     throw std::runtime_error("unsupported block_predicate: " + t);
 }
 
+// RuleTest (templatesystem) resolved to a predicate over the current block-state id.
+// random_block_match consumes a nextFloat (matters for ore RNG order); tag/block don't.
+mc::levelgen::feature::OreRuleTest loadRuleTest(const json& j) {
+    const std::string t = stripNs(j.at("predicate_type").get<std::string>());
+    if (t == "always_true") return [](const std::string&, RandomSource&) { return true; };
+    if (t == "tag_match") { const std::string tag = j.at("tag").get<std::string>();
+        return [tag](const std::string& s, RandomSource&) { return g_tags->isInTag(s, tag); }; }
+    if (t == "block_match") { const std::string b = j.at("block").get<std::string>();
+        return [b](const std::string& s, RandomSource&) { return s == b; }; }
+    if (t == "random_block_match") { const std::string b = j.at("block").get<std::string>(); const float p = j.at("probability").get<float>();
+        return [b, p](const std::string& s, RandomSource& r) { return s == b && r.nextFloat() < p; }; }
+    throw std::runtime_error("unsupported rule_test: " + t);
+}
+
 std::shared_ptr<const PlacementModifier> loadModifier(const json& j); // fwd
 
 // TreeFeature.validTreePos / TrunkPlacer.isFree (block-behaviour boundary).
@@ -393,6 +408,15 @@ PlacedFeature::FeaturePlacer loadFeature(const json& cfg) {
             }
             return true;
         };
+    }
+    if (t == "ore") {
+        const json& cc = cfg.at("config");
+        const int size = cc.at("size").get<int>();
+        const float discard = cc.at("discard_chance_on_air_exposure").get<float>();
+        std::vector<mc::levelgen::feature::OreTarget> targets;
+        for (const auto& tj : cc.at("targets"))
+            targets.push_back({ loadRuleTest(tj.at("target")), stateName(tj.at("state")) });
+        return mc::levelgen::feature::makeOrePlacer(std::move(targets), size, discard);
     }
     throw std::runtime_error("unsupported feature type: " + t);
 }
