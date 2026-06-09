@@ -11,9 +11,28 @@
 // This certifies one decoration FAMILY at a time against the server:
 //   ore     — the 20 ore blocks (ore configured features)
 //   vegetal — seagrass / tall_seagrass / kelp / kelp_plant (aquatic vegetation)
+//   all     — EVERY cell of chunk C vs the server dump, with a got=>want
+//             transition breakdown so residuals stay attributable to named
+//             unported features
 //
-//   full_chunk_decorate_parity --cases <server_chunk_cases.tsv> [--family ore|vegetal]
-//                              [--datadir <dir>]
+//   full_chunk_decorate_parity --cases <server_chunk_cases.tsv>
+//                              [--family ore|vegetal|all] [--datadir <dir>]
+//
+// After the 3x3 decoration, the FULL-promotion post-process pass runs for chunk C
+// (LevelChunk.postProcessGeneration mirrored exactly as in the Java ground-truth
+// harness FullChunkDecorateParity.postProcessChunk): marked positions come from
+// the carvers (WorldCarver.java:147-158, carved fluid cells), the WorldGenRegion
+// .setBlock getPostProcessPos hook (magma_block/soul_sand mark the block above,
+// mushrooms mark themselves — Blocks.java:1087,1099,2097,4398 + :6934-6940), and
+// features' explicit markPosForPostprocessing (DiskFeature's markAbove, Multiface
+// placement/spread). Liquid marks run the bubble-column occupation check
+// (LiquidBlock.java:162-167,191-193 -> BubbleColumnBlock.updateColumn:77-121);
+// non-liquid marks run Block.updateFromNeighbourShapes (UPDATE_SHAPE_ORDER =
+// WEST,EAST,NORTH,SOUTH,DOWN,UP, BlockBehaviour.java:85-87) — a no-op for the
+// static full blocks, exact face revalidation for glow_lichen, and asserted
+// invariants (throw if they would change) for the aquatic plants. The fluid
+// SPREAD tick needs a real ServerLevel and is a counted hard no-op, exactly as
+// in the certified Java harness.
 //
 // Heightmap model (mirrors the Java ground truth FullChunkDecorateParity.java +
 // ChunkStatusTasks.generateFeatures): WorldGenRegion.getHeight(type,x,z) returns
@@ -36,6 +55,10 @@
 #include "OreFeature.h"
 #include "SeagrassFeature.h"
 #include "KelpFeature.h"
+#include "DiskFeature.h"
+#include "SpringFeature.h"
+#include "UnderwaterMagmaFeature.h"
+#include "MultifaceGrowthFeature.h"
 #include "FeatureSorter.h"
 #include "BiomeFeatures.h"
 #include "GenerationStep.h"
@@ -49,10 +72,14 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
+#include <optional>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -145,6 +172,11 @@ struct DecoBiomeContext {
 };
 const DecoBiomeContext* g_biomeCtx = nullptr;   // set per case before decorating
 
+// The per-case level, reachable from cached feature placers (the multiface side
+// map and postprocess marks live on it). Set/cleared alongside g_biomeCtx.
+class MultiChunkLevel;
+MultiChunkLevel* g_level = nullptr;
+
 // ---- minimal loaders (throw on anything else: fail-closed) ----
 IntProviderPtr loadIntProvider(const json& j) {
     if (j.is_number_integer()) return ConstantInt::of(j.get<int>());
@@ -185,6 +217,105 @@ mc::levelgen::feature::OreRuleTest loadRuleTest(const json& j) {
         return [b, p](const std::string& s, RandomSource& r) { return s == b && r.nextFloat() < p; }; }
     throw std::runtime_error("unsupported rule_test: " + t);
 }
+// RegistryCodecs.homogeneousList: a single id, a "#tag" reference, or a list of
+// ids. Returns a membership predicate over canonical ids; `tags` resolves "#".
+std::function<bool(const std::string&)> loadHolderSet(const json& j, const mc::block::BlockTags* tags) {
+    auto entry = [tags](const std::string& e) -> std::function<bool(const std::string&)> {
+        if (!e.empty() && e[0] == '#') {
+            const std::string tag = e.substr(1);
+            return [tags, tag](const std::string& id) { return tags->isInTag(id, tag); };
+        }
+        const std::string want = "minecraft:" + stripNs(e);
+        return [want](const std::string& id) { return id == want; };
+    };
+    if (j.is_string()) return entry(j.get<std::string>());
+    if (j.is_array()) {
+        std::vector<std::function<bool(const std::string&)>> members;
+        for (const auto& e : j) members.push_back(entry(e.get<std::string>()));
+        return [members](const std::string& id) {
+            for (const auto& m : members) if (m(id)) return true;
+            return false;
+        };
+    }
+    throw std::runtime_error("unsupported holder set");
+}
+// Materialise a holder set of PLAIN ids into a std::set (throws on "#tag" —
+// callers that need an enumerable set, e.g. spring valid_blocks, never use tags).
+std::set<std::string> loadIdSet(const json& j) {
+    std::set<std::string> out;
+    auto add = [&out](const std::string& e) {
+        if (!e.empty() && e[0] == '#') throw std::runtime_error("tag in enumerable holder set");
+        out.insert("minecraft:" + stripNs(e));
+    };
+    if (j.is_string()) add(j.get<std::string>());
+    else if (j.is_array()) for (const auto& e : j) add(e.get<std::string>());
+    else throw std::runtime_error("unsupported holder set");
+    return out;
+}
+
+// BlockPredicate (fail-closed): matching_blocks (MatchingBlocksPredicate.java),
+// matching_fluids (MatchingFluidsPredicate.java); both StateTestingPredicate
+// subtypes testing the state at origin+offset (offset default 0,0,0).
+std::function<bool(WorldGenLevel&, BlockPos)> loadBlockPredicate(const json& j) {
+    const std::string t = stripNs(j.at("type").get<std::string>());
+    std::array<int, 3> off{ 0, 0, 0 };
+    if (j.contains("offset")) {
+        const auto& o = j.at("offset");
+        off = { o.at(0).get<int>(), o.at(1).get<int>(), o.at(2).get<int>() };
+    }
+    if (t == "matching_blocks") {
+        auto member = loadHolderSet(j.at("blocks"), g_tags);
+        return [member, off](WorldGenLevel& level, BlockPos p) {
+            return member(level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] }));
+        };
+    }
+    if (t == "matching_fluids") {
+        auto member = loadHolderSet(j.at("fluids"), g_fluidTags);
+        return [member, off](WorldGenLevel& level, BlockPos p) {
+            const mc::material::FluidState fs =
+                mc::material::fluidStateOf(level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] }));
+            return !fs.isEmpty() && member(fs.fluid);
+        };
+    }
+    throw std::runtime_error("unsupported block_predicate: " + t);
+}
+
+// BlockStateProvider.getOptionalState (fail-closed): simple_state_provider
+// (SimpleStateProvider.java:23-25, no RNG) and rule_based_state_provider
+// (RuleBasedStateProvider.java:57-66: first matching rule -> then.getState,
+// none -> fallback or null). The dump stores block ids; properties on the
+// provided states do not occur in the disk providers.
+mc::levelgen::feature::DiskStateProvider loadStateProvider(const json& j) {
+    const std::string t = stripNs(j.at("type").get<std::string>());
+    if (t == "simple_state_provider") {
+        const std::string s = stateName(j.at("state"));
+        return [s](WorldGenLevel&, RandomSource&, BlockPos) { return std::optional<std::string>(s); };
+    }
+    if (t == "rule_based_state_provider") {
+        struct Rule {
+            std::function<bool(WorldGenLevel&, BlockPos)> ifTrue;
+            mc::levelgen::feature::DiskStateProvider then;
+        };
+        auto rules = std::make_shared<std::vector<Rule>>();
+        for (const auto& rj : j.at("rules"))
+            rules->push_back({ loadBlockPredicate(rj.at("if_true")), loadStateProvider(rj.at("then")) });
+        std::shared_ptr<mc::levelgen::feature::DiskStateProvider> fallback;
+        if (j.contains("fallback"))
+            fallback = std::make_shared<mc::levelgen::feature::DiskStateProvider>(loadStateProvider(j.at("fallback")));
+        return [rules, fallback](WorldGenLevel& level, RandomSource& random, BlockPos pos) -> std::optional<std::string> {
+            for (const Rule& r : *rules) {
+                if (r.ifTrue(level, pos)) {
+                    std::optional<std::string> s = r.then(level, random, pos);   // then.getState: never null here
+                    if (!s.has_value()) throw std::logic_error("rule_based then-provider returned null");
+                    return s;
+                }
+            }
+            return fallback ? (*fallback)(level, random, pos) : std::nullopt;
+        };
+    }
+    throw std::runtime_error("unsupported state_provider: " + t);
+}
+
 Heightmap::Types parseHeightmapType(const std::string& s) {
     if (s == "WORLD_SURFACE_WG") return Heightmap::Types::WORLD_SURFACE_WG;
     if (s == "WORLD_SURFACE") return Heightmap::Types::WORLD_SURFACE;
@@ -206,6 +337,20 @@ std::shared_ptr<const PlacementModifier> loadModifier(const json& j, const std::
         j.at("noise_to_count_ratio").get<int>(), j.at("noise_factor").get<double>(), j.value("noise_offset", 0.0));
     if (t == "biome") return std::make_shared<BiomeFilter>(
         [featureKey](WorldGenLevel&, BlockPos pos) { return g_biomeCtx->hasFeatureAt(featureKey, pos); });
+    // SurfaceRelativeThresholdFilter.java: optional min/max default to
+    // Integer.MIN_VALUE / Integer.MAX_VALUE (compared in long).
+    if (t == "surface_relative_threshold_filter") return std::make_shared<SurfaceRelativeThresholdFilter>(
+        parseHeightmapType(j.at("heightmap").get<std::string>()),
+        j.contains("min_inclusive") ? j.at("min_inclusive").get<std::int64_t>()
+                                    : static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::min()),
+        j.contains("max_inclusive") ? j.at("max_inclusive").get<std::int64_t>()
+                                    : static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max()));
+    // BlockPredicateFilter.java:25-27: keep origin iff predicate.test(level, origin).
+    if (t == "block_predicate_filter") {
+        auto pred = loadBlockPredicate(j.at("predicate"));
+        return std::make_shared<BlockPredicateFilter>(
+            [pred](WorldGenLevel& level, BlockPos pos) { return pred(level, pos); });
+    }
     throw std::runtime_error("unsupported placement modifier: " + t);
 }
 
@@ -265,14 +410,78 @@ public:
         if (!c || p.y < m_minY || p.y >= m_maxY) return "minecraft:air";
         return name(c->getBlock(p.x, p.y, p.z));
     }
-    void setBlock(BlockPos p, const std::string& state, int) override {
-        if (!ensureCanWrite(p)) return;
+    // WorldGenRegion.setBlock (WorldGenRegion.java:264-301): false when
+    // ensureCanWrite rejects; otherwise write and — unless flag 16 is set and not
+    // during the FULL post-process pass — ask the new state for a post-process
+    // position and mark it (WorldGenRegion.java:288-293). The worldgen-reachable
+    // blocks with the postProcess property are brown_mushroom (Blocks.java:1087)
+    // and red_mushroom (:1099) -> postProcessSelf (pos, :6934-6936), soul_sand
+    // (:2097) and magma_block (:4398) -> postProcessAbove (pos.above(), :6938-6940).
+    bool setBlockChecked(BlockPos p, const std::string& state, int flags) override {
+        if (!ensureCanWrite(p)) return false;
         mc::LevelChunk* c = at(floorDiv(p.x, 16), floorDiv(p.z, 16));
+        if (!c) return false;
         // The grid stores block ids (default states); properties ([half=upper],
         // [age=N]) are not byte-compared (the server dump records block ids).
-        if (c) c->setBlock(p.x, p.y, p.z, mc::getDefaultBlockStateId(stripNs(mc::block::blockName(state)), m_airId));
+        // glow_lichen face/waterlogged bits live in the multiface side map: any
+        // overwrite invalidates the entry (the multiface port re-registers its own).
+        const std::string block = mc::block::blockName(state);
+        c->setBlock(p.x, p.y, p.z, mc::getDefaultBlockStateId(stripNs(block), m_airId));
+        m_multiface.erase(std::make_tuple(p.x, p.y, p.z));
+        if ((flags & 16) == 0 && !m_postprocessing) {
+            if (block == "minecraft:magma_block" || block == "minecraft:soul_sand") {
+                markPosForPostprocessing(BlockPos{ p.x, p.y + 1, p.z });
+            } else if (block == "minecraft:brown_mushroom" || block == "minecraft:red_mushroom") {
+                markPosForPostprocessing(p);
+            }
+        }
+        return true;
+    }
+    void setBlock(BlockPos p, const std::string& state, int flags) override {
+        (void)setBlockChecked(p, state, flags);
     }
     bool isEmptyBlock(BlockPos p) const override { return getBlockState(p) == "minecraft:air"; }
+
+    // ---- FULL-promotion post-processing marks ----
+    // ChunkAccess.markPosForPostprocessing: append to the per-section ShortList of
+    // the chunk CONTAINING pos (duplicates allowed, insertion order kept). The
+    // postprocess pass iterates sections ascending, insertion order within
+    // (LevelChunk.postProcessGeneration / the Java harness postProcessChunk).
+    void markPosForPostprocessing(BlockPos p) override {
+        const int cx = floorDiv(p.x, 16), cz = floorDiv(p.z, 16);
+        if (at(cx, cz) == nullptr) throw std::logic_error("postprocess mark outside generated grid");
+        if (p.y < m_minY || p.y >= m_maxY) throw std::logic_error("postprocess mark outside build height");
+        m_marks[packChunk(cx, cz)].push_back(Mark{ (p.y - m_minY) >> 4, p });
+    }
+    std::vector<BlockPos> postProcessMarks(int cx, int cz) {
+        auto it = m_marks.find(packChunk(cx, cz));
+        if (it == m_marks.end()) return {};
+        std::stable_sort(it->second.begin(), it->second.end(),
+                         [](const Mark& a, const Mark& b) { return a.section < b.section; });
+        std::vector<BlockPos> out;
+        out.reserve(it->second.size());
+        for (const Mark& m : it->second) out.push_back(m.pos);
+        return out;
+    }
+    void setPostprocessing(bool v) { m_postprocessing = v; }
+
+    // ---- multiface (glow_lichen) face/waterlogged side map ----
+    mc::levelgen::feature::MultifaceBlockState multifaceStateAt(BlockPos p) const {
+        mc::levelgen::feature::MultifaceBlockState s;
+        s.block = getBlockState(p);
+        if (s.block == "minecraft:glow_lichen") {
+            auto it = m_multiface.find(std::make_tuple(p.x, p.y, p.z));
+            if (it == m_multiface.end())
+                throw std::logic_error("glow_lichen without face record (multiface side map out of sync)");
+            s.isPlaceBlock = true;
+            s.faces = it->second.first;
+            s.waterlogged = it->second.second;
+        }
+        return s;
+    }
+    void putMultifaceState(BlockPos p, std::uint8_t faces, bool waterlogged) {
+        m_multiface[std::make_tuple(p.x, p.y, p.z)] = { faces, waterlogged };
+    }
 
     // BlockState.canSurvive(level, pos) for the block set the ported features gate
     // on. Fail-closed: anything else throws.
@@ -347,10 +556,179 @@ private:
         return m_minY - 1;
     }
     struct FrozenMaps { std::array<int, 256> oceanFloor; std::array<int, 256> worldSurface; };
+    struct Mark { int section; BlockPos pos; };
     std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>>* m_chunks;
     std::map<std::int64_t, FrozenMaps> m_frozen;
+    std::unordered_map<std::int64_t, std::vector<Mark>> m_marks;
+    std::map<std::tuple<int, int, int>, std::pair<std::uint8_t, bool>> m_multiface;
+    bool m_postprocessing = false;
     int m_minY, m_maxY, m_dcx = 0, m_dcz = 0; std::uint32_t m_airId{};
 };
+
+// ============================ FULL-promotion post-processing ============================
+// Mirrors the Java harness postProcessChunk (FullChunkDecorateParity.java:392-424),
+// itself LevelChunk.postProcessGeneration (LevelChunk.java:566) — proven
+// byte-identical to the no-structures server.
+
+// BubbleColumnBlock.canOccupy (BubbleColumnBlock.java:99-109): the state is the
+// bubble column itself, or a LiquidBlock whose fluid is in the
+// bubble_column_can_occupy fluid tag (== water), is a source, and has amount>=8.
+// Plant blocks with a virtual water fluid (seagrass/kelp/...) are NOT LiquidBlocks
+// and stop the column.
+bool bubbleCanOccupy(const std::string& state) {
+    if (state == "minecraft:bubble_column") return true;
+    if (state != "minecraft:water" && state != "minecraft:lava") return false;   // instanceof LiquidBlock
+    const mc::material::FluidState fs = mc::material::fluidStateOf(state);
+    return fs.is(*g_fluidTags, "minecraft:bubble_column_can_occupy") && fs.isSource() && fs.amount >= 8;
+}
+
+// BubbleColumnBlock.getColumnState (BubbleColumnBlock.java:111-121), reduced to
+// block ids (DRAG_DOWN does not change the id): below bubble -> bubble; below in
+// enables_bubble_column_push_up (soul_sand) or enables_bubble_column_drag_down
+// (magma_block) -> bubble; else the occupy state itself (a water id; the
+// occupy-is-bubble -> WATER branch also yields a water id).
+std::string bubbleColumnState(const std::string& below, const std::string& occupy) {
+    if (below == "minecraft:bubble_column") return "minecraft:bubble_column";
+    if (g_tags->isInTag(below, "minecraft:enables_bubble_column_push_up")) return "minecraft:bubble_column";
+    if (g_tags->isInTag(below, "minecraft:enables_bubble_column_drag_down")) return "minecraft:bubble_column";
+    return occupy == "minecraft:bubble_column" ? "minecraft:water" : occupy;
+}
+
+// BubbleColumnBlock.updateColumn (BubbleColumnBlock.java:77-97).
+void bubbleUpdateColumn(MultiChunkLevel& level, BlockPos occupyAt) {
+    const std::string occupyState = level.getBlockState(occupyAt);
+    const std::string below = level.getBlockState(BlockPos{ occupyAt.x, occupyAt.y - 1, occupyAt.z });
+    if (!bubbleCanOccupy(occupyState)) return;
+    const std::string columnState = bubbleColumnState(below, occupyState);
+    level.setBlockChecked(occupyAt, columnState, 2);
+    BlockPos pos{ occupyAt.x, occupyAt.y + 1, occupyAt.z };
+    while (bubbleCanOccupy(level.getBlockState(pos))) {
+        if (!level.setBlockChecked(pos, columnState, 2)) return;
+        pos = BlockPos{ pos.x, pos.y + 1, pos.z };
+    }
+}
+
+// Block.updateFromNeighbourShapes (Block.java:204-214, UPDATE_SHAPE_ORDER =
+// WEST,EAST,NORTH,SOUTH,DOWN,UP per BlockBehaviour.java:85-87) evaluated for the
+// closed set of non-liquid blocks that can be marked here. Static full blocks use
+// BlockBehaviour's identity updateShape; glow_lichen runs MultifaceBlock.updateShape
+// exactly (face revalidation, MultifaceBlock.java:135-143 + removeFace:263-266);
+// the aquatic plants' conversion/removal branches cannot fire under the placement
+// invariants — asserted, throwing if one ever would (port it then, never guess).
+void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const std::string& bs) {
+    static const std::set<std::string> staticNoOp = {
+        // Block/BlockBehaviour default updateShape returns the state unchanged.
+        "minecraft:air", "minecraft:stone", "minecraft:granite", "minecraft:diorite",
+        "minecraft:andesite", "minecraft:tuff", "minecraft:deepslate", "minecraft:bedrock",
+        "minecraft:obsidian", "minecraft:gravel", "minecraft:sand", "minecraft:red_sand",
+        "minecraft:sandstone", "minecraft:dirt", "minecraft:grass_block", "minecraft:coarse_dirt",
+        "minecraft:podzol", "minecraft:clay", "minecraft:mud", "minecraft:magma_block",
+        "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice", "minecraft:snow_block",
+        "minecraft:coal_ore", "minecraft:copper_ore", "minecraft:iron_ore", "minecraft:gold_ore",
+        "minecraft:redstone_ore", "minecraft:lapis_ore", "minecraft:diamond_ore", "minecraft:emerald_ore",
+        "minecraft:deepslate_coal_ore", "minecraft:deepslate_copper_ore", "minecraft:deepslate_iron_ore",
+        "minecraft:deepslate_gold_ore", "minecraft:deepslate_redstone_ore", "minecraft:deepslate_lapis_ore",
+        "minecraft:deepslate_diamond_ore", "minecraft:deepslate_emerald_ore",
+        // BubbleColumnBlock.updateShape (BubbleColumnBlock.java:160-179) only
+        // schedules ticks (dropped during worldgen) and returns super == unchanged.
+        "minecraft:bubble_column",
+    };
+    if (staticNoOp.count(bs) != 0) return;
+
+    if (bs == "minecraft:glow_lichen") {
+        // MultifaceBlock.updateShape per neighbour direction: hasFace(direction) &&
+        // !canAttachTo -> removeFace; no faces left -> AIR (MultifaceBlock.java:
+        // 135-143, 263-266). UPDATE_SHAPE_ORDER = WEST,EAST,NORTH,SOUTH,DOWN,UP.
+        namespace md = mc::levelgen::feature::multiface_detail;
+        mc::levelgen::feature::MultifaceBlockState st = level.multifaceStateAt(bp);
+        static const int order[6] = { 4, 5, 2, 3, 0, 1 };
+        bool changed = false;
+        for (int dir : order) {
+            if (md::hasFace(st, dir) && !md::canAttachTo(level, md::relative(bp, dir))) {
+                st.faces = static_cast<std::uint8_t>(st.faces & ~(1u << dir));
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        if (st.faces == 0) {
+            // removeFace -> Blocks.AIR (the waterlogged bit is dropped, verbatim).
+            level.setBlockChecked(bp, "minecraft:air", 276);   // harness flags (:417)
+        } else {
+            level.putMultifaceState(bp, st.faces, st.waterlogged);   // id unchanged
+        }
+        return;
+    }
+    if (bs == "minecraft:seagrass") {
+        // VegetationBlock.updateShape (VegetationBlock.java:28-41): !canSurvive -> AIR.
+        if (!level.canSurvive("minecraft:seagrass", bp)) {
+            throw std::logic_error("postprocess: seagrass updateShape would remove the block — port it");
+        }
+        return;
+    }
+    if (bs == "minecraft:tall_seagrass") {
+        // DoublePlantBlock.updateShape (DoublePlantBlock.java:41-61). The grid drops
+        // the HALF property; infer it (the upper half is exactly the cell whose
+        // below is the lower tall_seagrass — stacks deeper than 2 cannot place).
+        const std::string belowBlock = level.getBlockState(BlockPos{ bp.x, bp.y - 1, bp.z });
+        if (belowBlock == "minecraft:tall_seagrass") return;   // upper: below is its lower half
+        const std::string aboveBlock = level.getBlockState(BlockPos{ bp.x, bp.y + 1, bp.z });
+        if (aboveBlock != "minecraft:tall_seagrass" || !level.canSurvive("minecraft:tall_seagrass", bp)) {
+            throw std::logic_error("postprocess: tall_seagrass updateShape would remove the block — port it");
+        }
+        return;
+    }
+    if (bs == "minecraft:kelp") {
+        // GrowingPlantHeadBlock.updateShape (GrowingPlantHeadBlock.java:76-105):
+        // !canSurvive only schedules a tick (no-op here); the head->body conversion
+        // fires iff kelp/kelp_plant sits directly above — impossible by construction.
+        const std::string above = level.getBlockState(BlockPos{ bp.x, bp.y + 1, bp.z });
+        if (above == "minecraft:kelp" || above == "minecraft:kelp_plant") {
+            throw std::logic_error("postprocess: kelp head->body conversion would fire — port it");
+        }
+        return;
+    }
+    if (bs == "minecraft:kelp_plant") {
+        // GrowingPlantBodyBlock.updateShape (GrowingPlantBodyBlock.java:36-60):
+        // body->head conversion fires iff the block above is neither body nor head.
+        const std::string above = level.getBlockState(BlockPos{ bp.x, bp.y + 1, bp.z });
+        if (above != "minecraft:kelp" && above != "minecraft:kelp_plant") {
+            throw std::logic_error("postprocess: kelp_plant body->head conversion would fire — port it");
+        }
+        return;
+    }
+    throw std::logic_error("postprocess: updateFromNeighbourShapes not ported for " + bs);
+}
+
+// FullChunkDecorateParity.postProcessChunk (the Java harness :392-424). Returns the
+// number of skipped fluid-spread ticks (logged hard no-op, as in the harness).
+long long postProcessChunk(MultiChunkLevel& level, int Cx, int Cz) {
+    level.setDecorating(Cx, Cz);     // CUR_CX/CUR_CZ = C: updateColumn writes allowed
+    level.setPostprocessing(true);   // suppress re-marking (POSTPROCESSING flag)
+    long long skippedFluidTicks = 0;
+    for (const BlockPos& bp : level.postProcessMarks(Cx, Cz)) {
+        const std::string bs = level.getBlockState(bp);
+        const mc::material::FluidState fs = mc::material::fluidStateOf(bs);
+        const bool isLiquidBlock = (bs == "minecraft:water" || bs == "minecraft:lava");
+        // Waterlogged-style fluid (non-LiquidBlock with a fluid state): the block-id
+        // fluid model misses glow_lichen's WATERLOGGED property — the multiface side
+        // map carries it (MultifaceBlock waterlogged states getFluidState == water).
+        bool hasFluid = !fs.isEmpty();
+        if (bs == "minecraft:glow_lichen") hasFluid = level.multifaceStateAt(bp).waterlogged;
+        if (hasFluid && !isLiquidBlock) ++skippedFluidTicks;   // waterlogged-style
+        if (isLiquidBlock) {
+            ++skippedFluidTicks;   // fluid spread tick: hard no-op without a ServerLevel
+            // LiquidBlock.tick == shouldBubbleColumnOccupy -> updateColumn
+            // (LiquidBlock.java:162-167, 191-193).
+            if (fs.is(*g_fluidTags, "minecraft:bubble_column_can_occupy") && fs.isSource() && fs.isFull()) {
+                bubbleUpdateColumn(level, bp);
+            }
+        } else {
+            postUpdateFromNeighbourShapes(level, bp, bs);
+        }
+    }
+    level.setPostprocessing(false);
+    return skippedFluidTicks;
+}
 
 } // namespace
 
@@ -362,9 +740,9 @@ int main(int argc, char** argv) {
         else if (a == "--datadir" && i + 1 < argc) dataDir = argv[++i];
         else if (a == "--family" && i + 1 < argc) family = argv[++i];
     }
-    if (casesPath.empty()) { std::cerr << "usage: full_chunk_decorate_parity --cases <server tsv> [--family ore|vegetal]\n"; return 2; }
+    if (casesPath.empty()) { std::cerr << "usage: full_chunk_decorate_parity --cases <server tsv> [--family ore|vegetal|all]\n"; return 2; }
     if (dataDir.empty()) dataDir = findDataDir();
-    if (family != "ore" && family != "vegetal") { std::cerr << "--family must be ore or vegetal\n"; return 2; }
+    if (family != "ore" && family != "vegetal" && family != "all") { std::cerr << "--family must be ore, vegetal or all\n"; return 2; }
 
     installBlockStatesEnv();
     mc::initBlocks();
@@ -417,6 +795,58 @@ int main(int argc, char** argv) {
                 placer = mc::levelgen::feature::makeSeagrassPlacer(cfgJson.at("config").at("probability").get<double>());
             } else if (type == "kelp") {
                 placer = mc::levelgen::feature::makeKelpPlacer();
+            } else if (type == "disk") {
+                // DiskConfiguration: state_provider, target (BlockPredicate),
+                // radius (IntProvider 0..8), half_height (0..4).
+                const json& cc = cfgJson.at("config");
+                placer = mc::levelgen::feature::makeDiskPlacer(
+                    loadStateProvider(cc.at("state_provider")),
+                    loadBlockPredicate(cc.at("target")),
+                    loadIntProvider(cc.at("radius")),
+                    cc.at("half_height").get<int>());
+            } else if (type == "spring_feature") {
+                // SpringConfiguration. config.state is a FLUID state; the placed
+                // block is state.createLegacyBlock() == the plain source liquid
+                // block (FlowingFluid.getLegacyLevel: isSource -> LEVEL 0,
+                // independent of FALLING) — see SpringFeature.h.
+                const json& cc = cfgJson.at("config");
+                const std::string fluid = "minecraft:" + stripNs(cc.at("state").at("Name").get<std::string>());
+                if (fluid != "minecraft:water" && fluid != "minecraft:lava")
+                    throw std::runtime_error("unsupported spring fluid: " + fluid);
+                placer = mc::levelgen::feature::makeSpringPlacer(
+                    fluid,
+                    cc.value("requires_block_below", true),
+                    cc.value("rock_count", 4),
+                    cc.value("hole_count", 1),
+                    loadIdSet(cc.at("valid_blocks")));
+            } else if (type == "underwater_magma") {
+                const json& cc = cfgJson.at("config");
+                placer = mc::levelgen::feature::makeUnderwaterMagmaPlacer(
+                    cc.at("floor_search_range").get<int>(),
+                    cc.at("placement_radius_around_floor").get<int>(),
+                    cc.at("placement_probability_per_valid_position").get<float>());
+            } else if (type == "multiface_growth") {
+                // MultifaceGrowthConfiguration codec defaults: block orElse
+                // GLOW_LICHEN, search_range orElse 10, floor/ceiling/wall orElse
+                // false, chance_of_spreading orElse 0.5. Only glow_lichen is
+                // ported (sculk_vein etc. fail closed).
+                const json& cc = cfgJson.at("config");
+                const std::string block = "minecraft:" + stripNs(cc.value("block", std::string("minecraft:glow_lichen")));
+                if (block != "minecraft:glow_lichen")
+                    throw std::runtime_error("multiface block not ported: " + block);
+                mc::levelgen::feature::MultifaceLevelHooks hooks;
+                hooks.getState = [](BlockPos p) { return g_level->multifaceStateAt(p); };
+                hooks.putState = [](BlockPos p, std::uint8_t faces, bool waterlogged) {
+                    g_level->putMultifaceState(p, faces, waterlogged);
+                };
+                placer = mc::levelgen::feature::makeMultifaceGrowthPlacer(
+                    loadIdSet(cc.at("can_be_placed_on")),
+                    cc.value("search_range", 10),
+                    cc.value("can_place_on_floor", false),
+                    cc.value("can_place_on_ceiling", false),
+                    cc.value("can_place_on_wall", false),
+                    cc.value("chance_of_spreading", 0.5f),
+                    std::move(hooks));
             } else {
                 // Hard no-op: not yet ported. Counted per run at the call site; never "pass".
                 g_unportedType[featureKey] = type;
@@ -450,8 +880,10 @@ int main(int argc, char** argv) {
 
     const int minY = mc::CHUNK_MIN_Y, maxY = mc::CHUNK_MAX_Y;
     long long oreCells = 0, oreMism = 0, vegCells = 0, vegMism = 0, otherFeatureCells = 0; int shown = 0;
-    struct PerChunk { long long vegCells = 0, vegMism = 0; };
+    long long allCells = 0, allMism = 0;
+    struct PerChunk { long long vegCells = 0, vegMism = 0, allCells = 0, allMism = 0; };
     std::map<std::tuple<long long,int,int>, PerChunk> perChunk;
+    std::map<std::pair<std::string, std::string>, long long> transitions;   // got=>want over all mismatched cells
 
     for (const auto& [key, cells] : server) {
         const long long seed = std::get<0>(key);
@@ -460,12 +892,20 @@ int main(int argc, char** argv) {
         // 5x5 terrain (inner 3x3 decorated; outer ring for neighbour reads).
         NoiseBasedChunkGenerator gen(static_cast<std::uint64_t>(seed));
         std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>> chunks;
+        std::vector<std::vector<BlockPos>> genMarks;   // per-chunk noise+carver marks, generation order
         for (int dz = -2; dz <= 2; ++dz) for (int dx = -2; dx <= 2; ++dx) {
             auto chunk = std::make_unique<mc::LevelChunk>(mc::ChunkPos{ Cx + dx, Cz + dz });
-            gen.fillFromNoise(*chunk); gen.buildSurface(*chunk); gen.applyCarvers(*chunk);
+            std::vector<BlockPos> marks;   // NOISE-step marks first, then carver marks
+            gen.fillFromNoise(*chunk, &marks); gen.buildSurface(*chunk); gen.applyCarvers(*chunk, &marks);
+            genMarks.push_back(std::move(marks));
             chunks.emplace(packChunk(Cx + dx, Cz + dz), std::move(chunk));
         }
         MultiChunkLevel level(&chunks, minY, maxY);
+        // The NOISE step's aquifer-fluid marks (NoiseBasedChunkGenerator.java:
+        // 442-446) and the carvers' marks (WorldCarver.java:147-158) precede every
+        // decoration mark — inject them first, preserving generation order.
+        for (const auto& marks : genMarks)
+            for (const BlockPos& p : marks) level.markPosForPostprocessing(p);
         // EXACTLY as ChunkStatusTasks.generateFeatures: prime the non-WG heightmaps
         // for every chunk before any decoration runs; they freeze from here on.
         level.freezeHeights();
@@ -495,6 +935,7 @@ int main(int argc, char** argv) {
             return nb(qx, cqy, qz);
         };
         g_biomeCtx = &biomeCtx;
+        g_level = &level;
 
         // Decorate the inner 3x3 in xz order (x outer asc, z inner asc) — the order under
         // which the Java ground truth (FullChunkDecorateParity.java) byte-matches the real
@@ -543,7 +984,15 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        // FULL-promotion post-processing for chunk C (bubble columns above magma,
+        // glow_lichen revalidation, water-over-water column writes) — exactly the
+        // Java harness postProcessChunk, which the server byte-match certifies.
+        const long long skippedFluidTicks = postProcessChunk(level, Cx, Cz);
+        if (skippedFluidTicks > 0)
+            std::cerr << "POSTPROCESS chunk=(" << Cx << "," << Cz
+                      << ") fluid-spread ticks skipped (no ServerLevel): " << skippedFluidTicks << "\n";
         g_biomeCtx = nullptr;
+        g_level = nullptr;
 
         // Compare chunk C: every family cell (server or ours) must match.
         mc::LevelChunk* c = chunks[packChunk(Cx, Cz)].get();
@@ -554,6 +1003,14 @@ int main(int argc, char** argv) {
                 const std::string mine = level.name(c->getBlock(bx, y, bz));
                 auto sit = cells.find({bx, y, bz});
                 const std::string srv = (sit != cells.end()) ? sit->second : std::string("minecraft:air");
+                ++allCells; ++pc.allCells;
+                if (mine != srv) {
+                    ++allMism; ++pc.allMism;
+                    ++transitions[{ mine, srv }];
+                    if (family == "all" && shown++ < 200)
+                        std::cerr << "ALL-MISMATCH seed=" << seed << " (" << bx << "," << y << "," << bz
+                                  << ") got=" << mine << " server=" << srv << "\n";
+                }
                 const bool srvOre = oreFamily.count(srv) != 0, myOre = oreFamily.count(mine) != 0;
                 const bool srvVeg = vegetalFamily.count(srv) != 0, myVeg = vegetalFamily.count(mine) != 0;
                 if (srvOre || myOre) {
@@ -582,12 +1039,18 @@ int main(int argc, char** argv) {
     for (const auto& [key, pc] : perChunk)
         std::cout << "DecorateVegetalChunk seed=" << std::get<0>(key) << " chunk=(" << std::get<1>(key) << "," << std::get<2>(key)
                   << ") veg_cells=" << pc.vegCells << " veg_mismatches=" << pc.vegMism << "\n";
+    for (const auto& [key, pc] : perChunk)
+        std::cout << "DecorateAllChunk seed=" << std::get<0>(key) << " chunk=(" << std::get<1>(key) << "," << std::get<2>(key)
+                  << ") cells=" << pc.allCells << " mismatches=" << pc.allMism << "\n";
     std::cout << "DecorateOre ore_cells=" << oreCells << " ore_mismatches=" << oreMism
               << " other_feature_cells=" << otherFeatureCells
               << " | oreRuns=" << g_oreRuns << " orePlacedOk=" << g_orePlacedOk
               << " oreFamilySize=" << oreFamily.size() << "\n";
     std::cout << "DecorateVegetal veg_cells=" << vegCells << " veg_mismatches=" << vegMism
               << " | vegRuns=" << g_vegRuns << " vegPlacedOk=" << g_vegPlacedOk << "\n";
+    std::cout << "DecorateAll cells=" << allCells << " mismatches=" << allMism << "\n";
+    for (const auto& [t, n] : transitions)
+        std::cout << "DecorateAllTransition got=" << t.first << " want=" << t.second << " n=" << n << "\n";
     for (const auto& [type, n] : g_unportedSkips)
         std::cout << "UNPORTED-FEATURE-TYPE " << type << " skipped_placed_features=" << n << "\n";
     if (!g_blocksMotionDefaulted.empty()) {
@@ -595,6 +1058,16 @@ int main(int argc, char** argv) {
         for (const auto& b : g_blocksMotionDefaulted) std::cout << " " << b;
         std::cout << "\n";
     }
-    const long long famMism = (family == "vegetal") ? vegMism : oreMism;
+    if (!mc::levelgen::feature::underwaterMagmaOcclusionDefaulted().empty()) {
+        std::cout << "OCCLUSION-DEFAULTED (verify each vs Blocks.java and add to the table):";
+        for (const auto& b : mc::levelgen::feature::underwaterMagmaOcclusionDefaulted()) std::cout << " " << b;
+        std::cout << "\n";
+    }
+    if (!mc::levelgen::feature::multifaceAttachDefaulted().empty()) {
+        std::cout << "MULTIFACE-ATTACH-DEFAULTED (verify each vs Blocks.java and add to the table):";
+        for (const auto& b : mc::levelgen::feature::multifaceAttachDefaulted()) std::cout << " " << b;
+        std::cout << "\n";
+    }
+    const long long famMism = (family == "vegetal") ? vegMism : (family == "all") ? allMism : oreMism;
     return famMism == 0 ? 0 : 1;
 }

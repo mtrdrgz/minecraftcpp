@@ -31,7 +31,23 @@ public:
 
     virtual std::string getBlockState(BlockPos pos) const { (void)pos; throw std::logic_error("getBlockState not implemented"); }
     virtual void setBlock(BlockPos pos, const std::string& state, int flags) { (void)pos; (void)state; (void)flags; throw std::logic_error("setBlock not implemented"); }
+    // WorldGenRegion.setBlock returns a bool: false when ensureCanWrite rejects the
+    // position, true after the write (WorldGenRegion.java:264-301). Features whose
+    // control flow consumes that result (MultifaceSpreader.SpreadConfig.placeBlock,
+    // BubbleColumnBlock.updateColumn's climb loop) call this; the void setBlock
+    // remains for callers that ignore it.
+    virtual bool setBlockChecked(BlockPos pos, const std::string& state, int flags) {
+        if (!ensureCanWrite(pos)) return false;
+        setBlock(pos, state, flags);
+        return true;
+    }
     virtual bool isEmptyBlock(BlockPos pos) const { (void)pos; throw std::logic_error("isEmptyBlock not implemented"); }
+    // ChunkAccess.markPosForPostprocessing(pos) on the chunk CONTAINING pos (features
+    // call level.getChunk(pos).markPosForPostprocessing(pos) — no write-radius gate:
+    // Feature.markAboveForPostProcessing Feature.java:206-217, MultifaceGrowthFeature
+    // .java:74, MultifaceSpreader.java:172). Throwing default: only the multi-chunk
+    // decoration level implements the mark store; stubs must not silently drop marks.
+    virtual void markPosForPostprocessing(BlockPos pos) { (void)pos; throw std::logic_error("markPosForPostprocessing not implemented"); }
     // BlockState.canSurvive(level, pos): delegates to the block-behaviour subsystem.
     virtual bool canSurvive(const std::string& state, BlockPos pos) const { (void)state; (void)pos; throw std::logic_error("canSurvive not implemented"); }
     // WorldGenRegion.ensureCanWrite: whether a feature may write at pos (radius-1 +

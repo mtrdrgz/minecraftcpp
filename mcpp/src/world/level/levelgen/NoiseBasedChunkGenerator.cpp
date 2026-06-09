@@ -347,9 +347,11 @@ int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
     return m_settings.noiseSettings.minY;
 }
 
-void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk) const {
+void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks) const {
     const uint32_t air = stateIdFor("air", 0);
     const uint32_t solid = m_settings.defaultBlock ? m_settings.defaultBlock : stateIdFor("stone", air);
+    const uint32_t waterId = stateIdFor("water", UINT32_MAX);
+    const uint32_t lavaId = stateIdFor("lava", UINT32_MAX);
     const ChunkPos pos = chunk.pos();
     const int chunkStartBlockX = pos.x * 16;
     const int chunkStartBlockZ = pos.z * 16;
@@ -419,6 +421,13 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk) const {
 
                             if (state != air) {
                                 chunk.setBlock(blockX, blockY, blockZ, state);
+                                // NoiseBasedChunkGenerator.java:442-446: fluid cells
+                                // are marked for FULL postprocessing when the aquifer
+                                // requests a fluid update.
+                                if (fluidUpdateMarks != nullptr && aquifer->shouldScheduleFluidUpdate()
+                                    && (state == waterId || state == lavaId)) {
+                                    fluidUpdateMarks->push_back(mc::BlockPos{ blockX, blockY, blockZ });
+                                }
                             }
                         }
                     }
@@ -467,7 +476,7 @@ void NoiseBasedChunkGenerator::buildSurface(
     chunk.meshDirty = true;
 }
 
-void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk) const {
+void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks) const {
     if (m_settings.defaultBlock == stateIdFor("netherrack", UINT32_MAX)
         || m_settings.defaultBlock == stateIdFor("end_stone", UINT32_MAX)) {
         return;
@@ -504,7 +513,8 @@ void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk) const {
         m_router,
         m_aquiferRandom,
         preliminarySurface,
-        topMaterial);
+        topMaterial,
+        fluidUpdateMarks);
 }
 
 } // namespace mc::levelgen

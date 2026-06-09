@@ -100,6 +100,8 @@ struct CarvingContext {
     int minGenY = -64;
     int genDepth = 384;
     TopMaterialGetter topMaterial;
+    // chunk.markPosForPostprocessing sink (WorldCarver.java:149,157); null = drop.
+    std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr;
 };
 
 struct CarverConfiguration {
@@ -184,8 +186,16 @@ bool carveBlock(
     }
 
     chunk.setBlock(x, y, z, *carved);
+    // WorldCarver.java:147-149: carved fluid blocks are marked for FULL-status
+    // postprocessing when the aquifer requests a fluid update. The flag is
+    // STATEFUL: the lava-level branch of carveState does not touch the aquifer,
+    // so the previous computeSubstance's value applies — exactly as in Java.
+    const bool carvedFluid = *carved == water || *carved == lava;
+    if (context.fluidUpdateMarks != nullptr && aquifer.shouldScheduleFluidUpdate() && carvedFluid) {
+        context.fluidUpdateMarks->push_back(mc::BlockPos{ x, y, z });
+    }
     if (hasGrass && chunk.getBlock(x, y - 1, z) == dirt && context.topMaterial) {
-        const bool underFluid = *carved == water || *carved == lava;
+        const bool underFluid = carvedFluid;
         std::optional<std::uint32_t> top = context.topMaterial(
             chunk,
             x,
@@ -194,6 +204,10 @@ bool carveBlock(
             underFluid);
         if (top) {
             chunk.setBlock(x, y - 1, z, *top);
+            // WorldCarver.java:155-158: a fluid top material is marked too.
+            if (context.fluidUpdateMarks != nullptr && (*top == water || *top == lava)) {
+                context.fluidUpdateMarks->push_back(mc::BlockPos{ x, y - 1, z });
+            }
         }
     }
 
@@ -526,7 +540,8 @@ void applyOverworldCarvers(
     const NoiseRouter& router,
     std::shared_ptr<PositionalRandomFactory> aquiferRandom,
     const std::function<int(int, int)>& preliminarySurface,
-    const TopMaterialGetter& topMaterial
+    const TopMaterialGetter& topMaterial,
+    std::vector<mc::BlockPos>* fluidUpdateMarks
 ) {
     const int minY = settings.noiseSettings.minY;
     const int height = settings.noiseSettings.height;
@@ -534,7 +549,8 @@ void applyOverworldCarvers(
         WorldGenerationContext(minY, height),
         minY,
         height,
-        topMaterial
+        topMaterial,
+        fluidUpdateMarks
     };
     CarvingMask mask(height, minY);
 

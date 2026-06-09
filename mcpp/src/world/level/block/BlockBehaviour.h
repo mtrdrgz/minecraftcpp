@@ -133,4 +133,58 @@ inline bool isFaceSturdyUp(const std::string& blockOrState, bool* defaulted = nu
     return blocksMotion(blockOrState, defaulted);
 }
 
+// BlockStateBase.getFaceOcclusionShape(direction) full-block test, as consumed by
+// UnderwaterMagmaFeature.isVisibleFromOutside (UnderwaterMagmaFeature.java:77-81):
+// "visible" == faceOcclusionShape == empty || !isShapeFullBlock(faceShape). The
+// occlusion shape is empty unless canOcclude (BlockBehaviour.java:512: occlusionShape
+// = canOcclude ? owner.getOcclusionShape(state) : empty; :515-517 EMPTY vs FULL by
+// isFullBlock; :562-563 per-face slice). Over the worldgen block set:
+//   NOT occluding - air/cave_air/void_air                 (no shape)
+//                 - water/lava        LiquidBlock.getShape = Shapes.empty()
+//                                     (LiquidBlock.java:145-148) -> empty occlusion
+//                 - ice               .noOcclusion() (Blocks.java "ice" registration)
+//                 - seagrass/tall_seagrass/kelp/kelp_plant/glow_lichen/bubble_column
+//                                     non-full plant/column shapes -> no full face
+//                 - snow              layered shape (height 2/16): NOT full -> treated
+//                                     not-occluding AND flagged via `defaulted` (its
+//                                     DOWN face alone is full; never queried by the
+//                                     ported features -- surface review if it appears)
+//   occluding     - every full opaque cube the pipeline emits (stone family, deepslate,
+//                   tuff, bedrock, obsidian, sand/red_sand/sandstone, gravel, dirt /
+//                   grass_block/coarse_dirt/podzol, clay, mud, magma_block, snow_block,
+//                   packed_ice/blue_ice (no .noOcclusion() in Blocks.java), all ores).
+// Unknown blocks default to occluding (full cubes are the worldgen default) and are
+// flagged via `defaulted` for review, mirroring blocksMotion's discipline.
+inline bool isFaceOccludingFullBlock(const std::string& blockOrState, bool* defaulted = nullptr) {
+    static const std::set<std::string> nonOccluding = {
+        "minecraft:air", "minecraft:cave_air", "minecraft:void_air",
+        "minecraft:water", "minecraft:lava",
+        "minecraft:ice",
+        "minecraft:seagrass", "minecraft:tall_seagrass",
+        "minecraft:kelp", "minecraft:kelp_plant",
+        "minecraft:glow_lichen", "minecraft:bubble_column",
+    };
+    static const std::set<std::string> knownOccluding = {
+        "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
+        "minecraft:tuff", "minecraft:deepslate", "minecraft:bedrock", "minecraft:obsidian",
+        "minecraft:gravel", "minecraft:sand", "minecraft:red_sand", "minecraft:sandstone",
+        "minecraft:dirt", "minecraft:grass_block", "minecraft:coarse_dirt", "minecraft:podzol",
+        "minecraft:clay", "minecraft:mud", "minecraft:magma_block", "minecraft:snow_block",
+        "minecraft:packed_ice", "minecraft:blue_ice",
+        "minecraft:coal_ore", "minecraft:copper_ore", "minecraft:iron_ore", "minecraft:gold_ore",
+        "minecraft:redstone_ore", "minecraft:lapis_ore", "minecraft:diamond_ore", "minecraft:emerald_ore",
+        "minecraft:deepslate_coal_ore", "minecraft:deepslate_copper_ore", "minecraft:deepslate_iron_ore",
+        "minecraft:deepslate_gold_ore", "minecraft:deepslate_redstone_ore", "minecraft:deepslate_lapis_ore",
+        "minecraft:deepslate_diamond_ore", "minecraft:deepslate_emerald_ore",
+    };
+    const std::string block = blockName(blockOrState);
+    if (block == "minecraft:snow") {
+        if (defaulted != nullptr) *defaulted = true;   // see note above
+        return false;
+    }
+    if (nonOccluding.count(block) != 0) return false;
+    if (knownOccluding.count(block) == 0 && defaulted != nullptr) *defaulted = true;
+    return true;
+}
+
 } // namespace mc::block

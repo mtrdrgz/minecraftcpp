@@ -3,13 +3,16 @@
 // World-dependent placement modifiers that lift/scatter positions vertically:
 //   HeightmapPlacement  - to the surface heightmap at (x,z)
 //   HeightRangePlacement - to a HeightProvider-sampled Y
+//   SurfaceRelativeThresholdFilter - keep origin if its Y is within
+//       [surfaceY+min, surfaceY+max] of a heightmap surface
 // Ports of net.minecraft.world.level.levelgen.placement.{HeightmapPlacement,
-// HeightRangePlacement}.
+// HeightRangePlacement, SurfaceRelativeThresholdFilter}.
 
 #include "../heightproviders/HeightProvider.h"
 #include "PlacementContext.h"
 #include "PlacementModifier.h"
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -36,6 +39,29 @@ public:
 
 private:
     Heightmap::Types m_heightmap;
+};
+
+// SurfaceRelativeThresholdFilter.shouldPlace (SurfaceRelativeThresholdFilter.java:
+// 35-40): surfaceY = context.getHeight(heightmap, x, z) (WorldGenRegion semantics:
+// stored heightmap + 1); keep origin iff surfaceY+min <= origin.y <= surfaceY+max.
+// The comparison is done in long in Java only to avoid overflow with the
+// Integer.MIN/MAX_VALUE defaults; values here are small, int64 mirrors it.
+class SurfaceRelativeThresholdFilter final : public PlacementModifier {
+public:
+    SurfaceRelativeThresholdFilter(Heightmap::Types heightmap, std::int64_t minInclusive, std::int64_t maxInclusive)
+        : m_heightmap(heightmap), m_min(minInclusive), m_max(maxInclusive) {}
+
+    std::vector<BlockPos> getPositions(PlacementContext* context, RandomSource&, BlockPos origin) const override {
+        const std::int64_t surfaceY = context->getHeight(m_heightmap, origin.x, origin.z);
+        if (surfaceY + m_min <= origin.y && origin.y <= surfaceY + m_max) {
+            return { origin };
+        }
+        return {};
+    }
+
+private:
+    Heightmap::Types m_heightmap;
+    std::int64_t m_min, m_max;
 };
 
 class HeightRangePlacement final : public PlacementModifier {

@@ -29,7 +29,10 @@ public:
 
 
     int getBaseHeight(int blockX, int blockZ) const;
-    void fillFromNoise(LevelChunk& chunk) const;
+    // `fluidUpdateMarks`, when non-null, collects the postprocess marks vanilla
+    // records during the NOISE step (NoiseBasedChunkGenerator.java:442-446: every
+    // placed state with a non-empty fluid where aquifer.shouldScheduleFluidUpdate()).
+    void fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr) const;
     void buildSurface(LevelChunk& chunk) const;
     // Surface build with an explicit biome getter, overriding the BiomeManager
     // zoomer. Used to certify the per-biome surface rules in isolation (force one
@@ -37,7 +40,11 @@ public:
     // default overload otherwise.
     void buildSurface(LevelChunk& chunk,
                       const std::function<std::string(int, int, int)>& biomeOverride) const;
-    void applyCarvers(LevelChunk& chunk) const;
+    // `fluidUpdateMarks`, when non-null, collects the postprocess marks the Java
+    // carvers record on the carved chunk (WorldCarver.java:147-149 carved fluid
+    // blocks under aquifer.shouldScheduleFluidUpdate, :155-158 fluid top material).
+    // The FULL-status postprocess pass (bubble columns) consumes them.
+    void applyCarvers(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr) const;
 
     // Block-resolution biome at a world position (BiomeManager zoomer), as used by
     // gameplay biome queries.
