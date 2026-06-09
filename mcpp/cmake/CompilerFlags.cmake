@@ -28,7 +28,14 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         -ffp-contract=off
     )
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        add_compile_options(-O3 -flto=thin)
+        # x86-64-v3 (AVX2/BMI2, Haswell+ "modern hardware") improves the noise/density
+        # math codegen. FP-safe for byte-exact worldgen parity: scalar IEEE-754 doubles
+        # are bit-identical across SSE2/AVX, and with -ffp-contract=off + no -ffast-math
+        # clang does not FP-reassociate or auto-vectorize FP reductions, so results are
+        # unchanged. Verified by full_chunk_parity (mismatches=0). Override with
+        # -DMCPP_ARCH=... if a target CPU lacks AVX2.
+        set(MCPP_ARCH "x86-64-v3" CACHE STRING "clang -march for Release")
+        add_compile_options(-O3 -flto=thin -march=${MCPP_ARCH})
     else()
         add_compile_options(-O0 -g)
     endif()
