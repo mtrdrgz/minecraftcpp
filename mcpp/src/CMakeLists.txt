@@ -293,6 +293,18 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Mth (engine-wide math utility) parity vs the real net.minecraft.util.Mth — pure
+# functions, bit-exact (sin/cos table, atan2 LUT, fastInvSqrt/CubeRoot, hsv,
+# murmur, wrapDegrees, lerp/map families, ...). Ground truth: tools/MthParity.java.
+add_executable(mth_parity
+    world/level/levelgen/MthParityTest.cpp
+)
+target_include_directories(mth_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mth_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Network primitive codec parity vs the real FriendlyByteBuf/VarInt/VarLong.
 # Ground truth: tools/FriendlyByteBufParity.java.
 add_executable(packet_buffer_parity
