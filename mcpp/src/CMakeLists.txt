@@ -5041,3 +5041,134 @@ if(WIN32)
     target_link_libraries(component_nbt_parity PRIVATE bcrypt)
 endif()
 set_target_properties(component_nbt_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode Component-carrying play packet gates =====
+
+# net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket
+# Byte-exact packet codec parity vs the REAL net.minecraft STREAM_CODEC. The record's
+# codec is StreamCodec.composite(ByteBufCodecs.VAR_INT ::playerId,
+# ComponentSerialization.TRUSTED_STREAM_CODEC ::message, ::new), so the wire body is
+# VarInt(playerId) ++ Component(message). Restricted to PLAIN-TEXT literal Components,
+# which collapse to a root NBT StringTag (08 <u16 MUTF8 len> <bytes>) â€” the only
+# Component wire form currently ported. Reuses the certified PacketBuffer + NBT writer.
+add_executable(pkt_player_combat_kill_parity
+    network/protocol/game/PktPlayerCombatKillParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_player_combat_kill_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_player_combat_kill_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_player_combat_kill_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_player_combat_kill_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundServerDataPacket
+# Byte-exact parity vs the REAL ClientboundServerDataPacket.STREAM_CODEC (GT:
+# tools/PktServerDataParity.java). Composite codec, field order:
+#   motd : ComponentSerialization.TRUSTED_CONTEXT_FREE_STREAM_CODEC -> for a PLAIN
+#          literal collapses to a root StringTag (08 <u16 MUTF8 len> <bytes>) via
+#          FriendlyByteBuf.writeNbt(Tag); reproduced by PacketBuffer.writeNbt(NbtTag).
+#   iconBytes : Optional<byte[]> = optional(BYTE_ARRAY) -> writeBoolean(present)
+#               [+ VarInt(len) + raw bytes].
+# Reuses the certified PacketBuffer (FriendlyByteBuf port); links its NBT closure
+# (NbtIo/Tag for the writeNbt(Tag) symbols) + miniz (+ bcrypt on Windows).
+add_executable(pkt_server_data_parity
+    network/protocol/common/PktServerDataParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_server_data_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_server_data_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_server_data_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_server_data_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(pkt_set_actionbar_text_parity
+    network/protocol/game/PktSetActionBarTextParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_actionbar_text_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_actionbar_text_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_actionbar_text_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_actionbar_text_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
+# Byte-exact parity for the single-Component packet vs the real STREAM_CODEC:
+#   record ClientboundSetSubtitleTextPacket(Component text);
+#   STREAM_CODEC = StreamCodec.composite(ComponentSerialization.TRUSTED_STREAM_CODEC,
+#       ClientboundSetSubtitleTextPacket::text, ClientboundSetSubtitleTextPacket::new);
+# Single Component field, NO Optional framing. TRUSTED_STREAM_CODEC codec-encodes the
+# Component to NBT then FriendlyByteBuf.writeNbt(tag); a PLAIN literal collapses to a root
+# StringTag (08 <u16 MUTF8 len> <bytes>) â€” the whole packet body. The C++ side reproduces it
+# with PacketBuffer::writeNbt(NbtTag::string_(text)) on the exact UTF-8 bytes carried in the
+# TSV textHex column. Reuses the certified PacketBuffer (FriendlyByteBuf port); links its
+# closure (NbtIo/Tag pulled in for writeNbt symbols) + miniz, bcrypt on WIN32.
+# Ground truth: tools/PktSetSubtitleTextParity.java.
+add_executable(pkt_set_subtitle_text_parity
+    network/protocol/game/PktSetSubtitleTextParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_subtitle_text_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_subtitle_text_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_subtitle_text_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_subtitle_text_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# ===== netcode: ClientboundSetTitleTextPacket (single Component text, TRUSTED_STREAM_CODEC) =====
+# net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket â€” record(Component text);
+# STREAM_CODEC = composite(ComponentSerialization.TRUSTED_STREAM_CODEC, ...). Plain literal
+# collapses to a root StringTag emitted via PacketBuffer.writeNbt(NbtTag). No Optional framing.
+add_executable(pkt_set_title_text_parity
+    network/protocol/game/PktSetTitleTextParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_title_text_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_title_text_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_title_text_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_title_text_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== ClientboundSystemChatPacket: Component content + bool overlay =====
+# STREAM_CODEC = StreamCodec.composite(ComponentSerialization.TRUSTED_STREAM_CODEC, ::content,
+#                                      ByteBufCodecs.BOOL, ::overlay, ::new)
+# Wire (declaration order): content as a root NBT tag (plain literal -> StringTag 08 <u16 len>
+# <MUTF8 bytes>) via FriendlyByteBuf.writeNbt(Tag), then a single boolean byte for overlay.
+# GT: tools/PktSystemChatParity.java. content NOT optional (no present-bool).
+add_executable(pkt_system_chat_parity
+    network/protocol/game/PktSystemChatParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_system_chat_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_system_chat_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_system_chat_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_system_chat_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
