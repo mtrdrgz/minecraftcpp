@@ -151,9 +151,13 @@ inline bool veinRegrow(WorldGenLevel& level, const SculkHooks& hooks, BlockPos p
     return true;
 }
 
-// SculkVeinBlock.onDischarged (SculkVeinBlock.java:71-93).
-inline void veinOnDischarged(WorldGenLevel& level, const SculkHooks& hooks, BlockPos pos) {
-    MultifaceBlockState state = hooks.veinSpreader->hooks.getState(pos);
+// SculkVeinBlock.onDischarged (SculkVeinBlock.java:70-87). `state` is the CALLER'S
+// BlockState — the live read in attemptPlaceSculk's vein loop (SculkVeinBlock.java:
+// 121-127), but the cursor update's START-OF-UPDATE SNAPSHOT in the charge<=0 and
+// transfer paths (SculkSpreader.java:265,278,282) — attemptUseCharge's writes to
+// this very cell are NOT visible to those onDischarged calls.
+inline void veinOnDischarged(WorldGenLevel& level, const SculkHooks& hooks, BlockPos pos,
+                             MultifaceBlockState state) {
     if (state.block != "minecraft:sculk_vein") return;
     std::uint8_t faces = state.faces;
     for (int dir = 0; dir < 6; ++dir) {
@@ -246,8 +250,10 @@ inline bool veinAttemptPlaceSculk(WorldGenLevel& level, const SculkHooks& hooks,
         for (int dir = 0; dir < 6; ++dir) {
             if (dir == skip) continue;
             const BlockPos veinPos = multiface_detail::relative(supportPos, dir);
-            if (level.getBlockState(veinPos) == "minecraft:sculk_vein") {
-                veinOnDischarged(level, hooks, veinPos);
+            // possibleVeinBlock = a FRESH read per neighbour (SculkVeinBlock.java:122-126).
+            const MultifaceBlockState possibleVein = hooks.veinSpreader->hooks.getState(veinPos);
+            if (possibleVein.block == "minecraft:sculk_vein") {
+                veinOnDischarged(level, hooks, veinPos, possibleVein);
             }
         }
         return true;
@@ -311,7 +317,15 @@ inline void cursorUpdate(ChargeCursor& cursor, WorldGenLevel& level, const Sculk
         --cursor.updateDelay;
         return;
     }
-    std::string currentState = level.getBlockState(cursor.pos);
+    // `currentState` mirrors the Java local of the same name (SculkSpreader.java:265):
+    // it is a SNAPSHOT — re-read ONLY after attemptSpreadVein (when the behaviour can
+    // change the state, :268-271) and after a cursor transfer (:289), NOT after
+    // attemptUseCharge (whose attemptPlaceSculk spreads can rewrite this very cell).
+    // The final `facings = MultifaceBlock.availableFaces(currentState)` (:292-294)
+    // therefore reads the (possibly stale) snapshot's faces, so the snapshot must
+    // carry the full multiface state, not just the block id.
+    MultifaceBlockState currentMf = hooks.veinSpreader->hooks.getState(cursor.pos);
+    std::string currentState = currentMf.block;
     // getBlockBehaviour dispatch: 0 = DEFAULT, 1 = sculk, 2 = sculk_vein.
     auto behaviourOf = [](const std::string& s) {
         return s == "minecraft:sculk" ? 1 : s == "minecraft:sculk_vein" ? 2 : 0;
@@ -328,25 +342,26 @@ inline void cursorUpdate(ChargeCursor& cursor, WorldGenLevel& level, const Sculk
                                                      hooks.sameSpaceSpreader->hooks.getState(cursor.pos),
                                                      level, cursor.pos, /*postProcess=*/true) > 0;
             } else if (*cursor.facings != 0) {
-                const MultifaceBlockState existing = hooks.veinSpreader->hooks.getState(cursor.pos);
-                spread = (hooks.isAir(existing.block) || hooks.isWaterFluid(existing.block))
-                         && veinRegrow(level, hooks, cursor.pos, existing, *cursor.facings);
+                // `state` param = the update()'s currentState snapshot (SculkBehaviour
+                // .java:21; SculkSpreader.java:267) — currentMf here (no writes since).
+                spread = (hooks.isAir(currentMf.block) || hooks.isWaterFluid(currentMf.block))
+                         && veinRegrow(level, hooks, cursor.pos, currentMf, *cursor.facings);
             } else {
-                spread = multiface_detail::spreadAll(*hooks.veinSpreader,
-                                                     hooks.veinSpreader->hooks.getState(cursor.pos),
+                spread = multiface_detail::spreadAll(*hooks.veinSpreader, currentMf,
                                                      level, cursor.pos, /*postProcess=*/true) > 0;
             }
         } else {
-            // SculkBlock / SculkVeinBlock inherit the interface default (:56-58).
-            spread = multiface_detail::spreadAll(*hooks.veinSpreader,
-                                                 hooks.veinSpreader->hooks.getState(cursor.pos),
+            // SculkBlock / SculkVeinBlock inherit the interface default (:56-58),
+            // spreading from the snapshot state param.
+            spread = multiface_detail::spreadAll(*hooks.veinSpreader, currentMf,
                                                  level, cursor.pos, /*postProcess=*/true) > 0;
         }
         if (spread) {
             // canChangeBlockStateOnSpread: SculkBlock false (SculkBlock.java:103-106),
             // DEFAULT/vein true -> re-resolve the behaviour from the (possibly new) state.
             if (behaviour != 1) {
-                currentState = level.getBlockState(cursor.pos);
+                currentMf = hooks.veinSpreader->hooks.getState(cursor.pos);
+                currentState = currentMf.block;
                 behaviour = behaviourOf(currentState);
             }
         }
@@ -369,14 +384,16 @@ inline void cursorUpdate(ChargeCursor& cursor, WorldGenLevel& level, const Sculk
     }
 
     if (cursor.charge <= 0) {
-        // onDischarged: vein face cleanup; others no-op.
-        if (behaviour == 2) veinOnDischarged(level, hooks, cursor.pos);
+        // onDischarged(level, currentState, pos, random) — the START-OF-UPDATE
+        // SNAPSHOT, not a live re-read (SculkSpreader.java:277-279).
+        if (behaviour == 2) veinOnDischarged(level, hooks, cursor.pos, currentMf);
         return;
     }
     const std::optional<BlockPos> transferPos =
         getValidMovementPos(level, hooks, sculkReplaceableLevelTag, cursor.pos, random);
     if (transferPos.has_value()) {
-        if (behaviour == 2) veinOnDischarged(level, hooks, cursor.pos);
+        // onDischarged with the same snapshot (SculkSpreader.java:281-283).
+        if (behaviour == 2) veinOnDischarged(level, hooks, cursor.pos, currentMf);
         cursor.pos = *transferPos;
         // worldgen distance clamp (SculkSpreader.java:265-269): closerThan over
         // (origin.x, pos.y, origin.z), i.e. horizontal distance only.
@@ -385,13 +402,13 @@ inline void cursorUpdate(ChargeCursor& cursor, WorldGenLevel& level, const Sculk
             cursor.charge = 0;
             return;
         }
-        currentState = level.getBlockState(cursor.pos);
+        currentMf = hooks.veinSpreader->hooks.getState(cursor.pos);
+        currentState = currentMf.block;
     }
     if (currentState == "minecraft:sculk" || currentState == "minecraft:sculk_vein") {
-        // MultifaceBlock.availableFaces: face set of the (multiface) state; sculk
-        // (full block) has no face properties -> empty set.
-        const MultifaceBlockState st = hooks.veinSpreader->hooks.getState(cursor.pos);
-        cursor.facings = st.block == "minecraft:sculk_vein" ? availableFaces(st) : 0;
+        // MultifaceBlock.availableFaces(currentState) (SculkSpreader.java:292-294)
+        // over the SNAPSHOT (see above) — sculk (no face properties) -> empty set.
+        cursor.facings = currentMf.block == "minecraft:sculk_vein" ? availableFaces(currentMf) : 0;
     }
     // updateDecayDelay: DEFAULT max(age-1,0) only applies to the anon DEFAULT;
     // SculkBlock/SculkVeinBlock use the interface default (:67-69) == 1.

@@ -50,6 +50,8 @@
 #include "../../../../core/Math.h"           // BlockPos
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <optional>
 #include <set>
@@ -148,9 +150,11 @@ struct Config {
 
 // MultifaceBlock.isValidStateForPlacement (:191-198). isFaceSupported is true for
 // all six faces on GlowLichenBlock (MultifaceBlock.java:108 default).
-inline bool isValidStateForPlacement(WorldGenLevel& level, const MultifaceBlockState& oldState,
+// `oldState.is(this)` (:192) is the CONFIG's block — a sculk_vein under the
+// glow_lichen feature (or vice versa) is NOT "this" although it is multiface.
+inline bool isValidStateForPlacement(const Config& cfg, WorldGenLevel& level, const MultifaceBlockState& oldState,
                                      BlockPos placementPos, int placementDirection) {
-    if (!oldState.isPlaceBlock || !hasFace(oldState, placementDirection)) {
+    if (oldState.block != cfg.blockId || !hasFace(oldState, placementDirection)) {
         const BlockPos neighbourPos = relative(placementPos, placementDirection);
         static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
         return canAttachTo(level, neighbourPos, OPP[placementDirection]);
@@ -162,13 +166,13 @@ inline bool isValidStateForPlacement(WorldGenLevel& level, const MultifaceBlockS
 inline std::optional<MultifaceBlockState> getStateForPlacement(
         const Config& cfg, const MultifaceBlockState& oldState, WorldGenLevel& level,
         BlockPos placementPos, int placementDirection) {
-    if (!isValidStateForPlacement(level, oldState, placementPos, placementDirection)) {
+    if (!isValidStateForPlacement(cfg, level, oldState, placementPos, placementDirection)) {
         return std::nullopt;
     }
     MultifaceBlockState newState;
     newState.block = cfg.blockId;
     newState.isPlaceBlock = true;
-    if (oldState.isPlaceBlock) {
+    if (oldState.block == cfg.blockId) {                        // oldState.is(this)
         newState = oldState;                                    // :208-209
     } else if (oldState.block == "minecraft:water") {
         newState.waterlogged = true;                            // :210-211 (source water)
@@ -186,9 +190,11 @@ inline bool writeLichen(const Config& cfg, WorldGenLevel& level, BlockPos pos,
     return ok;
 }
 
-// MultifaceSpreader.DefaultSpreaderConfig.stateCanBeReplaced (:131-135).
-inline bool stateCanBeReplacedDefault(const MultifaceBlockState& existing) {
-    return existing.block == "minecraft:air" || existing.isPlaceBlock
+// MultifaceSpreader.DefaultSpreaderConfig.stateCanBeReplaced (:131-135):
+// existingState.isAir() || existingState.is(this.block) || water-source —
+// `this.block` is the CONFIG's block, not "any multiface block".
+inline bool stateCanBeReplacedDefault(const Config& cfg, const MultifaceBlockState& existing) {
+    return existing.block == "minecraft:air" || existing.block == cfg.blockId
         || existing.block == "minecraft:water";   // worldgen water is always a source
 }
 
@@ -214,7 +220,7 @@ inline bool stateCanBeReplacedSculk(const Config& cfg, WorldGenLevel& level, Blo
     const mc::material::FluidState fs = mc::material::fluidStateOf(existing.block);
     if (!fs.isEmpty() && fs.fluid != "minecraft:water") return false;
     if (cfg.isFireTag(existing.block)) return false;
-    return cfg.canBeReplaced(existing.block) || stateCanBeReplacedDefault(existing);
+    return cfg.canBeReplaced(existing.block) || stateCanBeReplacedDefault(cfg, existing);
 }
 
 // MultifaceSpreader.SpreadConfig.canSpreadInto dispatch (DefaultSpreaderConfig
@@ -224,9 +230,21 @@ inline bool canSpreadInto(const Config& cfg, WorldGenLevel& level, BlockPos sour
     const MultifaceBlockState existing = cfg.hooks.getState(spreadPos);
     const bool replaceable = cfg.sculkVeinConfig
         ? stateCanBeReplacedSculk(cfg, level, sourcePos, spreadPos, spreadFace, existing)
-        : stateCanBeReplacedDefault(existing);
-    return replaceable
-        && isValidStateForPlacement(level, existing, spreadPos, spreadFace);
+        : stateCanBeReplacedDefault(cfg, existing);
+    const bool valid = replaceable && isValidStateForPlacement(cfg, level, existing, spreadPos, spreadFace);
+    if (const char* dbg = std::getenv("MCPP_DBG_SPREADINTO")) {
+        int dx, dy, dz;
+        if (std::sscanf(dbg, "%d,%d,%d", &dx, &dy, &dz) == 3
+            && spreadPos.x == dx && spreadPos.y == dy && spreadPos.z == dz) {
+            fprintf(stderr, "SPREADINTO src=(%d,%d,%d) face=%d existing=%s/pb%d/f%02x repl=%d valid=%d against=%s neigh=%s\n",
+                    sourcePos.x, sourcePos.y, sourcePos.z, spreadFace,
+                    existing.block.c_str(), existing.isPlaceBlock ? 1 : 0, existing.faces,
+                    replaceable ? 1 : 0, valid ? 1 : 0,
+                    level.getBlockState(relative(spreadPos, spreadFace)).c_str(),
+                    level.getBlockState(relative(sourcePos, DIR_OPPOSITE[spreadFace])).c_str());
+        }
+    }
+    return valid;
 }
 
 // SculkVeinSpreaderConfig.isOtherBlockValidAsSource (SculkVeinBlock.java:183-185);
@@ -255,15 +273,26 @@ inline SpreadPos spreadPosFor(int type, BlockPos pos, int spreadDirection, int f
 inline std::optional<SpreadPos> getSpreadFromFaceTowardDirection(
         const Config& cfg, const MultifaceBlockState& state, WorldGenLevel& level,
         BlockPos pos, int startingFace, int spreadDirection) {
+    const char* dbg = std::getenv("MCPP_DBG_SPREAD");
+    int dbgX = 0, dbgY = 0, dbgZ = 0;
+    const bool dbgHit = dbg && std::sscanf(dbg, "%d,%d,%d", &dbgX, &dbgY, &dbgZ) == 3
+        && pos.x == dbgX && pos.y == dbgY && pos.z == dbgZ;
     if (DIR_AXIS[spreadDirection] == DIR_AXIS[startingFace]) return std::nullopt;       // :94-96
     if (isOtherBlockValidAsSource(cfg, state)
         || (hasFace(state, startingFace) && !hasFace(state, spreadDirection))) {        // :98
         for (int type : cfg.spreadTypes) {                                              // :99
             const SpreadPos sp = spreadPosFor(type, pos, spreadDirection, startingFace);
-            if (canSpreadInto(cfg, level, pos, sp.pos, sp.face)) {                      // :101
+            const bool ok = canSpreadInto(cfg, level, pos, sp.pos, sp.face);
+            if (dbgHit)
+                fprintf(stderr, "SPREAD\tF=%d D=%d type=%d -> (%d,%d,%d) face=%d : %s\n",
+                        startingFace, spreadDirection, type, sp.pos.x, sp.pos.y, sp.pos.z, sp.face,
+                        ok ? "ACCEPT" : "reject");
+            if (ok) {                                                                   // :101
                 return sp;
             }
         }
+    } else if (dbgHit) {
+        fprintf(stderr, "SPREAD\tF=%d D=%d : source-gate reject\n", startingFace, spreadDirection);
     }
     return std::nullopt;
 }
@@ -382,7 +411,9 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeMultifaceGrowth
                           cfg->validDirections.push_back(3); cfg->validDirections.push_back(4); }
 
     return [cfg](WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+        const bool dbg = std::getenv("MCPP_DBG_LICHEN") != nullptr && cfg->blockId == "minecraft:glow_lichen";
         const MultifaceBlockState originState = cfg->hooks.getState(origin);
+        if (dbg) fprintf(stderr, "LICHEN-POS (%d,%d,%d) origin=%s\n", origin.x, origin.y, origin.z, originState.block.c_str());
         if (!d::isAirOrWater(originState)) {                                            // :24-26
             return false;
         }
@@ -403,8 +434,8 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeMultifaceGrowth
                 // :40 — origin+dir each iteration (no outward walk), verbatim.
                 const BlockPos pos = d::relative(origin, searchDirection);
                 const MultifaceBlockState state = cfg->hooks.getState(pos);             // :41
-                if (!d::isAirOrWater(state) && !state.isPlaceBlock) {                   // :42-44
-                    break;
+                if (!d::isAirOrWater(state) && state.block != cfg->blockId) {            // :42-44
+                    break;                       // state.is(config.placeBlock) is config-specific
                 }
                 if (d::placeGrowthIfPossible(*cfg, level, pos, state, random, placementDirections)) {
                     return true;                                                        // :46-48

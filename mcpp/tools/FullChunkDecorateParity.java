@@ -339,6 +339,43 @@ public class FullChunkDecorateParity {
         source.listElements().forEach(holder -> registry.register(holder.key(), holder.value(), RegistrationInfo.BUILT_IN));
         return registry.freeze();
     }
+    // CONFIGURED_FEATURE registry for the proxy's registryAccess: PaleMossDecorator.place
+    // resolves VegetationFeatures.PALE_MOSS_PATCH through level.registryAccess()
+    // .lookup(Registries.CONFIGURED_FEATURE) (PaleMossDecorator.java:52-60). With a
+    // biome-only RegistryAccess that lookup is silently EMPTY and the decorator's
+    // ground moss patch never runs — diverging from the real server (proven by
+    // grass_block=>pale_moss_block GT<->server residuals in pale_garden).
+    static <T> Registry<T> copyRegistry(ResourceKey<? extends Registry<T>> key, HolderLookup.RegistryLookup<T> source) {
+        MappedRegistry<T> registry = new MappedRegistry<>(key, Lifecycle.stable());
+        source.listElements().forEach(holder -> registry.register(holder.key(), holder.value(), RegistrationInfo.BUILT_IN));
+        return registry.freeze();
+    }
+    // Minimal ServerLevel for ServerLevelAccessor.getLevel(): PaleMossDecorator's patch
+    // call evaluates level.getLevel().getChunkSource().getGenerator() (PaleMossDecorator
+    // .java:55-60; ServerLevel.java:196; ServerChunkCache.java:446-448; ChunkMap.java:
+    // 217-218 -> worldGenContext.generator()). Only that field chain is populated
+    // (Unsafe.allocateInstance: no constructors run); everything else stays the proxy.
+    static net.minecraft.server.level.ServerLevel FAKE_SERVER_LEVEL;
+    static void buildFakeServerLevel(net.minecraft.world.level.chunk.ChunkGenerator generator) throws Exception {
+        java.lang.reflect.Field uf = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        uf.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) uf.get(null);
+        net.minecraft.server.level.ChunkMap chunkMap = (net.minecraft.server.level.ChunkMap)
+            unsafe.allocateInstance(net.minecraft.server.level.ChunkMap.class);
+        java.lang.reflect.Field wgc = net.minecraft.server.level.ChunkMap.class.getDeclaredField("worldGenContext");
+        wgc.setAccessible(true);
+        wgc.set(chunkMap, new net.minecraft.world.level.chunk.status.WorldGenContext(null, generator, null, null, null, null));
+        net.minecraft.server.level.ServerChunkCache chunkSource = (net.minecraft.server.level.ServerChunkCache)
+            unsafe.allocateInstance(net.minecraft.server.level.ServerChunkCache.class);
+        java.lang.reflect.Field cm = net.minecraft.server.level.ServerChunkCache.class.getDeclaredField("chunkMap");
+        cm.setAccessible(true);
+        cm.set(chunkSource, chunkMap);
+        FAKE_SERVER_LEVEL = (net.minecraft.server.level.ServerLevel)
+            unsafe.allocateInstance(net.minecraft.server.level.ServerLevel.class);
+        java.lang.reflect.Field cs = net.minecraft.server.level.ServerLevel.class.getDeclaredField("chunkSource");
+        cs.setAccessible(true);
+        cs.set(FAKE_SERVER_LEVEL, chunkSource);
+    }
     static Aquifer.FluidPicker fluidPicker(NoiseGeneratorSettings settings) {
         Aquifer.FluidStatus lavaStatus = new Aquifer.FluidStatus(-54, Blocks.LAVA.defaultBlockState());
         int seaLevel = settings.seaLevel();
@@ -408,7 +445,9 @@ public class FullChunkDecorateParity {
 
         HolderLookup.Provider provider = VanillaRegistries.createLookup();
         Registry<Biome> biomeRegistry = copyBiomeRegistry(provider.lookupOrThrow(Registries.BIOME));
-        RegistryAccess registries = new RegistryAccess.ImmutableRegistryAccess(List.of(biomeRegistry)).freeze();
+        Registry<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> configuredFeatureRegistry =
+            copyRegistry(Registries.CONFIGURED_FEATURE, provider.lookupOrThrow(Registries.CONFIGURED_FEATURE));
+        RegistryAccess registries = new RegistryAccess.ImmutableRegistryAccess(List.of(biomeRegistry, configuredFeatureRegistry)).freeze();
 
         Holder<NoiseGeneratorSettings> settingsHolder =
             provider.lookupOrThrow(Registries.NOISE_SETTINGS).getOrThrow(NoiseGeneratorSettings.OVERWORLD);
@@ -418,6 +457,7 @@ public class FullChunkDecorateParity {
                 .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD);
         BIOMES = MultiNoiseBiomeSource.createFromPreset(overworldPreset);
         GEN = new NoiseBasedChunkGenerator(BIOMES, settingsHolder);
+        buildFakeServerLevel(GEN);
         LevelHeightAccessor height = LevelHeightAccessor.create(settings.noiseSettings().minY(), settings.noiseSettings().height());
         WorldGenerationContext surfaceContext = new WorldGenerationContext(GEN, height);
         final int minY = height.getMinY();
@@ -479,6 +519,27 @@ public class FullChunkDecorateParity {
             chunk.setPersistedStatus(ChunkStatus.BIOMES);
             CHUNKS.put(ckey(ncx, ncz), chunk);
         }
+        // Debug: dump the PASS-A store (diffable against the C++ MCPP_DUMP_BIOME_STORE)
+        // and, optionally, zoomed BiomeManager lookups (MCPP_DBG_ZOOM="x,y,z;x,y,z;...").
+        if (System.getenv("MCPP_DUMP_BIOME_STORE") != null) {
+            for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
+                ProtoChunk cc = chunkAt(Cx + dx, Cz + dz);
+                if (cc == null) continue;
+                for (int qx = (Cx + dx) * 4; qx < (Cx + dx) * 4 + 4; qx++)
+                    for (int qz = (Cz + dz) * 4; qz < (Cz + dz) * 4 + 4; qz++)
+                        for (int qy = minY >> 2; qy <= (maxY >> 2) - 1; qy++)
+                            ERR.println("STORE\t" + qx + "\t" + qy + "\t" + qz + "\t"
+                                + cc.getNoiseBiome(qx, qy, qz).unwrapKey().get().identifier());
+            }
+        }
+        if (System.getenv("MCPP_DBG_ZOOM") != null) {
+            for (String c : System.getenv("MCPP_DBG_ZOOM").split(";")) {
+                String[] p = c.split(",");
+                BlockPos zp = new BlockPos(Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]));
+                ERR.println("ZOOM\t" + zp.getX() + "\t" + zp.getY() + "\t" + zp.getZ() + "\t"
+                    + chunkCacheBiomeManager.getBiome(zp).unwrapKey().get().identifier());
+            }
+        }
         // PASS B — NOISE + SURFACE + CARVERS for the terrain square.
         for (int dx = -terrainRadius; dx <= terrainRadius; dx++) for (int dz = -terrainRadius; dz <= terrainRadius; dz++) {
             int ncx = Cx + dx, ncz = Cz + dz;
@@ -487,6 +548,22 @@ public class FullChunkDecorateParity {
             // NoiseChunk + aquifer and primes WORLD_SURFACE_WG/OCEAN_FLOOR_WG.
             GEN.fillFromNoise(Blender.empty(), randomState, noStructures, chunk).get();
             GEN.buildSurface(chunk, surfaceContext, randomState, null, chunkCacheBiomeManager, biomeRegistry, Blender.empty());
+            // Debug: post-surface column dump (MCPP_DBG_SURFCOL="x,z;x,z;..."):
+            // startingHeight (as the real buildSurface computed it), the zoomed surface
+            // biome at that height, and the y=40..90 column states.
+            if (System.getenv("MCPP_DBG_SURFCOL") != null) {
+                for (String c : System.getenv("MCPP_DBG_SURFCOL").split(";")) {
+                    String[] p = c.split(",");
+                    int sx = Integer.parseInt(p[0]), sz = Integer.parseInt(p[1]);
+                    if ((sx >> 4) != ncx || (sz >> 4) != ncz) continue;
+                    int sh = chunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, sx & 15, sz & 15) + 1;
+                    ERR.println("SURFCOL\t" + sx + "," + sz + "\tstartingHeight=" + sh + "\tzoom="
+                        + chunkCacheBiomeManager.getBiome(new BlockPos(sx, sh, sz)).unwrapKey().get().identifier());
+                    for (int y = 40; y <= 90; y++)
+                        ERR.println("SURFCEL\t" + sx + "\t" + y + "\t" + sz + "\t"
+                            + blockId(chunk.getBlockState(new BlockPos(sx, y, sz))));
+                }
+            }
             applyCarvers(GEN, BIOMES, registries, height, settings, SEED, randomState, chunkCacheBiomeManager, chunk);
             // NOTE: the non-WG heightmaps are primed PER CHUNK at its own decoration turn
             // (inside decorate(), exactly as ChunkStatusTasks.generateFeatures does), NOT
@@ -522,7 +599,7 @@ public class FullChunkDecorateParity {
             String[] dc = System.getenv("MCPP_DBG_CHUNK").split(",");
             DBG_CX = Integer.parseInt(dc[0]); DBG_CZ = Integer.parseInt(dc[1]);
         }
-        if (DEBUG) {
+        if (DEBUG || System.getenv("MCPP_TRACE_WRITES") != null || System.getenv("MCPP_DBG_OK") != null) {
             PF_ID = new HashMap<>();
             provider.lookupOrThrow(Registries.PLACED_FEATURE).listElements()
                 .forEach(h -> PF_ID.put(h.value(), h.key().identifier().toString()));
@@ -652,7 +729,8 @@ public class FullChunkDecorateParity {
                 for (int globalIndexOfFeature : indexArray) {
                     PlacedFeature feature = sfd.features().get(globalIndexOfFeature);
                     random.setFeatureSeed(decorationSeed, globalIndexOfFeature, stepIndex);
-                    if (DEBUG) { CUR_STEP = stepIndex; CUR_FEATURE_ID = PF_ID.getOrDefault(feature, "?#" + globalIndexOfFeature); }
+                    CUR_STEP = stepIndex;
+                    CUR_FEATURE_ID = PF_ID != null ? PF_ID.getOrDefault(feature, "?#" + globalIndexOfFeature) : ("?#" + globalIndexOfFeature);
                     if (DEBUG && CUR_FEATURE_ID.contains("lake_lava")) {
                         WorldgenRandom r2 = new WorldgenRandom(new XoroshiroRandomSource(1L));
                         r2.setFeatureSeed(decorationSeed, globalIndexOfFeature, stepIndex);
@@ -695,6 +773,12 @@ public class FullChunkDecorateParity {
                     }
                     if (!WATCH.isEmpty()) watchPoll("turn=" + ncx + "," + ncz + " step=" + stepIndex + " gi=" + globalIndexOfFeature
                         + " " + (PF_ID != null ? PF_ID.getOrDefault(feature, "?") : "?"));
+                    // Debug: per-feature-run placement result, diffable against the C++
+                    // harness's MCPP_DBG_OK output (first ok-flag divergence = first RNG
+                    // divergence inside the shared-RandomSource placement chain).
+                    if (System.getenv("MCPP_DBG_OK") != null)
+                        ERR.println("OK\t" + ncx + "," + ncz + "\t" + stepIndex + "\t" + globalIndexOfFeature
+                            + "\t" + (PF_ID != null ? PF_ID.getOrDefault(feature, "?") : "?") + "\t" + (ok ? 1 : 0));
                     if (DEBUG && ncx == DBG_CX && ncz == DBG_CZ) {
                         String id = PF_ID.getOrDefault(feature, "?#" + globalIndexOfFeature);
                         if (id.contains("lake") || id.contains("seagrass") || id.contains("spring") || id.contains("kelp"))
@@ -727,6 +811,16 @@ public class FullChunkDecorateParity {
                         if (DEBUG && (p.getX() >> 4) == DBG_CX && (p.getZ() >> 4) == DBG_CZ)
                             ERR.println("PUT\t" + CUR_CX + "," + CUR_CZ + "\t" + CUR_STEP + "\t" + CUR_FEATURE_ID + "\t" + p.getX() + "\t" + p.getY() + "\t" + p.getZ()
                                 + "\t" + ((BlockState) a[1]).getBlock().builtInRegistryHolder().key().identifier());
+                        // Write trace diffable against the C++ MCPP_TRACE_WRITES (any
+                        // destination chunk; filter = substring of the placed feature id).
+                        // MCPP_TRACE_STATES additionally prints the FULL state string
+                        // (properties included — face evolution of multiface blocks).
+                        String twf = System.getenv("MCPP_TRACE_WRITES");
+                        if (twf != null && CUR_FEATURE_ID.contains(twf))
+                            ERR.println("JPUT\t" + CUR_CX + "," + CUR_CZ + "\t" + CUR_FEATURE_ID + "\t" + p.getX() + "\t" + p.getY() + "\t" + p.getZ()
+                                + "\t" + (System.getenv("MCPP_TRACE_STATES") != null
+                                    ? a[1].toString()
+                                    : ((BlockState) a[1]).getBlock().builtInRegistryHolder().key().identifier().toString()));
                         BlockState st = (BlockState) a[1];
                         int flags = (a.length > 2 && a[2] instanceof Integer) ? (Integer) a[2] : 0;
                         c.setBlockState(p, st, flags);
@@ -817,6 +911,9 @@ public class FullChunkDecorateParity {
                     case "getNoiseBiome": { int qx = (Integer) a[0], qy = (Integer) a[1], qz = (Integer) a[2]; ProtoChunk c = chunkAt(QuartPos.toSection(qx), QuartPos.toSection(qz)); return c != null ? c.getNoiseBiome(qx, qy, qz) : BIOMES.getNoiseBiome(qx, qy, qz, randomState.sampler()); }
                     case "getUncachedNoiseBiome": return BIOMES.getNoiseBiome((Integer) a[0], (Integer) a[1], (Integer) a[2], randomState.sampler());
                     case "registryAccess": return registries;
+                    // ServerLevelAccessor.getLevel: the minimal Unsafe ServerLevel whose only
+                    // live path is getChunkSource().getGenerator() (PaleMossDecorator's patch).
+                    case "getLevel": return FAKE_SERVER_LEVEL;
                     case "getRandom": return REGION_RANDOM; // WorldGenRegion.java:386-388
                     case "setCurrentlyGenerating": return null;
                     case "isOutsideBuildHeight":
@@ -830,8 +927,8 @@ public class FullChunkDecorateParity {
                     // path never reaches getLevel()/difficulty (no entities, no nbt
                     // block entities in the fossil templates) — keep them as hard
                     // tripwires so any new structure use fails loudly.
-                    case "getLevel": throw new UnsupportedOperationException(
-                        "ServerLevelAccessor.getLevel: not available in the harness (fossil placeInWorld must not need it)");
+                    // (getLevel used to be a tripwire too; it now returns the minimal
+                    // Unsafe ServerLevel above for PaleMossDecorator's generator chain.)
                     case "getCurrentDifficultyAt": throw new UnsupportedOperationException(
                         "ServerLevelAccessor.getCurrentDifficultyAt: not available in the harness");
                     case "toString": return "MultiChunkWorldGenLevel";

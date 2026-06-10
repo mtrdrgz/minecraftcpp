@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 namespace mc::levelgen {
 
@@ -115,20 +117,23 @@ void SurfaceSystem::buildSurface(
             const int blockZ = minBlockZ + z;
 
             // startingHeight = Java's (getHeight(WORLD_SURFACE_WG, x, z) + 1)
-            // Our heightmap() returns topmost solid Y; Java getHeight() returns topmost+1.
-            // So startingHeight = topmost + 1 + 1 = heightmap + 2? Actually the Java adds
-            // +1 for the first-air offset already encoded in getHeight(), then SurfaceSystem
-            // adds another +1 as a safety margin → two blocks above topmost solid block.
-            const int startingHeight = chunk.heightmap(x, z) + 2;
+            // (SurfaceSystem.java:110). ChunkAccess.getHeight returns
+            // heightmap.getFirstAvailable(x,z) - 1 == the TOPMOST stored y
+            // (ChunkAccess.java:182-194) — NOT the WorldGenRegion stored+1 semantics.
+            // Our heightmap() returns the same topmost non-air y, so
+            // startingHeight = heightmap + 1. (A former +2 here sampled the zoomed
+            // surface biome one block too high, flipping fiddle-border columns:
+            // frozen_river vs frozen_ocean decides the frozenOceanExtension pillars.)
+            const int startingHeight = chunk.heightmap(x, z) + 1;
 
-            // Biome-specific pre-passes (require biome system — skipped until biomes land)
+            // Biome-specific pre-passes (SurfaceSystem.java:112-115)
             const std::string biome = biomeGetter(blockX, startingHeight, blockZ);
             if (biome == "minecraft:eroded_badlands") {
                 erodedBadlandsExtension(chunk, blockX, blockZ, startingHeight);
             }
 
-            // Re-read height after possible extension
-            const int height = chunk.heightmap(x, z) + 2;
+            // Re-read height after possible extension (SurfaceSystem.java:117)
+            const int height = chunk.heightmap(x, z) + 1;
 
             ctx.updateXZ(blockX, blockZ);
             int stoneAboveDepth = 0;
@@ -271,6 +276,13 @@ void SurfaceSystem::frozenOceanExtension(int minSurfaceLevel, const std::string&
         std::abs(m_icebergSurfaceNoise->getValue(blockX, 0.0, blockZ) * 8.25),
         m_icebergPillarNoise->getValue(blockX * 1.28, 0.0, blockZ * 1.28) * 15.0
     );
+    if (std::getenv("MCPP_DBG_ICEBERG") != nullptr) {
+        std::fprintf(stderr, "ICEBERG\t%d\t%d\t%s\th=%d\ticeberg=%.17g\tsurf=%.17g\tpillar=%.17g\tmelt=%d\n",
+                     blockX, blockZ, biome.c_str(), height, iceberg,
+                     m_icebergSurfaceNoise->getValue(blockX, 0.0, blockZ),
+                     m_icebergPillarNoise->getValue(blockX * 1.28, 0.0, blockZ * 1.28),
+                     (int)shouldMeltFrozenOceanIcebergSlightly(biome, blockX, blockZ));
+    }
     if (iceberg <= 1.8) return;
 
     double icebergRoof = std::abs(m_icebergPillarRoofNoise->getValue(blockX * 1.17, 0.0, blockZ * 1.17) * 1.5);

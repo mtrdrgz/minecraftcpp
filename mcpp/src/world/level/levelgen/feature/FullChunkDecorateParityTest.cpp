@@ -257,6 +257,14 @@ MultiChunkLevel* g_level = nullptr;
 std::string g_curFeatureKey = "?";
 int g_curTurnCx = 0, g_curTurnCz = 0;
 
+// WorldGenRegion.getRandom() (WorldGenRegion.java:69,86,386-388): one stateful
+// RandomSource per decoration turn, from the "minecraft:worldgen_region_random"
+// positional factory at the decorating chunk's getWorldPosition() (minBlockX, 0,
+// minBlockZ). Reset at every turn start, exactly as the Java GT's REGION_RANDOM
+// (FullChunkDecorateParity.java:646). Sole worldgen consumer: MossyCarpetBlock
+// .placeAt's topper nextBoolean draws (SimpleBlockFeature.java:33-35).
+std::shared_ptr<RandomSource> g_regionRandom;
+
 // ---- minimal loaders (throw on anything else: fail-closed) ----
 IntProviderPtr loadIntProvider(const json& j) {
     if (j.is_number_integer()) return ConstantInt::of(j.get<int>());
@@ -872,6 +880,9 @@ public:
         const std::string block = mc::block::blockName(state);
         c->setBlock(p.x, p.y, p.z, mc::getDefaultBlockStateId(stripNs(block), m_airId));
         m_multiface.erase(std::make_tuple(p.x, p.y, p.z));
+        // pale_moss_carpet BASE/side properties live in the carpet side map: any
+        // overwrite invalidates the entry (the carpet placeAt re-registers its own).
+        m_carpet.erase(std::make_tuple(p.x, p.y, p.z));
         // Leaf DISTANCE side map: tree foliage providers place distance=7 leaves
         // (the configured foliage states); TreeFeature.updateLeaves rewrites the
         // property via setLeafDistance. Overwrites drop the record.
@@ -994,6 +1005,21 @@ public:
     }
     void putMultifaceState(BlockPos p, std::uint8_t faces, bool waterlogged) {
         m_multiface[std::make_tuple(p.x, p.y, p.z)] = { faces, waterlogged };
+    }
+
+    // ---- pale_moss_carpet (MossyCarpetBlock) BASE + wall-side property map ----
+    // sides indexed NORTH,EAST,SOUTH,WEST (Direction.Plane.HORIZONTAL order,
+    // Direction.java:577); values 0=NONE 1=LOW 2=TALL (WallSide).
+    struct CarpetState { bool base = true; std::array<std::uint8_t, 4> sides{ 0, 0, 0, 0 }; };
+    std::optional<CarpetState> carpetStateAt(BlockPos p) const {
+        if (getBlockState(p) != "minecraft:pale_moss_carpet") return std::nullopt;
+        auto it = m_carpet.find(std::make_tuple(p.x, p.y, p.z));
+        if (it == m_carpet.end())
+            throw std::logic_error("pale_moss_carpet without property record (carpet side map out of sync)");
+        return it->second;
+    }
+    void putCarpetState(BlockPos p, const CarpetState& s) {
+        m_carpet[std::make_tuple(p.x, p.y, p.z)] = s;
     }
 
     // BlockState.canSurvive(level, pos) for the block set the ported features gate
@@ -1336,12 +1362,111 @@ private:
     bool m_bulkWriting = false;
     std::unordered_map<std::int64_t, std::vector<Mark>> m_marks;
     std::map<std::tuple<int, int, int>, std::pair<std::uint8_t, bool>> m_multiface;
+    std::map<std::tuple<int, int, int>, CarpetState> m_carpet;
     std::map<std::tuple<int, int, int>, int> m_leafDistance;
     std::map<std::tuple<int, int, int>, std::uint8_t> m_vineFaces;
     std::map<std::tuple<int, int, int>, int> m_facing;   // cocoa / coral wall fans
     bool m_postprocessing = false;
     int m_minY, m_maxY, m_dcx = 0, m_dcz = 0; std::uint32_t m_airId{};
 };
+
+// ============================ MossyCarpetBlock (pale_moss_carpet) ============================
+// 1:1 port of MossyCarpetBlock.placeAt + getUpdatedState + createTopperWithSideChance
+// + hasFaces (MossyCarpetBlock.java:109-208) over the harness carpet side map. The
+// grid stores the block id; BASE + the four WallSide properties live in m_carpet.
+// Direction.Plane.HORIZONTAL iteration order = NORTH, EAST, SOUTH, WEST
+// (Direction.java:577) == tree dirs {2, 5, 3, 4}.
+namespace mossy_carpet {
+
+using CarpetState = MultiChunkLevel::CarpetState;
+inline constexpr int HORIZ[4] = { 2, 5, 3, 4 };          // N, E, S, W (tree encoding)
+inline constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+
+// MossyCarpetBlock.canSupportAtFace (:123-125): UP -> false; else
+// MultifaceBlock.canAttachTo(level, pos, direction) (MultifaceBlock.java:250-261).
+inline bool canSupportAtFace(MultiChunkLevel& level, BlockPos pos, int dir) {
+    if (dir == 1) return false;   // Direction.UP
+    return mc::levelgen::feature::multiface_detail::canAttachTo(
+        level, mc::levelgen::feature::treeRelative(pos, dir), OPP[dir]);
+}
+
+// MossyCarpetBlock.hasFaces (:109-121).
+inline bool hasFaces(const CarpetState& s) {
+    if (s.base) return true;
+    for (int i = 0; i < 4; ++i) if (s.sides[i] != 0) return true;
+    return false;
+}
+
+// MossyCarpetBlock.getUpdatedState (:127-159). WallSide: 0=NONE 1=LOW 2=TALL.
+inline CarpetState getUpdatedState(MultiChunkLevel& level, CarpetState state, BlockPos pos, bool createSides) {
+    std::optional<CarpetState> aboveState; bool aboveLoaded = false;
+    std::optional<CarpetState> belowState; bool belowLoaded = false;
+    createSides |= state.base;
+    for (int i = 0; i < 4; ++i) {
+        const int dir = HORIZ[i];
+        std::uint8_t side = canSupportAtFace(level, pos, dir) ? (createSides ? 1 : state.sides[i]) : 0;
+        if (side == 1) {
+            if (!aboveLoaded) {
+                aboveState = level.carpetStateAt(BlockPos{ pos.x, pos.y + 1, pos.z });
+                aboveLoaded = true;
+            }
+            // aboveState.is(PALE_MOSS_CARPET) && getValue(property)!=NONE && !getValue(BASE)
+            if (aboveState && aboveState->sides[i] != 0 && !aboveState->base) side = 2;
+            if (!state.base) {
+                if (!belowLoaded) {
+                    belowState = level.carpetStateAt(BlockPos{ pos.x, pos.y - 1, pos.z });
+                    belowLoaded = true;
+                }
+                if (belowState && belowState->sides[i] == 0) side = 0;
+            }
+        }
+        state.sides[i] = side;
+    }
+    return state;
+}
+
+// MossyCarpetBlock.createTopperWithSideChance (:189-208). Returns the topper state
+// to place above, or nullopt for the AIR result.
+inline std::optional<CarpetState> createTopperWithSideChance(
+        MultiChunkLevel& level, BlockPos pos, const std::function<bool()>& sideSurvivalTest,
+        const std::function<bool(const std::string&)>& canBeReplaced) {
+    const BlockPos above{ pos.x, pos.y + 1, pos.z };
+    const std::string abovePrevId = level.getBlockState(above);
+    const std::optional<CarpetState> abovePrev = level.carpetStateAt(above);
+    const bool isMossyCarpetAbove = abovePrev.has_value();
+    if ((!isMossyCarpetAbove || !abovePrev->base) && (isMossyCarpetAbove || canBeReplaced(abovePrevId))) {
+        CarpetState noCarpetBase; noCarpetBase.base = false;   // default.setValue(BASE, false)
+        CarpetState aboveState = getUpdatedState(level, noCarpetBase, above, true);
+        for (int i = 0; i < 4; ++i) {
+            if (aboveState.sides[i] != 0 && !sideSurvivalTest()) aboveState.sides[i] = 0;
+        }
+        // hasFaces(aboveState) && aboveState != abovePreviousState (BlockState compare:
+        // a non-carpet abovePreviousState is trivially unequal).
+        const bool unequal = !isMossyCarpetAbove
+            || abovePrev->base != aboveState.base || abovePrev->sides != aboveState.sides;
+        if (hasFaces(aboveState) && unequal) return aboveState;
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+// MossyCarpetBlock.placeAt(level, pos, level.getRandom(), 2) (:166-176).
+inline void placeAt(MultiChunkLevel& level, BlockPos pos,
+                    const std::function<bool(const std::string&)>& canBeReplaced) {
+    CarpetState simpleCarpetLayer;   // defaultBlockState(): BASE=true, sides NONE
+    const CarpetState adjustedCarpetLayer = getUpdatedState(level, simpleCarpetLayer, pos, true);
+    if (level.setBlockChecked(pos, "minecraft:pale_moss_carpet", 2)) level.putCarpetState(pos, adjustedCarpetLayer);
+    const std::optional<CarpetState> topper = createTopperWithSideChance(
+        level, pos, [] { return g_regionRandom->nextBoolean(); }, canBeReplaced);
+    if (topper) {
+        const BlockPos above{ pos.x, pos.y + 1, pos.z };
+        if (level.setBlockChecked(above, "minecraft:pale_moss_carpet", 2)) level.putCarpetState(above, *topper);
+        const CarpetState updateBottomCarpet = getUpdatedState(level, adjustedCarpetLayer, pos, true);
+        if (level.setBlockChecked(pos, "minecraft:pale_moss_carpet", 2)) level.putCarpetState(pos, updateBottomCarpet);
+    }
+}
+
+} // namespace mossy_carpet
 
 // ============================ FULL-promotion post-processing ============================
 // Mirrors the Java harness postProcessChunk (FullChunkDecorateParity.java:392-424),
@@ -1503,10 +1628,22 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
         return bs;
     }
     // MossyCarpetBlock.updateShape (MossyCarpetBlock.java:211-227): !canSurvive ->
-    // AIR; getUpdatedState side growth is property-only (id unchanged; worldgen
-    // places bottom=true so hasFaces stays true).
+    // AIR (canSurvive :104-107: BASE -> !below.isAir(); topper -> below is a BASE
+    // carpet); then getUpdatedState(state, level, pos, false) recomputes the sides
+    // (id-invisible, side map updated) and !hasFaces -> AIR.
     if (bs == "minecraft:pale_moss_carpet") {
-        return level.canSurvive(bs, pos) ? bs : "minecraft:air";
+        const std::optional<MultiChunkLevel::CarpetState> st = level.carpetStateAt(pos);
+        const BlockPos below{ pos.x, pos.y - 1, pos.z };
+        if (st->base) {
+            if (mc::block::isAirBlock(level.getBlockState(below))) return "minecraft:air";
+        } else {
+            const std::optional<MultiChunkLevel::CarpetState> belowSt = level.carpetStateAt(below);
+            if (!belowSt || !belowSt->base) return "minecraft:air";
+        }
+        const MultiChunkLevel::CarpetState updated = mossy_carpet::getUpdatedState(level, *st, pos, false);
+        if (!mossy_carpet::hasFaces(updated)) return "minecraft:air";
+        level.putCarpetState(pos, updated);
+        return bs;
     }
     // SeaPickleBlock.updateShape (SeaPickleBlock.java:75-94): !canSurvive -> AIR
     // (direction-independent).
@@ -2478,7 +2615,15 @@ int main(int argc, char** argv) {
                 auto inner = mc::levelgen::feature::makeSimpleBlockPlacer(
                     loadStateProvider(cc.at("to_place")),
                     [](const std::string& s) { return mc::block::isDoublePlant(s); },
-                    [](const std::string& s) { return mc::block::isAirBlock(s); });
+                    [](const std::string& s) { return mc::block::isAirBlock(s); },
+                    [](const std::string& s) { return mc::block::blockName(s) == "minecraft:pale_moss_carpet"; },
+                    [](WorldGenLevel&, BlockPos origin) {
+                        // MossyCarpetBlock.placeAt(level, origin, level.getRandom(), 2)
+                        // (SimpleBlockFeature.java:33-35; MossyCarpetBlock.java:166-176).
+                        mossy_carpet::placeAt(*g_level, origin, [](const std::string& s) {
+                            return g_tags->isInTag(mc::block::blockName(s), "minecraft:replaceable");
+                        });
+                    });
                 if (!scheduleTick) {
                     placer = std::move(inner);
                 } else {
@@ -3097,6 +3242,17 @@ int main(int argc, char** argv) {
             const std::array<int, 3> q = BiomeManager::debugSelectQuart(zoomSeed, bx, by, bz);
             return storeNoiseBiome(q[0], q[1], q[2]);
         };
+        // Debug: zoomed lookups (diffable vs the Java GT's MCPP_DBG_ZOOM).
+        if (const char* zenv = std::getenv("MCPP_DBG_ZOOM")) {
+            std::stringstream zss(zenv);
+            std::string cell;
+            while (std::getline(zss, cell, ';')) {
+                int zx, zy, zz;
+                if (std::sscanf(cell.c_str(), "%d,%d,%d", &zx, &zy, &zz) == 3)
+                    std::cout << "ZOOM\t" << zx << "\t" << zy << "\t" << zz << "\t"
+                              << storeZoomBiome(zx, zy, zz) << "\n";
+            }
+        }
 
         // ---- PASS B: 5x5 terrain (inner 3x3 decorated; outer ring for neighbour
         // reads), dx OUTER / dz INNER exactly as the Java GT terrain pass (:408-423).
@@ -3148,9 +3304,20 @@ int main(int argc, char** argv) {
         // ground truth are confounded at borders by unported families overwriting cells;
         // they converge to a true 1:1 measure only as the remaining families are ported.
         // Do not tune the order against these numbers.
+        // RandomState.getOrCreateRandomFactory("minecraft:worldgen_region_random")
+        // (RandomState.java; WorldGenRegion.java:77,86): root Xoroshiro(seed)
+        // .forkPositional().fromHashOf(id).forkPositional(). Overworld settings use
+        // the Xoroshiro source (useLegacyRandomSource=false).
+        const std::shared_ptr<PositionalRandomFactory> regionRandomFactory =
+            std::make_shared<XoroshiroRandomSource>(static_cast<std::uint64_t>(seed))
+                ->forkPositional()->fromHashOf("minecraft:worldgen_region_random")->forkPositional();
         for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
             const int nx = Cx + dx, nz = Cz + dz;
             level.setDecorating(nx, nz);
+            // Fresh per-region random for this chunk's FEATURES turn at the chunk's
+            // getWorldPosition() (WorldGenRegion.java:86; GT: FullChunkDecorateParity
+            // .java decorate() REGION_RANDOM reset).
+            g_regionRandom = regionRandomFactory->at(nx * 16, 0, nz * 16);
             if (const char* wh = std::getenv("MCPP_WATCH_HEIGHT")) {
                 int wx, wz;
                 if (std::sscanf(wh, "%d,%d", &wx, &wz) == 2)
@@ -3193,6 +3360,10 @@ int main(int argc, char** argv) {
                     random.setFeatureSeed(deco, index, step);
                     g_curFeatureKey = normKey; g_curTurnCx = nx; g_curTurnCz = nz;
                     const bool any = placed->place(level, random, BlockPos{ nx * 16, 0, nz * 16 }, minY, maxY - minY);
+                    // Debug: per-feature-run result, diffable vs the Java GT's MCPP_DBG_OK.
+                    if (std::getenv("MCPP_DBG_OK") != nullptr)
+                        std::cerr << "OK\t" << nx << "," << nz << "\t" << step << "\t" << index
+                                  << "\t" << normKey << "\t" << (any ? 1 : 0) << "\n";
                     if (step == (int)GenerationStep::VEGETAL_DECORATION) { ++g_vegRuns; if (any) ++g_vegPlacedOk; }
                     else { ++g_oreRuns; if (any) ++g_orePlacedOk; }
                 }
