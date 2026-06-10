@@ -2354,7 +2354,7 @@ net/minecraft/core/HolderSet.java	unvisited
 net/minecraft/core/IdMap.java	unvisited	
 net/minecraft/core/IdMapper.java	unvisited	
 net/minecraft/core/LayeredRegistryAccess.java	unvisited	
-net/minecraft/core/MappedRegistry.java	unvisited	
+net/minecraft/core/MappedRegistry.java	partial	registry-id wire layer (getId order) ported+gated via mc::net::NetworkRegistries + network_registries_parity (2386/0); full object data/codecs pending; commit e65ed398
 net/minecraft/core/NonNullList.java	unvisited	
 net/minecraft/core/Position.java	unvisited	
 net/minecraft/core/QuartPos.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
@@ -2814,7 +2814,7 @@ net/minecraft/network/chat/numbers/NumberFormatTypes.java	unvisited
 net/minecraft/network/chat/numbers/StyledFormat.java	unvisited	
 net/minecraft/network/chat/numbers/package-info.java	unvisited	
 net/minecraft/network/chat/package-info.java	unvisited	
-net/minecraft/network/codec/ByteBufCodecs.java	unvisited	
+net/minecraft/network/codec/ByteBufCodecs.java	partial	registry-id wire layer (getId order) ported+gated via mc::net::NetworkRegistries + network_registries_parity (2386/0); full object data/codecs pending; commit e65ed398
 net/minecraft/network/codec/IdDispatchCodec.java	unvisited	
 net/minecraft/network/codec/StreamCodec.java	unvisited	
 net/minecraft/network/codec/StreamDecoder.java	unvisited	
@@ -2882,7 +2882,7 @@ net/minecraft/network/protocol/cookie/ServerCookiePacketListener.java	unvisited
 net/minecraft/network/protocol/cookie/ServerboundCookieResponsePacket.java	unvisited	
 net/minecraft/network/protocol/cookie/package-info.java	unvisited	
 net/minecraft/network/protocol/game/ClientGamePacketListener.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
 net/minecraft/network/protocol/game/ClientboundAnimatePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundAwardStatsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundBlockChangedAckPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
@@ -2956,7 +2956,7 @@ net/minecraft/network/protocol/game/ClientboundRecipeBookAddPacket.java	unvisite
 net/minecraft/network/protocol/game/ClientboundRecipeBookRemovePacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundRecipeBookSettingsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundRemoveEntitiesPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
-net/minecraft/network/protocol/game/ClientboundRemoveMobEffectPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundRemoveMobEffectPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
 net/minecraft/network/protocol/game/ClientboundResetScorePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundRespawnPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundRotateHeadPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
@@ -2992,8 +2992,8 @@ net/minecraft/network/protocol/game/ClientboundSetSubtitleTextPacket.java	unvisi
 net/minecraft/network/protocol/game/ClientboundSetTimePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/network/protocol/game/ClientboundSetTitleTextPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundSetTitlesAnimationPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
-net/minecraft/network/protocol/game/ClientboundSoundEntityPacket.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundSoundPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundSoundEntityPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
+net/minecraft/network/protocol/game/ClientboundSoundPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
 net/minecraft/network/protocol/game/ClientboundStartConfigurationPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundStopSoundPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ClientboundSystemChatPacket.java	unvisited	
@@ -3007,7 +3007,7 @@ net/minecraft/network/protocol/game/ClientboundTickingStepPacket.java	unvisited
 net/minecraft/network/protocol/game/ClientboundTrackedWaypointPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundUpdateAdvancementsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundUpdateAttributesPacket.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundUpdateMobEffectPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundUpdateMobEffectPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
 net/minecraft/network/protocol/game/ClientboundUpdateRecipesPacket.java	unvisited	
 net/minecraft/network/protocol/game/CommonPlayerSpawnInfo.java	unvisited	
 net/minecraft/network/protocol/game/DebugEntityNameGenerator.java	unvisited	
