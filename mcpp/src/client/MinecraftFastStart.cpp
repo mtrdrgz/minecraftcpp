@@ -4,6 +4,7 @@
 #include "../world/entity/Entities.h"
 #include "../world/level/block/BlockTags.h"
 #include "../world/level/levelgen/NoiseBasedChunkGenerator.h"
+#include "../world/level/levelgen/feature/BiomeDecorator.h"
 #include "../world/level/levelgen/feature/BiomeFeatures.h"
 
 namespace mc {
@@ -29,12 +30,21 @@ void Minecraft::startLocalGameFast(uint64_t seed) {
     m_biomeFeatures.reset();
     m_blockTags.reset();
     m_worldgenDir.clear();
+    m_dataMinecraftDir.clear();
 
     // Keep one main-thread generator for biome/height queries. Terrain chunks are
     // still produced by the existing async chunk queue, using the same generator
     // algorithm and block writes. This removes the blocking 5x5 pregen from the
     // click-to-ingame path without changing final terrain output.
     m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
+
+    // Decoration context (certified machinery; loads worldgen data from disk).
+    // Created up front so the streaming path can freeze each generated chunk's
+    // WG heightmaps at integration time — the chunk map was just cleared, so the
+    // old context (if any) must go with it.
+    ensureWorldgenData();
+    levelgen::feature::resetEngineDecoration();
+    levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
 
     PlayerState& state = m_localPlayer.state();
     state.entityId = 0;

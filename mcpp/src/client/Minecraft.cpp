@@ -315,8 +315,9 @@ void Minecraft::ensureWorldgenData() {
             m_blockTags = std::make_unique<block::BlockTags>(
                 block::BlockTags::loadFromDirectory(dataRoot + "/minecraft/tags/block"));
             m_worldgenDir = dataRoot + "/minecraft/worldgen";
+            m_dataMinecraftDir = dataRoot + "/minecraft";   // decoration context loads from DISK
             m_worldgenReady = true;
-            MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from {}",
+            MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from disk: {}",
                         m_biomeFeatures->biomeCount(), dataRoot);
             return;
         }
@@ -351,20 +352,15 @@ void Minecraft::ensureWorldgenData() {
 }
 
 void Minecraft::decorateChunk(LevelChunk& chunk) {
-    if (!m_worldgenReady || !m_localGenerator) return;
-    
+    if (!m_localGenerator) return;
+
     PROFILE_SCOPE_CHUNK("decorateChunk", chunk.pos().x, chunk.pos().z);
-    
-    auto biomeGetter = [this](int x, int y, int z) {
-        return m_localGenerator->getBiome(x, y, z);
-    };
-    // Let features write across this chunk's borders into already-loaded neighbours
-    // (fixes trees clipped at chunk edges) — main-thread only, so getChunk is safe.
-    auto chunkAt = [this](int cx, int cz) { return getChunk({ cx, cz }); };
+
+    // Delegates to the certified decoration machinery (EngineDecoration API via
+    // BiomeDecorator). Cross-chunk feature writes go through the context's
+    // region view over m_chunks — MAIN-THREAD ONLY (caches/hooks not thread-safe).
     try {
-        levelgen::feature::applyBiomeDecoration(
-            chunk, (std::int64_t)m_worldSeed, biomeGetter,
-            *m_biomeFeatures, *m_blockTags, m_worldgenDir, chunkAt);
+        levelgen::feature::applyBiomeDecoration(chunk);
     } catch (const std::exception& e) {
         MC_LOG_WARN("decorateChunk failed at ({},{}): {}", chunk.pos().x, chunk.pos().z, e.what());
     }
@@ -447,6 +443,11 @@ void Minecraft::startLocalGame(uint64_t seed) {
     m_worldSeed = seed;
     m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
     ensureWorldgenData();
+    // Fresh world: drop any previous decoration context (its per-chunk state is
+    // tied to the cleared m_chunks) and create the new one (loads the certified
+    // worldgen data from disk; logs the data source + resolved feature count).
+    levelgen::feature::resetEngineDecoration();
+    levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
     // Generate terrain for a 5x5 so the inner 3x3 can be decorated with all
     // neighbours present (deferred decoration → no trees clipped at chunk borders).
     constexpr int RADIUS = 2;
@@ -457,9 +458,13 @@ void Minecraft::startLocalGame(uint64_t seed) {
             for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
                 LevelChunk* chunk = getOrCreateChunk({cx, cz});
                 PROFILE_SCOPE_CHUNK("startup_fillFromNoise", cx, cz);
-                m_localGenerator->fillFromNoise(*chunk);
+                std::vector<BlockPos> genMarks;   // noise+carver postprocess marks
+                m_localGenerator->fillFromNoise(*chunk, &genMarks);
                 m_localGenerator->buildSurface(*chunk);
-                m_localGenerator->applyCarvers(*chunk);
+                m_localGenerator->applyCarvers(*chunk, &genMarks);
+                // Freeze the chunk's *_WG heightmaps + inject its generation marks
+                // (post-carvers, before any decoration can reach the chunk).
+                levelgen::feature::freezeWorldgenHeights(*chunk, &genMarks);
             }
         }
     }
@@ -832,7 +837,8 @@ void Minecraft::updateLocalChunks() {
     // 2. Poll completed generation tasks
     for (auto it = m_generationTasks.begin(); it != m_generationTasks.end(); ) {
         if (it->future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            std::unique_ptr<LevelChunk> chunk = it->future.get();
+            GeneratedChunk generated = it->future.get();
+            std::unique_ptr<LevelChunk> chunk = std::move(generated.chunk);
             if (chunk) {
                 ChunkPos cp = chunk->pos();
                 // Check if still within radius
@@ -844,6 +850,10 @@ void Minecraft::updateLocalChunks() {
                         // neighbours exist (the tryDecorate pass below) so trees/
                         // ores/structures write across borders without clipping.
                         m_chunks[key] = std::move(chunk);
+                        // Freeze the chunk's *_WG heightmaps + inject its generation
+                        // marks into the decoration context — on the MAIN thread, at
+                        // integration time (post-carvers, pre-decoration).
+                        levelgen::feature::freezeWorldgenHeights(*ptr, &generated.genMarks);
                         ptr->meshDirty = true;
                         // Mark neighboring chunks dirty so seams are updated
                         for (int dz = -1; dz <= 1; ++dz) {
@@ -930,22 +940,23 @@ void Minecraft::updateLocalChunks() {
         
         m_generationTasks.push_back({
             cand.pos,
-            m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed]() -> std::unique_ptr<LevelChunk> {
-                auto chunk = std::make_unique<LevelChunk>(pos);
+            m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed]() -> GeneratedChunk {
+                GeneratedChunk out;
+                out.chunk = std::make_unique<LevelChunk>(pos);
                 levelgen::NoiseBasedChunkGenerator generator(seed);
                 {
                     PROFILE_SCOPE_CHUNK("fillFromNoise", pos.x, pos.z);
-                    generator.fillFromNoise(*chunk);
+                    generator.fillFromNoise(*out.chunk, &out.genMarks);
                 }
                 {
                     PROFILE_SCOPE_CHUNK("buildSurface", pos.x, pos.z);
-                    generator.buildSurface(*chunk);
+                    generator.buildSurface(*out.chunk);
                 }
                 {
                     PROFILE_SCOPE_CHUNK("applyCarvers", pos.x, pos.z);
-                    generator.applyCarvers(*chunk);
+                    generator.applyCarvers(*out.chunk, &out.genMarks);
                 }
-                return chunk;
+                return out;
             })
         });
         

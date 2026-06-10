@@ -1,10 +1,9 @@
 #include "BiomeDecorator.h"
 
-#include "FeatureSorter.h"
-#include "../BiomeSource.h"
+#include "EngineDecoration.h"
+#include "../../../../core/Log.h"
 
 #include <utility>
-#include <vector>
 
 namespace mc::levelgen::feature {
 
@@ -14,45 +13,58 @@ JsonAssetReader& jsonAssetReader() {
     return reader;
 }
 
-const std::vector<FeatureSorter::StepFeatureData>& overworldFeaturesPerStep(const BiomeFeatures& biomeFeatures) {
-    static const BiomeFeatures* cachedBiomeFeatures = nullptr;
-    static std::vector<FeatureSorter::StepFeatureData> cachedFeatures;
-    if (cachedBiomeFeatures != &biomeFeatures) {
-        cachedFeatures = FeatureSorter::buildFeaturesPerStep(
-            mc::levelgen::BiomeSource::collectOverworldPossibleBiomes(),
-            biomeFeatures,
-            true);
-        cachedBiomeFeatures = &biomeFeatures;
-    }
-    return cachedFeatures;
-}
+EngineDecorationContext* g_ctx = nullptr;
+bool g_ctxFailed = false;                 // creation failed: stay silent after the first log
+std::uint64_t g_ctxSeed = 0;
+std::unordered_map<std::int64_t, std::unique_ptr<LevelChunk>>* g_ctxChunks = nullptr;
+long long g_decoratedChunks = 0;
 } // namespace
 
 void setJsonAssetReader(JsonAssetReader reader) {
     jsonAssetReader() = std::move(reader);
 }
 
-void applyBiomeDecoration(LevelChunk& chunk, std::int64_t worldSeed,
-                          const std::function<std::string(int, int, int)>& biomeGetter,
-                          const BiomeFeatures& biomeFeatures,
-                          const mc::block::BlockTags& tags,
-                          const std::string& worldgenDir,
-                          const std::function<LevelChunk*(int, int)>& chunkAt) {
-    (void)worldSeed;
-    (void)biomeGetter;
-    (void)tags;
-    (void)worldgenDir;
-    (void)chunkAt;
+bool ensureEngineDecoration(const std::string& dataMinecraftDir, std::uint64_t worldSeed,
+                            std::unordered_map<std::int64_t, std::unique_ptr<LevelChunk>>* chunks) {
+    if (g_ctx && g_ctxSeed == worldSeed && g_ctxChunks == chunks) return true;
+    resetEngineDecoration();
+    if (dataMinecraftDir.empty()) {
+        MC_LOG_WARN("Decoration disabled: worldgen data not found on disk "
+                    "(run from the repo root so 26.1.2/data resolves; the embedded-assets "
+                    "decoration path is deferred to the packaging task)");
+        g_ctxFailed = true;
+        return false;
+    }
+    MC_LOG_INFO("Creating decoration context: seed={} data={}", worldSeed, dataMinecraftDir);
+    g_ctx = engineDecorationCreate(dataMinecraftDir, worldSeed, chunks);
+    if (!g_ctx) {
+        MC_LOG_WARN("Decoration disabled: context creation failed (see [ERR] line above)");
+        g_ctxFailed = true;
+        return false;
+    }
+    g_ctxSeed = worldSeed;
+    g_ctxChunks = chunks;
+    return true;
+}
 
-    // Feature placement is intentionally disabled until PlacedFeature and all of
-    // its modifiers/configured-feature types are ported. The old runtime path still
-    // scanned the full 3x3 chunk biome volume per decorated chunk just to compute
-    // selected indices that were never placed. That made Singleplayer entry very
-    // slow for no visible result. Keep the vanilla global FeatureSorter cache warm,
-    // but skip per-chunk biome scanning until actual placement is implemented.
-    (void)overworldFeaturesPerStep(biomeFeatures);
+void resetEngineDecoration() {
+    if (g_ctx) engineDecorationDestroy(g_ctx);
+    g_ctx = nullptr;
+    g_ctxFailed = false;
+    g_ctxChunks = nullptr;
+    g_decoratedChunks = 0;
+}
 
-    chunk.decorated = true;
+void freezeWorldgenHeights(LevelChunk& chunk, const std::vector<BlockPos>* genMarks) {
+    if (!g_ctx) return;
+    engineFreezeWgHeights(g_ctx, &chunk, chunk.pos().x, chunk.pos().z, genMarks);
+}
+
+void applyBiomeDecoration(LevelChunk& chunk) {
+    if (!g_ctx) return;
+    engineDecorateChunk(g_ctx, chunk.pos().x, chunk.pos().z);
+    if (++g_decoratedChunks % 100 == 0)
+        MC_LOG_INFO("Decorated {} chunks", g_decoratedChunks);
 }
 
 } // namespace mc::levelgen::feature

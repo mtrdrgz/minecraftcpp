@@ -85,6 +85,7 @@
 #include "SculkFeatures.h"
 #include "FossilFeature.h"
 #include "../FloatProvider.h"
+#include "EngineDecoration.h"
 #include "FeatureSorter.h"
 #include "BiomeFeatures.h"
 #include "GenerationStep.h"
@@ -132,7 +133,7 @@ int floorDiv(int x, int y) { int q = x / y, r = x % y; if (r != 0 && ((r < 0) !=
 std::string stripNs(const std::string& id) { auto c = id.find(':'); return c == std::string::npos ? id : id.substr(c + 1); }
 std::int64_t packChunk(int cx, int cz) { return (static_cast<std::int64_t>(static_cast<std::uint32_t>(cx)) << 32) | static_cast<std::uint32_t>(cz); }
 
-void installBlockStatesEnv() {
+[[maybe_unused]] void installBlockStatesEnv() {   // parity-main only (unused in MCPP_DECORATE_NO_MAIN builds)
     if (std::getenv("MCPP_BLOCK_STATES")) return;
     for (const char* p : { "mcpp/src/assets/block_states.json", "src/assets/block_states.json" }) {
         std::ifstream f(p, std::ios::binary);
@@ -146,7 +147,7 @@ void installBlockStatesEnv() {
         }
     }
 }
-std::string findDataDir() {
+[[maybe_unused]] std::string findDataDir() {      // parity-main only (unused in MCPP_DECORATE_NO_MAIN builds)
     for (const char* p : { "26.1.2/data/minecraft", "../26.1.2/data/minecraft" }) {
         std::ifstream f(std::string(p) + "/tags/block/dirt.json");
         if (f) return p;
@@ -797,17 +798,34 @@ public:
     // ProtoChunk.setBlockState only updates getPersistedStatus().heightmapsAfter(),
     // ProtoChunk.java:147-165). Decoration therefore reads the post-carver TERRAIN
     // snapshot for *_WG — snapshot it now (called once before any decoration).
+    //
+    // freezeChunkHeights is the per-chunk unit (the engine streaming model snapshots
+    // each chunk at generation time, right after its carvers, before the chunk is
+    // reachable by any decoration); the harness freezeHeights() loops it over the
+    // whole generated grid, identical behaviour.
+    void freezeChunkHeights(mc::LevelChunk* c, int cx, int cz) {
+        auto& wg = m_wgSnapshot[packChunk(cx, cz)];
+        for (int i = 0; i < 256; ++i) {
+            const int x = cx * 16 + (i & 15), z = cz * 16 + (i >> 4);
+            wg.oceanFloorWg[static_cast<std::size_t>(i)] = scan(c, x, z, Heightmap::Types::OCEAN_FLOOR_WG);
+            wg.worldSurfaceWg[static_cast<std::size_t>(i)] = scan(c, x, z, Heightmap::Types::WORLD_SURFACE_WG);
+        }
+    }
     void freezeHeights() {
         for (auto& [key, chunkPtr] : *m_chunks) {
             const int cx = static_cast<int>(key >> 32);
             const int cz = static_cast<int>(static_cast<std::int32_t>(key & 0xffffffff));
-            auto& wg = m_wgSnapshot[key];
-            for (int i = 0; i < 256; ++i) {
-                const int x = cx * 16 + (i & 15), z = cz * 16 + (i >> 4);
-                wg.oceanFloorWg[static_cast<std::size_t>(i)] = scan(chunkPtr.get(), x, z, Heightmap::Types::OCEAN_FLOOR_WG);
-                wg.worldSurfaceWg[static_cast<std::size_t>(i)] = scan(chunkPtr.get(), x, z, Heightmap::Types::WORLD_SURFACE_WG);
-            }
+            freezeChunkHeights(chunkPtr.get(), cx, cz);
         }
+    }
+    // Engine chunk (RE)generation at coordinates seen before (unload + regenerate):
+    // drop the per-chunk state of the previous generation. A no-op in the batch
+    // harness (each case builds a fresh level; nothing exists before freeze).
+    void resetChunkGenState(int cx, int cz) {
+        const std::int64_t key = packChunk(cx, cz);
+        m_wgSnapshot.erase(key);
+        m_heightmaps.erase(key);
+        m_marks.erase(key);
     }
 
     int getMinY() const override { return m_minY; }
@@ -2048,30 +2066,103 @@ long long postProcessChunk(MultiChunkLevel& level, int Cx, int Cz) {
     return skippedFluidTicks;
 }
 
-} // namespace
+// ====================== shared decoration core (parity main + engine) ======================
+// The following pieces were mechanically extracted from the parity main so the
+// engine can run the EXACT SAME certified machinery (no behavioural change; the
+// parity gates prove it): main-locals became DecorationResolver members, the
+// mutually recursive loader lambdas became std::function members, and the
+// per-chunk decoration turn became decorateOneChunk.
 
-int main(int argc, char** argv) {
-    std::string casesPath, dataDir, family = "ore";
-    for (int i = 1; i < argc; ++i) {
-        std::string a = argv[i];
-        if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];
-        else if (a == "--datadir" && i + 1 < argc) dataDir = argv[++i];
-        else if (a == "--family" && i + 1 < argc) family = argv[++i];
-    }
-    if (casesPath.empty()) { std::cerr << "usage: full_chunk_decorate_parity --cases <server tsv> [--family ore|vegetal|all]\n"; return 2; }
-    if (dataDir.empty()) dataDir = findDataDir();
-    if (family != "ore" && family != "vegetal" && family != "all") { std::cerr << "--family must be ore, vegetal or all\n"; return 2; }
+// Direction name -> tree-encoding index (DOWN,UP,N,S,W,E).
+int parseDirection(const std::string& d) {
+    if (d == "down") return 0;
+    if (d == "up") return 1;
+    if (d == "north") return 2;
+    if (d == "south") return 3;
+    if (d == "west") return 4;
+    if (d == "east") return 5;
+    throw std::runtime_error("unsupported direction: " + d);
+}
 
-    installBlockStatesEnv();
-    mc::initBlocks();
-    static mc::block::BlockTags tags = mc::block::BlockTags::loadFromDirectory(dataDir + "/tags/block");
+bool isFaceSturdyUpState(const std::string& s) {
+    bool defaulted = false;
+    const bool r = mc::block::isFaceSturdyUp(s, &defaulted);
+    if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+    return r;
+}
+
+// TreeConfiguration.below_trunk_provider codec default: PLACE_BELOW_OVERWORLD_TRUNKS
+// = rule_based(if !#cannot_replace_below_tree_trunk then dirt), no fallback
+// (TreeConfiguration.java:5-10, codec orElse).
+mc::levelgen::feature::DiskStateProvider defaultBelowTrunkProvider() {
+    return [](WorldGenLevel& level, RandomSource&, BlockPos pos) -> std::optional<std::string> {
+        if (!g_tags->isInTag(mc::block::blockName(level.getBlockState(pos)), "minecraft:cannot_replace_below_tree_trunk"))
+            return std::optional<std::string>("minecraft:dirt");
+        return std::nullopt;
+    };
+}
+
+constexpr int genMinY = mc::CHUNK_MIN_Y, genDepth = mc::CHUNK_MAX_Y - mc::CHUNK_MIN_Y;
+
+// All certified placed/configured-feature loading machinery, as one long-lived
+// object. Construction loads block/fluid tags, biome feature lists, per-biome
+// climate and the global FeatureSorter step data from `dataDir`
+// (…/data/minecraft) and binds g_tags / g_fluidTags / g_biomeClimate.
+// NOT thread-safe; must outlive every cached placer (main-thread only).
+struct DecorationResolver {
+    std::string dataDir;
+    mc::block::BlockTags tags;        // data/minecraft/tags/block
+    mc::block::BlockTags fluidTags;   // data/minecraft/tags/fluid
+    BiomeFeatures biomeFeatures;
+
+    // Global per-step feature order/index (== the setFeatureSeed index), over all biomes.
+    std::vector<std::string> sources;
+    std::set<std::string> sourcesSet;
+    std::vector<FeatureSorter::StepFeatureData> stepData;
+
+    // Resolve every placed_feature whose configured type is ported (ore, seagrass,
+    // kelp) once; cache by feature key. Unported types are hard no-ops, counted.
+    std::set<std::string> oreFamily;
+    const std::set<std::string> vegetalFamily = {
+        "minecraft:seagrass", "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:kelp_plant",
+    };
+    std::map<std::string, std::shared_ptr<PlacedFeature>> cache;   // key -> placed (nullptr if unported)
+
+    // ---- shared hooks for the feature families, routed through g_level/g_tags ----
+    std::shared_ptr<mc::levelgen::feature::TreeHooks> treeHooks;
+    std::shared_ptr<mc::levelgen::feature::MonsterRoomHooks> monsterHooks;
+    std::shared_ptr<mc::levelgen::feature::SnowFreezeHooks> snowFreezeHooks;
+    std::shared_ptr<mc::levelgen::feature::LakeHooks> lakeHooks;
+    std::shared_ptr<mc::levelgen::feature::GeodeHooks> geodeHooks;
+    std::shared_ptr<mc::levelgen::feature::CaveFeatureHooks> caveHooks;
+    std::shared_ptr<mc::levelgen::feature::DripstoneHooks> dripstoneHooks;
+    std::shared_ptr<mc::levelgen::feature::HugeMushroomHooks> hugeMushroomHooks;
+    std::shared_ptr<mc::levelgen::feature::CoralHooks> coralHooks;
+    std::shared_ptr<mc::levelgen::feature::SculkHooks> sculkHooks;
+
+    // Mutually recursive loaders, bound in the ctor (capturing `this`): tree
+    // decorators (pale_moss) and several configured types reference other
+    // configured/placed features.
+    std::function<std::shared_ptr<PlacedFeature>(const std::string&)> resolveFeature;
+    std::function<PlacedFeature::FeaturePlacer(const json&)> loadConfiguredPlacer;
+    std::function<std::shared_ptr<PlacedFeature>(const json&, const std::string&)> loadPlacedFromJson;
+    std::function<mc::levelgen::feature::TreeDecoratorConfig(const json&)> loadTreeDecorator;
+    std::function<mc::levelgen::feature::FallenTreeDecoratorConfig(const json&)> loadFallenTreeDecorator;
+    std::function<std::shared_ptr<PlacedFeature>(const json&, const std::string&)> resolvePlacedRef;
+
+    DecorationResolver(const DecorationResolver&) = delete;
+    DecorationResolver& operator=(const DecorationResolver&) = delete;
+
+    explicit DecorationResolver(const std::string& dataDirIn)
+        : dataDir(dataDirIn),
+          tags(mc::block::BlockTags::loadFromDirectory(dataDirIn + "/tags/block")),
+          // Fluid tags: TallSeagrassBlock.canSurvive consults FluidTags.WATER (the Java
+          // ground truth binds them too — unbound tags silently test false and tall
+          // seagrass never places).
+          fluidTags(mc::block::BlockTags::loadFromDirectory(dataDirIn + "/tags/fluid")),
+          biomeFeatures(BiomeFeatures::loadFromDirectory(dataDirIn + "/worldgen/biome")) {
     g_tags = &tags;
-    // Fluid tags: TallSeagrassBlock.canSurvive consults FluidTags.WATER (the Java
-    // ground truth binds them too — unbound tags silently test false and tall
-    // seagrass never places).
-    static mc::block::BlockTags fluidTags = mc::block::BlockTags::loadFromDirectory(dataDir + "/tags/fluid");
     g_fluidTags = &fluidTags;
-    BiomeFeatures biomeFeatures = BiomeFeatures::loadFromDirectory(dataDir + "/worldgen/biome");
 
     // Per-biome climate (Biome.ClimateSettings codec fields straight from the biome
     // JSONs: temperature, has_precipitation, optional temperature_modifier) for
@@ -2090,21 +2181,12 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Global per-step feature order/index (== the setFeatureSeed index), over all biomes.
-    const std::vector<std::string> sources = BiomeSource::collectOverworldPossibleBiomes();
-    const std::set<std::string> sourcesSet(sources.begin(), sources.end());
-    const auto stepData = FeatureSorter::buildFeaturesPerStep(sources, biomeFeatures, true);
-
-    // Resolve every placed_feature whose configured type is ported (ore, seagrass,
-    // kelp) once; cache by feature key. Unported types are hard no-ops, counted.
-    std::set<std::string> oreFamily;
-    const std::set<std::string> vegetalFamily = {
-        "minecraft:seagrass", "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:kelp_plant",
-    };
-    std::map<std::string, std::shared_ptr<PlacedFeature>> cache;   // key -> placed (nullptr if unported)
+    sources = BiomeSource::collectOverworldPossibleBiomes();
+    sourcesSet = std::set<std::string>(sources.begin(), sources.end());
+    stepData = FeatureSorter::buildFeaturesPerStep(sources, biomeFeatures, true);
 
     // ---- shared hooks for the tree/dungeon family, routed through g_level/g_tags ----
-    auto treeHooks = std::make_shared<mc::levelgen::feature::TreeHooks>();
+    treeHooks = std::make_shared<mc::levelgen::feature::TreeHooks>();
     treeHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
     treeHooks->validTreePosState = [](const std::string& s) {   // TreeFeature.validTreePos
         return mc::block::isAirBlock(s) || g_tags->isInTag(mc::block::blockName(s), "minecraft:replaceable_by_trees");
@@ -2154,7 +2236,7 @@ int main(int argc, char** argv) {
     treeHooks->levelMinY = mc::CHUNK_MIN_Y;
     treeHooks->levelMaxY = mc::CHUNK_MAX_Y - 1;
 
-    auto monsterHooks = std::make_shared<mc::levelgen::feature::MonsterRoomHooks>();
+    monsterHooks = std::make_shared<mc::levelgen::feature::MonsterRoomHooks>();
     monsterHooks->isSolid = [](const std::string& s) {
         bool defaulted = false;
         const bool r = mc::block::isSolid(s, &defaulted);
@@ -2167,15 +2249,8 @@ int main(int argc, char** argv) {
     };
     monsterHooks->levelMinY = mc::CHUNK_MIN_Y;
 
-    auto isFaceSturdyUpState = [](const std::string& s) {
-        bool defaulted = false;
-        const bool r = mc::block::isFaceSturdyUp(s, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
-        return r;
-    };
-
     // ---- hooks for freeze_top_layer / lake / geode ----
-    auto snowFreezeHooks = std::make_shared<mc::levelgen::feature::SnowFreezeHooks>();
+    snowFreezeHooks = std::make_shared<mc::levelgen::feature::SnowFreezeHooks>();
     snowFreezeHooks->getBiome = [](BlockPos pos) { return g_biomeCtx->zoomBiome(pos); };
     snowFreezeHooks->climate = [](const std::string& biome) -> const mc::levelgen::feature::BiomeClimate& {
         auto it = g_biomeClimate.find(biome);
@@ -2198,7 +2273,7 @@ int main(int argc, char** argv) {
     snowFreezeHooks->levelMinY = mc::CHUNK_MIN_Y;
     snowFreezeHooks->levelMaxY = mc::CHUNK_MAX_Y;
 
-    auto lakeHooks = std::make_shared<mc::levelgen::feature::LakeHooks>();
+    lakeHooks = std::make_shared<mc::levelgen::feature::LakeHooks>();
     lakeHooks->featuresCannotReplace = [](const std::string& s) {
         return g_tags->isInTag(mc::block::blockName(s), "minecraft:features_cannot_replace");
     };
@@ -2228,12 +2303,12 @@ int main(int argc, char** argv) {
     lakeHooks->countSkippedScheduleTick = [] { ++g_skippedScheduleTicks; };
     lakeHooks->snowFreeze = snowFreezeHooks;
 
-    auto geodeHooks = std::make_shared<mc::levelgen::feature::GeodeHooks>();
+    geodeHooks = std::make_shared<mc::levelgen::feature::GeodeHooks>();
     geodeHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
     geodeHooks->levelSeed = [] { return static_cast<std::int64_t>(g_curLevelSeed); };
     geodeHooks->countSkippedScheduleTick = [] { ++g_skippedScheduleTicks; };
 
-    auto caveHooks = std::make_shared<mc::levelgen::feature::CaveFeatureHooks>();
+    caveHooks = std::make_shared<mc::levelgen::feature::CaveFeatureHooks>();
     caveHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
     caveHooks->isFaceSturdyFull = [](const std::string& s, int dir) {
         bool defaulted = false;
@@ -2254,7 +2329,7 @@ int main(int argc, char** argv) {
         return mc::material::fluidStateOf(s).is(*g_fluidTags, "minecraft:lava");
     };
 
-    auto dripstoneHooks = std::make_shared<mc::levelgen::feature::DripstoneHooks>();
+    dripstoneHooks = std::make_shared<mc::levelgen::feature::DripstoneHooks>();
     dripstoneHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
     dripstoneHooks->dripstoneReplaceable = [](const std::string& s) {
         return g_tags->isInTag(mc::block::blockName(s), "minecraft:dripstone_replaceable_blocks");
@@ -2266,18 +2341,8 @@ int main(int argc, char** argv) {
         return mc::material::fluidStateOf(s).is(*g_fluidTags, "minecraft:water");
     };
 
-    auto parseDirection = [](const std::string& d) -> int {
-        if (d == "down") return 0;
-        if (d == "up") return 1;
-        if (d == "north") return 2;
-        if (d == "south") return 3;
-        if (d == "west") return 4;
-        if (d == "east") return 5;
-        throw std::runtime_error("unsupported direction: " + d);
-    };
-
     // ---- hooks for huge mushrooms / bamboo / corals / sculk ----
-    auto hugeMushroomHooks = std::make_shared<mc::levelgen::feature::HugeMushroomHooks>();
+    hugeMushroomHooks = std::make_shared<mc::levelgen::feature::HugeMushroomHooks>();
     hugeMushroomHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
     hugeMushroomHooks->isLeavesTag = [](const std::string& s) {
         return g_tags->isInTag(mc::block::blockName(s), "minecraft:leaves");
@@ -2291,7 +2356,7 @@ int main(int argc, char** argv) {
     // Ordered tag lists for Registry.getRandomElementOf (HolderSet order = tag-file
     // order with nested refs expanded in place; the coral tags are flat except
     // #corals = #coral_plants + the fans — see CoralFeatures.h header).
-    auto orderedTagList = [&dataDir](const std::string& tagPath) {
+    auto orderedTagList = [this](const std::string& tagPath) {
         std::vector<std::string> out;
         std::set<std::string> seen;
         std::function<void(const std::string&)> expand = [&](const std::string& path) {
@@ -2307,7 +2372,7 @@ int main(int argc, char** argv) {
         expand(tagPath);
         return out;
     };
-    auto coralHooks = std::make_shared<mc::levelgen::feature::CoralHooks>();
+    coralHooks = std::make_shared<mc::levelgen::feature::CoralHooks>();
     coralHooks->coralBlocksTag = orderedTagList("coral_blocks");
     coralHooks->coralsTag = orderedTagList("corals");
     coralHooks->wallCoralsTag = orderedTagList("wall_corals");
@@ -2339,7 +2404,7 @@ int main(int argc, char** argv) {
         };
         return cfg;
     };
-    auto sculkHooks = std::make_shared<mc::levelgen::feature::SculkHooks>();
+    sculkHooks = std::make_shared<mc::levelgen::feature::SculkHooks>();
     sculkHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
     sculkHooks->sculkReplaceableWorldGen = [](const std::string& s) {
         return g_tags->isInTag(mc::block::blockName(s), "minecraft:sculk_replaceable_world_gen");
@@ -2362,24 +2427,7 @@ int main(int argc, char** argv) {
     sculkHooks->veinSpreader = makeSculkVeinSpreaderConfig(false);
     sculkHooks->sameSpaceSpreader = makeSculkVeinSpreaderConfig(true);
 
-    // TreeConfiguration.below_trunk_provider codec default: PLACE_BELOW_OVERWORLD_TRUNKS
-    // = rule_based(if !#cannot_replace_below_tree_trunk then dirt), no fallback
-    // (TreeConfiguration.java:5-10, codec orElse).
-    auto defaultBelowTrunkProvider = []() -> mc::levelgen::feature::DiskStateProvider {
-        return [](WorldGenLevel& level, RandomSource&, BlockPos pos) -> std::optional<std::string> {
-            if (!g_tags->isInTag(mc::block::blockName(level.getBlockState(pos)), "minecraft:cannot_replace_below_tree_trunk"))
-                return std::optional<std::string>("minecraft:dirt");
-            return std::nullopt;
-        };
-    };
-
-    // Mutually recursive loaders, declared early: tree decorators (pale_moss) and
-    // several configured types reference other configured/placed features.
-    std::function<std::shared_ptr<PlacedFeature>(const std::string&)> resolveFeature;
-    std::function<PlacedFeature::FeaturePlacer(const json&)> loadConfiguredPlacer;
-    std::function<std::shared_ptr<PlacedFeature>(const json&, const std::string&)> loadPlacedFromJson;
-
-    auto loadTreeDecorator = [&](const json& dj) -> mc::levelgen::feature::TreeDecoratorConfig {
+    loadTreeDecorator = [&](const json& dj) -> mc::levelgen::feature::TreeDecoratorConfig {
         mc::levelgen::feature::TreeDecoratorConfig dec;
         const std::string dtype = stripNs(dj.at("type").get<std::string>());
         if (dtype == "beehive") {
@@ -2449,7 +2497,7 @@ int main(int argc, char** argv) {
         }
         return dec;
     };
-    auto loadFallenTreeDecorator = [&](const json& dj) -> mc::levelgen::feature::FallenTreeDecoratorConfig {
+    loadFallenTreeDecorator = [&](const json& dj) -> mc::levelgen::feature::FallenTreeDecoratorConfig {
         mc::levelgen::feature::FallenTreeDecoratorConfig dec;
         const std::string dtype = stripNs(dj.at("type").get<std::string>());
         if (dtype == "trunk_vine") {
@@ -2465,8 +2513,6 @@ int main(int argc, char** argv) {
         }
         return dec;
     };
-
-    const int genMinY = mc::CHUNK_MIN_Y, genDepth = mc::CHUNK_MAX_Y - mc::CHUNK_MIN_Y;
 
     // Mutually recursive loaders (declared above loadTreeDecorator): a configured
     // feature can reference placed features (random_selector entries are registry
@@ -2493,7 +2539,7 @@ int main(int argc, char** argv) {
 
     // Placed-feature reference inside a configured feature: a registry id string or
     // an inline placed-feature object.
-    auto resolvePlacedRef = [&](const json& ref, const std::string& parentKey) -> std::shared_ptr<PlacedFeature> {
+    resolvePlacedRef = [&](const json& ref, const std::string& parentKey) -> std::shared_ptr<PlacedFeature> {
         if (ref.is_string()) {
             const std::string id = "minecraft:" + stripNs(ref.get<std::string>());
             std::shared_ptr<PlacedFeature> child = resolveFeature(id);
@@ -2905,7 +2951,8 @@ int main(int argc, char** argv) {
                 const json& cc = cfgJson.at("config");
                 auto featureTrue = resolvePlacedRef(cc.at("feature_true"), "?nested");
                 auto featureFalse = resolvePlacedRef(cc.at("feature_false"), "?nested");
-                placer = [featureTrue, featureFalse, genMinY, genDepth](
+                // (genMinY/genDepth are namespace-scope constexpr now: no capture needed)
+                placer = [featureTrue, featureFalse](
                              WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
                     const bool result = random.nextBoolean();
                     return (result ? featureTrue : featureFalse)->place(level, random, origin, genMinY, genDepth);
@@ -3157,6 +3204,140 @@ int main(int argc, char** argv) {
         cache[featureKey] = result;
         return result;
     };
+    }   // DecorationResolver ctor
+};
+
+// ---- PASS A unit: ONE chunk's quart-biome palette, in vanilla ChunkAccess
+// .fillBiomesFromNoise order (sections ascending; LevelChunkSection
+// .fillBiomesFromNoise x,y,z inner). ORDER MATTERS: Climate.ParameterList
+// .findValue routes through the RTree whose lastResult seed makes distance-TIE
+// results depend on the previous query (Climate.java:250,390-391) — see the
+// PASS-A comment in main. The harness fills a fixed 7x7 in dx OUTER / dz INNER
+// order; the ENGINE fills chunks on demand in neighbour-availability order, so
+// tie quarts at chunk borders may differ from the batch fill (documented delta).
+void fillBiomeStoreChunk(const NoiseBasedChunkGenerator& gen,
+                         std::unordered_map<std::int64_t, std::vector<std::string>>& biomeStore,
+                         int ncx, int ncz) {
+    const int minY = mc::CHUNK_MIN_Y, maxY = mc::CHUNK_MAX_Y;
+    const int qyMin = minY >> 2, qyMax = (maxY >> 2) - 1;
+    std::vector<std::string>& cell = biomeStore[packChunk(ncx, ncz)];
+    cell.resize(static_cast<std::size_t>(qyMax - qyMin + 1) * 16);
+    for (int sy = minY >> 4; sy <= (maxY - 1) >> 4; ++sy) {           // sections ascending
+        const int quartMinY = sy << 2;                                 // QuartPos.fromSection
+        for (int x = 0; x < 4; ++x) for (int y = 0; y < 4; ++y) for (int z = 0; z < 4; ++z) {
+            const int qx = ncx * 4 + x, qy = quartMinY + y, qz = ncz * 4 + z;
+            cell[static_cast<std::size_t>(qy - qyMin) * 16 + x * 4 + z] = gen.getNoiseBiome(qx, qy, qz);
+        }
+    }
+}
+// ChunkAccess.getNoiseBiome (ChunkAccess.java:425-437): quartY CLAMPED to the
+// chunk's section range, then the stored palette; outside the filled grid fall
+// back to the raw sampler (a live findValue query), as the Java proxy does.
+std::string storeNoiseBiomeLookup(const NoiseBasedChunkGenerator& gen,
+                                  const std::unordered_map<std::int64_t, std::vector<std::string>>& biomeStore,
+                                  int qx, int qy, int qz) {
+    const int qyMin = mc::CHUNK_MIN_Y >> 2, qyMax = (mc::CHUNK_MAX_Y >> 2) - 1;
+    const int scx = qx >> 2, scz = qz >> 2;   // QuartPos.toSection
+    auto it = biomeStore.find(packChunk(scx, scz));
+    if (it == biomeStore.end()) return gen.getNoiseBiome(qx, qy, qz);
+    const int cqy = std::max(qyMin, std::min(qyMax, qy));
+    return it->second[static_cast<std::size_t>(cqy - qyMin) * 16 + (qx & 3) * 4 + (qz & 3)];
+}
+
+// One chunk's FEATURES turn (the body of the harness's inner-3x3 loop, verbatim):
+// setDecorating, fresh per-region random, re-prime the four non-WG heightmaps,
+// possibleBiomes = distinct section biomes over the 3x3 ∩ overworld set,
+// setDecorationSeed/setFeatureSeed, placeWithBiomeCheck of every resolved feature
+// in FeatureSorter order (unported = counted hard no-op). PRECONDITIONS exactly as
+// in the harness: g_level/g_biomeCtx/g_curLevelSeed bound, the chunk and its 8
+// neighbours generated (post-carvers) and WG-frozen, biome store filled for the
+// 3x3 around (nx,nz).
+void decorateOneChunk(MultiChunkLevel& level, int nx, int nz, long long seed,
+                      DecorationResolver& resolver,
+                      const std::function<std::string(int, int, int)>& storeNoiseBiome,
+                      PositionalRandomFactory& regionRandomFactory) {
+    const int minY = mc::CHUNK_MIN_Y, maxY = mc::CHUNK_MAX_Y;
+    level.setDecorating(nx, nz);
+    // Fresh per-region random for this chunk's FEATURES turn at the chunk's
+    // getWorldPosition() (WorldGenRegion.java:86; GT: FullChunkDecorateParity
+    // .java decorate() REGION_RANDOM reset).
+    g_regionRandom = regionRandomFactory.at(nx * 16, 0, nz * 16);
+    if (const char* wh = std::getenv("MCPP_WATCH_HEIGHT")) {
+        int wx, wz;
+        if (std::sscanf(wh, "%d,%d", &wx, &wz) == 2)
+            std::cerr << "WATCH-HEIGHT turn=" << nx << "," << nz << " OCEAN_FLOOR(" << wx << "," << wz
+                      << ") = " << level.getHeight(Heightmap::Types::OCEAN_FLOOR, wx, wz) << "\n";
+    }
+    // ChunkStatusTasks.generateFeatures / the Java GT decorate() (:533-536):
+    // prime (overwrite) THIS chunk's four non-WG heightmaps at its turn start
+    // — the snapshot includes spill already written by earlier turns.
+    level.primeNonWgHeightmaps(nx, nz);
+
+    // possibleBiomes for chunk N = distinct section biomes over the 3x3 around N
+    // (ChunkPos.rangeClosed(N,1)) intersected with the overworld possible set.
+    std::set<std::string> pbSet;
+    for (int ddz = -1; ddz <= 1; ++ddz) for (int ddx = -1; ddx <= 1; ++ddx) {
+        const int qx0 = (nx + ddx) * 4, qz0 = (nz + ddz) * 4;
+        for (int qy = (minY >> 2); qy < (maxY >> 2); ++qy)
+            for (int qx = qx0; qx < qx0 + 4; ++qx)
+                for (int qz = qz0; qz < qz0 + 4; ++qz) {
+                    const std::string b = storeNoiseBiome(qx, qy, qz);
+                    if (resolver.sourcesSet.count(b)) pbSet.insert(b);
+                }
+    }
+    const std::vector<std::string> possibleBiomes(pbSet.begin(), pbSet.end());
+
+    WorldgenRandom random(std::make_shared<XoroshiroRandomSource>(static_cast<std::uint64_t>(seed)));
+    const std::int64_t deco = random.setDecorationSeed(static_cast<std::int64_t>(seed), nx * 16, nz * 16);
+    const auto& stepData = resolver.stepData;
+    const int genSteps = std::max(static_cast<int>(stepData.size()), (int)GenerationStep::COUNT);
+    for (int step = 0; step < genSteps && step < static_cast<int>(stepData.size()); ++step) {
+        const std::vector<int> indices = FeatureSorter::selectFeatureIndicesForStep(possibleBiomes, resolver.biomeFeatures, stepData[step], step);
+        for (int index : indices) {
+            const std::string& featureKey = stepData[step].features[static_cast<std::size_t>(index)];
+            const std::string normKey = "minecraft:" + stripNs(featureKey);
+            std::shared_ptr<PlacedFeature> placed = resolver.resolveFeature(normKey);
+            if (!placed) {   // unported type (hard no-op; reseeded next feature)
+                auto ut = g_unportedType.find(normKey);
+                ++g_unportedSkips[ut != g_unportedType.end() ? ut->second : "load-failed"];
+                continue;
+            }
+            random.setFeatureSeed(deco, index, step);
+            g_curFeatureKey = normKey; g_curTurnCx = nx; g_curTurnCz = nz;
+            const bool any = placed->place(level, random, BlockPos{ nx * 16, 0, nz * 16 }, minY, maxY - minY);
+            // Debug: per-feature-run result, diffable vs the Java GT's MCPP_DBG_OK.
+            if (std::getenv("MCPP_DBG_OK") != nullptr)
+                std::cerr << "OK\t" << nx << "," << nz << "\t" << step << "\t" << index
+                          << "\t" << normKey << "\t" << (any ? 1 : 0) << "\n";
+            if (step == (int)GenerationStep::VEGETAL_DECORATION) { ++g_vegRuns; if (any) ++g_vegPlacedOk; }
+            else { ++g_oreRuns; if (any) ++g_orePlacedOk; }
+        }
+    }
+}
+
+} // namespace
+
+#ifndef MCPP_DECORATE_NO_MAIN
+int main(int argc, char** argv) {
+    std::string casesPath, dataDir, family = "ore";
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];
+        else if (a == "--datadir" && i + 1 < argc) dataDir = argv[++i];
+        else if (a == "--family" && i + 1 < argc) family = argv[++i];
+    }
+    if (casesPath.empty()) { std::cerr << "usage: full_chunk_decorate_parity --cases <server tsv> [--family ore|vegetal|all]\n"; return 2; }
+    if (dataDir.empty()) dataDir = findDataDir();
+    if (family != "ore" && family != "vegetal" && family != "all") { std::cerr << "--family must be ore, vegetal or all\n"; return 2; }
+
+    installBlockStatesEnv();
+    mc::initBlocks();
+    // All loading machinery (tags, biomes, climate, step data, hooks, the cached
+    // fail-closed placed/configured-feature loaders) — shared 1:1 with the engine.
+    DecorationResolver resolver(dataDir);
+    BiomeFeatures& biomeFeatures = resolver.biomeFeatures;
+    std::set<std::string>& oreFamily = resolver.oreFamily;
+    const std::set<std::string>& vegetalFamily = resolver.vegetalFamily;
 
     // Parse the server dump: cells[(seed,cx,cz)][(x,y,z)] = block name.
     std::map<std::tuple<long long,int,int>, std::map<std::tuple<int,int,int>, std::string>> server;
@@ -3200,18 +3381,8 @@ int main(int argc, char** argv) {
         // raw sampler on these chunks, verified raw-vs-cached diffs=0 over 7 chunks.)
         const int qyMin = minY >> 2, qyMax = (maxY >> 2) - 1;
         std::unordered_map<std::int64_t, std::vector<std::string>> biomeStore;   // (cx,cz) -> [ (qy-qyMin)*16 + (qx&3)*4 + (qz&3) ]
-        for (int dx = -3; dx <= 3; ++dx) for (int dz = -3; dz <= 3; ++dz) {
-            const int ncx = Cx + dx, ncz = Cz + dz;
-            std::vector<std::string>& cell = biomeStore[packChunk(ncx, ncz)];
-            cell.resize(static_cast<std::size_t>(qyMax - qyMin + 1) * 16);
-            for (int sy = minY >> 4; sy <= (maxY - 1) >> 4; ++sy) {           // sections ascending
-                const int quartMinY = sy << 2;                                 // QuartPos.fromSection
-                for (int x = 0; x < 4; ++x) for (int y = 0; y < 4; ++y) for (int z = 0; z < 4; ++z) {
-                    const int qx = ncx * 4 + x, qy = quartMinY + y, qz = ncz * 4 + z;
-                    cell[static_cast<std::size_t>(qy - qyMin) * 16 + x * 4 + z] = gen.getNoiseBiome(qx, qy, qz);
-                }
-            }
-        }
+        for (int dx = -3; dx <= 3; ++dx) for (int dz = -3; dz <= 3; ++dz)
+            fillBiomeStoreChunk(gen, biomeStore, Cx + dx, Cz + dz);
         // Debug: dump the PASS-A store (diffable against the Java GT fill).
         if (std::getenv("MCPP_DUMP_BIOME_STORE") != nullptr) {
             for (int dx = -3; dx <= 3; ++dx) for (int dz = -3; dz <= 3; ++dz) {
@@ -3226,12 +3397,8 @@ int main(int argc, char** argv) {
         // ChunkAccess.getNoiseBiome (ChunkAccess.java:425-437): quartY CLAMPED to the
         // chunk's section range, then the stored palette; outside the filled grid the
         // Java proxy falls back to the raw sampler (a live findValue query).
-        auto storeNoiseBiome = [&, qyMin, qyMax](int qx, int qy, int qz) -> std::string {
-            const int scx = qx >> 2, scz = qz >> 2;   // QuartPos.toSection
-            auto it = biomeStore.find(packChunk(scx, scz));
-            if (it == biomeStore.end()) return gen.getNoiseBiome(qx, qy, qz);
-            const int cqy = std::max(qyMin, std::min(qyMax, qy));
-            return it->second[static_cast<std::size_t>(cqy - qyMin) * 16 + (qx & 3) * 4 + (qz & 3)];
+        auto storeNoiseBiome = [&gen, &biomeStore](int qx, int qy, int qz) -> std::string {
+            return storeNoiseBiomeLookup(gen, biomeStore, qx, qy, qz);
         };
         // WorldGenRegion.getBiomeManager zoom over the chunk-cached biomes — the exact
         // biome the vanilla SURFACE step reads (NoiseBasedChunkGenerator.buildSurface
@@ -3311,64 +3478,8 @@ int main(int argc, char** argv) {
         const std::shared_ptr<PositionalRandomFactory> regionRandomFactory =
             std::make_shared<XoroshiroRandomSource>(static_cast<std::uint64_t>(seed))
                 ->forkPositional()->fromHashOf("minecraft:worldgen_region_random")->forkPositional();
-        for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
-            const int nx = Cx + dx, nz = Cz + dz;
-            level.setDecorating(nx, nz);
-            // Fresh per-region random for this chunk's FEATURES turn at the chunk's
-            // getWorldPosition() (WorldGenRegion.java:86; GT: FullChunkDecorateParity
-            // .java decorate() REGION_RANDOM reset).
-            g_regionRandom = regionRandomFactory->at(nx * 16, 0, nz * 16);
-            if (const char* wh = std::getenv("MCPP_WATCH_HEIGHT")) {
-                int wx, wz;
-                if (std::sscanf(wh, "%d,%d", &wx, &wz) == 2)
-                    std::cerr << "WATCH-HEIGHT turn=" << nx << "," << nz << " OCEAN_FLOOR(" << wx << "," << wz
-                              << ") = " << level.getHeight(Heightmap::Types::OCEAN_FLOOR, wx, wz) << "\n";
-            }
-            // ChunkStatusTasks.generateFeatures / the Java GT decorate() (:533-536):
-            // prime (overwrite) THIS chunk's four non-WG heightmaps at its turn start
-            // — the snapshot includes spill already written by earlier turns.
-            level.primeNonWgHeightmaps(nx, nz);
-
-            // possibleBiomes for chunk N = distinct section biomes over the 3x3 around N
-            // (ChunkPos.rangeClosed(N,1)) intersected with the overworld possible set.
-            std::set<std::string> pbSet;
-            for (int ddz = -1; ddz <= 1; ++ddz) for (int ddx = -1; ddx <= 1; ++ddx) {
-                const int qx0 = (nx + ddx) * 4, qz0 = (nz + ddz) * 4;
-                for (int qy = (minY >> 2); qy < (maxY >> 2); ++qy)
-                    for (int qx = qx0; qx < qx0 + 4; ++qx)
-                        for (int qz = qz0; qz < qz0 + 4; ++qz) {
-                            const std::string b = storeNoiseBiome(qx, qy, qz);
-                            if (sourcesSet.count(b)) pbSet.insert(b);
-                        }
-            }
-            const std::vector<std::string> possibleBiomes(pbSet.begin(), pbSet.end());
-
-            WorldgenRandom random(std::make_shared<XoroshiroRandomSource>(static_cast<std::uint64_t>(seed)));
-            const std::int64_t deco = random.setDecorationSeed(static_cast<std::int64_t>(seed), nx * 16, nz * 16);
-            const int genSteps = std::max(static_cast<int>(stepData.size()), (int)GenerationStep::COUNT);
-            for (int step = 0; step < genSteps && step < static_cast<int>(stepData.size()); ++step) {
-                const std::vector<int> indices = FeatureSorter::selectFeatureIndicesForStep(possibleBiomes, biomeFeatures, stepData[step], step);
-                for (int index : indices) {
-                    const std::string& featureKey = stepData[step].features[static_cast<std::size_t>(index)];
-                    const std::string normKey = "minecraft:" + stripNs(featureKey);
-                    std::shared_ptr<PlacedFeature> placed = resolveFeature(normKey);
-                    if (!placed) {   // unported type (hard no-op; reseeded next feature)
-                        auto ut = g_unportedType.find(normKey);
-                        ++g_unportedSkips[ut != g_unportedType.end() ? ut->second : "load-failed"];
-                        continue;
-                    }
-                    random.setFeatureSeed(deco, index, step);
-                    g_curFeatureKey = normKey; g_curTurnCx = nx; g_curTurnCz = nz;
-                    const bool any = placed->place(level, random, BlockPos{ nx * 16, 0, nz * 16 }, minY, maxY - minY);
-                    // Debug: per-feature-run result, diffable vs the Java GT's MCPP_DBG_OK.
-                    if (std::getenv("MCPP_DBG_OK") != nullptr)
-                        std::cerr << "OK\t" << nx << "," << nz << "\t" << step << "\t" << index
-                                  << "\t" << normKey << "\t" << (any ? 1 : 0) << "\n";
-                    if (step == (int)GenerationStep::VEGETAL_DECORATION) { ++g_vegRuns; if (any) ++g_vegPlacedOk; }
-                    else { ++g_oreRuns; if (any) ++g_orePlacedOk; }
-                }
-            }
-        }
+        for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz)
+            decorateOneChunk(level, Cx + dx, Cz + dz, seed, resolver, storeNoiseBiome, *regionRandomFactory);
         // FULL-promotion post-processing for chunk C (bubble columns above magma,
         // glow_lichen revalidation, water-over-water column writes) — exactly the
         // Java harness postProcessChunk, which the server byte-match certifies.
@@ -3464,3 +3575,127 @@ int main(int argc, char** argv) {
     const long long famMism = (family == "vegetal") ? vegMism : (family == "all") ? allMism : oreMism;
     return famMism == 0 ? 0 : 1;
 }
+#endif  // MCPP_DECORATE_NO_MAIN
+
+// ====================== engine integration API (EngineDecoration.h) ======================
+// The engine's streaming pipeline drives the EXACT machinery the parity gates
+// certify, with the streaming-model deltas handled here:
+//  (i)  *_WG heightmaps: the harness snapshots ALL chunks before any decoration;
+//       the engine snapshots each chunk at generation time (engineFreezeWgHeights,
+//       post-carvers, before the chunk is reachable by any decoration turn).
+//  (ii) the PASS-A biome store fills on demand per 3x3 around the decorated
+//       chunk, cached for the world's lifetime (ONE shared climate RTree).
+//  (iii) MultiChunkLevel is LONG-LIVED over the engine's own chunk map
+//       (setDecorating per chunk, exactly as in the harness).
+// ORDER DELTA (documented): the ENGINE decorates chunks in neighbour-availability
+// order (and runs the FULL-promotion postprocess right after each chunk's own
+// decoration), not the ground truth's fixed xz batch order. Cross-chunk OVERLAP
+// cells at chunk borders are last-writer-wins, so they can differ from the
+// byte-certified dumps; the per-feature content is the certified code. A future
+// engine-dump gate will pin the streaming order.
+namespace mc::levelgen::feature {
+
+struct EngineDecorationContext {
+    DecorationResolver resolver;     // certified loaders + hooks + placed-feature cache
+    NoiseBasedChunkGenerator gen;    // ONE shared climate RTree for the biome store
+    std::uint64_t worldSeed;
+    std::unordered_map<std::int64_t, std::vector<std::string>> biomeStore;   // PASS-A palettes
+    std::function<std::string(int, int, int)> storeNoiseBiome;
+    DecoBiomeContext biomeCtx;
+    MultiChunkLevel level;           // long-lived region view over the engine chunk map
+    std::shared_ptr<PositionalRandomFactory> regionRandomFactory;
+
+    EngineDecorationContext(const std::string& dataDir, std::uint64_t seed,
+                            std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>>* chunks)
+        : resolver(dataDir), gen(seed), worldSeed(seed),
+          level(chunks, mc::CHUNK_MIN_Y, mc::CHUNK_MAX_Y) {
+        g_curLevelSeed = static_cast<long long>(seed);   // level.getSeed() for cached placers (geode noise)
+        storeNoiseBiome = [this](int qx, int qy, int qz) {
+            return storeNoiseBiomeLookup(gen, biomeStore, qx, qy, qz);
+        };
+        // The biome filter's level.getBiome goes through the chunk-cached biomes
+        // (clamped store reads), exactly like the harness.
+        biomeCtx.zoomSeed = BiomeManager::obfuscateSeed(static_cast<std::int64_t>(seed));
+        biomeCtx.noiseBiome = storeNoiseBiome;
+        biomeCtx.features = &resolver.biomeFeatures;
+        // RandomState.getOrCreateRandomFactory("minecraft:worldgen_region_random")
+        // (RandomState.java; WorldGenRegion.java:77,86): root Xoroshiro(seed)
+        // .forkPositional().fromHashOf(id).forkPositional().
+        regionRandomFactory = std::make_shared<XoroshiroRandomSource>(seed)
+            ->forkPositional()->fromHashOf("minecraft:worldgen_region_random")->forkPositional();
+        g_biomeCtx = &biomeCtx;
+        g_level = &level;
+    }
+};
+
+EngineDecorationContext* engineDecorationCreate(const std::string& dataDir, std::uint64_t worldSeed,
+        std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>>* chunks) {
+    try {
+        auto ctx = std::make_unique<EngineDecorationContext>(dataDir, worldSeed, chunks);
+        // Warm the placed-feature cache over the global step order (the same
+        // fail-closed loader the gates certify; resolution touches no world RNG,
+        // so eager-vs-lazy is behaviourally identical). Unported types stay
+        // counted hard no-ops.
+        for (const auto& sd : ctx->resolver.stepData)
+            for (const std::string& fk : sd.features)
+                (void)ctx->resolver.resolveFeature("minecraft:" + stripNs(fk));
+        std::size_t resolved = 0, unported = 0;
+        for (const auto& [key, placed] : ctx->resolver.cache) (placed ? resolved : unported) += 1;
+        std::cout << "[INF] decoration context ready (" << resolved << " placed features resolved, "
+                  << unported << " unported hard no-ops); worldgen data from disk: " << dataDir << "\n";
+        std::cout.flush();
+        return ctx.release();
+    } catch (const std::exception& e) {
+        std::cout << "[ERR] decoration context creation failed: " << e.what() << "\n";
+        std::cout.flush();
+        return nullptr;
+    }
+}
+
+void engineDecorationDestroy(EngineDecorationContext* ctx) {
+    if (!ctx) return;
+    g_biomeCtx = nullptr;
+    g_level = nullptr;
+    g_tags = nullptr;
+    g_fluidTags = nullptr;
+    g_regionRandom.reset();
+    delete ctx;
+}
+
+void engineFreezeWgHeights(EngineDecorationContext* ctx, mc::LevelChunk* chunk, int cx, int cz,
+                           const std::vector<mc::BlockPos>* genMarks) {
+    if (!ctx || !chunk) return;
+    // Re-generation of previously seen coordinates (engine unload + regen): drop
+    // the stale per-chunk state first (no-op for first-time chunks).
+    ctx->level.resetChunkGenState(cx, cz);
+    // setPersistedStatus(CARVERS) flips the chunk to FINAL_HEIGHTMAPS maintenance,
+    // freezing the WG pair at its post-carver values for the whole FEATURES phase
+    // (ChunkStatus.java:18,27).
+    ctx->level.freezeChunkHeights(chunk, cx, cz);
+    // The NOISE step's aquifer-fluid marks (NoiseBasedChunkGenerator.java:442-446)
+    // and the carvers' marks (WorldCarver.java:147-158) precede every decoration
+    // mark — inject them now, preserving generation order (all are within this chunk).
+    if (genMarks)
+        for (const mc::BlockPos& p : *genMarks) ctx->level.markPosForPostprocessing(p);
+}
+
+void engineDecorateChunk(EngineDecorationContext* ctx, int cx, int cz) {
+    if (!ctx) return;
+    // PASS-A store for the 3x3 around the decorated chunk (possibleBiomes scan +
+    // every zoomed biome read of this turn stays inside it), filled on demand.
+    for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
+        const std::int64_t key = packChunk(cx + dx, cz + dz);
+        if (ctx->biomeStore.find(key) == ctx->biomeStore.end())
+            fillBiomeStoreChunk(ctx->gen, ctx->biomeStore, cx + dx, cz + dz);
+    }
+    g_biomeCtx = &ctx->biomeCtx;
+    g_level = &ctx->level;
+    g_curLevelSeed = static_cast<long long>(ctx->worldSeed);
+    decorateOneChunk(ctx->level, cx, cz, static_cast<long long>(ctx->worldSeed),
+                     ctx->resolver, ctx->storeNoiseBiome, *ctx->regionRandomFactory);
+    // FULL-promotion post-processing for this chunk — the same postProcessChunk the
+    // server byte-match certifies (fluid SPREAD ticks stay counted hard no-ops).
+    (void)postProcessChunk(ctx->level, cx, cz);
+}
+
+} // namespace mc::levelgen::feature

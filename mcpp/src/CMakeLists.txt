@@ -45,6 +45,10 @@ set(MC_SOURCES
     world/level/block/BlockTags.cpp
     world/level/levelgen/feature/BiomeFeatures.cpp
     world/level/levelgen/feature/BiomeDecorator.cpp
+    # The certified whole-chunk decoration machinery (library mode: the engine
+    # target defines MCPP_DECORATE_NO_MAIN so the parity main is compiled out;
+    # the full_chunk_decorate_parity gate target keeps it and stays the truth).
+    world/level/levelgen/feature/FullChunkDecorateParityTest.cpp
     world/level/levelgen/feature/TreeGen.cpp
     world/level/levelgen/feature/OreGen.cpp
     world/level/levelgen/structure/StructureGen.cpp
@@ -181,6 +185,9 @@ endif()
 
 target_compile_definitions(mcpp PRIVATE
     NLOHMANN_JSON_NOEXCEPTION=0
+    # Compile the certified decoration TU as a library (no parity main) — only
+    # this one TU checks the define; the parity executable target does NOT set it.
+    MCPP_DECORATE_NO_MAIN
 )
 
 set_target_properties(mcpp PROPERTIES

@@ -118,13 +118,20 @@ private:
     std::unique_ptr<levelgen::feature::BiomeFeatures>    m_biomeFeatures;
     std::unique_ptr<block::BlockTags>                    m_blockTags;
     std::string m_worldgenDir;
+    std::string m_dataMinecraftDir;   // …/data/minecraft on disk ("" when not found)
     bool        m_worldgenReady = false;
     bool        m_worldgenTried = false;
 
     std::unique_ptr<ThreadPool>          m_threadPool;
+    // A generated chunk plus the noise+carver postprocess marks the generator
+    // collected for it (consumed by the decoration context's freeze step).
+    struct GeneratedChunk {
+        std::unique_ptr<LevelChunk> chunk;
+        std::vector<BlockPos> genMarks;
+    };
     struct ChunkGenTask {
         ChunkPos pos;
-        std::future<std::unique_ptr<LevelChunk>> future;
+        std::future<GeneratedChunk> future;
     };
     std::vector<ChunkGenTask>            m_generationTasks;
     std::unordered_set<int64_t>          m_queuedChunks;
