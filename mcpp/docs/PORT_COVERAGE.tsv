@@ -160,69 +160,69 @@ com/mojang/math/package-info.java	unvisited
 com/mojang/realmsclient/RealmsAvailability.java	unvisited	
 com/mojang/realmsclient/RealmsMainScreen.java	unvisited	
 com/mojang/realmsclient/Unit.java	unvisited	
-com/mojang/realmsclient/client/FileDownload.java	unvisited	
-com/mojang/realmsclient/client/FileUpload.java	unvisited	
-com/mojang/realmsclient/client/Ping.java	unvisited	
-com/mojang/realmsclient/client/RealmsClient.java	unvisited	
-com/mojang/realmsclient/client/RealmsClientConfig.java	unvisited	
-com/mojang/realmsclient/client/RealmsError.java	unvisited	
-com/mojang/realmsclient/client/Request.java	unvisited	
-com/mojang/realmsclient/client/UploadStatus.java	unvisited	
-com/mojang/realmsclient/client/package-info.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsCreateWorldFlow.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsUploadCanceledException.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsUploadException.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsUploadFailedException.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsUploadTooLargeException.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsUploadWorldNotClosedException.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsUploadWorldPacker.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsWorldUpload.java	unvisited	
-com/mojang/realmsclient/client/worldupload/RealmsWorldUploadStatusTracker.java	unvisited	
-com/mojang/realmsclient/client/worldupload/package-info.java	unvisited	
-com/mojang/realmsclient/dto/Backup.java	unvisited	
-com/mojang/realmsclient/dto/BackupList.java	unvisited	
-com/mojang/realmsclient/dto/Exclude.java	unvisited	
-com/mojang/realmsclient/dto/GuardedSerializer.java	unvisited	
-com/mojang/realmsclient/dto/Ops.java	unvisited	
-com/mojang/realmsclient/dto/OutboundPlayer.java	unvisited	
-com/mojang/realmsclient/dto/PendingInvite.java	unvisited	
-com/mojang/realmsclient/dto/PendingInvitesList.java	unvisited	
-com/mojang/realmsclient/dto/PingResult.java	unvisited	
-com/mojang/realmsclient/dto/PlayerInfo.java	unvisited	
-com/mojang/realmsclient/dto/PreferredRegionsDto.java	unvisited	
-com/mojang/realmsclient/dto/RealmsConfigurationDto.java	unvisited	
-com/mojang/realmsclient/dto/RealmsDescriptionDto.java	unvisited	
-com/mojang/realmsclient/dto/RealmsJoinInformation.java	unvisited	
-com/mojang/realmsclient/dto/RealmsNews.java	unvisited	
-com/mojang/realmsclient/dto/RealmsNotification.java	unvisited	
-com/mojang/realmsclient/dto/RealmsRegion.java	unvisited	
-com/mojang/realmsclient/dto/RealmsServer.java	unvisited	
-com/mojang/realmsclient/dto/RealmsServerList.java	unvisited	
-com/mojang/realmsclient/dto/RealmsServerPlayerLists.java	unvisited	
-com/mojang/realmsclient/dto/RealmsSetting.java	unvisited	
-com/mojang/realmsclient/dto/RealmsSlot.java	unvisited	
-com/mojang/realmsclient/dto/RealmsSlotUpdateDto.java	unvisited	
-com/mojang/realmsclient/dto/RealmsText.java	unvisited	
-com/mojang/realmsclient/dto/RealmsWorldOptions.java	unvisited	
-com/mojang/realmsclient/dto/RealmsWorldResetDto.java	unvisited	
-com/mojang/realmsclient/dto/ReflectionBasedSerialization.java	unvisited	
-com/mojang/realmsclient/dto/RegionDataDto.java	unvisited	
-com/mojang/realmsclient/dto/RegionPingResult.java	unvisited	
-com/mojang/realmsclient/dto/RegionSelectionPreference.java	unvisited	
-com/mojang/realmsclient/dto/RegionSelectionPreferenceDto.java	unvisited	
-com/mojang/realmsclient/dto/ServiceQuality.java	unvisited	
-com/mojang/realmsclient/dto/Subscription.java	unvisited	
-com/mojang/realmsclient/dto/UploadInfo.java	unvisited	
-com/mojang/realmsclient/dto/ValueObject.java	unvisited	
-com/mojang/realmsclient/dto/WorldDownload.java	unvisited	
-com/mojang/realmsclient/dto/WorldTemplate.java	unvisited	
-com/mojang/realmsclient/dto/WorldTemplatePaginatedList.java	unvisited	
-com/mojang/realmsclient/dto/package-info.java	unvisited	
-com/mojang/realmsclient/exception/RealmsDefaultUncaughtExceptionHandler.java	unvisited	
-com/mojang/realmsclient/exception/RealmsHttpException.java	unvisited	
-com/mojang/realmsclient/exception/RealmsServiceException.java	unvisited	
-com/mojang/realmsclient/exception/RetryCallException.java	unvisited	
-com/mojang/realmsclient/exception/package-info.java	unvisited	
+com/mojang/realmsclient/client/FileDownload.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/FileUpload.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/Ping.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/RealmsClient.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/RealmsClientConfig.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/RealmsError.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/Request.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/UploadStatus.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/package-info.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsCreateWorldFlow.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsUploadCanceledException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsUploadException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsUploadFailedException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsUploadTooLargeException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsUploadWorldNotClosedException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsUploadWorldPacker.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsWorldUpload.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/RealmsWorldUploadStatusTracker.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/client/worldupload/package-info.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/Backup.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/BackupList.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/Exclude.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/GuardedSerializer.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/Ops.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/OutboundPlayer.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/PendingInvite.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/PendingInvitesList.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/PingResult.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/PlayerInfo.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/PreferredRegionsDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsConfigurationDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsDescriptionDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsJoinInformation.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsNews.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsNotification.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsRegion.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsServer.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsServerList.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsServerPlayerLists.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsSetting.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsSlot.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsSlotUpdateDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsText.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsWorldOptions.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RealmsWorldResetDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/ReflectionBasedSerialization.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RegionDataDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RegionPingResult.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RegionSelectionPreference.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/RegionSelectionPreferenceDto.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/ServiceQuality.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/Subscription.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/UploadInfo.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/ValueObject.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/WorldDownload.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/WorldTemplate.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/WorldTemplatePaginatedList.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/dto/package-info.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/exception/RealmsDefaultUncaughtExceptionHandler.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/exception/RealmsHttpException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/exception/RealmsServiceException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/exception/RetryCallException.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
+com/mojang/realmsclient/exception/package-info.java	n/a	Mojang Realms web-service client (dto/http); port targets offline play — no service to talk to. Realms UI screens tracked separately under client/realms.
 com/mojang/realmsclient/gui/RealmsDataFetcher.java	unvisited	
 com/mojang/realmsclient/gui/RealmsNewsManager.java	unvisited	
 com/mojang/realmsclient/gui/RealmsServerList.java	unvisited	
@@ -3708,393 +3708,393 @@ net/minecraft/util/datafix/DataFixers.java	unvisited
 net/minecraft/util/datafix/ExtraDataFixUtils.java	unvisited	
 net/minecraft/util/datafix/LegacyComponentDataFixUtils.java	unvisited	
 net/minecraft/util/datafix/PackedBitStorage.java	unvisited	
-net/minecraft/util/datafix/fixes/AbstractArrowPickupFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AbstractBlockPropertyFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AbstractPoiSectionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AbstractUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AddFieldFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AddFlagIfNotPresentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AddNewChoices.java	unvisited	
-net/minecraft/util/datafix/fixes/AdvancementsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AdvancementsRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AreaEffectCloudDurationScaleFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AreaEffectCloudPotionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AttributeIdPrefixFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AttributeModifierIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AttributesRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/AttributesRenameLegacy.java	unvisited	
-net/minecraft/util/datafix/fixes/BannerEntityCustomNameToOverrideComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BannerPatternFormatFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BedItemColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BeehiveFieldRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BiomeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BitStorageAlignFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlendingDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlendingDataRemoveFromNetherEndFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityBannerColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityBlockStateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityCustomNameToComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityFurnaceBurnTimeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityJukeboxFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityKeepPacked.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityShulkerBoxColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntitySignDoubleSidedEditableTextFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockEntityUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockNameFlatteningFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockPosFormatAndRenamesFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockPropertyRenameAndFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockStateData.java	unvisited	
-net/minecraft/util/datafix/fixes/BlockStateStructureTemplateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/BoatSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CarvingStepRemoveFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CatTypeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CauldronRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CavesAndCliffsRenames.java	unvisited	
-net/minecraft/util/datafix/fixes/ChestedHorsesInventoryZeroIndexingFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkBedBlockEntityInjecterFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkBiomeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkDeleteIgnoredLightDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkDeleteLightFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkHeightAndBiomeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkLightRemoveFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkPalettedStorageFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkProtoTickListFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkRenamesFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkStatusFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkStatusFix2.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkStructuresTemplateRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkTicketUnpackPosFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ChunkToProtochunkFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ColorlessShulkerEntityFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ContainerBlockEntityLockPredicateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CopperGolemWeatherStateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CriteriaRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/CustomModelDataExpandFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DataComponentRemainderFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DayTimeToClockFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DebugProfileLookingAtSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DebugProfileOverlayReferenceFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DecoratedPotFieldRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DropChancesFormatFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DropInvalidSignDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/DyeItemRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EffectDurationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EmptyItemInHotbarFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EmptyItemInVillagerTradeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityArmorStandSilentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityAttributeBaseValueFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityBlockStateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityBrushableBlockFieldsRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityCatSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityCodSalmonFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityCustomNameToComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityElderGuardianSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityEquipmentToArmorAndHandFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityFallDistanceFloatToDoubleFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityFieldsRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityGoatMissingStateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityHealthFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityHorseSaddleFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityHorseSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityItemFrameDirectionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityMinecartIdentifiersFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityPaintingItemFrameDirectionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityPaintingMotiveFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityProjectileOwnerFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityPufferfishRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityRavagerRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityRedundantChanceTagsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityRidingToPassengersFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntitySalmonSizeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityShulkerColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityShulkerRotationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntitySkeletonSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntitySpawnerItemVariantComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityStringUuidFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityTheRenameningFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityTippedArrowFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityVariantFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityWolfColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityZombieSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityZombieVillagerTypeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EntityZombifiedPiglinRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EquipmentFormatFix.java	unvisited	
-net/minecraft/util/datafix/fixes/EquippableAssetRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/FeatureFlagRemoveFix.java	unvisited	
-net/minecraft/util/datafix/fixes/FilteredBooksFix.java	unvisited	
-net/minecraft/util/datafix/fixes/FilteredSignsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/FireResistantToDamageResistantComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/FixProjectileStoredItem.java	unvisited	
-net/minecraft/util/datafix/fixes/FixWolfHealth.java	unvisited	
-net/minecraft/util/datafix/fixes/FoodToConsumableFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ForcePoiRebuild.java	unvisited	
-net/minecraft/util/datafix/fixes/ForcedChunkToTicketFix.java	unvisited	
-net/minecraft/util/datafix/fixes/FurnaceRecipeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/GameRuleRegistryFix.java	unvisited	
-net/minecraft/util/datafix/fixes/GoatHornIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/GossipUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/HeightmapRenamingFix.java	unvisited	
-net/minecraft/util/datafix/fixes/HorseBodyArmorItemFix.java	unvisited	
-net/minecraft/util/datafix/fixes/IglooMetadataRemovalFix.java	unvisited	
-net/minecraft/util/datafix/fixes/InlineBlockPosFormatFix.java	unvisited	
-net/minecraft/util/datafix/fixes/InvalidBlockEntityLockFix.java	unvisited	
-net/minecraft/util/datafix/fixes/InvalidLockComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemBannerColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemCustomNameToComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemLoreFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemPotionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemShulkerBoxColorFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemSpawnEggFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackComponentizationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackCustomNameToOverrideComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackEnchantmentNamesFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackMapIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackSpawnEggFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackTagFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackTagRemainderFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackTheFlatteningFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemStackUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ItemWaterPotionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/JigsawPropertiesFix.java	unvisited	
-net/minecraft/util/datafix/fixes/JigsawRotationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/JukeboxTicksSinceSongStartedFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LeavesFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LegacyDimensionIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LegacyDragonFightFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LegacyHoverEventFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LegacyWorldBorderFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LevelDatDifficultyFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LevelDatToSavedDataPreparationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LevelDataGeneratorOptionsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LevelFlatGeneratorInfoFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LevelLegacyWorldGenSettingsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LevelUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LockComponentPredicateFix.java	unvisited	
-net/minecraft/util/datafix/fixes/LodestoneCompassComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/MapBannerBlockPosFormatFix.java	unvisited	
-net/minecraft/util/datafix/fixes/MapIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/MemoryExpiryDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/MissingDimensionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/MobEffectIdFix.java	unvisited	
-net/minecraft/util/datafix/fixes/MobSpawnerEntityIdentifiersFix.java	unvisited	
-net/minecraft/util/datafix/fixes/NamedEntityConvertUncheckedFix.java	unvisited	
-net/minecraft/util/datafix/fixes/NamedEntityFix.java	unvisited	
-net/minecraft/util/datafix/fixes/NamedEntityWriteReadFix.java	unvisited	
-net/minecraft/util/datafix/fixes/NamespacedTypeRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/NewVillageFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ObjectiveRenderTypeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OminousBannerBlockEntityRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OminousBannerRarityFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OminousBannerRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsAccessibilityOnboardFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsAddTextBackgroundFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsAmbientOcclusionFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsFancyGraphicsToGraphicsModeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsForceVBOFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsGraphicsModeSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsKeyLwjgl3Fix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsKeyTranslationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsLowerCaseLanguageFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsMenuBlurrinessFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsMusicToastFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsProgrammerArtFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsRenameFieldFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OptionsSetGraphicsPresetToCustomFix.java	unvisited	
-net/minecraft/util/datafix/fixes/OverreachingTickFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ParticleUnflatteningFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PlayerEquipmentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PlayerHeadBlockProfileFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PlayerRespawnDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PlayerUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PoiTypeRemoveFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PoiTypeRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/PrimedTntBlockStateFixer.java	unvisited	
-net/minecraft/util/datafix/fixes/ProjectileStoredWeaponFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RaidRenamesDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RandomSequenceSettingsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RecipesFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RecipesRenameningFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RedstoneWireConnectionsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/References.java	unvisited	
-net/minecraft/util/datafix/fixes/RemapChunkStatusFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RemoveBlockEntityTagFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RemoveEmptyItemInBrushableBlockFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RemoveGolemGossipFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RenameEnchantmentsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RenamedCoralFansFix.java	unvisited	
-net/minecraft/util/datafix/fixes/RenamedCoralFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ReorganizePoi.java	unvisited	
-net/minecraft/util/datafix/fixes/SaddleEquipmentSlotFix.java	unvisited	
-net/minecraft/util/datafix/fixes/SavedDataFeaturePoolElementFix.java	unvisited	
-net/minecraft/util/datafix/fixes/SavedDataUUIDFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ScoreboardDisplayNameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ScoreboardDisplaySlotFix.java	unvisited	
-net/minecraft/util/datafix/fixes/SignTextStrictJsonFix.java	unvisited	
-net/minecraft/util/datafix/fixes/SimpleEntityRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/SimplestEntityRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/SpawnerDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StatsCounterFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StatsRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StonecutterRecipeRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StriderGravityFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StructureReferenceCountFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StructureSettingsFlattenFix.java	unvisited	
-net/minecraft/util/datafix/fixes/StructuresBecomeConfiguredFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TextComponentHoverAndClickEventFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TextComponentStringifiedFlagsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ThrownPotionSplitFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TippedArrowPotionToItemFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TooltipDisplayComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TrappedChestBlockEntityFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TrialSpawnerConfigFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TrialSpawnerConfigInRegistryFix.java	unvisited	
-net/minecraft/util/datafix/fixes/TridentAnimationFix.java	unvisited	
-net/minecraft/util/datafix/fixes/UnflattenTextComponentFix.java	unvisited	
-net/minecraft/util/datafix/fixes/VariantRenameFix.java	unvisited	
-net/minecraft/util/datafix/fixes/VillagerDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/VillagerFollowRangeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/VillagerRebuildLevelAndXpFix.java	unvisited	
-net/minecraft/util/datafix/fixes/VillagerSetCanPickUpLootFix.java	unvisited	
-net/minecraft/util/datafix/fixes/VillagerSetVillagerDataFinalized.java	unvisited	
-net/minecraft/util/datafix/fixes/VillagerTradeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WallPropertyFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WeaponSmithChestLootTableFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WorldBorderWarningTimeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WorldGenSettingsDisallowOldCustomWorldsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WorldGenSettingsFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WorldGenSettingsHeightAndBiomeFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WorldSpawnDataFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WriteAndReadFix.java	unvisited	
-net/minecraft/util/datafix/fixes/WrittenBookPagesStrictJsonFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ZombieVillagerRebuildXpFix.java	unvisited	
-net/minecraft/util/datafix/fixes/ZombieVillagerSetVillagerDataFinalized.java	unvisited	
-net/minecraft/util/datafix/fixes/package-info.java	unvisited	
+net/minecraft/util/datafix/fixes/AbstractArrowPickupFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AbstractBlockPropertyFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AbstractPoiSectionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AbstractUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AddFieldFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AddFlagIfNotPresentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AddNewChoices.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AdvancementsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AdvancementsRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AreaEffectCloudDurationScaleFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AreaEffectCloudPotionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AttributeIdPrefixFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AttributeModifierIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AttributesRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/AttributesRenameLegacy.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BannerEntityCustomNameToOverrideComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BannerPatternFormatFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BedItemColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BeehiveFieldRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BiomeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BitStorageAlignFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlendingDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlendingDataRemoveFromNetherEndFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityBannerColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityBlockStateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityCustomNameToComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityFurnaceBurnTimeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityJukeboxFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityKeepPacked.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityShulkerBoxColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntitySignDoubleSidedEditableTextFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockEntityUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockNameFlatteningFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockPosFormatAndRenamesFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockPropertyRenameAndFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockStateData.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BlockStateStructureTemplateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/BoatSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CarvingStepRemoveFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CatTypeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CauldronRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CavesAndCliffsRenames.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChestedHorsesInventoryZeroIndexingFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkBedBlockEntityInjecterFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkBiomeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkDeleteIgnoredLightDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkDeleteLightFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkHeightAndBiomeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkLightRemoveFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkPalettedStorageFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkProtoTickListFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkRenamesFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkStatusFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkStatusFix2.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkStructuresTemplateRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkTicketUnpackPosFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ChunkToProtochunkFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ColorlessShulkerEntityFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ContainerBlockEntityLockPredicateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CopperGolemWeatherStateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CriteriaRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/CustomModelDataExpandFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DataComponentRemainderFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DayTimeToClockFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DebugProfileLookingAtSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DebugProfileOverlayReferenceFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DecoratedPotFieldRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DropChancesFormatFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DropInvalidSignDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/DyeItemRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EffectDurationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EmptyItemInHotbarFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EmptyItemInVillagerTradeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityArmorStandSilentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityAttributeBaseValueFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityBlockStateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityBrushableBlockFieldsRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityCatSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityCodSalmonFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityCustomNameToComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityElderGuardianSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityEquipmentToArmorAndHandFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityFallDistanceFloatToDoubleFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityFieldsRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityGoatMissingStateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityHealthFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityHorseSaddleFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityHorseSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityItemFrameDirectionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityMinecartIdentifiersFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityPaintingItemFrameDirectionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityPaintingMotiveFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityProjectileOwnerFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityPufferfishRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityRavagerRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityRedundantChanceTagsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityRidingToPassengersFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntitySalmonSizeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityShulkerColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityShulkerRotationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntitySkeletonSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntitySpawnerItemVariantComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityStringUuidFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityTheRenameningFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityTippedArrowFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityVariantFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityWolfColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityZombieSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityZombieVillagerTypeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EntityZombifiedPiglinRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EquipmentFormatFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/EquippableAssetRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FeatureFlagRemoveFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FilteredBooksFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FilteredSignsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FireResistantToDamageResistantComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FixProjectileStoredItem.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FixWolfHealth.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FoodToConsumableFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ForcePoiRebuild.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ForcedChunkToTicketFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/FurnaceRecipeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/GameRuleRegistryFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/GoatHornIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/GossipUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/HeightmapRenamingFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/HorseBodyArmorItemFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/IglooMetadataRemovalFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/InlineBlockPosFormatFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/InvalidBlockEntityLockFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/InvalidLockComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemBannerColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemCustomNameToComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemLoreFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemPotionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemShulkerBoxColorFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemSpawnEggFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackComponentizationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackCustomNameToOverrideComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackEnchantmentNamesFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackMapIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackSpawnEggFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackTagFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackTagRemainderFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackTheFlatteningFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemStackUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ItemWaterPotionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/JigsawPropertiesFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/JigsawRotationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/JukeboxTicksSinceSongStartedFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LeavesFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LegacyDimensionIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LegacyDragonFightFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LegacyHoverEventFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LegacyWorldBorderFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LevelDatDifficultyFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LevelDatToSavedDataPreparationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LevelDataGeneratorOptionsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LevelFlatGeneratorInfoFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LevelLegacyWorldGenSettingsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LevelUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LockComponentPredicateFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/LodestoneCompassComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/MapBannerBlockPosFormatFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/MapIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/MemoryExpiryDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/MissingDimensionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/MobEffectIdFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/MobSpawnerEntityIdentifiersFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/NamedEntityConvertUncheckedFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/NamedEntityFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/NamedEntityWriteReadFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/NamespacedTypeRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/NewVillageFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ObjectiveRenderTypeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OminousBannerBlockEntityRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OminousBannerRarityFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OminousBannerRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsAccessibilityOnboardFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsAddTextBackgroundFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsAmbientOcclusionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsFancyGraphicsToGraphicsModeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsForceVBOFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsGraphicsModeSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsKeyLwjgl3Fix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsKeyTranslationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsLowerCaseLanguageFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsMenuBlurrinessFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsMusicToastFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsProgrammerArtFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsRenameFieldFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OptionsSetGraphicsPresetToCustomFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/OverreachingTickFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ParticleUnflatteningFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PlayerEquipmentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PlayerHeadBlockProfileFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PlayerRespawnDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PlayerUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PoiTypeRemoveFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PoiTypeRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/PrimedTntBlockStateFixer.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ProjectileStoredWeaponFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RaidRenamesDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RandomSequenceSettingsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RecipesFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RecipesRenameningFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RedstoneWireConnectionsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/References.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RemapChunkStatusFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RemoveBlockEntityTagFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RemoveEmptyItemInBrushableBlockFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RemoveGolemGossipFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RenameEnchantmentsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RenamedCoralFansFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/RenamedCoralFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ReorganizePoi.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SaddleEquipmentSlotFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SavedDataFeaturePoolElementFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SavedDataUUIDFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ScoreboardDisplayNameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ScoreboardDisplaySlotFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SignTextStrictJsonFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SimpleEntityRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SimplestEntityRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/SpawnerDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StatsCounterFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StatsRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StonecutterRecipeRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StriderGravityFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StructureReferenceCountFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StructureSettingsFlattenFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/StructuresBecomeConfiguredFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TextComponentHoverAndClickEventFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TextComponentStringifiedFlagsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ThrownPotionSplitFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TippedArrowPotionToItemFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TooltipDisplayComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TrappedChestBlockEntityFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TrialSpawnerConfigFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TrialSpawnerConfigInRegistryFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/TridentAnimationFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/UnflattenTextComponentFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VariantRenameFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VillagerDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VillagerFollowRangeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VillagerRebuildLevelAndXpFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VillagerSetCanPickUpLootFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VillagerSetVillagerDataFinalized.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/VillagerTradeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WallPropertyFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WeaponSmithChestLootTableFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WorldBorderWarningTimeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WorldGenSettingsDisallowOldCustomWorldsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WorldGenSettingsFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WorldGenSettingsHeightAndBiomeFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WorldSpawnDataFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WriteAndReadFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/WrittenBookPagesStrictJsonFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ZombieVillagerRebuildXpFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/ZombieVillagerSetVillagerDataFinalized.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/fixes/package-info.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
 net/minecraft/util/datafix/package-info.java	unvisited	
-net/minecraft/util/datafix/schemas/NamespacedSchema.java	unvisited	
-net/minecraft/util/datafix/schemas/V100.java	unvisited	
-net/minecraft/util/datafix/schemas/V102.java	unvisited	
-net/minecraft/util/datafix/schemas/V1022.java	unvisited	
-net/minecraft/util/datafix/schemas/V106.java	unvisited	
-net/minecraft/util/datafix/schemas/V107.java	unvisited	
-net/minecraft/util/datafix/schemas/V1125.java	unvisited	
-net/minecraft/util/datafix/schemas/V135.java	unvisited	
-net/minecraft/util/datafix/schemas/V143.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451_1.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451_2.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451_3.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451_4.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451_5.java	unvisited	
-net/minecraft/util/datafix/schemas/V1451_6.java	unvisited	
-net/minecraft/util/datafix/schemas/V1458.java	unvisited	
-net/minecraft/util/datafix/schemas/V1460.java	unvisited	
-net/minecraft/util/datafix/schemas/V1466.java	unvisited	
-net/minecraft/util/datafix/schemas/V1470.java	unvisited	
-net/minecraft/util/datafix/schemas/V1481.java	unvisited	
-net/minecraft/util/datafix/schemas/V1483.java	unvisited	
-net/minecraft/util/datafix/schemas/V1486.java	unvisited	
-net/minecraft/util/datafix/schemas/V1488.java	unvisited	
-net/minecraft/util/datafix/schemas/V1510.java	unvisited	
-net/minecraft/util/datafix/schemas/V1800.java	unvisited	
-net/minecraft/util/datafix/schemas/V1801.java	unvisited	
-net/minecraft/util/datafix/schemas/V1904.java	unvisited	
-net/minecraft/util/datafix/schemas/V1906.java	unvisited	
-net/minecraft/util/datafix/schemas/V1909.java	unvisited	
-net/minecraft/util/datafix/schemas/V1920.java	unvisited	
-net/minecraft/util/datafix/schemas/V1928.java	unvisited	
-net/minecraft/util/datafix/schemas/V1929.java	unvisited	
-net/minecraft/util/datafix/schemas/V1931.java	unvisited	
-net/minecraft/util/datafix/schemas/V2100.java	unvisited	
-net/minecraft/util/datafix/schemas/V2501.java	unvisited	
-net/minecraft/util/datafix/schemas/V2502.java	unvisited	
-net/minecraft/util/datafix/schemas/V2505.java	unvisited	
-net/minecraft/util/datafix/schemas/V2509.java	unvisited	
-net/minecraft/util/datafix/schemas/V2511_1.java	unvisited	
-net/minecraft/util/datafix/schemas/V2519.java	unvisited	
-net/minecraft/util/datafix/schemas/V2522.java	unvisited	
-net/minecraft/util/datafix/schemas/V2551.java	unvisited	
-net/minecraft/util/datafix/schemas/V2568.java	unvisited	
-net/minecraft/util/datafix/schemas/V2571.java	unvisited	
-net/minecraft/util/datafix/schemas/V2684.java	unvisited	
-net/minecraft/util/datafix/schemas/V2686.java	unvisited	
-net/minecraft/util/datafix/schemas/V2688.java	unvisited	
-net/minecraft/util/datafix/schemas/V2704.java	unvisited	
-net/minecraft/util/datafix/schemas/V2707.java	unvisited	
-net/minecraft/util/datafix/schemas/V2831.java	unvisited	
-net/minecraft/util/datafix/schemas/V2832.java	unvisited	
-net/minecraft/util/datafix/schemas/V2842.java	unvisited	
-net/minecraft/util/datafix/schemas/V3076.java	unvisited	
-net/minecraft/util/datafix/schemas/V3078.java	unvisited	
-net/minecraft/util/datafix/schemas/V3081.java	unvisited	
-net/minecraft/util/datafix/schemas/V3082.java	unvisited	
-net/minecraft/util/datafix/schemas/V3083.java	unvisited	
-net/minecraft/util/datafix/schemas/V3202.java	unvisited	
-net/minecraft/util/datafix/schemas/V3203.java	unvisited	
-net/minecraft/util/datafix/schemas/V3204.java	unvisited	
-net/minecraft/util/datafix/schemas/V3325.java	unvisited	
-net/minecraft/util/datafix/schemas/V3326.java	unvisited	
-net/minecraft/util/datafix/schemas/V3327.java	unvisited	
-net/minecraft/util/datafix/schemas/V3328.java	unvisited	
-net/minecraft/util/datafix/schemas/V3438.java	unvisited	
-net/minecraft/util/datafix/schemas/V3439.java	unvisited	
-net/minecraft/util/datafix/schemas/V3439_1.java	unvisited	
-net/minecraft/util/datafix/schemas/V3448.java	unvisited	
-net/minecraft/util/datafix/schemas/V3682.java	unvisited	
-net/minecraft/util/datafix/schemas/V3683.java	unvisited	
-net/minecraft/util/datafix/schemas/V3685.java	unvisited	
-net/minecraft/util/datafix/schemas/V3689.java	unvisited	
-net/minecraft/util/datafix/schemas/V3799.java	unvisited	
-net/minecraft/util/datafix/schemas/V3807.java	unvisited	
-net/minecraft/util/datafix/schemas/V3808.java	unvisited	
-net/minecraft/util/datafix/schemas/V3808_1.java	unvisited	
-net/minecraft/util/datafix/schemas/V3808_2.java	unvisited	
-net/minecraft/util/datafix/schemas/V3813.java	unvisited	
-net/minecraft/util/datafix/schemas/V3816.java	unvisited	
-net/minecraft/util/datafix/schemas/V3818.java	unvisited	
-net/minecraft/util/datafix/schemas/V3818_3.java	unvisited	
-net/minecraft/util/datafix/schemas/V3818_4.java	unvisited	
-net/minecraft/util/datafix/schemas/V3818_5.java	unvisited	
-net/minecraft/util/datafix/schemas/V3825.java	unvisited	
-net/minecraft/util/datafix/schemas/V3938.java	unvisited	
-net/minecraft/util/datafix/schemas/V4059.java	unvisited	
-net/minecraft/util/datafix/schemas/V4067.java	unvisited	
-net/minecraft/util/datafix/schemas/V4070.java	unvisited	
-net/minecraft/util/datafix/schemas/V4071.java	unvisited	
-net/minecraft/util/datafix/schemas/V4290.java	unvisited	
-net/minecraft/util/datafix/schemas/V4292.java	unvisited	
-net/minecraft/util/datafix/schemas/V4300.java	unvisited	
-net/minecraft/util/datafix/schemas/V4301.java	unvisited	
-net/minecraft/util/datafix/schemas/V4302.java	unvisited	
-net/minecraft/util/datafix/schemas/V4306.java	unvisited	
-net/minecraft/util/datafix/schemas/V4307.java	unvisited	
-net/minecraft/util/datafix/schemas/V4312.java	unvisited	
-net/minecraft/util/datafix/schemas/V4420.java	unvisited	
-net/minecraft/util/datafix/schemas/V4421.java	unvisited	
-net/minecraft/util/datafix/schemas/V4531.java	unvisited	
-net/minecraft/util/datafix/schemas/V4532.java	unvisited	
-net/minecraft/util/datafix/schemas/V4533.java	unvisited	
-net/minecraft/util/datafix/schemas/V4543.java	unvisited	
-net/minecraft/util/datafix/schemas/V4648.java	unvisited	
-net/minecraft/util/datafix/schemas/V4656.java	unvisited	
-net/minecraft/util/datafix/schemas/V4771.java	unvisited	
-net/minecraft/util/datafix/schemas/V501.java	unvisited	
-net/minecraft/util/datafix/schemas/V700.java	unvisited	
-net/minecraft/util/datafix/schemas/V701.java	unvisited	
-net/minecraft/util/datafix/schemas/V702.java	unvisited	
-net/minecraft/util/datafix/schemas/V703.java	unvisited	
-net/minecraft/util/datafix/schemas/V704.java	unvisited	
-net/minecraft/util/datafix/schemas/V705.java	unvisited	
-net/minecraft/util/datafix/schemas/V808.java	unvisited	
-net/minecraft/util/datafix/schemas/V99.java	unvisited	
-net/minecraft/util/datafix/schemas/package-info.java	unvisited	
+net/minecraft/util/datafix/schemas/NamespacedSchema.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V100.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V102.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1022.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V106.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V107.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1125.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V135.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V143.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451_1.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451_2.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451_3.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451_4.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451_5.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1451_6.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1458.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1460.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1466.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1470.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1481.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1483.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1486.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1488.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1510.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1800.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1801.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1904.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1906.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1909.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1920.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1928.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1929.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V1931.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2100.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2501.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2502.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2505.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2509.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2511_1.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2519.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2522.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2551.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2568.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2571.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2684.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2686.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2688.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2704.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2707.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2831.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2832.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V2842.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3076.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3078.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3081.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3082.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3083.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3202.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3203.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3204.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3325.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3326.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3327.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3328.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3438.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3439.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3439_1.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3448.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3682.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3683.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3685.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3689.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3799.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3807.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3808.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3808_1.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3808_2.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3813.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3816.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3818.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3818_3.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3818_4.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3818_5.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3825.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V3938.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4059.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4067.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4070.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4071.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4290.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4292.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4300.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4301.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4302.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4306.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4307.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4312.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4420.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4421.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4531.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4532.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4533.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4543.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4648.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4656.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V4771.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V501.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V700.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V701.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V702.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V703.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V704.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V705.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V808.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/V99.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
+net/minecraft/util/datafix/schemas/package-info.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
 net/minecraft/util/debug/DebugBeeInfo.java	unvisited	
 net/minecraft/util/debug/DebugBrainDump.java	unvisited	
 net/minecraft/util/debug/DebugBreezeInfo.java	unvisited	
@@ -6810,7 +6810,7 @@ net/minecraft/world/level/validation/ForbiddenSymlinkInfo.java	unvisited
 net/minecraft/world/level/validation/PathAllowList.java	unvisited	
 net/minecraft/world/level/validation/package-info.java	unvisited	
 net/minecraft/world/package-info.java	unvisited	
-net/minecraft/world/phys/AABB.java	unvisited	
+net/minecraft/world/phys/AABB.java	partial	clip/expandTowards/contract/distanceToSqr bit-exact (aabb_parity 512/0); remaining API surface (intersects/inflate/move/ofSize...) + NaN-ctor semantics (ternary vs Math.min) ungated
 net/minecraft/world/phys/BlockHitResult.java	unvisited	
 net/minecraft/world/phys/EntityHitResult.java	unvisited	
 net/minecraft/world/phys/HitResult.java	unvisited	

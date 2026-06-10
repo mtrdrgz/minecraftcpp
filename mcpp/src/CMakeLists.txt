@@ -272,6 +272,19 @@ set_target_properties(packet_buffer_parity PROPERTIES
 # NBT tag-codec parity vs the real net.minecraft.nbt: canonical read dumps +
 # byte-exact rewrite of real world payloads (level.dat, chunk NBTs) + a synthetic
 # all-tag-types / modified-UTF-8 case. Ground truth: tools/NbtParity.java.
+# AABB (ray clip / expandTowards / contract / distanceToSqr) parity vs the real
+# net.minecraft.world.phys.AABB. Ground truth: tools/AabbParity.java (bit-exact).
+add_executable(aabb_parity
+    world/phys/AabbParityTest.cpp
+    world/phys/AABB.cpp
+)
+target_include_directories(aabb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aabb_parity PRIVATE glm)
+set_target_properties(aabb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 add_executable(nbt_parity
     nbt/NbtParityTest.cpp
     nbt/NbtIo.cpp
