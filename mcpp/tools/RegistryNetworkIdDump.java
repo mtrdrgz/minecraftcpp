@@ -41,6 +41,7 @@ public class RegistryNetworkIdDump {
 
         // Built-in registries whose ids appear directly on the play-protocol wire as
         // VarInt(getId) via ByteBufCodecs.registry/holderRegistry/holder.
+        dump("minecraft:item", BuiltInRegistries.ITEM);  // ItemStack/Item.STREAM_CODEC holder id (== items.json order)
         dump("minecraft:mob_effect", BuiltInRegistries.MOB_EFFECT);
         dump("minecraft:sound_event", BuiltInRegistries.SOUND_EVENT);
         dump("minecraft:menu", BuiltInRegistries.MENU);

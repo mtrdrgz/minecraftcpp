@@ -5172,3 +5172,17 @@ set_target_properties(pkt_system_chat_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ===== netcode ItemStack layer (step A): ItemStack.OPTIONAL_STREAM_CODEC, no-component domain =====
+add_executable(itemstack_stream_parity
+    network/ItemStackStreamParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(itemstack_stream_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(itemstack_stream_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(itemstack_stream_parity PRIVATE bcrypt)
+endif()
+set_target_properties(itemstack_stream_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
