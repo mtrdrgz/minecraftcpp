@@ -900,3 +900,750 @@ set_target_properties(quaternionf_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTOR
 add_executable(explosion_falloff_parity world/level/ExplosionMathParityTest.cpp)
 target_include_directories(explosion_falloff_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(explosion_falloff_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== Parallel-authored bounded gates (workflow wave 4) =====
+
+# net.minecraft.world.level.block.state.properties (AttachFace/Half/SlabType/StairsShape/BedPart/ChestType/ComparatorMode/WallSide/DoorHingeSide/PistonType/RedstoneSide/RailShape/DoubleBlockHalf/Tilt)
+add_executable(attach_face_props_parity world/level/block/state/properties/BlockStateEnumsParityTest.cpp)
+target_include_directories(attach_face_props_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(attach_face_props_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.valueproviders.BiasedToBottomInt
+add_executable(biased_to_bottom_int_parity util/valueproviders/BiasedToBottomIntParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(biased_to_bottom_int_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(biased_to_bottom_int_parity PRIVATE bcrypt)
+endif()
+set_target_properties(biased_to_bottom_int_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.BinaryAnimator
+add_executable(binary_animator_parity
+    util/BinaryAnimatorParityTest.cpp
+)
+target_include_directories(binary_animator_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(binary_animator_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.pathfinder.BinaryHeap
+add_executable(binary_heap_parity world/level/pathfinder/BinaryHeapParityTest.cpp)
+target_include_directories(binary_heap_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(binary_heap_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.level.biome.Biome
+add_executable(biome_temperature_parity
+    world/level/levelgen/BiomeTemperatureParityTest.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(biome_temperature_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+target_link_libraries(biome_temperature_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(biome_temperature_parity PRIVATE bcrypt)
+endif()
+set_target_properties(biome_temperature_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.core.BlockBox
+add_executable(block_box_parity core/BlockBoxParityTest.cpp)
+target_include_directories(block_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(block_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.core.BlockMath
+# net.minecraft.core.BlockMath parity: UV-lock face transformation
+# (getFaceTransformation + the two VANILLA_UV_TRANSFORM_* Direction->Transformation
+# maps + Direction.getApproximateNearest). Header-only on the certified
+# render/model/Joml.h subset (Matrix4f rotation/translation/mul/invertAffine/
+# transformDirection, Quaternionf.rotateX/rotateY via jsin+cosFromSin,
+# MatrixUtil.isIdentity). No registry/world deps. Ground truth: tools/BlockMathParity.java.
+add_executable(block_math_parity
+    core/BlockMathParityTest.cpp
+)
+target_include_directories(block_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(block_math_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.phys.shapes.BooleanOp
+# BooleanOp truth-table parity vs the real net.minecraft.world.phys.shapes.BooleanOp
+# (the 16 named two-input boolean operators FALSE..TRUE used by Shapes.join).
+# Ground truth: tools/BooleanOpParity.java reflects each BooleanOp lambda field and
+# invokes the real apply(boolean,boolean) over the 2x2 truth table; this gate
+# dispatches the same op by name and compares the boolean result bit-for-bit.
+# The included header (world/phys/shapes/BooleanOp.h) is self-contained (pure
+# constexpr lambdas) so the target needs no extra sources and no external libs.
+add_executable(boolean_op_parity
+    world/level/levelgen/BooleanOpParityTest.cpp
+)
+target_include_directories(boolean_op_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(boolean_op_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.ByIdMap
+add_executable(byidmap_parity util/ByIdMapParityTest.cpp)
+target_include_directories(byidmap_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(byidmap_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.valueproviders.ClampedInt
+# ClampedInt parity vs the real net.minecraft.util.valueproviders.ClampedInt.
+# VERIFY-EXISTING: the certified port lives in
+# world/level/levelgen/IntProvider.h (header-only); the test seeds a
+# LegacyRandomSource identically (RandomSource.cpp) and compares sampled +
+# bounds results bit-for-bit. Ground truth: tools/ClampedIntParity.java.
+add_executable(clamped_int_parity
+    util/valueproviders/ClampedIntParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(clamped_int_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(clamped_int_parity PRIVATE bcrypt)
+endif()
+set_target_properties(clamped_int_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.valueproviders.ClampedNormalFloat
+# Bit-exact parity gate for net.minecraft.util.valueproviders.ClampedNormalFloat.
+# VERIFY-EXISTING: reuses the certified port in world/level/levelgen/FloatProvider.h
+# (mc::valueproviders::ClampedNormalFloat). Pure standard C++; `--cases <tsv>`
+# compares against ground truth from tools/ClampedNormalFloatParity.java (the real
+# decompiled class). Links RandomSource.cpp for LegacyRandomSource::nextGaussian.
+add_executable(clamped_normal_float_parity
+    util/valueproviders/ClampedNormalFloatParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(clamped_normal_float_parity PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen
+)
+if(WIN32)
+    target_link_libraries(clamped_normal_float_parity PRIVATE bcrypt)
+endif()
+set_target_properties(clamped_normal_float_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.ColorRGBA
+# net.minecraft.util.ColorRGBA parity â€” the typed packed-RGBA value record
+# (constructor, rgba() accessor, toString() 8-digit lowercase hex) over a packed
+# 32-bit color int, reusing the certified util/ARGB.h channel pack/unpack.
+# Header-only (ARGB.h/Mth.h are inline; sRGB/atan LUTs are .inc includes).
+# Ground truth: tools/ColorRgbaParity.java.
+add_executable(color_rgba_parity
+    util/ColorRgbaParityTest.cpp
+)
+target_include_directories(color_rgba_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(color_rgba_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.entity.Crackiness
+add_executable(crackiness_parity world/entity/CrackinessParityTest.cpp)
+target_include_directories(crackiness_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(crackiness_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.phys.shapes.CubePointRange
+# CubePointRange parity vs the real net.minecraft.world.phys.shapes.CubePointRange
+# (DoubleList grid: getDouble(i) = (double)i / parts; size() = parts + 1).
+# VERIFY-EXISTING: reuses world/phys/shapes/DoubleList.h (class mc::CubePointRange),
+# which is header-only (standard-library includes only), so the test target needs no
+# extra sources and no glm. Ground truth: tools/CubePointRangeParity.java.
+add_executable(cube_point_range_parity
+    world/level/levelgen/CubePointRangeParityTest.cpp
+)
+target_include_directories(cube_point_range_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cube_point_range_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.phys.shapes.DiscreteCubeMerger
+add_executable(cube_voxel_parity world/level/levelgen/DiscreteCubeMergerParityTest.cpp)
+target_include_directories(cube_voxel_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cube_voxel_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.core.Cursor3D
+add_executable(cursor3d_parity core/Cursor3DParityTest.cpp)
+target_include_directories(cursor3d_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cursor3d_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.core.Direction
+add_executable(direction_axis_parity core/DirectionAxisExtraParityTest.cpp)
+target_include_directories(direction_axis_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(direction_axis_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.core.Direction8
+add_executable(direction8_parity core/Direction8ParityTest.cpp)
+target_include_directories(direction8_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(direction8_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# com.mojang.math.Divisor
+add_executable(divisor_parity render/model/DivisorParityTest.cpp)
+target_include_directories(divisor_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(divisor_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.item.DyeColor
+# DyeColor parity vs the real net.minecraft.world.item.DyeColor (16 colors).
+# Pure data enum: id/name/textureDiffuseColor/mapColor(id+col)/fireworkColor/textColor,
+# plus byId (ByIdMap.continuous ZERO) and byFireworkColor. ARGB.opaque baked into
+# the texture/text color constants. Ground truth: tools/DyeColorParity.java.
+add_executable(dye_color_parity
+    world/item/DyeColorParityTest.cpp
+)
+target_include_directories(dye_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(dye_color_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.Ease
+# net.minecraft.util.Ease (the easing primitives: inBack/inBounce/.../inOutBack)
+# parity vs the REAL class â€” pure float easings, bit-exact. Header-only port that
+# reuses the certified mc::levelgen::mth:: square/cube/sin(table)/cos(table); the
+# libm-routed Math.pow/sin/sqrt match after the final narrowing to float.
+# Ground truth: tools/EasingParity.java.
+add_executable(easing_parity
+    util/EasingParityTest.cpp
+)
+target_include_directories(easing_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(easing_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.entity.EntityAttachments
+# EntityAttachments (full Builder.attach + getClamped/get/getAverage/getNullable +
+# transformPoint yRot-via-Mth) parity vs the real net.minecraft.world.entity.
+# EntityAttachments â€” bit-exact (Mth-table rotation, float 1.0F/size average divisor,
+# float->double widening on every attach/scale). Header-only deps (Vec3.h, Mth.h,
+# Direction.h), so no extra link libs â€” mirrors vec3_parity. GT: tools/EntityAttachmentsParity.java.
+add_executable(entity_attachments_parity
+    world/entity/EntityAttachmentsParityTest.cpp
+)
+target_include_directories(entity_attachments_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(entity_attachments_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.entity.EquipmentSlotGroup
+add_executable(equipment_slot_group_parity world/entity/EquipmentSlotGroupParityTest.cpp)
+target_include_directories(equipment_slot_group_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(equipment_slot_group_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.EquipmentSlot
+add_executable(equipment_slot_parity world/entity/EquipmentSlotParityTest.cpp)
+target_include_directories(equipment_slot_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(equipment_slot_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.level.material.FogType
+# FogType enum parity vs net.minecraft.world.level.material.FogType (bare enum:
+# 5 constants LAVA/WATER/POWDER_SNOW/ATMOSPHERIC/NONE; verifies ordinals + names).
+# Ground truth: tools/FogTypeParity.java. Header is self-contained (std only).
+add_executable(fog_type_parity
+    world/level/material/FogTypeParityTest.cpp
+)
+target_include_directories(fog_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(fog_type_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.Graph
+add_executable(graph_sort_parity util/GraphSortParityTest.cpp)
+target_include_directories(graph_sort_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(graph_sort_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.InclusiveRange
+add_executable(inclusive_range_parity util/InclusiveRangeParityTest.cpp)
+target_include_directories(inclusive_range_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(inclusive_range_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.InterpolationHandler
+add_executable(interpolation_handler_parity world/entity/InterpolationHandlerParityTest.cpp)
+target_include_directories(interpolation_handler_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(interpolation_handler_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.item.ItemCooldowns
+# net.minecraft.world.item.ItemCooldowns parity vs the REAL class. Drives a real
+# ItemCooldowns through deterministic op programs (addCooldown(Identifier,int) +
+# tick(), both public; removeCooldown public) and records getCooldownPercent /
+# isOnCooldown at sampled points; the C++ port (header-only) replays the same op
+# stream and must match bit-for-bit. The ItemStack->group resolution
+# (getCooldownGroup / addCooldown(ItemStack) / isOnCooldown(ItemStack)) is
+# registry/component-coupled and intentionally not exercised â€” raw int group keys.
+# Ground truth: tools/ItemCooldownsParity.java.
+add_executable(item_cooldowns_parity
+    world/item/ItemCooldownsParityTest.cpp
+)
+target_include_directories(item_cooldowns_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/item)
+set_target_properties(item_cooldowns_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.item.ItemDisplayContext
+add_executable(item_display_context_parity world/item/ItemDisplayContextParityTest.cpp)
+target_include_directories(item_display_context_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(item_display_context_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.Keyframe
+# Keyframe interpolation parity (net.minecraft.util.Keyframe / KeyframeTrack /
+# KeyframeTrackSampler + EasingType + LerpFunction). Header-only, pure standard
+# C++ (no glm/world/registry deps). `--cases <tsv>` compares against ground truth
+# from tools/KeyframeParity.java (the real decompiled classes).
+add_executable(keyframe_parity
+    util/KeyframeParityTest.cpp
+)
+target_include_directories(keyframe_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(keyframe_parity PRIVATE bcrypt)
+endif()
+set_target_properties(keyframe_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.LinearCongruentialGenerator
+# LinearCongruentialGenerator parity vs the real net.minecraft.util.Linear-
+# CongruentialGenerator â€” the positional-random LCG (next(rval,c) +
+# MULTIPLIER/INCREMENT) used by BiomeManager's biome-zoom fiddle. Pure 64-bit
+# two's-complement long arithmetic, bit-exact. Ground truth: tools/LcgParity.java.
+add_executable(lcg_parity
+    util/LcgParityTest.cpp
+)
+target_include_directories(lcg_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(lcg_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.LpVec3
+add_executable(lp_vec3_parity
+    network/LpVec3ParityTest.cpp
+)
+target_include_directories(lp_vec3_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(lp_vec3_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.material.MapColor
+# MapColor parity vs the real net.minecraft.world.level.material.MapColor â€” the
+# map-color col/id table (62 entries) + nested Brightness enum (180/220/255/135)
+# + the pure color math: calculateARGBColor / getColorFromPackedId / getPackedId.
+# Reuses the certified util/ARGB.h (ARGB.opaque + the int overload of ARGB.scaleRGB).
+# Header-only; no glm/json. Ground truth: tools/MapColorParity.java.
+add_executable(map_color_parity
+    world/level/material/MapColorParityTest.cpp
+)
+target_include_directories(map_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(map_color_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.saveddata.maps.MapDecorationType
+add_executable(map_decoration_type_parity world/level/saveddata/maps/MapDecorationTypeParityTest.cpp)
+target_include_directories(map_decoration_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(map_decoration_type_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.level.saveddata.maps.MapId
+add_executable(map_id_parity
+    world/level/saveddata/maps/MapIdParityTest.cpp
+)
+target_include_directories(map_id_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/saveddata/maps)
+set_target_properties(map_id_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.levelgen.MarsagliaPolarGaussian
+# MarsagliaPolarGaussian parity (the polar nextGaussian shared by every
+# RandomSource). VERIFY-EXISTING: the class is already ported as the private
+# `gaussian()` helper in RandomSource.cpp (surfaced via
+# RandomSource::nextGaussian()); this test re-states the standalone class body
+# locally and drives the engine RandomSource. `--cases <tsv>` compares against
+# ground truth from tools/MarsagliaGaussianParity.java (the real decompiled
+# MarsagliaPolarGaussian over the real RandomSource implementations).
+add_executable(marsaglia_gaussian_parity
+    world/level/levelgen/MarsagliaGaussianParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(marsaglia_gaussian_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+if(WIN32)
+    target_link_libraries(marsaglia_gaussian_parity PRIVATE bcrypt)
+endif()
+set_target_properties(marsaglia_gaussian_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# org.joml.Matrix4f
+# org.joml.Matrix4f projection-builder parity (setOrtho / setPerspective /
+# perspective) vs the REAL org.joml (joml-1.10.8.jar). Self-contained header
+# (render/model/Matrix4fProjection.h) â€” no extra .cpp/lib link closure needed.
+# setPerspective routes through org.joml.Math.tan = (float)Math.tan((double)x);
+# this gate certifies std::tan agrees bit-for-bit. Ground truth:
+# tools/Matrix4fProjParity.java.
+add_executable(matrix4f_proj_parity
+    render/model/Matrix4fProjParityTest.cpp
+)
+target_include_directories(matrix4f_proj_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(matrix4f_proj_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.entity.MobCategory
+add_executable(mob_category_parity world/entity/MobCategoryParityTest.cpp)
+target_include_directories(mob_category_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mob_category_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.MoverType
+add_executable(mover_type_parity
+    world/entity/MoverTypeParityTest.cpp
+)
+target_include_directories(mover_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mover_type_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.levelgen.synth.NoiseUtils
+add_executable(noise_utils_parity
+    world/level/levelgen/NoiseUtilsParityTest.cpp
+)
+target_include_directories(noise_utils_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+set_target_properties(noise_utils_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.block.state.properties.NoteBlockInstrument
+add_executable(note_block_instrument_parity world/level/block/state/properties/NoteBlockInstrumentParityTest.cpp)
+target_include_directories(note_block_instrument_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(note_block_instrument_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.phys.shapes.OffsetDoubleList
+# OffsetDoubleList parity vs the real net.minecraft.world.phys.shapes.OffsetDoubleList.
+# VERIFY-EXISTING: the C++ port lives in world/phys/shapes/DoubleList.h
+# (class mc::OffsetDoubleList: getDouble(i) = delegate.getDouble(i) + offset; size() = delegate.size()).
+# DoubleList.h is fully header-only (std only), so no extra .cpp link closure is needed.
+# Ground truth: tools/OffsetDoubleListParity.java.
+add_executable(offset_double_list_parity
+    world/level/levelgen/OffsetDoubleListParityTest.cpp
+)
+target_include_directories(offset_double_list_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(offset_double_list_parity PRIVATE bcrypt)
+endif()
+set_target_properties(offset_double_list_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.pathfinder.PathType
+add_executable(path_type_parity world/level/pathfinder/PathTypeParityTest.cpp)
+target_include_directories(path_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(path_type_parity PRIVATE bcrypt)
+endif()
+set_target_properties(path_type_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.PositionMoveRotation
+# PositionMoveRotation (teleport/position-sync record) parity vs the real
+# net.minecraft.world.entity.PositionMoveRotation â€” bit-exact. Pure arithmetic
+# over the certified Vec3 (xRot/yRot use the Mth sin/cos table) + Mth.clamp(float)
+# + the Relative enum mask packing. Header-only closure (Vec3.h -> Mth.h/Direction.h),
+# no extra sources, no libs. Ground truth: tools/PositionMoveRotationParity.java.
+add_executable(position_move_rotation_parity
+    world/entity/PositionMoveRotationParityTest.cpp
+)
+target_include_directories(position_move_rotation_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(position_move_rotation_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.material.PushReaction
+# PushReaction enum-ordinal/name parity vs net.minecraft.world.level.material.PushReaction
+# (bare enum: NORMAL/DESTROY/BLOCK/IGNORE/PUSH_ONLY -> ordinals 0..4). Verifies the
+# header-only port world/level/material/PushReaction.h. Ground truth: tools/PushReactionParity.java.
+add_executable(push_reaction_parity
+    world/level/material/PushReactionParityTest.cpp
+)
+target_include_directories(push_reaction_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(push_reaction_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.levelgen.RandomSupport
+# RandomSupport seed-math parity gate. Verifies the EXISTING certified port in
+# world/level/levelgen/RandomSource.{h,cpp}: mixStafford13, upgradeSeedTo128bit(Unmixed),
+# Seed128bit::xorWith/mixed, and seedFromHashOf (real MD5_128 -> needs bcrypt on Win).
+# Ground truth: mcpp/tools/RandomSupportParity.java (real net.minecraft.world.level.levelgen.RandomSupport).
+add_executable(random_support_parity
+    world/level/levelgen/RandomSupportParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(random_support_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+if(WIN32)
+    target_link_libraries(random_support_parity PRIVATE bcrypt)
+endif()
+set_target_properties(random_support_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.entity.ai.attributes.RangedAttribute
+add_executable(ranged_attribute_parity world/entity/ai/attributes/RangedAttributeParityTest.cpp)
+target_include_directories(ranged_attribute_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+  target_link_libraries(ranged_attribute_parity PRIVATE bcrypt)
+endif()
+set_target_properties(ranged_attribute_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.item.Rarity
+# Rarity (item rarity enum: id/serialized-name + ChatFormatting color + BY_ID
+# ZERO-strategy lookup) parity vs net.minecraft.world.item.Rarity. Pure data
+# enum; header is header-only (std lib only). Ground truth: tools/RarityParity.java.
+add_executable(rarity_parity
+    world/item/RarityParityTest.cpp
+)
+target_include_directories(rarity_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(rarity_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.scores.ReadOnlyScoreInfo
+# ReadOnlyScoreInfo interface-contract parity vs net.minecraft.world.scores.ReadOnlyScoreInfo
+# (pure subset: int value() / boolean isLocked()). Verifies the reused 1:1 port of its only
+# concrete impl, world/scores/Score.h (mc::world::scores::Score), read THROUGH a local model
+# of the interface. Header-only â€” no extra link closure. Ground truth: tools/ReadOnlyScoreInfoParity.java.
+add_executable(readonly_score_info_parity
+    world/scores/ReadOnlyScoreInfoParityTest.cpp
+)
+target_include_directories(readonly_score_info_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(readonly_score_info_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.core.Rotations
+# net.minecraft.core.Rotations parity vs the real 26.1.2 record. Bit-exact: verifies the
+# canonical constructor normalization (v % 360.0F for finite; 0 for Inf/NaN) via x()/y()/z()
+# accessors, plus re-verifies the reused certified Mth.wrapDegrees(float). Both Rotations.h
+# and Mth.h are header-only. Ground truth: tools/RotationsParity.java.
+add_executable(rotations_parity
+    core/RotationsParityTest.cpp
+)
+target_include_directories(rotations_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(rotations_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.scores.Score
+add_executable(score_parity world/scores/ScoreParityTest.cpp)
+target_include_directories(score_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(score_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.SegmentedAnglePrecision
+# SegmentedAnglePrecision angle-quantization parity vs the real
+# net.minecraft.util.SegmentedAnglePrecision (toSegment/fromSegment style binary-angle
+# math used by RotationSegment / rotated blocks). Pure int/float, bit-exact (floats as
+# raw IEEE-754 bits; Math.round(float) via the JDK bit-twiddle). Ground truth:
+# tools/SegAngleParity.java.
+add_executable(seg_angle_parity
+    util/SegAngleParityTest.cpp
+)
+target_include_directories(seg_angle_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(seg_angle_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.entity.AnimationState
+add_executable(squid_swim_parity
+    world/entity/AnimationStateParityTest.cpp
+)
+target_include_directories(squid_swim_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/world/entity)
+set_target_properties(squid_swim_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.StringUtil
+# Pure-string helpers parity vs the real net.minecraft.util.StringUtil
+# (isBlank/isNullOrEmpty/truncateStringIfNecessary/lineCount/trimChatMessage/
+# isAllowedChatCharacter/isWhitespace). Header-only (std lib + embedded JDK whitespace
+# table StringUtilWhitespace.inc); no project link deps. Ground truth: tools/StringUtilParity.java.
+add_executable(stringutil_parity util/StringUtilParityTest.cpp)
+target_include_directories(stringutil_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(stringutil_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.item.ToolMaterial
+add_executable(tool_material_parity world/item/ToolMaterialParityTest.cpp)
+target_include_directories(tool_material_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(tool_material_parity PRIVATE bcrypt)
+endif()
+set_target_properties(tool_material_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.valueproviders.TrapezoidFloat
+add_executable(trapezoid_float_parity
+    util/valueproviders/TrapezoidFloatParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(trapezoid_float_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(trapezoid_float_parity PRIVATE bcrypt)
+endif()
+set_target_properties(trapezoid_float_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.TriState
+# net.minecraft.util.TriState parity gate (pure value enum: from / toBoolean /
+# getSerializedName). Pure standard C++, no deps; `--cases <tsv>` compares against
+# ground truth from tools/TriStateParity.java (the real decompiled TriState).
+add_executable(tristate_parity
+    util/TriStateParityTest.cpp
+)
+target_include_directories(tristate_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/util)
+set_target_properties(tristate_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.valueproviders.UniformFloat
+# UniformFloat value-provider parity vs net.minecraft.util.valueproviders.UniformFloat.
+# VERIFIES the existing certified port mc::valueproviders::UniformFloat (in
+# world/level/levelgen/FloatProvider.h); sample == nextFloat()*(max-min)+min.
+# Ground truth: tools/UniformFloatParity.java (real UniformFloat over LEG+XOR RNGs).
+add_executable(uniform_float_parity
+    util/valueproviders/UniformFloatParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(uniform_float_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(uniform_float_parity PRIVATE bcrypt)
+endif()
+set_target_properties(uniform_float_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.valueproviders.UniformInt
+# UniformInt parity GATE vs the REAL net.minecraft.util.valueproviders.UniformInt.
+# Verifies the existing certified port mc::valueproviders::UniformInt in
+# world/level/levelgen/IntProvider.h (header-only). `--cases <tsv>` compares
+# bit-for-bit against ground truth from tools/UniformIntParity.java. Link closure:
+# only RandomSource.cpp (LegacyRandomSource + XoroshiroRandomSource) + bcrypt on WIN32.
+add_executable(uniform_int_parity
+    util/valueproviders/UniformIntParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(uniform_int_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(uniform_int_parity PRIVATE bcrypt)
+endif()
+set_target_properties(uniform_int_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.core.UUIDUtil
+add_executable(uuidutil_parity core/UuidUtilParityTest.cpp)
+target_include_directories(uuidutil_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(uuidutil_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.network.VarInt
+# net.minecraft.network.VarInt parity: getByteSize(int) + encode bytes (VarInt.write)
+# over a wide int range. Ground truth: tools/VarIntSizeParity.java.
+# Also pins the existing PacketBuffer::writeVarInt encoder (same bytes).
+add_executable(varint_size_parity
+    world/level/levelgen/VarIntSizeParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(varint_size_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(varint_size_parity PRIVATE miniz)
+set_target_properties(varint_size_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.VarLong
+add_executable(varlong_size_parity
+    world/level/levelgen/VarLongSizeParityTest.cpp
+)
+target_include_directories(varlong_size_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(varlong_size_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.Avatar
+add_executable(vec2_done_parity util/AvatarParityTest.cpp)
+target_include_directories(vec2_done_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vec2_done_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.level.levelgen.VerticalAnchor
+add_executable(vertical_anchor_parity
+    ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen/VerticalAnchorParityTest.cpp)
+target_include_directories(vertical_anchor_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vertical_anchor_parity PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.WalkAnimationState
+add_executable(walk_anim_parity world/entity/WalkAnimParityTest.cpp)
+target_include_directories(walk_anim_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(walk_anim_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.valueproviders.WeightedListInt
+# WeightedListInt parity. VERIFIES the existing engine port
+# mc::valueproviders::WeightedListInt in world/level/levelgen/IntProvider.h
+# (the test #includes it via a relative path). Pure standard C++; `--cases <tsv>`
+# compares against ground truth from tools/WeightedListIntParity.java (the real
+# decompiled net.minecraft.util.valueproviders.WeightedListInt / WeightedList).
+# Link closure: only RandomSource.cpp (the certified LegacyRandomSource) + bcrypt
+# on Windows; IntProvider.h pulls in nothing else (no glm/AABB/Vec3).
+add_executable(weighted_list_int_parity
+    util/valueproviders/WeightedListIntParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(weighted_list_int_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(weighted_list_int_parity PRIVATE bcrypt)
+endif()
+set_target_properties(weighted_list_int_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.block.state.properties.WoodType
+add_executable(wood_type_parity world/level/block/state/properties/WoodTypeParityTest.cpp)
+target_include_directories(wood_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(wood_type_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.level.levelgen.Xoroshiro128PlusPlus
+add_executable(xoroshiro128_parity world/level/levelgen/Xoroshiro128ParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(xoroshiro128_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(xoroshiro128_parity PRIVATE bcrypt)
+endif()
+set_target_properties(xoroshiro128_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
