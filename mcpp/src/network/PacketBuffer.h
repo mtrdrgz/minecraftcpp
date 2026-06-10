@@ -33,6 +33,10 @@ public:
     void writeString(std::string_view s, int maxLen = 32767);
     void writeBytes(std::span<const uint8_t> b) { m_data.insert(m_data.end(), b.begin(), b.end()); }
     void writeNbt(const nbt::NbtCompound& c);
+    // FriendlyByteBuf.writeNbt(Tag): any root tag (type byte + unnamed payload). A
+    // ComponentSerialization-encoded text component is a root StringTag; this is the form
+    // play packets carrying a Component use.
+    void writeNbt(const nbt::NbtTag& tag);
 
     // Writing a uuid (2 longs, big-endian)
     void writeUUID(uint64_t hi, uint64_t lo) { writeLong((int64_t)hi); writeLong((int64_t)lo); }

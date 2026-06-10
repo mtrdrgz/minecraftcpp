@@ -347,6 +347,16 @@ std::vector<uint8_t> NbtWriter::writeAnyRootCompound(const NbtCompound& c) {
     return std::move(w.m_buf);
 }
 
+std::vector<uint8_t> NbtWriter::writeAnyRoot(const NbtTag& tag) {
+    // NbtIo.writeAnyTag: write the type byte, then the UNNAMED payload. writeTag emits no
+    // payload for TAG_End (monostate), so an EndTag is just the single 0x00 byte, exactly
+    // as Java encodes a null Tag on the wire.
+    NbtWriter w;
+    w.writeByte((int8_t)tag.type());
+    w.writeTag(tag);
+    return std::move(w.m_buf);
+}
+
 std::vector<uint8_t> NbtWriter::writeGzip(std::string_view name, const NbtCompound& c) {
     // REAL gzip framing (RFC 1952), as java.util.zip.GZIPOutputStream produces:
     // 10-byte header (magic 1F 8B, method 8, flags 0, mtime 0, XFL 0, OS 0),

@@ -5026,3 +5026,18 @@ set_target_properties(pkt_upd_mob_effect_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ===== netcode Component layer: plain-text Component NBT wire form =====
+# net.minecraft.network.chat.ComponentSerialization (literal -> root StringTag via writeNbt(Tag)).
+add_executable(component_nbt_parity
+    network/ComponentNbtParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(component_nbt_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(component_nbt_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(component_nbt_parity PRIVATE bcrypt)
+endif()
+set_target_properties(component_nbt_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

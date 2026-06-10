@@ -136,6 +136,12 @@ void PacketBuffer::writeNbt(const nbt::NbtCompound& c) {
     writeBytes(bytes);
 }
 
+void PacketBuffer::writeNbt(const nbt::NbtTag& tag) {
+    // Any-root-tag form (String/Int/Compound/...): type byte + UNNAMED payload.
+    auto bytes = nbt::NbtWriter::writeAnyRoot(tag);
+    writeBytes(bytes);
+}
+
 nbt::NbtCompound PacketBuffer::readNbt() {
     // FriendlyByteBuf.readNbt -> NbtIo.readAnyTag: unnamed; EndTag (0x00) = null,
     // surfaced here as an empty compound (callers needing tri-state use readNbtOpt).

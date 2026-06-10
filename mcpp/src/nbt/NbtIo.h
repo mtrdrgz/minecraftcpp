@@ -84,6 +84,11 @@ public:
     // NbtIo.writeAnyTag framing (network, NbtIo.java:151-156): type byte + UNNAMED
     // payload (no root name string).
     static std::vector<uint8_t> writeAnyRootCompound(const NbtCompound&);
+    // Same network framing for ANY root tag (not just compound): type byte + UNNAMED
+    // payload. A plain-text Component serializes to a root StringTag (08 <u16len> <MUTF8>),
+    // an EndTag (null) to just 0x00 — the wire form used by ComponentSerialization /
+    // FriendlyByteBuf.writeNbt(Tag).
+    static std::vector<uint8_t> writeAnyRoot(const NbtTag&);
     // Writes with gzip compression
     static std::vector<uint8_t> writeGzip(std::string_view name, const NbtCompound&);
     // Writes with zlib compression
