@@ -116,14 +116,38 @@ public class ServerChunkDump {
 
     public static void main(String[] args) throws IOException {
         long seed = 1L;
+        boolean statusScan = false;
         List<int[]> chunks = new ArrayList<>();
         for (String a : args) {
-            if (a.contains(",")) {
+            if (a.equals("--status")) {
+                statusScan = true;
+            } else if (a.contains(",")) {
                 String[] p = a.split(",");
                 chunks.add(new int[]{ Integer.parseInt(p[0].trim()), Integer.parseInt(p[1].trim()) });
             } else {
                 seed = Long.parseLong(a.trim());
             }
+        }
+        if (statusScan) {
+            // --status: print "cx cz Status" for EVERY chunk present in every region
+            // file. Used to recover the server's exact decorated set (chunks whose
+            // status reached at least minecraft:features) so the GT decoration perm
+            // can mirror it without guessing the forceload rect.
+            Path dir = Path.of(REGION_DIR);
+            try (var stream = Files.list(dir)) {
+                for (Path mca : stream.filter(p -> p.getFileName().toString().endsWith(".mca")).sorted().toList()) {
+                    String[] parts = mca.getFileName().toString().split("\\.");
+                    int rx = Integer.parseInt(parts[1]), rz = Integer.parseInt(parts[2]);
+                    byte[] file = Files.readAllBytes(mca);
+                    for (int i = 0; i < 1024; i++) {
+                        if (beInt(file, i * 4) == 0) continue;
+                        int cx = rx * 32 + (i & 31), cz = rz * 32 + (i >> 5);
+                        CompoundTag root = readChunkNbt(cx, cz);
+                        System.out.println(cx + "\t" + cz + "\t" + (root == null ? "?" : root.getStringOr("Status", "?")));
+                    }
+                }
+            }
+            return;
         }
         if (chunks.isEmpty()) {
             int[][] def = { {0, 0}, {1, 1}, {-1, -1}, {2, 3}, {0, 1}, {3, -2} };

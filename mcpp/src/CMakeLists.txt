@@ -327,6 +327,25 @@ set_target_properties(aabb_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Voxel-shape + collision parity vs the real net.minecraft.world.phys.shapes.*
+# (VoxelShape/Shapes/BitSetDiscreteVoxelShape/IndexMerger family/SliceShape +
+# AABB iterable clip). Ground truth: tools/VoxelShapesParity.java — emits a
+# shape-construction program + observations as raw IEEE-754 bit hex; this gate
+# replays the program and compares BIT-exactly.
+add_executable(voxel_shapes_parity
+    world/phys/VoxelShapesParityTest.cpp
+    world/phys/AABB.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/Shapes.cpp
+)
+target_include_directories(voxel_shapes_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(voxel_shapes_parity PRIVATE glm)
+set_target_properties(voxel_shapes_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 add_executable(nbt_parity
     nbt/NbtParityTest.cpp
     nbt/NbtIo.cpp
