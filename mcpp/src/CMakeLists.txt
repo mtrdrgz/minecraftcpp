@@ -293,6 +293,20 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# OctahedralGroup parity vs com.mojang.math.OctahedralGroup + SymmetricGroup3 (the
+# 48-element symmetry group behind Rotation/Mirror.rotation() + block model baking).
+# Verifies the existing render/model/McMath groundwork. Ground truth:
+# tools/OctahedralGroupParity.java.
+add_executable(octahedral_parity
+    render/model/OctahedralGroupParityTest.cpp
+    render/model/McMath.cpp
+)
+target_include_directories(octahedral_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(octahedral_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # ARGB color math parity vs the real net.minecraft.util.ARGB (packing/blend/scale/
 # sRGB<->linear/setBrightness). Rendering+GUI color primitives, bit-exact (sRGB LUTs
 # embedded from the real class). Ground truth: tools/ARGBParity.java.
