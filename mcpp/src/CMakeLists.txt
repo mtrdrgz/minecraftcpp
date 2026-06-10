@@ -5374,3 +5374,8 @@ set_target_properties(stitcher_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMA
 add_executable(cuboid_model_json_parity render/model/CuboidModelJsonParityTest.cpp)
 target_include_directories(cuboid_model_json_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../vendor)
 set_target_properties(cuboid_model_json_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: BlockModelLighter AO geometry tables (AdjacencyInfo/AmbientVertexRemap/SizeInfo) =====
+add_executable(block_model_lighter_tables_parity render/block/BlockModelLighterTablesParityTest.cpp)
+target_include_directories(block_model_lighter_tables_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(block_model_lighter_tables_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
