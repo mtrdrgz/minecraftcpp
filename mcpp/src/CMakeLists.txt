@@ -5339,3 +5339,8 @@ set_target_properties(dcp_misc_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMA
 add_executable(uvpair_parity render/model/UVPairParityTest.cpp)
 target_include_directories(uvpair_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(uvpair_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: FaceBakery.bakeQuad full single-face assembly =====
+add_executable(face_bakery_bakequad_parity render/model/FaceBakeryBakeQuadParityTest.cpp)
+target_include_directories(face_bakery_bakequad_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(face_bakery_bakequad_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

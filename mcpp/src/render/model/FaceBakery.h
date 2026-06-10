@@ -11,12 +11,15 @@
 //   rotateVertexBy(vertex, origin, M) (FaceBakery.java:176-180)
 //   findClosestDirection(direction)   (FaceBakery.java:188-205)
 //   calculateFacing(positions[0..2])  (FaceBakery.java:182-186)
-// NOT yet ported (need FaceInfo corner tables + BlockElementRotation + UV pipeline):
-//   bakeVertex / bakeQuad / recalculateWinding.
+//   bakeVertexPosition / bakeVertexUV / recalculateWinding (the certified primitives)
+//   bakeQuad (FaceBakery.java:73-124)  — the full single-face assembly, certified by
+//                                        face_bakery_bakequad_parity.
 
 #include "Joml.h"
+#include "UVPair.h"
 
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 namespace mc::render::model {
@@ -181,6 +184,81 @@ inline bool recalculateWinding(Vector3f pos[4], int perm[4], int facing) {
         }
     }
     return true;
+}
+
+// Same as recalculateWinding but swaps the parallel packed-UV array (uint64_t) instead
+// of an index permutation — this is exactly FaceBakery.recalculateWinding(positions,
+// long[] uvs, direction) (FaceBakery.java:207-262), the form bakeQuad calls.
+inline bool recalculateWindingPacked(Vector3f pos[4], uint64_t uvs[4], int facing) {
+    float minX = 999.0F, minY = 999.0F, minZ = 999.0F, maxX = -999.0F, maxY = -999.0F, maxZ = -999.0F;
+    for (int i = 0; i < 4; ++i) {
+        float x = pos[i].x, y = pos[i].y, z = pos[i].z;
+        if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
+        if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
+    }
+    for (int vertex = 0; vertex < 4; ++vertex) {
+        const int* e = FACE_INFO[facing][vertex];
+        float newX = extentSelect6(e[0], minX, minY, minZ, maxX, maxY, maxZ);
+        float newY = extentSelect6(e[1], minX, minY, minZ, maxX, maxY, maxZ);
+        float newZ = extentSelect6(e[2], minX, minY, minZ, maxX, maxY, maxZ);
+        int swapIdx = findVertexEq(pos, vertex, newX, newY, newZ);
+        if (swapIdx == -1) return false;
+        if (swapIdx != vertex) {
+            std::swap(pos[swapIdx], pos[vertex]);
+            std::swap(uvs[swapIdx], uvs[vertex]);
+        }
+    }
+    return true;
+}
+
+// ── TextureAtlasSprite.getU/getV (TextureAtlasSprite.java:68-84) ─────────────
+// The atlas-region lerp applied to the model uv before UVPair.pack. Atlas-free:
+// the gate feeds the sprite's exact u0/u1/v0/v1 (computed from the real sprite
+// constructor formula) so no real atlas/GL is needed.
+struct SpriteUV {
+    float u0, u1, v0, v1;
+    float getU(float offset) const { float diff = u1 - u0; return u0 + diff * offset; }
+    float getV(float offset) const { float diff = v1 - v0; return v0 + diff * offset; }
+};
+
+// FaceBakery.bakeQuad output: 4 baked positions, 4 packed UVs, the final Direction
+// ordinal (DOWN=0..EAST=5; Objects.requireNonNullElse(.., Direction.UP=1) fallback).
+struct BakedQuadGeom {
+    Vector3f pos[4];
+    uint64_t packedUV[4];
+    int direction;
+};
+
+// 1:1 port of FaceBakery.bakeQuad (the interner overload, FaceBakery.java:73-124):
+// the per-vertex bake loop (certified bakeVertexPosition + bakeVertexUV), then the
+// sprite-UV lerp + UVPair.pack, calculateFacing, the elementRotation-gated
+// recalculateWinding, and the UP-fallback direction.
+//   hasModel       = modelState.transformation() != Transformation.IDENTITY
+//   hasUvTransform = !MatrixUtil.isIdentity(modelState.inverseFaceTransformation(facing))
+//   hasElement     = elementRotation != null
+inline BakedQuadGeom bakeQuad(
+    const Vector3f& from, const Vector3f& to,
+    const UVs& uvs, int uvRotation, int facing,
+    const SpriteUV& sprite,
+    bool hasModel, const Matrix4f& modelMatrix,
+    bool hasUvTransform, const Matrix4f& uvTransform,
+    bool hasElement, const Vector3f& elementOrigin, const Matrix4f& elementTransform) {
+    BakedQuadGeom out;
+    for (int i = 0; i < 4; ++i) {
+        Vector3f vertex = bakeVertexPosition(facing, i, from, to,
+                                             hasElement, elementOrigin, elementTransform,
+                                             hasModel, modelMatrix);
+        float u, v;
+        bakeVertexUV(uvs, uvRotation, i, hasUvTransform, uvTransform, u, v);
+        out.pos[i] = vertex;
+        out.packedUV[i] = uvpair::pack(sprite.getU(u), sprite.getV(v));
+    }
+    int finalDir = calculateFacing(out.pos[0], out.pos[1], out.pos[2]);
+    if (!hasElement && finalDir != -1) {
+        recalculateWindingPacked(out.pos, out.packedUV, finalDir);
+    }
+    out.direction = (finalDir != -1) ? finalDir : 1;  // requireNonNullElse(.., Direction.UP)
+    return out;
 }
 
 } // namespace fb
