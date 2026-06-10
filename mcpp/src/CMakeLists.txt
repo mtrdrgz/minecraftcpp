@@ -4858,3 +4858,171 @@ set_target_properties(sound_type_parity PROPERTIES
 add_executable(network_registries_parity network/NetworkRegistriesParityTest.cpp)
 target_include_directories(network_registries_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(network_registries_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== Registry-id-backed packet gates (NetworkRegistries-resolved holders) =====
+
+# net.minecraft.network.protocol.game.ClientboundAddEntityPacket
+# Byte-exact parity vs the REAL ClientboundAddEntityPacket.STREAM_CODEC.
+# Wire body (codec order, ClientboundAddEntityPacket.java:109-121):
+#   VarInt(id) ++ UUID(2 longs BE) ++ registry(ENTITY_TYPE)=VarInt(getId)[PLAIN, no +1]
+#   ++ double x,y,z (BE) ++ Vec3.LP_STREAM_CODEC(movement)=LpVec3.write
+#   ++ byte packDegrees(xRot) ++ byte packDegrees(yRot) ++ byte packDegrees(yHeadRot)
+#   ++ VarInt(data)
+# Registry-held EntityType resolved name->id via NetworkRegistries (assets/network_registries.tsv).
+# Exercises PacketBuffer + NetworkRegistries only (no per-packet header). GT: tools/PktAddEntityParity.java.
+add_executable(pkt_add_entity_parity
+    network/protocol/game/PktAddEntityParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_add_entity_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_add_entity_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_add_entity_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_add_entity_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket
+# Byte-exact parity vs the REAL ClientboundRemoveMobEffectPacket.STREAM_CODEC
+# (ClientboundRemoveMobEffectPacket.java:14-21). Codec body in order:
+#   (1) ByteBufCodecs.VAR_INT entityId   -> VarInt(entityId)  (ByteBufCodecs.java:102-110)
+#   (2) MobEffect.STREAM_CODEC effect    -> VarInt(MOB_EFFECT.getId(effect))  PLAIN, no +1
+#       MobEffect.STREAM_CODEC = ByteBufCodecs.holderRegistry(Registries.MOB_EFFECT)
+#       (MobEffect.java:41); holderRegistry -> registry(asHolderIdMap) plain-id form
+#       (ByteBufCodecs.java:560-586; Registry.java:145-149).
+# The registry-held effect id is resolved name->id via mc::net::NetworkRegistries over the
+# committed assets/network_registries.tsv (gated by network_registries_parity), NOT hard-coded.
+add_executable(pkt_remove_mob_effect_parity
+    network/protocol/game/PktRemoveMobEffectParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_remove_mob_effect_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_remove_mob_effect_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_remove_mob_effect_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_remove_mob_effect_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSoundEntityPacket
+# Byte-exact parity vs the REAL ClientboundSoundEntityPacket.STREAM_CODEC. Body
+# (ClientboundSoundEntityPacket.java:43-50):
+#   SoundEvent.STREAM_CODEC.encode(output, sound)  -> ByteBufCodecs.holder(SOUND_EVENT):
+#                                                     VarInt(getId+1) for a REFERENCE sound
+#   writeEnum(source)  = VarInt(ordinal)           (FriendlyByteBuf.java:471-473)
+#   writeVarInt(id); writeFloat(volume); writeFloat(pitch); writeLong(seed)
+# The registry-held sound is resolved ns:path -> wire id via mc::net::NetworkRegistries
+# (certified by network_registries_parity), then +1 applied per the holder() codec. Reuses
+# the certified PacketBuffer (FriendlyByteBuf port); links its full closure (NbtIo/Tag for
+# writeNbt symbols) + miniz, and bcrypt on WIN32.
+# Ground truth: tools/PktSoundEntityParity.java.
+add_executable(pkt_sound_entity_parity
+    network/protocol/game/PktSoundEntityParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_sound_entity_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_sound_entity_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_sound_entity_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_sound_entity_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSoundPacket byte-exact codec parity
+# vs tools/PktSoundParity.java. STREAM_CODEC = Packet.codec(write, ctor) (no id prefix).
+# write(RegistryFriendlyByteBuf out) (ClientboundSoundPacket.java 56-65):
+#   SoundEvent.STREAM_CODEC.encode(out, sound)  -- holder(SOUND_EVENT, DIRECT) form,
+#     REFERENCE holder -> VarInt(BuiltInRegistries.SOUND_EVENT.getId(value)+1)
+#     (ByteBufCodecs.java 588-614; SoundEvent.java:26);
+#   writeEnum(source)=VarInt(ordinal) [MASTER=0..UI=10] (FriendlyByteBuf 471-473);
+#   writeInt(x) writeInt(y) writeInt(z) BE int, each=(int)(coord*8.0) (LOCATION_ACCURACY=8.0F);
+#   writeFloat(volume) writeFloat(pitch) BE float; writeLong(seed) BE long.
+# Registry id resolved via NetworkRegistries (assets/network_registries.tsv, header-only);
+# reuses the certified PacketBuffer (FriendlyByteBuf port). Links its closure
+# (NbtIo/Tag for writeNbt symbols) + miniz (+ bcrypt on Windows).
+add_executable(pkt_sound_parity
+    network/protocol/game/PktSoundParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_sound_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_sound_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_sound_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_sound_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundStopSoundPacket â€” "registry-id layer"
+# wave variant. FINDING: this packet carries NO registry-held field. Its codec
+# (ClientboundStopSoundPacket.java 40-56) writes:
+#   both  -> writeByte(3) + writeEnum(source)=writeVarInt(ordinal) + writeIdentifier(name)=writeUtf(toString)
+#   src   -> writeByte(1) + writeEnum(source)
+#   name  -> writeByte(2) + writeIdentifier(name)
+#   none  -> writeByte(0)
+# The Identifier is a PLAIN ResourceLocation (UTF-8 string), NOT a Holder<SoundEvent>/
+# registry id (contrast ClientboundSoundPacket which uses holder(SOUND_EVENT)->VarInt(id+1)).
+# So mc::net::NetworkRegistries is not required to encode it; the test still loads the
+# network registry table as an availability sanity check and fails loudly if the GT ever
+# emits a non-"-" registry field for this packet. (FriendlyByteBuf.writeEnum 471-473 /
+# writeIdentifier 585-588 / writeUtf 572-579; SoundSource ordinals SoundSource.java 4-14.)
+# Reuses the certified PacketBuffer (FriendlyByteBuf port) + header-only NetworkRegistries;
+# links its closure (NbtIo/Tag for writeNbt symbols) + miniz (+ bcrypt on Windows).
+# Ground truth: tools/PktStopSoundRegParity.java.
+add_executable(pkt_stop_sound_reg_parity
+    network/protocol/game/PktStopSoundRegParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_stop_sound_reg_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_stop_sound_reg_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_stop_sound_reg_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_stop_sound_reg_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket
+# Byte-exact parity for the ClientboundUpdateMobEffectPacket STREAM_CODEC vs the REAL
+# net.minecraft codec. Body (ClientboundUpdateMobEffectPacket.write, lines 58-64):
+#   writeVarInt(entityId);
+#   MobEffect.STREAM_CODEC.encode(effect)   // ByteBufCodecs.holderRegistry(MOB_EFFECT)
+#                                           //   == plain VarInt(getId), NO +1 (ByteBufCodecs:573-576)
+#   writeVarInt(effectAmplifier); writeVarInt(effectDurationTicks); writeByte(flags);
+# Packet.codec -> StreamCodec.ofMember: body only, no id/length prefix. The effect
+# Holder<MobEffect> wire id is resolved via mc::net::NetworkRegistries from
+# assets/network_registries.tsv (minecraft:mob_effect). Ground truth:
+# tools/PktUpdateMobEffectParity.java.
+add_executable(pkt_upd_mob_effect_parity
+    network/protocol/game/PktUpdateMobEffectParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_upd_mob_effect_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_upd_mob_effect_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_upd_mob_effect_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_upd_mob_effect_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
