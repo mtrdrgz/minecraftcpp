@@ -330,6 +330,18 @@ set_target_properties(joml_math_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Entity movement-input math parity vs net.minecraft.world.entity.Entity.getInputVector
+# (WASD input + yaw -> world delta; core of moveRelative). On certified Vec3 + Mth.
+# Ground truth: tools/EntityMovementParity.java.
+add_executable(entity_movement_parity
+    world/entity/EntityMovementParityTest.cpp
+)
+target_include_directories(entity_movement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(entity_movement_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Vec3 (double-precision movement/physics/raytrace vector) parity vs the real
 # net.minecraft.world.phys.Vec3 — bit-exact (Mth-table rotations + correctly-rounded
 # sqrt; rotation() atan2/asin tracked separately). Ground truth: tools/Vec3Parity.java.
