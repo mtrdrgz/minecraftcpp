@@ -854,3 +854,49 @@ if(WIN32)
     target_link_libraries(simplex_noise_parity PRIVATE bcrypt)
 endif()
 set_target_properties(simplex_noise_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ───────────────────────── Parallel-authored bounded gates (workflow wave 3) ─────────────────────────
+
+set(WAVE3_NOISE_SRC world/level/levelgen/Noise.cpp world/level/levelgen/DensityFunction.cpp world/level/levelgen/CubicSpline.cpp world/level/levelgen/RandomSource.cpp)
+add_executable(perlin_noise_parity world/level/levelgen/synth/PerlinNoiseParityTest.cpp ${WAVE3_NOISE_SRC})
+add_executable(normal_noise_parity world/level/levelgen/synth/NormalNoiseParityTest.cpp ${WAVE3_NOISE_SRC})
+add_executable(blended_noise_parity world/level/levelgen/synth/BlendedNoiseParityTest.cpp ${WAVE3_NOISE_SRC})
+add_executable(perlin_simplex_noise_parity world/level/levelgen/synth/PerlinSimplexNoiseParityTest.cpp ${WAVE3_NOISE_SRC})
+add_executable(density_fns_parity world/level/levelgen/DensityFnsParityTest.cpp ${WAVE3_NOISE_SRC})
+foreach(t perlin_noise_parity normal_noise_parity blended_noise_parity perlin_simplex_noise_parity density_fns_parity)
+    target_include_directories(${t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+    target_link_libraries(${t} PRIVATE glm nlohmann_json)
+    if(WIN32)
+        target_link_libraries(${t} PRIVATE bcrypt)
+    endif()
+    set_target_properties(${t} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endforeach()
+
+add_executable(vec_delta_codec_parity world/entity/VecDeltaCodecParityTest.cpp)
+target_include_directories(vec_delta_codec_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vec_delta_codec_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(id_bimap_parity util/IdBiMapParityTest.cpp)
+target_include_directories(id_bimap_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(id_bimap_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(block_state_props_parity world/level/block/state/properties/BlockStatePropsParityTest.cpp)
+target_include_directories(block_state_props_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(block_state_props_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(pathfinder_node_parity world/level/pathfinder/PathfinderNodeParityTest.cpp)
+target_include_directories(pathfinder_node_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pathfinder_node_parity PRIVATE glm)
+set_target_properties(pathfinder_node_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(light_texture_parity render/LightTextureParityTest.cpp)
+target_include_directories(light_texture_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(light_texture_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(quaternionf_math_parity render/model/QuaternionMathParityTest.cpp)
+target_include_directories(quaternionf_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(quaternionf_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(explosion_falloff_parity world/level/ExplosionMathParityTest.cpp)
+target_include_directories(explosion_falloff_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(explosion_falloff_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
