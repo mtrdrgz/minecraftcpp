@@ -5320,3 +5320,17 @@ if(WIN32)
     target_link_libraries(dcp_int_parity PRIVATE bcrypt)
 endif()
 set_target_properties(dcp_int_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode ItemStack layer B: DataComponentPatch Component/enum/Unit components =====
+add_executable(dcp_misc_parity
+    network/DataComponentPatchMiscParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(dcp_misc_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(dcp_misc_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(dcp_misc_parity PRIVATE bcrypt)
+endif()
+set_target_properties(dcp_misc_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
