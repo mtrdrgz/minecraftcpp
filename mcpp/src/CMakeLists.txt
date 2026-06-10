@@ -330,6 +330,18 @@ set_target_properties(joml_math_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Vec3 (double-precision movement/physics/raytrace vector) parity vs the real
+# net.minecraft.world.phys.Vec3 — bit-exact (Mth-table rotations + correctly-rounded
+# sqrt; rotation() atan2/asin tracked separately). Ground truth: tools/Vec3Parity.java.
+add_executable(vec3_parity
+    world/phys/Vec3ParityTest.cpp
+)
+target_include_directories(vec3_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vec3_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # OctahedralGroup parity vs com.mojang.math.OctahedralGroup + SymmetricGroup3 (the
 # 48-element symmetry group behind Rotation/Mirror.rotation() + block model baking).
 # Verifies the existing render/model/McMath groundwork. Ground truth:
