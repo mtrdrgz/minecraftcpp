@@ -724,3 +724,54 @@ set_target_properties(embedded_worldgen_assets PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ───────────────────────── Parallel-authored bounded gates (workflow batch) ─────────────────────────
+
+add_executable(vec3i_parity core/Vec3iParityTest.cpp)
+target_include_directories(vec3i_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vec3i_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(vec2_parity world/phys/Vec2ParityTest.cpp)
+target_include_directories(vec2_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vec2_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(quart_pos_parity core/QuartPosParityTest.cpp)
+target_include_directories(quart_pos_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(quart_pos_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(front_and_top_parity core/FrontAndTopParityTest.cpp)
+target_include_directories(front_and_top_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(front_and_top_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(hit_result_parity world/phys/HitResultParityTest.cpp)
+target_include_directories(hit_result_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(hit_result_parity PRIVATE glm)
+set_target_properties(hit_result_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(smooth_double_parity util/SmoothDoubleParityTest.cpp)
+target_include_directories(smooth_double_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(smooth_double_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(brightness_parity util/BrightnessParityTest.cpp)
+target_include_directories(brightness_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(brightness_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(math_axis_parity render/model/MathAxisParityTest.cpp)
+target_include_directories(math_axis_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(math_axis_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(cubic_spline_parity world/level/levelgen/CubicSplineParityTest.cpp)
+target_include_directories(cubic_spline_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cubic_spline_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(transformation_parity render/model/TransformationParityTest.cpp)
+target_include_directories(transformation_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(transformation_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(direction2d_parity core/Direction2DParityTest.cpp)
+target_include_directories(direction2d_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(direction2d_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(chunk_pos_extra_parity world/level/ChunkPosExtraParityTest.cpp)
+target_include_directories(chunk_pos_extra_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(chunk_pos_extra_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
