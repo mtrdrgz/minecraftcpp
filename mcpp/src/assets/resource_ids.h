@@ -4,6 +4,7 @@
 #define IDR_BLOCK_ATLAS   102
 #define IDR_ATLAS_UV      103
 #define IDR_BLOCK_STATES  104
+#define IDR_ITEMS         114
 // GUI / font textures (extracted from client.jar; embedded so menus can render).
 #define IDR_FONT_ASCII    105
 #define IDR_GUI_LOGO      106

@@ -121,6 +121,7 @@ set(MC_ASSET_RESOURCE_DEPS
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/block_atlas.png"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/block_atlas.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/block_states.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/items.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/ascii.png"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_logo.png"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/gui_button.png"

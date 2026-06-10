@@ -7,6 +7,7 @@
 #include "render/level/LevelRenderer.h"
 #include "client/Minecraft.h"
 #include "world/level/block/Blocks.h"
+#include "world/item/Items.h"
 #include <string>
 #include <chrono>
 #include <vector>
@@ -43,8 +44,9 @@ int main() {
 
     try {
         mc::initBlocks();
+        mc::initItems();   // after blocks: BlockItems reference Blocks
     } catch (const std::exception& e) {
-        std::string msg = "Critical Error during block initialization: ";
+        std::string msg = "Critical Error during block/item initialization: ";
         msg += e.what();
         MessageBoxA(nullptr, msg.c_str(), "mcpp — Fatal Error", MB_ICONERROR);
         return 1;
