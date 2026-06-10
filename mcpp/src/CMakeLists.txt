@@ -5186,3 +5186,123 @@ if(WIN32)
     target_link_libraries(itemstack_stream_parity PRIVATE bcrypt)
 endif()
 set_target_properties(itemstack_stream_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode ItemStack-carrying inventory packet gates =====
+
+# ===== netcode packet: ClientboundContainerSetContentPacket.STREAM_CODEC (empty + no-component ItemStacks) =====
+add_executable(pkt_container_set_content_parity
+    network/protocol/game/PktContainerSetContentParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_container_set_content_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_container_set_content_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_container_set_content_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_container_set_content_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode packet: ClientboundContainerSetSlotPacket.STREAM_CODEC (no-component ItemStack domain) =====
+add_executable(pkt_container_set_slot_parity
+    network/protocol/game/PktContainerSetSlotParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_container_set_slot_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_container_set_slot_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_container_set_slot_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_container_set_slot_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket
+# Byte-exact parity for the packet STREAM_CODEC (ServerboundSetCreativeModeSlotPacket.java:11-17):
+#   StreamCodec.composite(ByteBufCodecs.SHORT, slotNum,
+#     ItemStack.validatedStreamCodec(ItemStack.OPTIONAL_UNTRUSTED_STREAM_CODEC), itemStack, ::new)
+# Wire = writeShort(slotNum) | ItemStack OPTIONAL_UNTRUSTED form. validatedStreamCodec.encode
+# delegates to the inner codec (validation only on decode, no extra bytes); DELIMITED patch
+# codec == plain patch codec for an empty patch, so over the EMPTY + NO-COMPONENT domain the
+# ItemStack bytes are exactly VarInt(0) (empty) or VarInt(count) VarInt(itemId) VarInt(0) VarInt(0).
+# itemId resolved name->id via NetworkRegistries (minecraft:item). Ground truth:
+# tools/PktSetCreativeSlotParity.java (encodes the REAL packet through RegistryFriendlyByteBuf).
+add_executable(pkt_set_creative_slot_parity
+    network/protocol/game/PktSetCreativeSlotParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_creative_slot_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_creative_slot_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_creative_slot_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_creative_slot_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# ===== ClientboundSetCursorItemPacket: single ItemStack contents (OPTIONAL_STREAM_CODEC) =====
+# ClientboundSetCursorItemPacket.java:9-12 -> record(ItemStack contents);
+#   STREAM_CODEC = StreamCodec.composite(ItemStack.OPTIONAL_STREAM_CODEC, ::contents, ::new)
+# Wire (no-component domain): empty -> VarInt(0); else VarInt(count) VarInt(itemId) VarInt(0) VarInt(0).
+# itemId resolved name->id via NetworkRegistries (minecraft:item). GT: tools/PktSetCursorItemParity.java.
+add_executable(pkt_set_cursor_item_parity
+    network/protocol/game/PktSetCursorItemParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_cursor_item_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_cursor_item_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_cursor_item_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_cursor_item_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket
+# Byte-exact parity for ClientboundSetEquipmentPacket vs the REAL STREAM_CODEC
+# (Packet.codec(::write, ::new); write() is hand-written, NOT a composite codec).
+# Body: writeVarInt(entity) then per-slot writeByte(ordinal | (i!=size-1 ? 0x80 : 0))
+# ++ ItemStack.OPTIONAL_STREAM_CODEC.encode(stack). The LAST slot byte has the high
+# bit (CONTINUE_MASK = -128 = 0x80) CLEAR; every earlier slot has it SET. The slot byte
+# is EquipmentSlot.ordinal() (MAINHAND=0..SADDLE=7), NOT EquipmentSlot.id. ItemStack uses
+# the certified no-component wire form (empty->VarInt(0); else VarInt(count) VarInt(itemId)
+# VarInt(0) VarInt(0)), item id resolved name->id via NetworkRegistries (minecraft:item).
+# Verifies the certified PacketBuffer (FriendlyByteBuf port) directly. No new header.
+# Ground truth: tools/PktSetEquipmentParity.java.
+add_executable(pkt_set_equipment_parity
+    network/protocol/game/PktSetEquipmentParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_equipment_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_equipment_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_equipment_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_equipment_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(pkt_set_player_inventory_parity
+    network/protocol/game/PktSetPlayerInventoryParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_player_inventory_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_player_inventory_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_player_inventory_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_player_inventory_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
