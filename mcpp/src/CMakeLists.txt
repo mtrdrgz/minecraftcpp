@@ -293,6 +293,19 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# JOML math parity (deterministic subset: Matrix4f rotation(quat)/mul/translate/
+# scale/invertAffine/transform*, Vector3f ops, Matrix3f, GeometryUtils.normal) vs
+# the real org.joml. Bit-exact via fma + exact-float quaternions (no sin/cos).
+# Verifies render/model/Joml.h. Ground truth: tools/JomlMathParity.java.
+add_executable(joml_math_parity
+    render/model/JomlMathParityTest.cpp
+)
+target_include_directories(joml_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(joml_math_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # OctahedralGroup parity vs com.mojang.math.OctahedralGroup + SymmetricGroup3 (the
 # 48-element symmetry group behind Rotation/Mirror.rotation() + block model baking).
 # Verifies the existing render/model/McMath groundwork. Ground truth:
