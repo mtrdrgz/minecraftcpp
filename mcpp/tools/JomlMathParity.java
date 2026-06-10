@@ -58,6 +58,18 @@ public class JomlMathParity {
             for (int j = 0; j < QS.length; j++)
                 O.println("MUL\t" + i + "\t" + j + "\t" + m4(rot(QS[i]).mul(rot(QS[j]))));
 
+        // Transcendental rotations — does (float)Math.sin survive the float cast
+        // identically to the C++ (float)std::sin? Emit and let the gate decide.
+        float[] ANG = { 0f, 0.5f, 1.0f, 1.5707964f, 3.1415927f, 0.3f, 1.234f, -2.0f,
+                        0.7853982f, -0.7853982f, 2.5f, 6.2831855f, 0.123456f, -3.0f };
+        for (float a : ANG) {
+            O.println("ROTX\t" + b(a) + "\t" + m4(new Matrix4f().rotationX(a)));
+            O.println("ROTY\t" + b(a) + "\t" + m4(new Matrix4f().rotationY(a)));
+            O.println("ROTZ\t" + b(a) + "\t" + m4(new Matrix4f().rotationZ(a)));
+            O.println("ROTAXIS\t" + b(a) + "\t" + b(0.5773503f) + "\t" + b(0.5773503f) + "\t" + b(0.5773503f)
+                + "\t" + m4(new Matrix4f().rotation(a, 0.5773503f, 0.5773503f, 0.5773503f)));
+        }
+
         // Vector3f ops — rows carry inputs(3[,3]) then result.
         for (float[] a : VS) for (float[] c : VS) {
             String in = b(a[0])+"\t"+b(a[1])+"\t"+b(a[2])+"\t"+b(c[0])+"\t"+b(c[1])+"\t"+b(c[2]);

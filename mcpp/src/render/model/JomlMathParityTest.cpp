@@ -77,6 +77,10 @@ int main(int argc, char** argv) {
         else if (t == "SCALE")     { auto m = rot(std::stoi(p[1])); m.scale(bf(p[2]), bf(p[3]), bf(p[4])); m4(m, p, 5, line); }
         else if (t == "INVAFF")    { auto m = rot(std::stoi(p[1])).invertAffine(); m4(m, p, 2, line); }
         else if (t == "MUL")       { auto m = rot(std::stoi(p[1])); m.mul(rot(std::stoi(p[2]))); m4(m, p, 3, line); }
+        else if (t == "ROTX")      { j::Matrix4f m; m.rotationX(bf(p[1])); m4(m, p, 2, line); }
+        else if (t == "ROTY")      { j::Matrix4f m; m.rotationY(bf(p[1])); m4(m, p, 2, line); }
+        else if (t == "ROTZ")      { j::Matrix4f m; m.rotationZ(bf(p[1])); m4(m, p, 2, line); }
+        else if (t == "ROTAXIS")   { j::Matrix4f m; m.rotation(bf(p[1]), bf(p[2]), bf(p[3]), bf(p[4])); m4(m, p, 5, line); }
         else if (t == "TFPOS")     { j::Vector3f v{bf(p[2]),bf(p[3]),bf(p[4])}; rot(std::stoi(p[1])).transformPosition(v); v3(v.x,v.y,v.z,p,5,line); }
         else if (t == "TFDIR")     { j::Vector3f v{bf(p[2]),bf(p[3]),bf(p[4])}; rot(std::stoi(p[1])).transformDirection(v); v3(v.x,v.y,v.z,p,5,line); }
         else if (t == "VADD")      { j::Vector3f a{bf(p[1]),bf(p[2]),bf(p[3])}, b{bf(p[4]),bf(p[5]),bf(p[6])}; a.add(b); v3(a.x,a.y,a.z,p,7,line); }
