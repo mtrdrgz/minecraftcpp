@@ -293,6 +293,18 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# FaceBakery geometry-helper parity vs net.minecraft...cuboid.FaceBakery (private
+# rotateVertexBy/findClosestDirection/calculateFacing/corner<->center). Block-model
+# bake geometry on the certified JOML. Ground truth: tools/FaceBakeryParity.java.
+add_executable(face_bakery_parity
+    render/model/FaceBakeryParityTest.cpp
+)
+target_include_directories(face_bakery_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(face_bakery_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # JOML math parity (deterministic subset: Matrix4f rotation(quat)/mul/translate/
 # scale/invertAffine/transform*, Vector3f ops, Matrix3f, GeometryUtils.normal) vs
 # the real org.joml. Bit-exact via fma + exact-float quaternions (no sin/cos).
