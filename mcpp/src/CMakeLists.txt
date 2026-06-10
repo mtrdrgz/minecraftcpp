@@ -5369,3 +5369,8 @@ set_target_properties(resolved_model_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY 
 add_executable(stitcher_parity render/texture/StitcherParityTest.cpp)
 target_include_directories(stitcher_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(stitcher_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: block-model JSON deserialization (CuboidModel/Element/Face -> certified bake) =====
+add_executable(cuboid_model_json_parity render/model/CuboidModelJsonParityTest.cpp)
+target_include_directories(cuboid_model_json_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../vendor)
+set_target_properties(cuboid_model_json_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
