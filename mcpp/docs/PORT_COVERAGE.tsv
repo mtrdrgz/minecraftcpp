@@ -149,7 +149,7 @@ com/mojang/blaze3d/vertex/VertexSorting.java	unvisited
 com/mojang/blaze3d/vertex/package-info.java	unvisited	
 com/mojang/math/Axis.java	unvisited	
 com/mojang/math/Constants.java	unvisited	
-com/mojang/math/Divisor.java	unvisited	
+com/mojang/math/Divisor.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 com/mojang/math/GivensParameters.java	unvisited	
 com/mojang/math/MatrixUtil.java	unvisited	
 com/mojang/math/OctahedralGroup.java	unvisited	
@@ -2334,16 +2334,16 @@ net/minecraft/commands/synchronization/brigadier/StringArgumentSerializer.java	u
 net/minecraft/commands/synchronization/brigadier/package-info.java	unvisited	
 net/minecraft/commands/synchronization/package-info.java	unvisited	
 net/minecraft/core/AxisCycle.java	unvisited	
-net/minecraft/core/BlockBox.java	unvisited	
-net/minecraft/core/BlockMath.java	unvisited	
+net/minecraft/core/BlockBox.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/core/BlockMath.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/core/BlockPos.java	unvisited	
 net/minecraft/core/ClientAsset.java	unvisited	
 net/minecraft/core/Cloner.java	unvisited	
-net/minecraft/core/Cursor3D.java	unvisited	
+net/minecraft/core/Cursor3D.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/core/DefaultedMappedRegistry.java	unvisited	
 net/minecraft/core/DefaultedRegistry.java	unvisited	
-net/minecraft/core/Direction.java	unvisited	
-net/minecraft/core/Direction8.java	unvisited	
+net/minecraft/core/Direction.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/core/Direction8.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/core/FrontAndTop.java	unvisited	
 net/minecraft/core/GlobalPos.java	unvisited	
 net/minecraft/core/Holder.java	unvisited	
@@ -2364,10 +2364,10 @@ net/minecraft/core/RegistryAccess.java	unvisited
 net/minecraft/core/RegistryCodecs.java	unvisited	
 net/minecraft/core/RegistrySetBuilder.java	unvisited	
 net/minecraft/core/RegistrySynchronization.java	unvisited	
-net/minecraft/core/Rotations.java	unvisited	
+net/minecraft/core/Rotations.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/core/SectionPos.java	unvisited	
 net/minecraft/core/TypedInstance.java	unvisited	
-net/minecraft/core/UUIDUtil.java	unvisited	
+net/minecraft/core/UUIDUtil.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/core/Vec3i.java	unvisited	
 net/minecraft/core/WritableRegistry.java	unvisited	
 net/minecraft/core/cauldron/CauldronInteraction.java	unvisited	
@@ -2727,7 +2727,7 @@ net/minecraft/network/HashedStack.java	unvisited
 net/minecraft/network/HiddenByteBuf.java	unvisited	
 net/minecraft/network/LocalFrameDecoder.java	unvisited	
 net/minecraft/network/LocalFrameEncoder.java	unvisited	
-net/minecraft/network/LpVec3.java	unvisited	
+net/minecraft/network/LpVec3.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/network/MonitoredLocalFrameDecoder.java	unvisited	
 net/minecraft/network/PacketBundlePacker.java	unvisited	
 net/minecraft/network/PacketBundleUnpacker.java	unvisited	
@@ -3612,15 +3612,15 @@ net/minecraft/util/ARGB.java	unvisited
 net/minecraft/util/AbortableIterationConsumer.java	unvisited	
 net/minecraft/util/AbstractListBuilder.java	unvisited	
 net/minecraft/util/ArrayListDeque.java	unvisited	
-net/minecraft/util/BinaryAnimator.java	unvisited	
+net/minecraft/util/BinaryAnimator.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/BitStorage.java	unvisited	
 net/minecraft/util/BlockUtil.java	unvisited	
 net/minecraft/util/BoundedFloatFunction.java	unvisited	
 net/minecraft/util/Brightness.java	unvisited	
-net/minecraft/util/ByIdMap.java	unvisited	
+net/minecraft/util/ByIdMap.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/ClassInstanceMultiMap.java	unvisited	
 net/minecraft/util/ClassTreeIdRegistry.java	unvisited	
-net/minecraft/util/ColorRGBA.java	unvisited	
+net/minecraft/util/ColorRGBA.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/CommonColors.java	unvisited	
 net/minecraft/util/CommonLinks.java	unvisited	
 net/minecraft/util/CompilableString.java	unvisited	
@@ -3633,7 +3633,7 @@ net/minecraft/util/DelegateDataOutput.java	unvisited
 net/minecraft/util/DependencySorter.java	unvisited	
 net/minecraft/util/DirectoryLock.java	unvisited	
 net/minecraft/util/DummyFileAttributes.java	unvisited	
-net/minecraft/util/Ease.java	unvisited	
+net/minecraft/util/Ease.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/EasingType.java	unvisited	
 net/minecraft/util/EncoderCache.java	unvisited	
 net/minecraft/util/ExceptionCollector.java	unvisited	
@@ -3645,19 +3645,19 @@ net/minecraft/util/FileZipper.java	unvisited
 net/minecraft/util/FormattedCharSequence.java	unvisited	
 net/minecraft/util/FormattedCharSink.java	unvisited	
 net/minecraft/util/FutureChain.java	unvisited	
-net/minecraft/util/Graph.java	unvisited	
+net/minecraft/util/Graph.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/GsonHelper.java	unvisited	
 net/minecraft/util/HashOps.java	unvisited	
 net/minecraft/util/HttpUtil.java	unvisited	
 net/minecraft/util/IdentifierPattern.java	unvisited	
-net/minecraft/util/InclusiveRange.java	unvisited	
+net/minecraft/util/InclusiveRange.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/KeyDispatchDataCodec.java	unvisited	
-net/minecraft/util/Keyframe.java	unvisited	
+net/minecraft/util/Keyframe.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/KeyframeTrack.java	unvisited	
 net/minecraft/util/KeyframeTrackSampler.java	unvisited	
 net/minecraft/util/LenientJsonParser.java	unvisited	
 net/minecraft/util/LightCoordsUtil.java	unvisited	
-net/minecraft/util/LinearCongruentialGenerator.java	unvisited	
+net/minecraft/util/LinearCongruentialGenerator.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/ListAndDeque.java	unvisited	
 net/minecraft/util/MemoryReserve.java	unvisited	
 net/minecraft/util/ModCheck.java	unvisited	
@@ -3671,7 +3671,7 @@ net/minecraft/util/ProblemReporter.java	unvisited
 net/minecraft/util/ProgressListener.java	unvisited	
 net/minecraft/util/RandomSource.java	unvisited	
 net/minecraft/util/RegistryContextSwapper.java	unvisited	
-net/minecraft/util/SegmentedAnglePrecision.java	unvisited	
+net/minecraft/util/SegmentedAnglePrecision.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/SequencedPriorityIterator.java	unvisited	
 net/minecraft/util/SignatureUpdater.java	unvisited	
 net/minecraft/util/SignatureValidator.java	unvisited	
@@ -3686,14 +3686,14 @@ net/minecraft/util/StaticCache2D.java	unvisited
 net/minecraft/util/StrictJsonParser.java	unvisited	
 net/minecraft/util/StringDecomposer.java	unvisited	
 net/minecraft/util/StringRepresentable.java	unvisited	
-net/minecraft/util/StringUtil.java	unvisited	
+net/minecraft/util/StringUtil.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/TaskChainer.java	unvisited	
 net/minecraft/util/ThreadingDetector.java	unvisited	
 net/minecraft/util/TickThrottler.java	unvisited	
 net/minecraft/util/TimeSource.java	unvisited	
 net/minecraft/util/TimeUtil.java	unvisited	
 net/minecraft/util/ToFloatFunction.java	unvisited	
-net/minecraft/util/TriState.java	unvisited	
+net/minecraft/util/TriState.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/Tuple.java	unvisited	
 net/minecraft/util/Unit.java	unvisited	
 net/minecraft/util/Util.java	unvisited	
@@ -4309,7 +4309,7 @@ net/minecraft/util/valueproviders/IntProvider.java	ported	IntProvider.h + loader
 net/minecraft/util/valueproviders/IntProviders.java	unvisited	
 net/minecraft/util/valueproviders/MultipliedFloats.java	unvisited	
 net/minecraft/util/valueproviders/SampledFloat.java	unvisited	
-net/minecraft/util/valueproviders/TrapezoidFloat.java	unvisited	
+net/minecraft/util/valueproviders/TrapezoidFloat.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/valueproviders/TrapezoidInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/util/valueproviders/UniformFloat.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/util/valueproviders/UniformInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
@@ -4416,20 +4416,20 @@ net/minecraft/world/effect/WindChargedMobEffect.java	unvisited
 net/minecraft/world/effect/WitherMobEffect.java	unvisited	
 net/minecraft/world/effect/package-info.java	unvisited	
 net/minecraft/world/entity/AgeableMob.java	unvisited	
-net/minecraft/world/entity/AnimationState.java	unvisited	
+net/minecraft/world/entity/AnimationState.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/AreaEffectCloud.java	unvisited	
 net/minecraft/world/entity/Attackable.java	unvisited	
-net/minecraft/world/entity/Avatar.java	unvisited	
+net/minecraft/world/entity/Avatar.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/ContainerUser.java	unvisited	
 net/minecraft/world/entity/ConversionParams.java	unvisited	
 net/minecraft/world/entity/ConversionType.java	unvisited	
-net/minecraft/world/entity/Crackiness.java	unvisited	
+net/minecraft/world/entity/Crackiness.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/Display.java	unvisited	
 net/minecraft/world/entity/DropChances.java	unvisited	
 net/minecraft/world/entity/ElytraAnimationState.java	unvisited	
 net/minecraft/world/entity/Entity.java	unvisited	
 net/minecraft/world/entity/EntityAttachment.java	unvisited	
-net/minecraft/world/entity/EntityAttachments.java	unvisited	
+net/minecraft/world/entity/EntityAttachments.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/EntityDimensions.java	unvisited	
 net/minecraft/world/entity/EntityEquipment.java	unvisited	
 net/minecraft/world/entity/EntityEvent.java	unvisited	
@@ -4439,8 +4439,8 @@ net/minecraft/world/entity/EntityReference.java	unvisited
 net/minecraft/world/entity/EntitySelector.java	unvisited	
 net/minecraft/world/entity/EntitySpawnReason.java	unvisited	
 net/minecraft/world/entity/EntityType.java	unvisited	
-net/minecraft/world/entity/EquipmentSlot.java	unvisited	
-net/minecraft/world/entity/EquipmentSlotGroup.java	unvisited	
+net/minecraft/world/entity/EquipmentSlot.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/entity/EquipmentSlotGroup.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/EquipmentTable.java	unvisited	
 net/minecraft/world/entity/EquipmentUser.java	unvisited	
 net/minecraft/world/entity/ExperienceOrb.java	unvisited	
@@ -4449,7 +4449,7 @@ net/minecraft/world/entity/HumanoidArm.java	unvisited
 net/minecraft/world/entity/InsideBlockEffectApplier.java	unvisited	
 net/minecraft/world/entity/InsideBlockEffectType.java	unvisited	
 net/minecraft/world/entity/Interaction.java	unvisited	
-net/minecraft/world/entity/InterpolationHandler.java	unvisited	
+net/minecraft/world/entity/InterpolationHandler.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/ItemBasedSteering.java	unvisited	
 net/minecraft/world/entity/ItemOwner.java	unvisited	
 net/minecraft/world/entity/ItemSteerable.java	unvisited	
@@ -4458,8 +4458,8 @@ net/minecraft/world/entity/LightningBolt.java	unvisited
 net/minecraft/world/entity/LivingEntity.java	unvisited	
 net/minecraft/world/entity/Marker.java	unvisited	
 net/minecraft/world/entity/Mob.java	unvisited	
-net/minecraft/world/entity/MobCategory.java	unvisited	
-net/minecraft/world/entity/MoverType.java	unvisited	
+net/minecraft/world/entity/MobCategory.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/entity/MoverType.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/NeutralMob.java	unvisited	
 net/minecraft/world/entity/OminousItemSpawner.java	unvisited	
 net/minecraft/world/entity/OwnableEntity.java	unvisited	
@@ -4468,7 +4468,7 @@ net/minecraft/world/entity/PlayerRideable.java	unvisited
 net/minecraft/world/entity/PlayerRideableJumping.java	unvisited	
 net/minecraft/world/entity/PortalProcessor.java	unvisited	
 net/minecraft/world/entity/Pose.java	unvisited	
-net/minecraft/world/entity/PositionMoveRotation.java	unvisited	
+net/minecraft/world/entity/PositionMoveRotation.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/Relative.java	unvisited	
 net/minecraft/world/entity/ReputationEventHandler.java	unvisited	
 net/minecraft/world/entity/Shearable.java	unvisited	
@@ -4481,7 +4481,7 @@ net/minecraft/world/entity/SpawnPlacements.java	unvisited
 net/minecraft/world/entity/TamableAnimal.java	unvisited	
 net/minecraft/world/entity/Targeting.java	unvisited	
 net/minecraft/world/entity/TraceableEntity.java	unvisited	
-net/minecraft/world/entity/WalkAnimationState.java	unvisited	
+net/minecraft/world/entity/WalkAnimationState.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/ai/ActivityData.java	unvisited	
 net/minecraft/world/entity/ai/Brain.java	unvisited	
 net/minecraft/world/entity/ai/attributes/Attribute.java	unvisited	
@@ -4491,7 +4491,7 @@ net/minecraft/world/entity/ai/attributes/AttributeModifier.java	unvisited
 net/minecraft/world/entity/ai/attributes/AttributeSupplier.java	unvisited	
 net/minecraft/world/entity/ai/attributes/Attributes.java	unvisited	
 net/minecraft/world/entity/ai/attributes/DefaultAttributes.java	unvisited	
-net/minecraft/world/entity/ai/attributes/RangedAttribute.java	unvisited	
+net/minecraft/world/entity/ai/attributes/RangedAttribute.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/entity/ai/attributes/package-info.java	unvisited	
 net/minecraft/world/entity/ai/behavior/AcquirePoi.java	unvisited	
 net/minecraft/world/entity/ai/behavior/AnimalMakeLove.java	unvisited	
@@ -5222,7 +5222,7 @@ net/minecraft/world/item/DebugStickItem.java	unvisited
 net/minecraft/world/item/DiscFragmentItem.java	unvisited	
 net/minecraft/world/item/DispensibleContainerItem.java	unvisited	
 net/minecraft/world/item/DoubleHighBlockItem.java	unvisited	
-net/minecraft/world/item/DyeColor.java	unvisited	
+net/minecraft/world/item/DyeColor.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/item/DyeItem.java	unvisited	
 net/minecraft/world/item/EggItem.java	unvisited	
 net/minecraft/world/item/EmptyMapItem.java	unvisited	
@@ -5246,8 +5246,8 @@ net/minecraft/world/item/Instrument.java	unvisited
 net/minecraft/world/item/InstrumentItem.java	unvisited	
 net/minecraft/world/item/Instruments.java	unvisited	
 net/minecraft/world/item/Item.java	partial	registry table 1:1 (item_registry_parity 1506/1506/0, commit 1b461782); Item behavior surface unported
-net/minecraft/world/item/ItemCooldowns.java	unvisited	
-net/minecraft/world/item/ItemDisplayContext.java	unvisited	
+net/minecraft/world/item/ItemCooldowns.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/item/ItemDisplayContext.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/item/ItemFrameItem.java	unvisited	
 net/minecraft/world/item/ItemInstance.java	unvisited	
 net/minecraft/world/item/ItemStack.java	unvisited	
@@ -5273,7 +5273,7 @@ net/minecraft/world/item/PlayerHeadItem.java	unvisited
 net/minecraft/world/item/PotionItem.java	unvisited	
 net/minecraft/world/item/ProjectileItem.java	unvisited	
 net/minecraft/world/item/ProjectileWeaponItem.java	unvisited	
-net/minecraft/world/item/Rarity.java	unvisited	
+net/minecraft/world/item/Rarity.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/item/ScaffoldingBlockItem.java	unvisited	
 net/minecraft/world/item/ServerItemCooldowns.java	unvisited	
 net/minecraft/world/item/ShearsItem.java	unvisited	
@@ -5292,7 +5292,7 @@ net/minecraft/world/item/StandingAndWallBlockItem.java	unvisited
 net/minecraft/world/item/SwingAnimationType.java	unvisited	
 net/minecraft/world/item/ThrowablePotionItem.java	unvisited	
 net/minecraft/world/item/TippedArrowItem.java	unvisited	
-net/minecraft/world/item/ToolMaterial.java	unvisited	
+net/minecraft/world/item/ToolMaterial.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/item/TooltipFlag.java	unvisited	
 net/minecraft/world/item/TridentItem.java	unvisited	
 net/minecraft/world/item/WeatheringCopperItems.java	unvisited	
@@ -6012,37 +6012,37 @@ net/minecraft/world/level/block/state/pattern/package-info.java	unvisited
 net/minecraft/world/level/block/state/predicate/BlockPredicate.java	unvisited	
 net/minecraft/world/level/block/state/predicate/BlockStatePredicate.java	unvisited	
 net/minecraft/world/level/block/state/predicate/package-info.java	unvisited	
-net/minecraft/world/level/block/state/properties/AttachFace.java	unvisited	
+net/minecraft/world/level/block/state/properties/AttachFace.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/BambooLeaves.java	unvisited	
-net/minecraft/world/level/block/state/properties/BedPart.java	unvisited	
+net/minecraft/world/level/block/state/properties/BedPart.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/BellAttachType.java	unvisited	
 net/minecraft/world/level/block/state/properties/BlockSetType.java	unvisited	
 net/minecraft/world/level/block/state/properties/BlockStateProperties.java	unvisited	
 net/minecraft/world/level/block/state/properties/BooleanProperty.java	unvisited	
-net/minecraft/world/level/block/state/properties/ChestType.java	unvisited	
-net/minecraft/world/level/block/state/properties/ComparatorMode.java	unvisited	
+net/minecraft/world/level/block/state/properties/ChestType.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/ComparatorMode.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/CreakingHeartState.java	unvisited	
-net/minecraft/world/level/block/state/properties/DoorHingeSide.java	unvisited	
-net/minecraft/world/level/block/state/properties/DoubleBlockHalf.java	unvisited	
+net/minecraft/world/level/block/state/properties/DoorHingeSide.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/DoubleBlockHalf.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/DripstoneThickness.java	unvisited	
 net/minecraft/world/level/block/state/properties/EnumProperty.java	unvisited	
-net/minecraft/world/level/block/state/properties/Half.java	unvisited	
+net/minecraft/world/level/block/state/properties/Half.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/IntegerProperty.java	unvisited	
-net/minecraft/world/level/block/state/properties/NoteBlockInstrument.java	unvisited	
-net/minecraft/world/level/block/state/properties/PistonType.java	unvisited	
+net/minecraft/world/level/block/state/properties/NoteBlockInstrument.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/PistonType.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/Property.java	unvisited	
-net/minecraft/world/level/block/state/properties/RailShape.java	unvisited	
-net/minecraft/world/level/block/state/properties/RedstoneSide.java	unvisited	
+net/minecraft/world/level/block/state/properties/RailShape.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/RedstoneSide.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/RotationSegment.java	unvisited	
 net/minecraft/world/level/block/state/properties/SculkSensorPhase.java	unvisited	
 net/minecraft/world/level/block/state/properties/SideChainPart.java	unvisited	
-net/minecraft/world/level/block/state/properties/SlabType.java	unvisited	
-net/minecraft/world/level/block/state/properties/StairsShape.java	unvisited	
+net/minecraft/world/level/block/state/properties/SlabType.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/StairsShape.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/StructureMode.java	unvisited	
 net/minecraft/world/level/block/state/properties/TestBlockMode.java	unvisited	
-net/minecraft/world/level/block/state/properties/Tilt.java	unvisited	
-net/minecraft/world/level/block/state/properties/WallSide.java	unvisited	
-net/minecraft/world/level/block/state/properties/WoodType.java	unvisited	
+net/minecraft/world/level/block/state/properties/Tilt.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/WallSide.java	ported	C++ BlockStateEnumsParityTest.cpp gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/block/state/properties/WoodType.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/block/state/properties/package-info.java	unvisited	
 net/minecraft/world/level/border/BorderChangeListener.java	unvisited	
 net/minecraft/world/level/border/BorderStatus.java	unvisited	
@@ -6167,7 +6167,7 @@ net/minecraft/world/level/levelgen/GeodeCrackSettings.java	unvisited
 net/minecraft/world/level/levelgen/GeodeLayerSettings.java	unvisited	
 net/minecraft/world/level/levelgen/Heightmap.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/LegacyRandomSource.java	ported	terrain gate + vein fix cd1ecd1f
-net/minecraft/world/level/levelgen/MarsagliaPolarGaussian.java	unvisited	
+net/minecraft/world/level/levelgen/MarsagliaPolarGaussian.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java	ported	NoiseBasedChunkGenerator.cpp et al; full_chunk_parity 2359296/0
 net/minecraft/world/level/levelgen/NoiseChunk.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java	ported	terrain gate + vein fix cd1ecd1f
@@ -6191,7 +6191,7 @@ net/minecraft/world/level/levelgen/WorldGenSettings.java	unvisited
 net/minecraft/world/level/levelgen/WorldGenerationContext.java	unvisited	
 net/minecraft/world/level/levelgen/WorldOptions.java	unvisited	
 net/minecraft/world/level/levelgen/WorldgenRandom.java	ported	terrain gate + vein fix cd1ecd1f
-net/minecraft/world/level/levelgen/Xoroshiro128PlusPlus.java	unvisited	
+net/minecraft/world/level/levelgen/Xoroshiro128PlusPlus.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/levelgen/XoroshiroRandomSource.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/blending/Blender.java	unvisited	
 net/minecraft/world/level/levelgen/blending/BlendingData.java	unvisited	
@@ -6570,7 +6570,7 @@ net/minecraft/world/level/levelgen/structure/templatesystem/rule/blockentity/Rul
 net/minecraft/world/level/levelgen/structure/templatesystem/rule/blockentity/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/synth/BlendedNoise.java	unvisited	
 net/minecraft/world/level/levelgen/synth/ImprovedNoise.java	unvisited	
-net/minecraft/world/level/levelgen/synth/NoiseUtils.java	unvisited	
+net/minecraft/world/level/levelgen/synth/NoiseUtils.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/levelgen/synth/NormalNoise.java	unvisited	
 net/minecraft/world/level/levelgen/synth/PerlinNoise.java	unvisited	
 net/minecraft/world/level/levelgen/synth/PerlinSimplexNoise.java	unvisited	
@@ -6596,22 +6596,22 @@ net/minecraft/world/level/material/FlowingFluid.java	unvisited
 net/minecraft/world/level/material/Fluid.java	unvisited	
 net/minecraft/world/level/material/FluidState.java	unvisited	
 net/minecraft/world/level/material/Fluids.java	unvisited	
-net/minecraft/world/level/material/FogType.java	unvisited	
+net/minecraft/world/level/material/FogType.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/material/LavaFluid.java	unvisited	
-net/minecraft/world/level/material/MapColor.java	unvisited	
-net/minecraft/world/level/material/PushReaction.java	unvisited	
+net/minecraft/world/level/material/MapColor.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/level/material/PushReaction.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/material/WaterFluid.java	unvisited	
 net/minecraft/world/level/material/package-info.java	unvisited	
 net/minecraft/world/level/package-info.java	unvisited	
 net/minecraft/world/level/pathfinder/AmphibiousNodeEvaluator.java	unvisited	
-net/minecraft/world/level/pathfinder/BinaryHeap.java	unvisited	
+net/minecraft/world/level/pathfinder/BinaryHeap.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/pathfinder/FlyNodeEvaluator.java	unvisited	
 net/minecraft/world/level/pathfinder/Node.java	unvisited	
 net/minecraft/world/level/pathfinder/NodeEvaluator.java	unvisited	
 net/minecraft/world/level/pathfinder/Path.java	unvisited	
 net/minecraft/world/level/pathfinder/PathComputationType.java	unvisited	
 net/minecraft/world/level/pathfinder/PathFinder.java	unvisited	
-net/minecraft/world/level/pathfinder/PathType.java	unvisited	
+net/minecraft/world/level/pathfinder/PathType.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/pathfinder/PathTypeCache.java	unvisited	
 net/minecraft/world/level/pathfinder/PathfindingContext.java	unvisited	
 net/minecraft/world/level/pathfinder/SwimNodeEvaluator.java	unvisited	
@@ -6638,10 +6638,10 @@ net/minecraft/world/level/saveddata/WanderingTraderData.java	unvisited
 net/minecraft/world/level/saveddata/WeatherData.java	unvisited	
 net/minecraft/world/level/saveddata/maps/MapBanner.java	unvisited	
 net/minecraft/world/level/saveddata/maps/MapDecoration.java	unvisited	
-net/minecraft/world/level/saveddata/maps/MapDecorationType.java	unvisited	
+net/minecraft/world/level/saveddata/maps/MapDecorationType.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/saveddata/maps/MapDecorationTypes.java	unvisited	
 net/minecraft/world/level/saveddata/maps/MapFrame.java	unvisited	
-net/minecraft/world/level/saveddata/maps/MapId.java	unvisited	
+net/minecraft/world/level/saveddata/maps/MapId.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/saveddata/maps/MapIndex.java	unvisited	
 net/minecraft/world/level/saveddata/maps/MapItemSavedData.java	unvisited	
 net/minecraft/world/level/saveddata/maps/package-info.java	unvisited	
@@ -6831,7 +6831,7 @@ net/minecraft/world/phys/shapes/IndexMerger.java	ported	phys/shapes/*.{h,cpp}; v
 net/minecraft/world/phys/shapes/IndirectMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/MinecartCollisionContext.java	unvisited	
 net/minecraft/world/phys/shapes/NonOverlappingMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
-net/minecraft/world/phys/shapes/OffsetDoubleList.java	unvisited	
+net/minecraft/world/phys/shapes/OffsetDoubleList.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/phys/shapes/Shapes.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/SliceShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/SubShape.java	unvisited	
@@ -6842,8 +6842,8 @@ net/minecraft/world/scores/Objective.java	unvisited
 net/minecraft/world/scores/PlayerScoreEntry.java	unvisited	
 net/minecraft/world/scores/PlayerScores.java	unvisited	
 net/minecraft/world/scores/PlayerTeam.java	unvisited	
-net/minecraft/world/scores/ReadOnlyScoreInfo.java	unvisited	
-net/minecraft/world/scores/Score.java	unvisited	
+net/minecraft/world/scores/ReadOnlyScoreInfo.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
+net/minecraft/world/scores/Score.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/scores/ScoreAccess.java	unvisited	
 net/minecraft/world/scores/ScoreHolder.java	unvisited	
 net/minecraft/world/scores/Scoreboard.java	unvisited	

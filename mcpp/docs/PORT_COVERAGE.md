@@ -83,3 +83,11 @@ replay, commit). The goal is **zero `unvisited` rows** and every `no-op` justifi
   certified end-to-end on 15 chunks (oceans/shore/forest, 1.47M cells, all 0);
   tree family ported; PalettedContainer engine bug found+fixed by parity work;
   ledger created, 51 files evidence-marked ported.
+- 2026-06-10: bounded-class byte-exact parity waves 1-4 (~150 leaf classes,
+  util/core/math/worldgen/phys/entity/item/biome/AI/render/netcode/block-state).
+  Engine bugs found+fixed by the gates: Mth.square/invSqrt/atan2, AABB.getCenter,
+  Joml jfma, PalettedContainer wire layout, Vec3i saturating cast,
+  SegmentedAnglePrecision saturating round, DensityFunctions YClampedGradient
+  endpoint (1-ULP). Documented platform ceiling: java.lang.Math.{sin,log} HotSpot
+  intrinsics != std::*/StrictMath (handled with tight ULP allowlists/tolerances).
+  Ledger: 225 ported.
