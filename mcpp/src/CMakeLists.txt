@@ -5354,3 +5354,8 @@ set_target_properties(model_element_helpers_parity PROPERTIES RUNTIME_OUTPUT_DIR
 add_executable(model_element_bake_parity render/model/ModelElementBakeParityTest.cpp)
 target_include_directories(model_element_bake_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(model_element_bake_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: model texture-slot resolution (TextureSlots.Resolver '#ref' fixpoint) =====
+add_executable(texture_slots_parity render/model/TextureSlotsResolveParityTest.cpp)
+target_include_directories(texture_slots_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(texture_slots_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
