@@ -4850,3 +4850,11 @@ target_include_directories(sound_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 set_target_properties(sound_type_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== Netcode registry-id layer (foundational): network VarInt-id registries =====
+# net.minecraft network registry-id resolution (MOB_EFFECT/SOUND_EVENT/MENU/ENTITY_TYPE/
+# PARTICLE_TYPE/DATA_COMPONENT_TYPE/ATTRIBUTE in vanilla getId order). Header-only loader
+# (network/NetworkRegistries.h) over the committed asset assets/network_registries.tsv.
+add_executable(network_registries_parity network/NetworkRegistriesParityTest.cpp)
+target_include_directories(network_registries_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(network_registries_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
