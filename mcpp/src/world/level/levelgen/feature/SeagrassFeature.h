@@ -52,6 +52,11 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeSeagrassPlacer(
         const int z = random.nextInt(8) - random.nextInt(8);
         const int y = level.getHeight(Heightmap::Types::OCEAN_FLOOR, origin.x + x, origin.z + z);
         const BlockPos grassPos{ origin.x + x, y, origin.z + z };
+#ifdef MCPP_TRACE_SEAGRASS
+        std::fprintf(stderr, "SG attempt origin=%d,%d,%d grass=%d,%d,%d state=%s\n",
+                     origin.x, origin.y, origin.z, grassPos.x, grassPos.y, grassPos.z,
+                     level.getBlockState(grassPos).c_str());
+#endif
         if (stateIsBlock(level, grassPos, "minecraft:water")) {
             const bool isTall = random.nextDouble() < probability;
             const char* state = isTall ? "minecraft:tall_seagrass" : "minecraft:seagrass";

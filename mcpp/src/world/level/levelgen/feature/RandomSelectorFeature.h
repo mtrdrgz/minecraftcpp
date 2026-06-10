@@ -14,6 +14,8 @@
 #include "../placement/PlacedFeature.h"
 #include "../RandomSource.h"
 
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -31,12 +33,27 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeRandomSelectorP
         int minGenY, int genDepth) {
     return [features = std::move(features), defaultFeature = std::move(defaultFeature),
             minGenY, genDepth](WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+        // Debug attempt trace (MCPP_TRACE_SELECTOR=1): origin + chosen entry +
+        // result + the WorldgenRandom low-level draw counter (next() calls).
+        static const bool trace = std::getenv("MCPP_TRACE_SELECTOR") != nullptr;
+        auto drawCount = [&random]() -> std::int64_t {
+            if (auto* wr = dynamic_cast<WorldgenRandom*>(&random)) return wr->getCount();
+            return -1;
+        };
+        int idx = 0;
         for (const WeightedPlacedFeatureEntry& feature : features) {
             if (random.nextFloat() < feature.chance) {
-                return feature.feature->place(level, random, origin, minGenY, genDepth);
+                const bool ok = feature.feature->place(level, random, origin, minGenY, genDepth);
+                if (trace) std::cerr << "SEL\t" << origin.x << "," << origin.y << "," << origin.z
+                                     << "\tentry=" << idx << "\tok=" << ok << "\tdraws=" << drawCount() << "\n";
+                return ok;
             }
+            ++idx;
         }
-        return defaultFeature->place(level, random, origin, minGenY, genDepth);
+        const bool ok = defaultFeature->place(level, random, origin, minGenY, genDepth);
+        if (trace) std::cerr << "SEL\t" << origin.x << "," << origin.y << "," << origin.z
+                             << "\tentry=default\tok=" << ok << "\tdraws=" << drawCount() << "\n";
+        return ok;
     };
 }
 

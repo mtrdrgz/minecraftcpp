@@ -46,6 +46,7 @@
 #include "../placement/PlacedFeature.h"      // FeaturePlacer
 #include "../RandomSource.h"
 #include "../../block/BlockBehaviour.h"      // isFaceSturdyUp (full-cube face test)
+#include "../../material/Fluids.h"           // fluidStateOf (sculk spread fluid gate)
 #include "../../../../core/Math.h"           // BlockPos
 
 #include <cstdint>
@@ -74,6 +75,10 @@ struct MultifaceBlockState {
 struct MultifaceLevelHooks {
     std::function<MultifaceBlockState(BlockPos)> getState;
     std::function<void(BlockPos, std::uint8_t, bool)> putState;   // after successful write
+    // Sculk-vein spreader config dependencies (SculkVeinSpreaderConfig): only
+    // consulted when the configured block is minecraft:sculk_vein.
+    std::function<bool(const std::string&)> isFireTag;        // #minecraft:fire
+    std::function<bool(const std::string&)> canBeReplaced;    // BlockStateBase.canBeReplaced (#replaceable)
 };
 
 // Tracks blocks whose face-full answer had to be defaulted (must stay empty).
@@ -125,11 +130,20 @@ inline bool canAttachTo(WorldGenLevel& level, BlockPos neighbourPos, int faceDir
 }
 
 struct Config {
+    std::string blockId = "minecraft:glow_lichen";   // the MultifaceBlock being placed
     std::set<std::string> canBePlacedOn;
     int searchRange = 10;
     float chanceOfSpreading = 0.5f;
     std::vector<int> validDirections;     // construction order, see header
     MultifaceLevelHooks hooks;
+    // MultifaceSpreader.SpreadConfig dispatch: glow_lichen uses the
+    // DefaultSpreaderConfig; sculk_vein uses SculkVeinBlock.SculkVeinSpreaderConfig
+    // (SculkVeinBlock.java:147-186) whose stateCanBeReplaced is the sculk variant.
+    bool sculkVeinConfig = false;
+    std::vector<int> spreadTypes = { 0, 1, 2 };   // DEFAULT_SPREAD_ORDER; sameSpace = {0}
+    // Sculk-config dependencies (only consulted when sculkVeinConfig):
+    std::function<bool(const std::string&)> isFireTag;        // #minecraft:fire
+    std::function<bool(const std::string&)> canBeReplaced;    // BlockStateBase.canBeReplaced (#replaceable)
 };
 
 // MultifaceBlock.isValidStateForPlacement (:191-198). isFaceSupported is true for
@@ -152,7 +166,7 @@ inline std::optional<MultifaceBlockState> getStateForPlacement(
         return std::nullopt;
     }
     MultifaceBlockState newState;
-    newState.block = "minecraft:glow_lichen";
+    newState.block = cfg.blockId;
     newState.isPlaceBlock = true;
     if (oldState.isPlaceBlock) {
         newState = oldState;                                    // :208-209
@@ -160,30 +174,65 @@ inline std::optional<MultifaceBlockState> getStateForPlacement(
         newState.waterlogged = true;                            // :210-211 (source water)
     }                                                           // :212-213 default
     newState.faces = static_cast<std::uint8_t>(newState.faces | (1u << placementDirection));  // :216
-    (void)cfg;
     return newState;
 }
 
-// Write a lichen state through the level; register the side-map entry on success.
-// Returns the WorldGenRegion.setBlock result.
+// Write a multiface state through the level; register the side-map entry on
+// success. Returns the WorldGenRegion.setBlock result.
 inline bool writeLichen(const Config& cfg, WorldGenLevel& level, BlockPos pos,
                         const MultifaceBlockState& state, int flags) {
-    const bool ok = level.setBlockChecked(pos, "minecraft:glow_lichen", flags);
+    const bool ok = level.setBlockChecked(pos, cfg.blockId, flags);
     if (ok) cfg.hooks.putState(pos, state.faces, state.waterlogged);
     return ok;
 }
 
 // MultifaceSpreader.DefaultSpreaderConfig.stateCanBeReplaced (:131-135).
-inline bool stateCanBeReplaced(const MultifaceBlockState& existing) {
+inline bool stateCanBeReplacedDefault(const MultifaceBlockState& existing) {
     return existing.block == "minecraft:air" || existing.isPlaceBlock
         || existing.block == "minecraft:water";   // worldgen water is always a source
 }
 
-// MultifaceSpreader.DefaultSpreaderConfig.canSpreadInto (:138-142).
-inline bool canSpreadInto(const Config& cfg, WorldGenLevel& level, BlockPos spreadPos, int spreadFace) {
+// SculkVeinBlock.SculkVeinSpreaderConfig.stateCanBeReplaced (SculkVeinBlock.java:156-178).
+inline bool stateCanBeReplacedSculk(const Config& cfg, WorldGenLevel& level, BlockPos sourcePos,
+                                    BlockPos placementPos, int placementDirection,
+                                    const MultifaceBlockState& existing) {
+    const std::string against = level.getBlockState(relative(placementPos, placementDirection));
+    if (against == "minecraft:sculk" || against == "minecraft:sculk_catalyst"
+        || against == "minecraft:moving_piston") {
+        return false;
+    }
+    const int manhattan = std::abs(sourcePos.x - placementPos.x) + std::abs(sourcePos.y - placementPos.y)
+                          + std::abs(sourcePos.z - placementPos.z);
+    if (manhattan == 2) {
+        const BlockPos neighbourPos = relative(sourcePos, DIR_OPPOSITE[placementDirection]);
+        bool defaulted = false;
+        const bool sturdy = mc::block::isFaceSturdyFull(
+            level.getBlockState(neighbourPos), placementDirection, &defaulted);
+        if (defaulted) multifaceAttachDefaulted().insert(level.getBlockState(neighbourPos));
+        if (sturdy) return false;
+    }
+    const mc::material::FluidState fs = mc::material::fluidStateOf(existing.block);
+    if (!fs.isEmpty() && fs.fluid != "minecraft:water") return false;
+    if (cfg.isFireTag(existing.block)) return false;
+    return cfg.canBeReplaced(existing.block) || stateCanBeReplacedDefault(existing);
+}
+
+// MultifaceSpreader.SpreadConfig.canSpreadInto dispatch (DefaultSpreaderConfig
+// :138-142 / SculkVeinSpreaderConfig).
+inline bool canSpreadInto(const Config& cfg, WorldGenLevel& level, BlockPos sourcePos,
+                          BlockPos spreadPos, int spreadFace) {
     const MultifaceBlockState existing = cfg.hooks.getState(spreadPos);
-    return stateCanBeReplaced(existing)
+    const bool replaceable = cfg.sculkVeinConfig
+        ? stateCanBeReplacedSculk(cfg, level, sourcePos, spreadPos, spreadFace, existing)
+        : stateCanBeReplacedDefault(existing);
+    return replaceable
         && isValidStateForPlacement(level, existing, spreadPos, spreadFace);
+}
+
+// SculkVeinSpreaderConfig.isOtherBlockValidAsSource (SculkVeinBlock.java:183-185);
+// the default config returns false (MultifaceSpreader.java:160-162).
+inline bool isOtherBlockValidAsSource(const Config& cfg, const MultifaceBlockState& state) {
+    return cfg.sculkVeinConfig && state.block != "minecraft:sculk_vein";
 }
 
 struct SpreadPos {
@@ -203,21 +252,29 @@ inline SpreadPos spreadPosFor(int type, BlockPos pos, int spreadDirection, int f
 }
 
 // MultifaceSpreader.getSpreadFromFaceTowardDirection (:86-110).
-// isOtherBlockValidAsSource == false for the default config (:160-162).
 inline std::optional<SpreadPos> getSpreadFromFaceTowardDirection(
         const Config& cfg, const MultifaceBlockState& state, WorldGenLevel& level,
         BlockPos pos, int startingFace, int spreadDirection) {
     if (DIR_AXIS[spreadDirection] == DIR_AXIS[startingFace]) return std::nullopt;       // :94-96
-    if (hasFace(state, startingFace) && !hasFace(state, spreadDirection)) {             // :98
-        for (int type = 0; type < 3; ++type) {                                          // :99
+    if (isOtherBlockValidAsSource(cfg, state)
+        || (hasFace(state, startingFace) && !hasFace(state, spreadDirection))) {        // :98
+        for (int type : cfg.spreadTypes) {                                              // :99
             const SpreadPos sp = spreadPosFor(type, pos, spreadDirection, startingFace);
-            if (canSpreadInto(cfg, level, sp.pos, sp.face)) {                           // :101
+            if (canSpreadInto(cfg, level, pos, sp.pos, sp.face)) {                      // :101
                 return sp;
             }
         }
     }
     return std::nullopt;
 }
+
+// MultifaceSpreader.SpreadConfig.canSpreadFrom (:164-166).
+inline bool canSpreadFrom(const Config& cfg, const MultifaceBlockState& state, int face) {
+    return isOtherBlockValidAsSource(cfg, state) || hasFace(state, face);
+}
+
+// MultifaceSpreader.spreadFromFaceTowardAllDirections (:64-72) + spreadAll (:46-52).
+// Declared after spreadToFace below.
 
 // MultifaceSpreader.spreadToFace (:112-115) + SpreadConfig.placeBlock (:168-179).
 inline bool spreadToFace(const Config& cfg, WorldGenLevel& level, const SpreadPos& sp, bool postProcess) {
@@ -249,6 +306,25 @@ inline void spreadFromFaceTowardRandomDirection(const Config& cfg, const Multifa
     }
 }
 
+// MultifaceSpreader.spreadAll (:46-52): Direction.stream() (values() order) over
+// canSpreadFrom faces, each spreading toward all 6 directions (:64-72); returns
+// the number of successful placements.
+inline long spreadAll(const Config& cfg, const MultifaceBlockState& state, WorldGenLevel& level,
+                      BlockPos pos, bool postProcess) {
+    long total = 0;
+    for (int faceDirection = 0; faceDirection < 6; ++faceDirection) {
+        if (!canSpreadFrom(cfg, state, faceDirection)) continue;
+        for (int spreadDirection = 0; spreadDirection < 6; ++spreadDirection) {
+            const std::optional<SpreadPos> sp =
+                getSpreadFromFaceTowardDirection(cfg, state, level, pos, faceDirection, spreadDirection);
+            if (sp.has_value() && spreadToFace(cfg, level, *sp, postProcess)) {
+                ++total;
+            }
+        }
+    }
+    return total;
+}
+
 // MultifaceGrowthFeature.placeGrowthIfPossible (:55-84).
 inline bool placeGrowthIfPossible(const Config& cfg, WorldGenLevel& level, BlockPos pos,
                                   const MultifaceBlockState& oldState, RandomSource& random,
@@ -275,19 +351,29 @@ inline bool placeGrowthIfPossible(const Config& cfg, WorldGenLevel& level, Block
 
 } // namespace multiface_detail
 
-// configuredBlock must be minecraft:glow_lichen (the only MultifaceSpreadeableBlock
-// reachable in the overworld decoration set); anything else is rejected by the
-// caller (fail-closed).
+// blockId: minecraft:glow_lichen or minecraft:sculk_vein (the MultifaceSpreadeable
+// blocks reachable in the overworld decoration set). NOTE the sculk_vein FEATURE
+// placement (multiface_growth configured type) uses the same MultifaceBlock
+// placement/spread semantics as glow_lichen — the vein-specific spreader config
+// (SculkVeinSpreaderConfig) only applies to SculkSpreader cursors (SculkFeatures.h).
 inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeMultifaceGrowthPlacer(
-        std::set<std::string> canBePlacedOn, int searchRange,
+        std::string blockId, std::set<std::string> canBePlacedOn, int searchRange,
         bool canPlaceOnFloor, bool canPlaceOnCeiling, bool canPlaceOnWall,
         float chanceOfSpreading, MultifaceLevelHooks hooks) {
     namespace d = multiface_detail;
     auto cfg = std::make_shared<d::Config>();
+    cfg->blockId = std::move(blockId);
     cfg->canBePlacedOn = std::move(canBePlacedOn);
     cfg->searchRange = searchRange;
     cfg->chanceOfSpreading = chanceOfSpreading;
     cfg->hooks = std::move(hooks);
+    if (cfg->blockId == "minecraft:sculk_vein") {
+        // The sculk_vein placeBlock's getSpreader() is the SculkVeinSpreaderConfig
+        // vein spreader (SculkVeinBlock.java:24-25, 39-41).
+        cfg->sculkVeinConfig = true;
+        cfg->isFireTag = cfg->hooks.isFireTag;
+        cfg->canBeReplaced = cfg->hooks.canBeReplaced;
+    }
     // MultifaceGrowthConfiguration ctor order: ceiling -> UP, floor -> DOWN,
     // wall -> Plane.HORIZONTAL {NORTH, EAST, SOUTH, WEST}.
     if (canPlaceOnCeiling) cfg->validDirections.push_back(1);

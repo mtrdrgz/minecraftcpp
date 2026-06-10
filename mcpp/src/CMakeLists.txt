@@ -419,9 +419,11 @@ add_executable(full_chunk_decorate_parity
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
     world/level/block/BlockTags.cpp
+    nbt/Tag.cpp
+    nbt/NbtIo.cpp
 )
 target_include_directories(full_chunk_decorate_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(full_chunk_decorate_parity PRIVATE glm nlohmann_json)
+target_link_libraries(full_chunk_decorate_parity PRIVATE glm nlohmann_json miniz)
 if(WIN32)
     target_link_libraries(full_chunk_decorate_parity PRIVATE bcrypt)
 endif()

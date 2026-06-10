@@ -146,6 +146,32 @@ inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = null
         // (BlockBehaviour.calculateSolid; AmethystClusterBlock shapes).
         "minecraft:small_amethyst_bud", "minecraft:medium_amethyst_bud",
         "minecraft:large_amethyst_bud", "minecraft:amethyst_cluster",
+        // Jungle/savanna/dark-forest/cherry/mangrove/pale-garden vegetal additions,
+        // all .noCollision() in Blocks.java: SaplingBlock jungle/acacia/dark_oak/
+        // cherry/pale_oak_sapling, MangrovePropaguleBlock, HangingMossBlock
+        // (pale_hanging_moss), EyeblossomBlock closed/open_eyeblossom; cocoa is
+        // a small AGE-dependent box (CocoaBlock.SHAPES -> legacySolid false);
+        // pale_moss_carpet is the 1/16 MossyCarpetBlock plate (like moss_carpet).
+        "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling",
+        "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:mangrove_propagule",
+        "minecraft:pale_hanging_moss", "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom",
+        "minecraft:cocoa", "minecraft:pale_moss_carpet",
+        // Warm-ocean corals: CoralPlantBlock / CoralFanBlock / CoralWallFanBlock all
+        // .noCollision(); sea_pickle is a small box (legacySolid false).
+        "minecraft:tube_coral", "minecraft:brain_coral", "minecraft:bubble_coral",
+        "minecraft:fire_coral", "minecraft:horn_coral",
+        "minecraft:tube_coral_fan", "minecraft:brain_coral_fan", "minecraft:bubble_coral_fan",
+        "minecraft:fire_coral_fan", "minecraft:horn_coral_fan",
+        "minecraft:tube_coral_wall_fan", "minecraft:brain_coral_wall_fan", "minecraft:bubble_coral_wall_fan",
+        "minecraft:fire_coral_wall_fan", "minecraft:horn_coral_wall_fan",
+        "minecraft:sea_pickle",
+        // powder_snow: NO forceSolidOn (Blocks.java "powder_snow": .strength/.sound/
+        // .dynamicShape()/.noOcclusion() only) and its collision shape with the
+        // empty (cache) context is Shapes.empty() (PowderSnowBlock.getCollisionShape:
+        // non-entity context -> Shapes.empty()) -> calculateSolid FALSE
+        // (BlockBehaviour.java:482-499) -> blocksMotion FALSE. The MOTION_BLOCKING
+        // heightmap therefore sees THROUGH powder snow (freeze_top_layer relies on it).
+        "minecraft:powder_snow",
     };
     static const std::set<std::string> knownMotionBlocking = {
         "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
@@ -191,6 +217,32 @@ inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = null
         "minecraft:pointed_dripstone", "minecraft:sculk",
         "minecraft:raw_iron_block", "minecraft:raw_copper_block", "minecraft:raw_gold_block",
         "minecraft:azalea_leaves", "minecraft:flowering_azalea_leaves",
+        // Jungle/savanna/dark-forest/cherry/mangrove/pale-garden full-cube
+        // colliders (Blocks.java log/leaves registrations; mangrove_roots is a
+        // full collision cube with .noOcclusion(); muddy_mangrove_roots a
+        // RotatedPillarBlock; the HugeMushroomBlock trio; pale_moss_block;
+        // creaking_heart; bone_block — FossilFeature structures).
+        "minecraft:jungle_log", "minecraft:acacia_log", "minecraft:dark_oak_log",
+        "minecraft:cherry_log", "minecraft:mangrove_log", "minecraft:pale_oak_log",
+        "minecraft:jungle_leaves", "minecraft:acacia_leaves", "minecraft:dark_oak_leaves",
+        "minecraft:cherry_leaves", "minecraft:mangrove_leaves", "minecraft:pale_oak_leaves",
+        "minecraft:mangrove_roots", "minecraft:muddy_mangrove_roots",
+        "minecraft:brown_mushroom_block", "minecraft:red_mushroom_block", "minecraft:mushroom_stem",
+        "minecraft:pale_moss_block", "minecraft:creaking_heart", "minecraft:bone_block",
+        // bamboo (.forceSolidOn(), Blocks.java "bamboo") and sculk_vein
+        // (.forceSolidOn(), "sculk_vein"): legacySolid FORCED true despite their
+        // empty/thin collision shapes (BlockBehaviour.java:482-487).
+        "minecraft:bamboo", "minecraft:sculk_vein",
+        // sculk_sensor / sculk_shrieker: full-xz 8/16 slabs -> collision bounds avg
+        // (1+0.5+1)/3 = 0.833 >= 0.7291 -> legacySolid TRUE; sculk_catalyst full cube.
+        "minecraft:sculk_sensor", "minecraft:sculk_shrieker", "minecraft:sculk_catalyst",
+        // Warm-ocean coral BLOCKS (CoralBlock: full opaque cubes).
+        "minecraft:tube_coral_block", "minecraft:brain_coral_block", "minecraft:bubble_coral_block",
+        "minecraft:fire_coral_block", "minecraft:horn_coral_block",
+        // Badlands surface family (full opaque cubes; the surface rule bands).
+        "minecraft:terracotta", "minecraft:white_terracotta", "minecraft:orange_terracotta",
+        "minecraft:yellow_terracotta", "minecraft:brown_terracotta", "minecraft:red_terracotta",
+        "minecraft:light_gray_terracotta", "minecraft:red_sandstone",
     };
     const std::string block = blockName(blockOrState);
     if (nonMotionBlocking.count(block) != 0) return false;
@@ -259,6 +311,25 @@ inline bool isSolidRender(const std::string& blockOrState, bool* defaulted = nul
         "minecraft:azalea", "minecraft:flowering_azalea", "minecraft:big_dripleaf",
         "minecraft:spore_blossom", "minecraft:moss_carpet", "minecraft:pointed_dripstone",
         "minecraft:azalea_leaves", "minecraft:flowering_azalea_leaves",
+        // New-class non-occluding states: the leaves family (.noOcclusion()),
+        // the no-collision plants, mangrove_roots (.noOcclusion()), bamboo
+        // (.noOcclusion()), cocoa/sea_pickle (.noOcclusion()), sculk_vein (thin),
+        // sculk_sensor/sculk_shrieker (8/16 non-full shapes).
+        "minecraft:jungle_leaves", "minecraft:acacia_leaves", "minecraft:dark_oak_leaves",
+        "minecraft:cherry_leaves", "minecraft:mangrove_leaves", "minecraft:pale_oak_leaves",
+        "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling",
+        "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:mangrove_propagule",
+        "minecraft:pale_hanging_moss", "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom",
+        "minecraft:cocoa", "minecraft:pale_moss_carpet", "minecraft:mangrove_roots",
+        "minecraft:bamboo", "minecraft:sea_pickle", "minecraft:sculk_vein",
+        "minecraft:sculk_sensor", "minecraft:sculk_shrieker",
+        "minecraft:tube_coral", "minecraft:brain_coral", "minecraft:bubble_coral",
+        "minecraft:fire_coral", "minecraft:horn_coral",
+        "minecraft:tube_coral_fan", "minecraft:brain_coral_fan", "minecraft:bubble_coral_fan",
+        "minecraft:fire_coral_fan", "minecraft:horn_coral_fan",
+        "minecraft:tube_coral_wall_fan", "minecraft:brain_coral_wall_fan", "minecraft:bubble_coral_wall_fan",
+        "minecraft:fire_coral_wall_fan", "minecraft:horn_coral_wall_fan",
+        "minecraft:powder_snow",   // .noOcclusion() (Blocks.java "powder_snow")
     };
     static const std::set<std::string> knownSolidRender = {
         "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
@@ -282,6 +353,18 @@ inline bool isSolidRender(const std::string& blockOrState, bool* defaulted = nul
         "minecraft:moss_block", "minecraft:rooted_dirt", "minecraft:dripstone_block",
         "minecraft:sculk", "minecraft:raw_iron_block", "minecraft:raw_copper_block",
         "minecraft:raw_gold_block",
+        // New-class full opaque cubes (Blocks.java registrations, no .noOcclusion()).
+        "minecraft:jungle_log", "minecraft:acacia_log", "minecraft:dark_oak_log",
+        "minecraft:cherry_log", "minecraft:mangrove_log", "minecraft:pale_oak_log",
+        "minecraft:muddy_mangrove_roots",
+        "minecraft:brown_mushroom_block", "minecraft:red_mushroom_block", "minecraft:mushroom_stem",
+        "minecraft:pale_moss_block", "minecraft:creaking_heart", "minecraft:sculk_catalyst",
+        "minecraft:bone_block",
+        "minecraft:tube_coral_block", "minecraft:brain_coral_block", "minecraft:bubble_coral_block",
+        "minecraft:fire_coral_block", "minecraft:horn_coral_block",
+        "minecraft:terracotta", "minecraft:white_terracotta", "minecraft:orange_terracotta",
+        "minecraft:yellow_terracotta", "minecraft:brown_terracotta", "minecraft:red_terracotta",
+        "minecraft:light_gray_terracotta", "minecraft:red_sandstone",
     };
     const std::string block = blockName(blockOrState);
     if (notSolidRender.count(block) != 0) return false;
@@ -318,9 +401,12 @@ inline bool isAirBlock(const std::string& blockOrState) {
 //     => leaves are NEVER face-sturdy (although they collide as full cubes)
 //   SnowLayerBlock.getBlockSupportShape -> SHAPES[layers] (SnowLayerBlock.java:55-58)
 //     => a worldgen snow layer (layers=1, 2/16 tall) is sturdy on DOWN only
+//   MudBlock.getBlockSupportShape -> Shapes.block() (MudBlock.java:31-34)
+//     => mud is sturdy on EVERY face (although its collision shape is 14/16 —
+//        seagrass/coral survive on mud; only isCollisionFaceFull sees 14/16)
 // Full-cube colliding blocks are sturdy on every face; partial blocks
-// (mud 14/16, cactus, bottom slabs, chest) are sturdy only where a face is full:
-//   mud / sandstone_slab (bottom): DOWN only; cactus/chest/buds: none.
+// (cactus, bottom slabs, chest) are sturdy only where a face is full:
+//   sandstone_slab (bottom): DOWN only; cactus/chest/buds: none.
 // Direction indices: 0=DOWN,1=UP,2=NORTH,3=SOUTH,4=WEST,5=EAST.
 // Unknown blocks default to sturdy (full cubes are the worldgen default) and are
 // flagged via `defaulted` for review.
@@ -328,10 +414,14 @@ inline bool isFaceSturdyFull(const std::string& blockOrState, int direction, boo
     const std::string block = blockName(blockOrState);
     if (isLeavesBlock(block)) return false;                    // support shape EMPTY
     static const std::set<std::string> downOnly = {
-        "minecraft:snow", "minecraft:mud", "minecraft:sandstone_slab",
+        "minecraft:snow", "minecraft:sandstone_slab",
         "minecraft:moss_carpet",   // 1/16 carpet: DOWN face full only
+        "minecraft:pale_moss_carpet",                          // 1/16 MossyCarpetBlock plate
+        "minecraft:sculk_sensor", "minecraft:sculk_shrieker",  // full-xz 8/16 bottom slabs
     };
     if (downOnly.count(block) != 0) return direction == 0;
+    // NOTE: mud is NOT here — its SUPPORT shape is the full cube (MudBlock.java:31-34)
+    // even though its collision shape is 14/16; it falls through to blocksMotion=true.
     // AzaleaBlock support = collision = full-xz top slab (y 8..16) + stem
     // (AzaleaBlock.java:21): only the UP face is full.
     if (block == "minecraft:azalea" || block == "minecraft:flowering_azalea") return direction == 1;
@@ -343,6 +433,10 @@ inline bool isFaceSturdyFull(const std::string& blockOrState, int direction, boo
         "minecraft:small_dripleaf", "minecraft:big_dripleaf", "minecraft:big_dripleaf_stem",
         "minecraft:hanging_roots", "minecraft:spore_blossom",
         "minecraft:cave_vines", "minecraft:cave_vines_plant",
+        // forceSolidOn blocks whose SUPPORT shape (= collision) is thin/empty:
+        // bamboo (tiny stalk column) and sculk_vein (.noCollision()) blocksMotion
+        // TRUE but have no full face; cocoa/sea_pickle are small boxes.
+        "minecraft:bamboo", "minecraft:sculk_vein", "minecraft:cocoa", "minecraft:sea_pickle",
     };
     if (neverSturdy.count(block) != 0) return false;
     // The remaining sets share blocksMotion's discipline: motion-blockers here are
@@ -384,6 +478,7 @@ inline bool isCollisionFaceFull(const std::string& blockOrState, int direction, 
         const std::string b = blockName(blockOrState);
         static const std::set<std::string> downOnly = {
             "minecraft:snow", "minecraft:mud", "minecraft:sandstone_slab", "minecraft:moss_carpet",
+            "minecraft:pale_moss_carpet", "minecraft:sculk_sensor", "minecraft:sculk_shrieker",
         };
         if (downOnly.count(b) != 0) return direction == 0;
         if (b == "minecraft:azalea" || b == "minecraft:flowering_azalea") return direction == 1;
@@ -418,6 +513,22 @@ inline bool isCollisionFaceFull(const std::string& blockOrState, int direction, 
         "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:big_dripleaf_stem",
         "minecraft:big_dripleaf", "minecraft:spore_blossom",
         "minecraft:pointed_dripstone",
+        // New-class non-colliding / partial blocks (see blocksMotion notes).
+        "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling",
+        "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:mangrove_propagule",
+        "minecraft:pale_hanging_moss", "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom",
+        "minecraft:cocoa", "minecraft:bamboo", "minecraft:sea_pickle", "minecraft:sculk_vein",
+        "minecraft:tube_coral", "minecraft:brain_coral", "minecraft:bubble_coral",
+        "minecraft:fire_coral", "minecraft:horn_coral",
+        "minecraft:tube_coral_fan", "minecraft:brain_coral_fan", "minecraft:bubble_coral_fan",
+        "minecraft:fire_coral_fan", "minecraft:horn_coral_fan",
+        "minecraft:tube_coral_wall_fan", "minecraft:brain_coral_wall_fan", "minecraft:bubble_coral_wall_fan",
+        "minecraft:fire_coral_wall_fan", "minecraft:horn_coral_wall_fan",
+        // powder_snow: collision shape Shapes.empty() for the non-entity context
+        // (PowderSnowBlock.getCollisionShape) -> no full face. This is why
+        // freeze_top_layer's SNOW canSurvive rejects on top of powder snow
+        // (SnowLayerBlock.canSurvive UP-face test).
+        "minecraft:powder_snow",
     };
     static const std::set<std::string> knownFaceFull = {
         "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
@@ -442,6 +553,23 @@ inline bool isCollisionFaceFull(const std::string& blockOrState, int direction, 
         "minecraft:sculk", "minecraft:raw_iron_block", "minecraft:raw_copper_block",
         "minecraft:raw_gold_block",
         "minecraft:azalea_leaves", "minecraft:flowering_azalea_leaves",
+        // New-class full collision cubes (logs/leaves collide as full cubes;
+        // mangrove_roots/muddy_mangrove_roots; mushroom blocks; pale_moss_block;
+        // creaking_heart; sculk_catalyst; coral blocks; badlands terracottas;
+        // bone_block).
+        "minecraft:jungle_log", "minecraft:acacia_log", "minecraft:dark_oak_log",
+        "minecraft:cherry_log", "minecraft:mangrove_log", "minecraft:pale_oak_log",
+        "minecraft:jungle_leaves", "minecraft:acacia_leaves", "minecraft:dark_oak_leaves",
+        "minecraft:cherry_leaves", "minecraft:mangrove_leaves", "minecraft:pale_oak_leaves",
+        "minecraft:mangrove_roots", "minecraft:muddy_mangrove_roots",
+        "minecraft:brown_mushroom_block", "minecraft:red_mushroom_block", "minecraft:mushroom_stem",
+        "minecraft:pale_moss_block", "minecraft:creaking_heart", "minecraft:sculk_catalyst",
+        "minecraft:bone_block",
+        "minecraft:tube_coral_block", "minecraft:brain_coral_block", "minecraft:bubble_coral_block",
+        "minecraft:fire_coral_block", "minecraft:horn_coral_block",
+        "minecraft:terracotta", "minecraft:white_terracotta", "minecraft:orange_terracotta",
+        "minecraft:yellow_terracotta", "minecraft:brown_terracotta", "minecraft:red_terracotta",
+        "minecraft:light_gray_terracotta", "minecraft:red_sandstone",
     };
     const std::string block = blockName(blockOrState);
     if (notFaceFull.count(block) != 0) return false;
@@ -451,6 +579,24 @@ inline bool isCollisionFaceFull(const std::string& blockOrState, int direction, 
 // SnowLayerBlock.canSurvive's UP-face test.
 inline bool isCollisionFaceFullUp(const std::string& blockOrState, bool* defaulted = nullptr) {
     return isCollisionFaceFull(blockOrState, 1, defaulted);
+}
+
+// BlockStateBase.isCollisionShapeFullBlock(level, pos) (BlockBehaviour.java) ==
+// Block.isShapeFullBlock(getCollisionShape(...)): the collision shape is the full
+// cube. Under the face-full table model a block is shape-full iff EVERY collision
+// face is full — downOnly/upOnly partials and all the non-colliding blocks are
+// not. Consumed by SculkPatchFeature.canSpreadFrom (SculkPatchFeature.java:50,
+// 68-77).
+inline bool isCollisionShapeFullBlock(const std::string& blockOrState, bool* defaulted = nullptr) {
+    const std::string b = blockName(blockOrState);
+    static const std::set<std::string> partial = {
+        "minecraft:snow", "minecraft:mud", "minecraft:sandstone_slab", "minecraft:moss_carpet",
+        "minecraft:pale_moss_carpet", "minecraft:sculk_sensor", "minecraft:sculk_shrieker",
+        "minecraft:azalea", "minecraft:flowering_azalea",
+        "minecraft:powder_snow",   // collision Shapes.empty() (non-entity context)
+    };
+    if (partial.count(b) != 0) return false;
+    return isCollisionFaceFull(blockOrState, 0, defaulted);
 }
 
 // BlockStateBase.getFaceOcclusionShape(direction) full-block test, as consumed by

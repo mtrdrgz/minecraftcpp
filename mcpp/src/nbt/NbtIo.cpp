@@ -47,24 +47,37 @@ static std::vector<uint8_t> gzipDecompress(std::span<const uint8_t> in) {
     if (in.size() < pos + 8) throw std::runtime_error("Gzip: truncated body");
     std::span<const uint8_t> deflateData = in.subspan(pos, in.size() - pos - 8);
 
-    // Use miniz tinfl for raw deflate (no zlib header)
-    size_t outBufSize = deflateData.size() * 6;
-    std::vector<uint8_t> out(outBufSize);
-    tinfl_decompressor decomp;
-    tinfl_init(&decomp);
+    // Use miniz tinfl for raw deflate (no zlib header). The output size is
+    // unknown; retry with a doubled buffer while tinfl reports HAS_MORE_OUTPUT —
+    // high-ratio payloads (e.g. the bone-block fossil structure templates at
+    // ~8x) exceed any fixed multiplier, and truncation MUST hard-fail, never
+    // silently pass (the old `status < DONE` check let HAS_MORE_OUTPUT through
+    // with a cut buffer).
+    size_t outBufSize = std::max<size_t>(deflateData.size() * 6, size_t{1} << 14);
+    for (;;) {
+        std::vector<uint8_t> out(outBufSize);
+        tinfl_decompressor decomp;
+        tinfl_init(&decomp);
 
-    size_t inSize = deflateData.size();
-    size_t outSize = outBufSize;
-    tinfl_status status = tinfl_decompress(&decomp,
-        deflateData.data(), &inSize,
-        out.data(), out.data(), &outSize,
-        TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+        size_t inSize = deflateData.size();
+        size_t outSize = outBufSize;
+        tinfl_status status = tinfl_decompress(&decomp,
+            deflateData.data(), &inSize,
+            out.data(), out.data(), &outSize,
+            TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
 
-    if (status < TINFL_STATUS_DONE)
+        if (status == TINFL_STATUS_DONE) {
+            out.resize(outSize);
+            return out;
+        }
+        if (status == TINFL_STATUS_HAS_MORE_OUTPUT) {
+            outBufSize *= 2;
+            if (outBufSize > (size_t{1} << 31))
+                throw std::runtime_error("Gzip: decompressed payload too large");
+            continue;
+        }
         throw std::runtime_error("Gzip tinfl decompress failed: " + std::to_string(status));
-
-    out.resize(outSize);
-    return out;
+    }
 }
 
 // ── NbtReader ────────────────────────────────────────────────────────────────

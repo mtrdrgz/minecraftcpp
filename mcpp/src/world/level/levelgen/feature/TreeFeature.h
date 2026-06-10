@@ -2,12 +2,17 @@
 
 // 1:1 port of net.minecraft.world.level.levelgen.feature.TreeFeature with
 //   trunk placers:   StraightTrunkPlacer, FancyTrunkPlacer, GiantTrunkPlacer,
-//                    BendingTrunkPlacer
+//                    BendingTrunkPlacer, ForkingTrunkPlacer, DarkOakTrunkPlacer,
+//                    MegaJungleTrunkPlacer, CherryTrunkPlacer, UpwardsBranchingTrunkPlacer
 //   foliage placers: BlobFoliagePlacer, FancyFoliagePlacer, SpruceFoliagePlacer,
-//                    PineFoliagePlacer, MegaPineFoliagePlacer, RandomSpreadFoliagePlacer
+//                    PineFoliagePlacer, MegaPineFoliagePlacer, RandomSpreadFoliagePlacer,
+//                    AcaciaFoliagePlacer, BushFoliagePlacer, CherryFoliagePlacer,
+//                    DarkOakFoliagePlacer, MegaJungleFoliagePlacer ("jungle_foliage_placer")
+//   root placers:    MangroveRootPlacer
 //   decorators:      BeehiveDecorator, PlaceOnGroundDecorator, AlterGroundDecorator,
-//                    LeaveVineDecorator
-//   minimum size:    TwoLayersFeatureSize
+//                    LeaveVineDecorator, CocoaDecorator, TrunkVineDecorator,
+//                    AttachedToLeavesDecorator, PaleMossDecorator, CreakingHeartDecorator
+//   minimum size:    TwoLayersFeatureSize, ThreeLayersFeatureSize
 // plus the post-placement leaf DISTANCE update (TreeFeature.updateLeaves) and
 // StructureTemplate.updateShapeAtEdge over the resulting DiscreteVoxelShape.
 //
@@ -54,8 +59,11 @@
 #include "../RandomSource.h"
 #include "../IntProvider.h"
 #include "../Heightmap.h"
+#include "../Mth.h"                          // Mth.sin/cos table (MegaJungleTrunkPlacer)
 #include "DiskFeature.h"                     // DiskStateProvider typedef
 #include "../../../../core/Math.h"           // BlockPos
+
+#include <tuple>
 
 #include <algorithm>
 #include <array>
@@ -134,6 +142,14 @@ public:
         }
         m_items.push_back(p);
         return true;
+    }
+    // HashSet.contains (order-independent; FoliagePlacer.FoliageSetter.isSet,
+    // TreeFeature.java:147-149).
+    bool contains(BlockPos p) const {
+        for (const BlockPos& q : m_items) {
+            if (q == p) return true;
+        }
+        return false;
     }
     bool empty() const { return m_items.empty(); }
     std::size_t size() const { return m_items.size(); }
@@ -565,6 +581,10 @@ struct TreeHooks {
     std::function<bool(const std::string&)> isLog;             // #minecraft:logs (TrunkPlacer.isFree, TrunkPlacer.java:117-119)
     std::function<bool(const std::string&)> isVine;            // Blocks.VINE (TreeFeature.java:41-43)
     std::function<bool(const std::string&)> isSolidRender;     // BlockStateBase.isSolidRender
+    // state.is(BlockTags.LEAVES) — TreeFeature.isAirOrLeaves (TreeFeature.java:45-48,
+    // DarkOakTrunkPlacer.java:66) and CreakingHeartDecorator's #logs check share tags.
+    std::function<bool(const std::string&)> isLeavesTag;
+    std::function<bool(const std::string&)> isLogsTag;         // #minecraft:logs (CreakingHeartDecorator.java:43)
     // LeavesBlock.getOptionalDistanceAt (LeavesBlock.java:131-137).
     std::function<std::optional<int>(BlockPos)> optionalDistanceAt;
     // TreeFeature.updateLeaves' setBlockKnownShape(pos, state.setValue(DISTANCE, d))
@@ -578,6 +598,10 @@ struct TreeHooks {
     // TrunkVineDecorator.placeVine sets VINE with exactly one face property
     // (TreeDecorator.java:53-55); the id-only grid keeps the face in a side map.
     std::function<void(BlockPos, int)> putVineFace;
+    // CocoaDecorator places COCOA with FACING (CocoaDecorator.java:42-45); the
+    // id-only grid keeps the facing in a side map (CocoaBlock.updateShape /
+    // canSurvive revalidate against the faced log).
+    std::function<void(BlockPos, int)> putCocoaFacing;
     int levelMinY = 0;   // level.getMinY()
     int levelMaxY = 0;   // level.getMaxY() (inclusive highest buildable y)
 };
@@ -585,37 +609,97 @@ struct TreeHooks {
 // ---------------------------------------------------------------------------
 // Configuration (TreeConfiguration.java + the placer/decorator codecs).
 struct TreeDecoratorConfig {
-    enum class Kind { Beehive, PlaceOnGround, AlterGround, LeaveVine };
+    enum class Kind {
+        Beehive, PlaceOnGround, AlterGround, LeaveVine,
+        Cocoa,             // CocoaDecorator.java
+        TrunkVine,         // TrunkVineDecorator.java
+        AttachedToLeaves,  // AttachedToLeavesDecorator.java (mangrove propagules)
+        PaleMoss,          // PaleMossDecorator.java
+        CreakingHeart,     // CreakingHeartDecorator.java
+    };
     Kind kind = Kind::Beehive;
-    float probability = 0.0f;                 // beehive / leave_vine
+    float probability = 0.0f;                 // beehive / leave_vine / cocoa / creaking_heart / attached_to_leaves / pale_moss leaves_probability
     int tries = 128, radius = 2, height = 1;  // place_on_ground codec defaults (PlaceOnGroundDecorator.java:19-21)
-    DiskStateProvider provider;               // place_on_ground block_state_provider / alter_ground provider
+    DiskStateProvider provider;               // place_on_ground block_state_provider / alter_ground provider / attached_to_leaves block_provider
+    // attached_to_leaves (AttachedToLeavesDecorator codec)
+    int exclusionRadiusXZ = 0, exclusionRadiusY = 0, requiredEmptyBlocks = 1;
+    std::vector<int> directions;              // Direction list (values() indices)
+    std::string providerBlockId;              // block id the provider places (id-level grid)
+    // pale_moss (PaleMossDecorator codec): probability == leaves_probability
+    float trunkProbability = 0.0f, groundProbability = 0.0f;
+    // PaleMossDecorator.place: the PALE_MOSS_PATCH configured feature placed directly
+    // (PaleMossDecorator.java:55-60) — resolved by the harness loader.
+    std::function<bool(WorldGenLevel&, RandomSource&, BlockPos)> paleMossPatch;
+};
+
+// MangroveRootPlacer + RootPlacer base (RootPlacer.java, MangroveRootPlacer.java,
+// MangroveRootPlacement.java, AboveRootPlacement.java).
+struct MangroveRootConfig {
+    mc::valueproviders::IntProviderPtr trunkOffsetY;       // RootPlacer codec
+    DiskStateProvider rootProvider;                        // mangrove_roots (waterlogged: id-invisible)
+    bool hasAboveRootPlacement = false;                    // AboveRootPlacement optional
+    DiskStateProvider aboveRootProvider;                   // moss_carpet
+    float aboveRootPlacementChance = 0.0f;
+    std::function<bool(const std::string&)> canGrowThrough;  // #mangrove_roots_can_grow_through
+    std::function<bool(const std::string&)> muddyRootsIn;    // mud / muddy_mangrove_roots
+    DiskStateProvider muddyRootsProvider;                  // muddy_mangrove_roots
+    int maxRootWidth = 8, maxRootLength = 15;
+    float randomSkewChance = 0.0f;
 };
 
 struct TreeConfig {
     DiskStateProvider trunkProvider;       // getState (never null)
     DiskStateProvider foliageProvider;     // getState (never null)
     DiskStateProvider belowTrunkProvider;  // getOptionalState (nullopt == none)
-    enum class Trunk { Straight, Fancy, Giant, Bending };
+    enum class Trunk { Straight, Fancy, Giant, Bending, Forking, DarkOak, MegaJungle, Cherry, UpwardsBranching };
     Trunk trunkKind = Trunk::Straight;
     int baseHeight = 0, heightRandA = 0, heightRandB = 0;
     // bending_trunk_placer extras (BendingTrunkPlacer codec): min_height_for_leaves
     // (default 1) + bend_length IntProvider.
     int minHeightForLeaves = 1;
     mc::valueproviders::IntProviderPtr bendLength;
-    enum class Foliage { Blob, Fancy, Spruce, Pine, MegaPine, RandomSpread };
+    // cherry_trunk_placer extras (CherryTrunkPlacer codec): branch_count,
+    // branch_horizontal_length, branch_start_offset_from_top (a UniformInt whose
+    // derived secondBranchStart = UniformInt(min, max-1), CherryTrunkPlacer.java:62),
+    // branch_end_offset_from_top.
+    mc::valueproviders::IntProviderPtr branchCount, branchHorizontalLength, branchEndOffsetFromTop;
+    int branchStartOffsetMin = 0, branchStartOffsetMax = 0;
+    // upwards_branching_trunk_placer extras (UpwardsBranchingTrunkPlacer codec).
+    mc::valueproviders::IntProviderPtr extraBranchSteps, extraBranchLength;
+    float placeBranchPerLogProbability = 0.0f;
+    std::function<bool(const std::string&)> canGrowThrough;   // #mangrove_logs_can_grow_through
+    enum class Foliage { Blob, Fancy, Spruce, Pine, MegaPine, RandomSpread, Acacia, Bush, Cherry, DarkOak, MegaJungle };
     Foliage foliageKind = Foliage::Blob;
     mc::valueproviders::IntProviderPtr foliageRadius, foliageOffset;
-    int foliageHeightParam = 0;            // blob/fancy "height"
+    int foliageHeightParam = 0;            // blob/fancy/bush/mega_jungle "height"
     // spruce "trunk_height" / pine "height" / mega_pine "crown_height" / random_spread
-    // "foliage_height" (each an IntProvider sampled in foliageHeight — the respective
-    // FoliagePlacer codecs).
+    // "foliage_height" / cherry "height" (each an IntProvider sampled in foliageHeight
+    // — the respective FoliagePlacer codecs).
     mc::valueproviders::IntProviderPtr foliageHeightProvider;
     int leafPlacementAttempts = 0;         // random_spread_foliage_placer
+    // cherry_foliage_placer extras (CherryFoliagePlacer codec): DECODE reads the
+    // "corner_hole_chance" JSON field into cornerHoleChance (the encode-side
+    // forGetter reuses wideBottomLayerHoleChance — vanilla quirk, irrelevant here).
+    float wideBottomLayerHoleChance = 0.0f, cornerHoleChance = 0.0f;
+    float hangingLeavesChance = 0.0f, hangingLeavesExtensionChance = 0.0f;
+    enum class SizeKind { TwoLayers, ThreeLayers };
+    SizeKind sizeKind = SizeKind::TwoLayers;
     int sizeLimit = 1, lowerSize = 0, upperSize = 1;   // two_layers_feature_size
+    int upperLimit = 1, middleSize = 1;                // three_layers_feature_size extras
     std::optional<int> minClippedHeight;
     bool ignoreVines = false;
+    std::shared_ptr<MangroveRootConfig> rootPlacer;    // null when absent
     std::vector<TreeDecoratorConfig> decorators;
+
+    // FeatureSize.getSizeAtHeight (TwoLayersFeatureSize.java:38-40,
+    // ThreeLayersFeatureSize.java:47-53).
+    int sizeAtHeight(int treeHeight, int y) const {
+        if (sizeKind == SizeKind::TwoLayers) {
+            return y < sizeLimit ? lowerSize : upperSize;
+        }
+        if (y < sizeLimit) return lowerSize;
+        return y >= treeHeight - upperLimit ? upperSize : middleSize;
+    }
 };
 
 // FoliagePlacer.FoliageAttachment (FoliagePlacer.java:189-211).
@@ -827,6 +911,158 @@ inline void placeLeaveVineDecorator(TreeDecoratorContext& ctx, float probability
     }
 }
 
+// CocoaDecorator.place (CocoaDecorator.java:26-50): one nextFloat gate (>= prob
+// rejects); per log within 2 of the lowest-log Y, per HORIZONTAL direction
+// (N,E,S,W) one nextFloat <= 0.25 draw; when the opposite-side cell is air, the
+// cocoa state's AGE nextInt(3) draw fires INSIDE the setBlock argument.
+inline void placeCocoaDecorator(TreeDecoratorContext& ctx, float probability,
+                                const std::function<void(BlockPos, int)>& putCocoaFacing) {
+    RandomSource& random = *ctx.random;
+    if (random.nextFloat() >= probability) return;
+    const std::vector<BlockPos>& logs = ctx.logs;
+    if (logs.empty()) return;
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // N, E, S, W
+    static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+    const int treeY = logs.front().y;
+    for (const BlockPos& pos : logs) {
+        if (pos.y - treeY > 2) continue;
+        for (int direction : HORIZONTAL) {
+            if (random.nextFloat() <= 0.25f) {
+                const int opposite = OPP[direction];
+                const BlockPos cocoaPos{ pos.x + TREE_DIR_DX[opposite], pos.y, pos.z + TREE_DIR_DZ[opposite] };
+                if (ctx.isAir(cocoaPos)) {
+                    (void)random.nextInt(3);   // CocoaBlock.AGE (id-invisible)
+                    if (ctx.setBlock(cocoaPos, "minecraft:cocoa")) {
+                        putCocoaFacing(cocoaPos, direction);   // FACING side map
+                    }
+                }
+            }
+        }
+    }
+}
+
+// TrunkVineDecorator.place (TrunkVineDecorator.java:18-48): per log four
+// UNCONDITIONAL nextInt(3) draws (west/east/north/south); each > 0 and air
+// places the face vine.
+inline void placeTrunkVineDecorator(TreeDecoratorContext& ctx) {
+    RandomSource& random = *ctx.random;
+    auto placeVine = [&](BlockPos at, int faceDir) {
+        if (ctx.setBlock(at, "minecraft:vine")) {
+            ctx.hooks->putVineFace(at, faceDir);
+        }
+    };
+    for (const BlockPos& pos : ctx.logs) {
+        if (random.nextInt(3) > 0) {
+            const BlockPos west{ pos.x - 1, pos.y, pos.z };
+            if (ctx.isAir(west)) placeVine(west, 5);   // VineBlock.EAST
+        }
+        if (random.nextInt(3) > 0) {
+            const BlockPos east{ pos.x + 1, pos.y, pos.z };
+            if (ctx.isAir(east)) placeVine(east, 4);   // VineBlock.WEST
+        }
+        if (random.nextInt(3) > 0) {
+            const BlockPos north{ pos.x, pos.y, pos.z - 1 };
+            if (ctx.isAir(north)) placeVine(north, 3); // VineBlock.SOUTH
+        }
+        if (random.nextInt(3) > 0) {
+            const BlockPos south{ pos.x, pos.y, pos.z + 1 };
+            if (ctx.isAir(south)) placeVine(south, 2); // VineBlock.NORTH
+        }
+    }
+}
+
+// AttachedToLeavesDecorator.place (AttachedToLeavesDecorator.java:55-79):
+// shuffled copy of the leaves; per leaf ONE Util.getRandom(directions) draw,
+// then blacklist / nextFloat(prob) / required-empty gates in that short-circuit
+// order; success blacklists the exclusion box and draws the provider state.
+inline void placeAttachedToLeavesDecorator(TreeDecoratorContext& ctx, const TreeDecoratorConfig& cfg) {
+    RandomSource& random = *ctx.random;
+    std::set<std::tuple<int, int, int>> blacklist;
+    std::vector<BlockPos> shuffled = ctx.leaves;
+    javaShuffle(shuffled, random);   // Util.shuffledCopy
+    for (const BlockPos& leafPos : shuffled) {
+        const int direction = cfg.directions[static_cast<std::size_t>(
+            random.nextInt(static_cast<int>(cfg.directions.size())))];   // Util.getRandom
+        const BlockPos placementPos = treeRelative(leafPos, direction);
+        if (blacklist.count({ placementPos.x, placementPos.y, placementPos.z }) != 0) continue;
+        if (!(random.nextFloat() < cfg.probability)) continue;
+        bool hasEmpty = true;   // hasRequiredEmptyBlocks (:81-89)
+        for (int i = 1; i <= cfg.requiredEmptyBlocks; ++i) {
+            const BlockPos offsetPos{ leafPos.x + TREE_DIR_DX[direction] * i,
+                                      leafPos.y + TREE_DIR_DY[direction] * i,
+                                      leafPos.z + TREE_DIR_DZ[direction] * i };
+            if (!ctx.isAir(offsetPos)) { hasEmpty = false; break; }
+        }
+        if (!hasEmpty) continue;
+        for (int x = placementPos.x - cfg.exclusionRadiusXZ; x <= placementPos.x + cfg.exclusionRadiusXZ; ++x)
+            for (int y = placementPos.y - cfg.exclusionRadiusY; y <= placementPos.y + cfg.exclusionRadiusY; ++y)
+                for (int z = placementPos.z - cfg.exclusionRadiusXZ; z <= placementPos.z + cfg.exclusionRadiusXZ; ++z)
+                    blacklist.insert({ x, y, z });
+        const std::optional<std::string> state = cfg.provider(*ctx.level, random, placementPos);
+        ctx.setBlock(placementPos, state.value());
+    }
+}
+
+// PaleMossDecorator.place (PaleMossDecorator.java:46-90).
+inline void placePaleMossDecorator(TreeDecoratorContext& ctx, const TreeDecoratorConfig& cfg) {
+    RandomSource& random = *ctx.random;
+    std::vector<BlockPos> logs = ctx.logs;
+    javaShuffle(logs, random);   // Util.shuffledCopy(context.logs(), random)
+    if (logs.empty()) return;
+    // Collections.min(logs, comparingInt(Vec3i::getY)): first strict minimum in
+    // the shuffled iteration order.
+    BlockPos origin = logs.front();
+    for (const BlockPos& p : logs) {
+        if (p.y < origin.y) origin = p;
+    }
+    if (random.nextFloat() < cfg.groundProbability) {
+        // registry CONFIGURED_FEATURE pale_moss_patch placed directly at origin.above()
+        // (PaleMossDecorator.java:55-60).
+        (void)cfg.paleMossPatch(*ctx.level, random, BlockPos{ origin.x, origin.y + 1, origin.z });
+    }
+    auto addMossHanger = [&](BlockPos pos) {
+        // PaleMossDecorator.addMossHanger (:83-90): tip=false chain downward while
+        // air below and nextFloat >= 0.5, then the tip block. Both are the
+        // "minecraft:pale_hanging_moss" id (TIP is id-invisible).
+        while (ctx.isAir(BlockPos{ pos.x, pos.y - 1, pos.z }) && !(random.nextFloat() < 0.5f)) {
+            ctx.setBlock(pos, "minecraft:pale_hanging_moss");
+            pos = BlockPos{ pos.x, pos.y - 1, pos.z };
+        }
+        ctx.setBlock(pos, "minecraft:pale_hanging_moss");
+    };
+    for (const BlockPos& pos : ctx.logs) {
+        if (random.nextFloat() < cfg.trunkProbability) {
+            const BlockPos down{ pos.x, pos.y - 1, pos.z };
+            if (ctx.isAir(down)) addMossHanger(down);
+        }
+    }
+    for (const BlockPos& pos : ctx.leaves) {
+        if (random.nextFloat() < cfg.probability) {   // leaves_probability
+            const BlockPos down{ pos.x, pos.y - 1, pos.z };
+            if (ctx.isAir(down)) addMossHanger(down);
+        }
+    }
+}
+
+// CreakingHeartDecorator.place (CreakingHeartDecorator.java:32-61).
+inline void placeCreakingHeartDecorator(TreeDecoratorContext& ctx, float probability) {
+    RandomSource& random = *ctx.random;
+    if (ctx.logs.empty()) return;
+    if (random.nextFloat() >= probability) return;
+    std::vector<BlockPos> heartPlacements = ctx.logs;
+    javaShuffle(heartPlacements, random);   // Util.shuffle
+    for (const BlockPos& pos : heartPlacements) {
+        bool allLogs = true;
+        for (int dir = 0; dir < 6 && allLogs; ++dir) {   // Direction.values()
+            if (!ctx.hooks->isLogsTag(ctx.level->getBlockState(treeRelative(pos, dir)))) allLogs = false;
+        }
+        if (allLogs) {
+            ctx.setBlock(pos, "minecraft:creaking_heart");
+            return;   // findFirst
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Trunk placer helpers (TrunkPlacer.java).
 struct TrunkPlacerOps {
@@ -835,13 +1071,19 @@ struct TrunkPlacerOps {
     const TreeHooks* hooks;
     std::function<void(BlockPos, const std::string&)> trunkSetter;
 
+    // TrunkPlacer.validTreePos is OVERRIDDEN by UpwardsBranchingTrunkPlacer to also
+    // pass #mangrove_logs_can_grow_through (UpwardsBranchingTrunkPlacer.java:139-141);
+    // placeLog and isFree dispatch through it virtually.
     bool validTreePos(BlockPos pos) const {
-        return hooks->validTreePosState(level->getBlockState(pos));
+        const std::string s = level->getBlockState(pos);
+        if (hooks->validTreePosState(s)) return true;
+        return config->trunkKind == TreeConfig::Trunk::UpwardsBranching
+               && config->canGrowThrough && config->canGrowThrough(s);
     }
     // TrunkPlacer.isFree (TrunkPlacer.java:117-119).
     bool isFree(BlockPos pos) const {
-        const std::string s = level->getBlockState(pos);
-        return hooks->validTreePosState(s) || hooks->isLog(s);
+        if (validTreePos(pos)) return true;
+        return hooks->isLog(level->getBlockState(pos));
     }
     // TrunkPlacer.placeBelowTrunkBlock (TrunkPlacer.java:62-73).
     void placeBelowTrunkBlock(RandomSource& random, BlockPos pos) const {
@@ -932,6 +1174,237 @@ inline std::vector<FoliageAttachment> placeBendingTrunk(
         pos = treeRelative(pos, direction);
     }
     return foliagePoints;
+}
+
+// ForkingTrunkPlacer.placeTrunk (ForkingTrunkPlacer.java:30-95) — acacia.
+inline std::vector<FoliageAttachment> placeForkingTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // Direction.Plane.HORIZONTAL: N, E, S, W
+    ops.placeBelowTrunkBlock(random, BlockPos{ origin.x, origin.y - 1, origin.z });
+    std::vector<FoliageAttachment> attachments;
+    const int leanDirection = HORIZONTAL[random.nextInt(4)];
+    const int leanHeight = treeHeight - random.nextInt(4) - 1;
+    int leanSteps = 3 - random.nextInt(3);
+    int tx = origin.x, tz = origin.z;
+    std::optional<int> ey;
+    for (int yo = 0; yo < treeHeight; ++yo) {
+        const int yy = origin.y + yo;
+        if (yo >= leanHeight && leanSteps > 0) {
+            tx += TREE_DIR_DX[leanDirection];
+            tz += TREE_DIR_DZ[leanDirection];
+            --leanSteps;
+        }
+        if (ops.placeLog(random, BlockPos{ tx, yy, tz })) ey = yy + 1;
+    }
+    if (ey.has_value()) attachments.push_back(FoliageAttachment{ BlockPos{ tx, *ey, tz }, 1, false });
+    tx = origin.x;
+    tz = origin.z;
+    const int branchDirection = HORIZONTAL[random.nextInt(4)];
+    if (branchDirection != leanDirection) {
+        const int branchPos = leanHeight - random.nextInt(2) - 1;
+        int branchSteps = 1 + random.nextInt(3);
+        ey.reset();
+        for (int yo = branchPos; yo < treeHeight && branchSteps > 0; --branchSteps) {
+            if (yo >= 1) {
+                const int yy = origin.y + yo;
+                tx += TREE_DIR_DX[branchDirection];
+                tz += TREE_DIR_DZ[branchDirection];
+                if (ops.placeLog(random, BlockPos{ tx, yy, tz })) ey = yy + 1;
+            }
+            ++yo;
+        }
+        if (ey.has_value()) attachments.push_back(FoliageAttachment{ BlockPos{ tx, *ey, tz }, 0, false });
+    }
+    return attachments;
+}
+
+// DarkOakTrunkPlacer.placeTrunk (DarkOakTrunkPlacer.java:30-91) — 2x2 leaning
+// trunk; logs gated by TreeFeature.isAirOrLeaves (:66), branch stubs by
+// nextInt(3) <= 0 with length 2 + nextInt(3).
+inline std::vector<FoliageAttachment> placeDarkOakTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // N, E, S, W
+    std::vector<FoliageAttachment> attachments;
+    const BlockPos below{ origin.x, origin.y - 1, origin.z };
+    ops.placeBelowTrunkBlock(random, below);
+    ops.placeBelowTrunkBlock(random, BlockPos{ below.x + 1, below.y, below.z });        // east
+    ops.placeBelowTrunkBlock(random, BlockPos{ below.x, below.y, below.z + 1 });        // south
+    ops.placeBelowTrunkBlock(random, BlockPos{ below.x + 1, below.y, below.z + 1 });    // south.east
+    const int leanDirection = HORIZONTAL[random.nextInt(4)];
+    const int leanHeight = treeHeight - random.nextInt(4);
+    int leanSteps = 2 - random.nextInt(3);
+    const int x = origin.x, y = origin.y, z = origin.z;
+    int tx = x, tz = z;
+    const int ey = y + treeHeight - 1;
+    for (int dy = 0; dy < treeHeight; ++dy) {
+        if (dy >= leanHeight && leanSteps > 0) {
+            tx += TREE_DIR_DX[leanDirection];
+            tz += TREE_DIR_DZ[leanDirection];
+            --leanSteps;
+        }
+        const int yy = y + dy;
+        const BlockPos blockPos{ tx, yy, tz };
+        // TreeFeature.isAirOrLeaves (TreeFeature.java:45-48): isAir || #leaves.
+        const std::string st = ops.level->getBlockState(blockPos);
+        if (ops.hooks->isAir(st) || ops.hooks->isLeavesTag(st)) {
+            ops.placeLog(random, blockPos);
+            ops.placeLog(random, BlockPos{ tx + 1, yy, tz });
+            ops.placeLog(random, BlockPos{ tx, yy, tz + 1 });
+            ops.placeLog(random, BlockPos{ tx + 1, yy, tz + 1 });
+        }
+    }
+    attachments.push_back(FoliageAttachment{ BlockPos{ tx, ey, tz }, 0, true });
+    for (int ox = -1; ox <= 2; ++ox) {
+        for (int oz = -1; oz <= 2; ++oz) {
+            if ((ox < 0 || ox > 1 || oz < 0 || oz > 1) && random.nextInt(3) <= 0) {
+                const int length = random.nextInt(3) + 2;
+                for (int branchY = 0; branchY < length; ++branchY) {
+                    ops.placeLog(random, BlockPos{ x + ox, ey - branchY - 1, z + oz });
+                }
+                attachments.push_back(FoliageAttachment{ BlockPos{ x + ox, ey, z + oz }, 0, false });
+            }
+        }
+    }
+    return attachments;
+}
+
+// MegaJungleTrunkPlacer.placeTrunk (MegaJungleTrunkPlacer.java:29-56): the giant
+// 2x2 trunk plus spiral branches every 2 + nextInt(4) levels above height/2.
+inline std::vector<FoliageAttachment> placeMegaJungleTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    std::vector<FoliageAttachment> attachments = placeGiantTrunk(ops, random, treeHeight, origin);
+    for (int branchHeight = treeHeight - 2 - random.nextInt(4); branchHeight > treeHeight / 2;
+         branchHeight -= 2 + random.nextInt(4)) {
+        const float angle = random.nextFloat() * 6.2831855f;   // (float)(Math.PI * 2)
+        int bx = 0, bz = 0;
+        for (int b = 0; b < 5; ++b) {
+            bx = static_cast<int>(1.5f + mc::levelgen::mth::cos(angle) * static_cast<float>(b));
+            bz = static_cast<int>(1.5f + mc::levelgen::mth::sin(angle) * static_cast<float>(b));
+            ops.placeLog(random, BlockPos{ origin.x + bx, origin.y + branchHeight - 3 + b / 2, origin.z + bz });
+        }
+        attachments.push_back(FoliageAttachment{ BlockPos{ origin.x + bx, origin.y + branchHeight, origin.z + bz }, -2, false });
+    }
+    return attachments;
+}
+
+// CherryTrunkPlacer (CherryTrunkPlacer.java:75-200).
+inline FoliageAttachment cherryGenerateBranch(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin,
+        int branchDirection, int offsetFromOrigin, bool middleContinuesUpwards) {
+    BlockPos logPos{ origin.x, origin.y + offsetFromOrigin, origin.z };
+    const int branchEndPosOffsetFromOrigin = treeHeight - 1 + ops.config->branchEndOffsetFromTop->sample(random);
+    const bool extendBranchAwayFromTrunk = middleContinuesUpwards || branchEndPosOffsetFromOrigin < offsetFromOrigin;
+    const int distanceToTrunk = ops.config->branchHorizontalLength->sample(random) + (extendBranchAwayFromTrunk ? 1 : 0);
+    const BlockPos branchEndPos{ origin.x + TREE_DIR_DX[branchDirection] * distanceToTrunk,
+                                 origin.y + branchEndPosOffsetFromOrigin,
+                                 origin.z + TREE_DIR_DZ[branchDirection] * distanceToTrunk };
+    const int stepsHorizontally = extendBranchAwayFromTrunk ? 2 : 1;
+    for (int i = 0; i < stepsHorizontally; ++i) {
+        logPos = treeRelative(logPos, branchDirection);
+        ops.placeLog(random, logPos);   // sideways axis modifier: id-invisible
+    }
+    const int verticalDirection = branchEndPos.y > logPos.y ? 1 : 0;   // UP : DOWN
+    while (true) {
+        const int distance = std::abs(logPos.x - branchEndPos.x) + std::abs(logPos.y - branchEndPos.y)
+                             + std::abs(logPos.z - branchEndPos.z);   // distManhattan
+        if (distance == 0) {
+            return FoliageAttachment{ BlockPos{ branchEndPos.x, branchEndPos.y + 1, branchEndPos.z }, 0, false };
+        }
+        const float chanceToGrowVertically = static_cast<float>(std::abs(branchEndPos.y - logPos.y)) / static_cast<float>(distance);
+        const bool growVertically = random.nextFloat() < chanceToGrowVertically;
+        logPos = treeRelative(logPos, growVertically ? verticalDirection : branchDirection);
+        ops.placeLog(random, logPos);
+    }
+}
+
+inline std::vector<FoliageAttachment> placeCherryTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // N, E, S, W
+    static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+    ops.placeBelowTrunkBlock(random, BlockPos{ origin.x, origin.y - 1, origin.z });
+    // branch_start_offset_from_top is a UniformInt; secondBranchStartOffsetFromTop =
+    // UniformInt(min, max-1) (CherryTrunkPlacer.java:62).
+    const int firstBranchOffsetFromOrigin = std::max(0, treeHeight - 1
+        + nextIntBetweenInclusive(random, ops.config->branchStartOffsetMin, ops.config->branchStartOffsetMax));
+    int secondBranchOffsetFromOrigin = std::max(0, treeHeight - 1
+        + nextIntBetweenInclusive(random, ops.config->branchStartOffsetMin, ops.config->branchStartOffsetMax - 1));
+    if (secondBranchOffsetFromOrigin >= firstBranchOffsetFromOrigin) ++secondBranchOffsetFromOrigin;
+    const int branchCount = ops.config->branchCount->sample(random);
+    const bool hasMiddleBranch = branchCount == 3;
+    const bool hasBothSideBranches = branchCount >= 2;
+    int trunkHeight;
+    if (hasMiddleBranch) trunkHeight = treeHeight;
+    else if (hasBothSideBranches) trunkHeight = std::max(firstBranchOffsetFromOrigin, secondBranchOffsetFromOrigin) + 1;
+    else trunkHeight = firstBranchOffsetFromOrigin + 1;
+    for (int y = 0; y < trunkHeight; ++y) {
+        ops.placeLog(random, BlockPos{ origin.x, origin.y + y, origin.z });
+    }
+    std::vector<FoliageAttachment> attachments;
+    if (hasMiddleBranch) {
+        attachments.push_back(FoliageAttachment{ BlockPos{ origin.x, origin.y + trunkHeight, origin.z }, 0, false });
+    }
+    const int treeDirection = HORIZONTAL[random.nextInt(4)];
+    attachments.push_back(cherryGenerateBranch(ops, random, treeHeight, origin, treeDirection,
+                                               firstBranchOffsetFromOrigin,
+                                               firstBranchOffsetFromOrigin < trunkHeight - 1));
+    if (hasBothSideBranches) {
+        attachments.push_back(cherryGenerateBranch(ops, random, treeHeight, origin, OPP[treeDirection],
+                                                   secondBranchOffsetFromOrigin,
+                                                   secondBranchOffsetFromOrigin < trunkHeight - 1));
+    }
+    return attachments;
+}
+
+// UpwardsBranchingTrunkPlacer (UpwardsBranchingTrunkPlacer.java:66-137) — mangrove.
+inline void upwardsPlaceBranch(const TrunkPlacerOps& ops, RandomSource& random, int treeHeight,
+                               std::vector<FoliageAttachment>& attachments, BlockPos logPos,
+                               int currentHeight, int branchDir, int branchPos, int branchSteps) {
+    int heightAlongBranch = currentHeight + branchPos;
+    int logX = logPos.x, logZ = logPos.z;
+    int branchPlacementIndex = branchPos;
+    while (branchPlacementIndex < treeHeight && branchSteps > 0) {
+        if (branchPlacementIndex >= 1) {
+            const int placementHeight = currentHeight + branchPlacementIndex;
+            logX += TREE_DIR_DX[branchDir];
+            logZ += TREE_DIR_DZ[branchDir];
+            heightAlongBranch = placementHeight;
+            if (ops.placeLog(random, BlockPos{ logX, placementHeight, logZ })) {
+                ++heightAlongBranch;
+            }
+            attachments.push_back(FoliageAttachment{ BlockPos{ logX, placementHeight, logZ }, 0, false });
+        }
+        ++branchPlacementIndex;
+        --branchSteps;
+    }
+    if (heightAlongBranch - currentHeight > 1) {
+        const BlockPos foliagePos{ logX, heightAlongBranch, logZ };
+        attachments.push_back(FoliageAttachment{ foliagePos, 0, false });
+        attachments.push_back(FoliageAttachment{ BlockPos{ foliagePos.x, foliagePos.y - 2, foliagePos.z }, 0, false });
+    }
+}
+
+inline std::vector<FoliageAttachment> placeUpwardsBranchingTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // N, E, S, W
+    std::vector<FoliageAttachment> attachments;
+    for (int heightPos = 0; heightPos < treeHeight; ++heightPos) {
+        const int currentHeight = origin.y + heightPos;
+        if (ops.placeLog(random, BlockPos{ origin.x, currentHeight, origin.z })
+            && heightPos < treeHeight - 1
+            && random.nextFloat() < ops.config->placeBranchPerLogProbability) {
+            const int branchDir = HORIZONTAL[random.nextInt(4)];
+            const int branchLen = ops.config->extraBranchLength->sample(random);
+            const int branchPos = std::max(0, branchLen - ops.config->extraBranchLength->sample(random) - 1);
+            const int branchSteps = ops.config->extraBranchSteps->sample(random);
+            upwardsPlaceBranch(ops, random, treeHeight, attachments,
+                               BlockPos{ origin.x, currentHeight, origin.z }, currentHeight,
+                               branchDir, branchPos, branchSteps);
+        }
+        if (heightPos == treeHeight - 1) {
+            attachments.push_back(FoliageAttachment{ BlockPos{ origin.x, currentHeight + 1, origin.z }, 0, false });
+        }
+    }
+    return attachments;
 }
 
 // FancyTrunkPlacer (FancyTrunkPlacer.java) — the gnarled big oak.
@@ -1069,47 +1542,158 @@ inline bool tryPlaceLeaf(const TreeConfig& config, const TreeHooks& hooks, World
     return false;
 }
 
-// FoliagePlacer.shouldSkipLocationSigned + placeLeavesRow (FoliagePlacer.java:77-114).
+// Per-placer FoliagePlacer.shouldSkipLocation over the min-mapped coordinates
+// (FoliagePlacer.java:85-95 maps the signed dx/dz; each placer's override below).
+inline bool shouldSkipLocationMin(const TreeConfig& config, RandomSource& random,
+                                  int minDx, int y, int minDz, int currentRadius, bool doubleTrunk) {
+    switch (config.foliageKind) {
+        case TreeConfig::Foliage::Blob:
+        case TreeConfig::Foliage::Fancy:
+        case TreeConfig::Foliage::MegaPine:
+        case TreeConfig::Foliage::Spruce:
+        case TreeConfig::Foliage::Pine:
+        case TreeConfig::Foliage::RandomSpread:
+        default:
+            break;
+        case TreeConfig::Foliage::Acacia:
+            // AcaciaFoliagePlacer.shouldSkipLocation (AcaciaFoliagePlacer.java:51-53).
+            if (y == 0) return (minDx > 1 || minDz > 1) && minDx != 0 && minDz != 0;
+            return minDx == currentRadius && minDz == currentRadius && currentRadius > 0;
+        case TreeConfig::Foliage::Bush:
+            // BushFoliagePlacer.shouldSkipLocation (BushFoliagePlacer.java:41-43):
+            // the corner nextInt(2) draw fires only at the exact corner.
+            return minDx == currentRadius && minDz == currentRadius && random.nextInt(2) == 0;
+        case TreeConfig::Foliage::Cherry: {
+            // CherryFoliagePlacer.shouldSkipLocation (CherryFoliagePlacer.java:101-112);
+            // draw order: edge-hole nextFloat first (y == -1 rows), then the corner /
+            // diagonal nextFloat gates with Java's exact short-circuiting.
+            if (y == -1 && (minDx == currentRadius || minDz == currentRadius)
+                && random.nextFloat() < config.wideBottomLayerHoleChance) {
+                return true;
+            }
+            const bool corner = minDx == currentRadius && minDz == currentRadius;
+            const bool wideLayer = currentRadius > 2;
+            if (wideLayer) {
+                return corner
+                       || (minDx + minDz > currentRadius * 2 - 2 && random.nextFloat() < config.cornerHoleChance);
+            }
+            return corner && random.nextFloat() < config.cornerHoleChance;
+        }
+        case TreeConfig::Foliage::DarkOak:
+            // DarkOakFoliagePlacer.shouldSkipLocation (DarkOakFoliagePlacer.java:69-75).
+            if (y == -1 && !doubleTrunk) {
+                return minDx == currentRadius && minDz == currentRadius;
+            }
+            return y == 1 ? minDx + minDz > currentRadius * 2 - 2 : false;
+        case TreeConfig::Foliage::MegaJungle:
+            // MegaJungleFoliagePlacer.shouldSkipLocation (MegaJungleFoliagePlacer.java:60-62).
+            return minDx + minDz >= 7 || minDx * minDx + minDz * minDz > currentRadius * currentRadius;
+    }
+    if (config.foliageKind == TreeConfig::Foliage::Blob) {
+        // BlobFoliagePlacer.shouldSkipLocation (BlobFoliagePlacer.java:56-58):
+        // the nextInt(2) draw fires at every corner BEFORE the || y == 0.
+        return minDx == currentRadius && minDz == currentRadius
+               && (random.nextInt(2) == 0 || y == 0);
+    }
+    if (config.foliageKind == TreeConfig::Foliage::Fancy) {
+        // FancyFoliagePlacer.shouldSkipLocation (FancyFoliagePlacer.java:41-44).
+        const float fx = static_cast<float>(minDx) + 0.5f;
+        const float fz = static_cast<float>(minDz) + 0.5f;
+        return fx * fx + fz * fz > static_cast<float>(currentRadius * currentRadius);
+    }
+    if (config.foliageKind == TreeConfig::Foliage::MegaPine) {
+        // MegaPineFoliagePlacer.shouldSkipLocation (MegaPineFoliagePlacer.java:66-69):
+        // dx + dz >= 7 || dx*dx + dz*dz > r*r (no draw).
+        return minDx + minDz >= 7
+               || minDx * minDx + minDz * minDz > currentRadius * currentRadius;
+    }
+    // Spruce/PineFoliagePlacer.shouldSkipLocation (SpruceFoliagePlacer.java:62-65,
+    // PineFoliagePlacer.java:61-64): the exact corner at positive radius (no draw).
+    return minDx == currentRadius && minDz == currentRadius && currentRadius > 0;
+}
+
+// FoliagePlacer.shouldSkipLocationSigned (FoliagePlacer.java:81-95) with the
+// DarkOakFoliagePlacer SIGNED override (DarkOakFoliagePlacer.java:60-66).
+inline bool shouldSkipLocationSigned(const TreeConfig& config, RandomSource& random,
+                                     int dx, int y, int dz, int currentRadius, bool doubleTrunk) {
+    if (config.foliageKind == TreeConfig::Foliage::DarkOak) {
+        // skip when y == 0 && doubleTrunk && (dx == -r || dx >= r) && (dz == -r || dz >= r)
+        const bool toSuper = y != 0 || !doubleTrunk
+                             || (dx != -currentRadius && dx < currentRadius)
+                             || (dz != -currentRadius && dz < currentRadius);
+        if (!toSuper) return true;
+    }
+    int minDx, minDz;
+    if (doubleTrunk) {
+        minDx = std::min(std::abs(dx), std::abs(dx - 1));
+        minDz = std::min(std::abs(dz), std::abs(dz - 1));
+    } else {
+        minDx = std::abs(dx);
+        minDz = std::abs(dz);
+    }
+    return shouldSkipLocationMin(config, random, minDx, y, minDz, currentRadius, doubleTrunk);
+}
+
+// FoliagePlacer.placeLeavesRow (FoliagePlacer.java:97-116).
 inline void placeLeavesRow(const TreeConfig& config, const TreeHooks& hooks, WorldGenLevel& level,
                            const FoliageSetterState& setter, RandomSource& random,
                            BlockPos origin, int currentRadius, int y, bool doubleTrunk) {
     const int offset = doubleTrunk ? 1 : 0;
     for (int dx = -currentRadius; dx <= currentRadius + offset; ++dx) {
         for (int dz = -currentRadius; dz <= currentRadius + offset; ++dz) {
-            // shouldSkipLocationSigned -> shouldSkipLocation(minDx, y, minDz, ...)
-            int minDx, minDz;
-            if (doubleTrunk) {
-                minDx = std::min(std::abs(dx), std::abs(dx - 1));
-                minDz = std::min(std::abs(dz), std::abs(dz - 1));
-            } else {
-                minDx = std::abs(dx);
-                minDz = std::abs(dz);
-            }
-            bool skip;
-            if (config.foliageKind == TreeConfig::Foliage::Blob) {
-                // BlobFoliagePlacer.shouldSkipLocation (BlobFoliagePlacer.java:56-58):
-                // the nextInt(2) draw fires at every corner BEFORE the || y == 0.
-                skip = minDx == currentRadius && minDz == currentRadius
-                       && (random.nextInt(2) == 0 || y == 0);
-            } else if (config.foliageKind == TreeConfig::Foliage::Fancy) {
-                // FancyFoliagePlacer.shouldSkipLocation (FancyFoliagePlacer.java:41-44).
-                const float fx = static_cast<float>(minDx) + 0.5f;
-                const float fz = static_cast<float>(minDz) + 0.5f;
-                skip = fx * fx + fz * fz > static_cast<float>(currentRadius * currentRadius);
-            } else if (config.foliageKind == TreeConfig::Foliage::MegaPine) {
-                // MegaPineFoliagePlacer.shouldSkipLocation (MegaPineFoliagePlacer.java:66-69):
-                // dx + dz >= 7 || dx*dx + dz*dz > r*r (no draw).
-                skip = minDx + minDz >= 7
-                       || minDx * minDx + minDz * minDz > currentRadius * currentRadius;
-            } else {
-                // Spruce/PineFoliagePlacer.shouldSkipLocation (SpruceFoliagePlacer.java:62-65,
-                // PineFoliagePlacer.java:61-64): the exact corner at positive radius (no draw).
-                skip = minDx == currentRadius && minDz == currentRadius && currentRadius > 0;
-            }
-            if (!skip) {
+            if (!shouldSkipLocationSigned(config, random, dx, y, dz, currentRadius, doubleTrunk)) {
                 tryPlaceLeaf(config, hooks, level, setter, random,
                              BlockPos{ origin.x + dx, origin.y + y, origin.z + dz });
             }
+        }
+    }
+}
+
+// FoliagePlacer.tryPlaceExtension (FoliagePlacer.java:157-167): manhattan >= 7
+// rejects WITHOUT a draw; then ONE nextFloat gate, then tryPlaceLeaf.
+inline bool tryPlaceExtension(const TreeConfig& config, const TreeHooks& hooks, WorldGenLevel& level,
+                              const FoliageSetterState& setter, RandomSource& random,
+                              float chance, BlockPos logPos, BlockPos pos) {
+    if (std::abs(pos.x - logPos.x) + std::abs(pos.y - logPos.y) + std::abs(pos.z - logPos.z) >= 7) {
+        return false;
+    }
+    return random.nextFloat() > chance ? false : tryPlaceLeaf(config, hooks, level, setter, random, pos);
+}
+
+// FoliagePlacer.placeLeavesRowWithHangingLeavesBelow (FoliagePlacer.java:118-155).
+inline void placeLeavesRowWithHangingLeavesBelow(
+        const TreeConfig& config, const TreeHooks& hooks, WorldGenLevel& level,
+        const FoliageSetterState& setter, RandomSource& random, BlockPos origin,
+        int currentRadius, int y, bool doubleTrunk,
+        float hangingLeavesChance, float hangingLeavesExtensionChance) {
+    placeLeavesRow(config, hooks, level, setter, random, origin, currentRadius, y, doubleTrunk);
+    const int offset = doubleTrunk ? 1 : 0;
+    const BlockPos logPos{ origin.x, origin.y - 1, origin.z };
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };       // N, E, S, W
+    static constexpr int CLOCKWISE[6] = { 0, 1, 5, 4, 2, 3 };  // getClockWise: N->E, S->W, W->N, E->S
+    for (int alongEdge : HORIZONTAL) {
+        const int toEdge = CLOCKWISE[alongEdge];
+        // AxisDirection POSITIVE: SOUTH(3) and EAST(5) (and UP).
+        const int offsetToEdge = (toEdge == 3 || toEdge == 5 || toEdge == 1) ? currentRadius + offset : currentRadius;
+        BlockPos pos{ origin.x + TREE_DIR_DX[toEdge] * offsetToEdge + TREE_DIR_DX[alongEdge] * -currentRadius,
+                      origin.y + y - 1,
+                      origin.z + TREE_DIR_DZ[toEdge] * offsetToEdge + TREE_DIR_DZ[alongEdge] * -currentRadius };
+        int offsetAlongEdge = -currentRadius;
+        while (offsetAlongEdge < currentRadius + offset) {
+            // foliageSetter.isSet(pos.above()) — the FOLIAGE SET, not the level
+            // (TreeFeature.java:147-149).
+            const bool leavesAbove = setter.foliage->contains(BlockPos{ pos.x, pos.y + 1, pos.z });
+#ifdef MCPP_TRACE_HANGING
+            std::fprintf(stderr, "WALK edge=%d pos=%d,%d,%d above=%d\n", alongEdge, pos.x, pos.y, pos.z, leavesAbove ? 1 : 0);
+#endif
+            if (leavesAbove && tryPlaceExtension(config, hooks, level, setter, random,
+                                                 hangingLeavesChance, logPos, pos)) {
+                const BlockPos below{ pos.x, pos.y - 1, pos.z };
+                tryPlaceExtension(config, hooks, level, setter, random,
+                                  hangingLeavesExtensionChance, logPos, below);
+            }
+            ++offsetAlongEdge;
+            pos = treeRelative(pos, alongEdge);
         }
     }
 }
@@ -1125,6 +1709,61 @@ inline void createFoliage(const TreeConfig& config, const TreeHooks& hooks, Worl
     if (config.foliageKind == TreeConfig::Foliage::Blob) {
         for (int yo = offset; yo >= offset - foliageHeight; --yo) {
             const int currentRadius = std::max(leafRadius + attachment.radiusOffset - 1 - yo / 2, 0);
+            placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
+        }
+    } else if (config.foliageKind == TreeConfig::Foliage::Acacia) {
+        // AcaciaFoliagePlacer.createFoliage (AcaciaFoliagePlacer.java:25-40).
+        const bool doubleTrunk = attachment.doubleTrunk;
+        const BlockPos foliagePos{ attachment.pos.x, attachment.pos.y + offset, attachment.pos.z };
+        placeLeavesRow(config, hooks, level, setter, random, foliagePos,
+                       leafRadius + attachment.radiusOffset, -1 - foliageHeight, doubleTrunk);
+        placeLeavesRow(config, hooks, level, setter, random, foliagePos,
+                       leafRadius - 1, -foliageHeight, doubleTrunk);
+        placeLeavesRow(config, hooks, level, setter, random, foliagePos,
+                       leafRadius + attachment.radiusOffset - 1, 0, doubleTrunk);
+    } else if (config.foliageKind == TreeConfig::Foliage::Bush) {
+        // BushFoliagePlacer.createFoliage (BushFoliagePlacer.java:25-39).
+        for (int yo = offset; yo >= offset - foliageHeight; --yo) {
+            const int currentRadius = leafRadius + attachment.radiusOffset - 1 - yo;
+            placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
+        }
+    } else if (config.foliageKind == TreeConfig::Foliage::Cherry) {
+        // CherryFoliagePlacer.createFoliage (CherryFoliagePlacer.java:57-86).
+        const bool doubleTrunk = attachment.doubleTrunk;
+        const BlockPos foliagePos{ attachment.pos.x, attachment.pos.y + offset, attachment.pos.z };
+        const int currentRadius = leafRadius + attachment.radiusOffset - 1;
+        placeLeavesRow(config, hooks, level, setter, random, foliagePos, currentRadius - 2, foliageHeight - 3, doubleTrunk);
+        placeLeavesRow(config, hooks, level, setter, random, foliagePos, currentRadius - 1, foliageHeight - 4, doubleTrunk);
+        for (int y = foliageHeight - 5; y >= 0; --y) {
+            placeLeavesRow(config, hooks, level, setter, random, foliagePos, currentRadius, y, doubleTrunk);
+        }
+        placeLeavesRowWithHangingLeavesBelow(config, hooks, level, setter, random, foliagePos,
+                                             currentRadius, -1, doubleTrunk,
+                                             config.hangingLeavesChance, config.hangingLeavesExtensionChance);
+        placeLeavesRowWithHangingLeavesBelow(config, hooks, level, setter, random, foliagePos,
+                                             currentRadius - 1, -2, doubleTrunk,
+                                             config.hangingLeavesChance, config.hangingLeavesExtensionChance);
+    } else if (config.foliageKind == TreeConfig::Foliage::DarkOak) {
+        // DarkOakFoliagePlacer.createFoliage (DarkOakFoliagePlacer.java:25-50).
+        const BlockPos pos{ attachment.pos.x, attachment.pos.y + offset, attachment.pos.z };
+        const bool doubleTrunk = attachment.doubleTrunk;
+        if (doubleTrunk) {
+            placeLeavesRow(config, hooks, level, setter, random, pos, leafRadius + 2, -1, doubleTrunk);
+            placeLeavesRow(config, hooks, level, setter, random, pos, leafRadius + 3, 0, doubleTrunk);
+            placeLeavesRow(config, hooks, level, setter, random, pos, leafRadius + 2, 1, doubleTrunk);
+            if (random.nextBoolean()) {
+                placeLeavesRow(config, hooks, level, setter, random, pos, leafRadius, 2, doubleTrunk);
+            }
+        } else {
+            placeLeavesRow(config, hooks, level, setter, random, pos, leafRadius + 2, -1, doubleTrunk);
+            placeLeavesRow(config, hooks, level, setter, random, pos, leafRadius + 1, 0, doubleTrunk);
+        }
+    } else if (config.foliageKind == TreeConfig::Foliage::MegaJungle) {
+        // MegaJungleFoliagePlacer.createFoliage (MegaJungleFoliagePlacer.java:29-47):
+        // single-trunk attachments draw 1 + nextInt(2) for the leaf height.
+        const int leafHeight = attachment.doubleTrunk ? foliageHeight : 1 + random.nextInt(2);
+        for (int yo = offset; yo >= offset - leafHeight; --yo) {
+            const int currentRadius = leafRadius + attachment.radiusOffset + 1 - yo;
             placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
         }
     } else if (config.foliageKind == TreeConfig::Foliage::Fancy) {
@@ -1263,6 +1902,104 @@ inline TreeVoxelShape updateLeaves(const TreeHooks& hooks, const TreeBoundingBox
 }
 
 // ---------------------------------------------------------------------------
+// MangroveRootPlacer (MangroveRootPlacer.java + RootPlacer.java).
+namespace mangrove_detail {
+
+// RootPlacer.canPlaceRoot + the mangrove canGrowThrough override
+// (MangroveRootPlacer.java:127-130).
+inline bool canPlaceRoot(WorldGenLevel& level, const TreeHooks& hooks,
+                         const MangroveRootConfig& cfg, BlockPos pos) {
+    const std::string s = level.getBlockState(pos);
+    return hooks.validTreePosState(s) || cfg.canGrowThrough(s);
+}
+
+// MangroveRootPlacer.potentialRootPositions (MangroveRootPlacer.java:104-125).
+inline std::vector<BlockPos> potentialRootPositions(const MangroveRootConfig& cfg, RandomSource& random,
+                                                    BlockPos pos, int prevDir, BlockPos rootOrigin) {
+    const BlockPos below{ pos.x, pos.y - 1, pos.z };
+    const BlockPos nextTo = treeRelative(pos, prevDir);
+    const int width = std::abs(pos.x - rootOrigin.x) + std::abs(pos.y - rootOrigin.y) + std::abs(pos.z - rootOrigin.z);
+    if (width > cfg.maxRootWidth - 3 && width <= cfg.maxRootWidth) {
+        return random.nextFloat() < cfg.randomSkewChance
+                   ? std::vector<BlockPos>{ below, BlockPos{ nextTo.x, nextTo.y - 1, nextTo.z } }
+                   : std::vector<BlockPos>{ below };
+    }
+    if (width > cfg.maxRootWidth) return { below };
+    if (random.nextFloat() < cfg.randomSkewChance) return { below };
+    return random.nextBoolean() ? std::vector<BlockPos>{ nextTo } : std::vector<BlockPos>{ below };
+}
+
+// MangroveRootPlacer.simulateRoots (MangroveRootPlacer.java:85-102).
+inline bool simulateRoots(WorldGenLevel& level, const TreeHooks& hooks, const MangroveRootConfig& cfg,
+                          RandomSource& random, BlockPos rootPos, int dir, BlockPos rootOrigin,
+                          std::vector<BlockPos>& rootPositions, int layer) {
+    const int maxRootLength = cfg.maxRootLength;
+    if (layer == maxRootLength || static_cast<int>(rootPositions.size()) > maxRootLength) return false;
+    for (const BlockPos& pos : potentialRootPositions(cfg, random, rootPos, dir, rootOrigin)) {
+        if (canPlaceRoot(level, hooks, cfg, pos)) {
+            rootPositions.push_back(pos);
+            if (!simulateRoots(level, hooks, cfg, random, pos, dir, rootOrigin, rootPositions, layer + 1)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// MangroveRootPlacer.placeRoot override (MangroveRootPlacer.java:132-145) over
+// RootPlacer.placeRoot (RootPlacer.java:62-79). WATERLOGGED setValue is
+// id-invisible; the above-root branch draws nextFloat BEFORE the isAir check.
+inline void placeRoot(WorldGenLevel& level, const TreeHooks& hooks, const MangroveRootConfig& cfg,
+                      RandomSource& random,
+                      const std::function<bool(BlockPos, const std::string&)>& rootSetter, BlockPos pos) {
+    if (cfg.muddyRootsIn(level.getBlockState(pos))) {
+        const std::optional<std::string> muddy = cfg.muddyRootsProvider(level, random, pos);
+        rootSetter(pos, muddy.value());
+        return;
+    }
+    if (canPlaceRoot(level, hooks, cfg, pos)) {
+        const std::optional<std::string> root = cfg.rootProvider(level, random, pos);
+        rootSetter(pos, root.value());
+        if (cfg.hasAboveRootPlacement) {
+            const BlockPos above{ pos.x, pos.y + 1, pos.z };
+            if (random.nextFloat() < cfg.aboveRootPlacementChance
+                && hooks.isAir(level.getBlockState(above))) {
+                const std::optional<std::string> aboveState = cfg.aboveRootProvider(level, random, above);
+                rootSetter(above, aboveState.value());
+            }
+        }
+    }
+}
+
+// MangroveRootPlacer.placeRoots (MangroveRootPlacer.java:41-83).
+inline bool placeRoots(WorldGenLevel& level, const TreeHooks& hooks, const MangroveRootConfig& cfg,
+                       RandomSource& random, BlockPos origin, BlockPos trunkOrigin,
+                       const std::function<bool(BlockPos, const std::string&)>& rootSetter) {
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // N, E, S, W
+    for (BlockPos columnPos = origin; columnPos.y < trunkOrigin.y;
+         columnPos = BlockPos{ columnPos.x, columnPos.y + 1, columnPos.z }) {
+        if (!canPlaceRoot(level, hooks, cfg, columnPos)) return false;
+    }
+    std::vector<BlockPos> rootPositions;
+    rootPositions.push_back(BlockPos{ trunkOrigin.x, trunkOrigin.y - 1, trunkOrigin.z });
+    for (int dir : HORIZONTAL) {
+        const BlockPos pos = treeRelative(trunkOrigin, dir);
+        std::vector<BlockPos> positionsInDirection;
+        if (!simulateRoots(level, hooks, cfg, random, pos, dir, trunkOrigin, positionsInDirection, 0)) {
+            return false;
+        }
+        rootPositions.insert(rootPositions.end(), positionsInDirection.begin(), positionsInDirection.end());
+        rootPositions.push_back(treeRelative(trunkOrigin, dir));
+    }
+    for (const BlockPos& rootPos : rootPositions) {
+        placeRoot(level, hooks, cfg, random, rootSetter, rootPos);
+    }
+    return true;
+}
+
+} // namespace mangrove_detail
+
+// ---------------------------------------------------------------------------
 // The feature itself (TreeFeature.place, TreeFeature.java:120-169).
 inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
         std::shared_ptr<const TreeConfig> config, std::shared_ptr<const TreeHooks> hooks) {
@@ -1283,10 +2020,12 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
         {
             const int treeHeight = config->baseHeight + random.nextInt(config->heightRandA + 1)
                                    + random.nextInt(config->heightRandB + 1);   // TrunkPlacer.getTreeHeight
-            // foliagePlacer.foliageHeight (TreeFeature.java:67): blob/fancy constant
-            // (no draw); spruce max(4, treeHeight - trunk_height.sample)
-            // (SpruceFoliagePlacer.java:57-60); pine height.sample (PineFoliagePlacer
-            // .java:56-59); mega_pine crown_height.sample (MegaPineFoliagePlacer.java:61-64).
+            // foliagePlacer.foliageHeight (TreeFeature.java:67): blob/fancy/bush/
+            // mega_jungle constant height (no draw); dark_oak 4, acacia 0 (no draw);
+            // spruce max(4, treeHeight - trunk_height.sample) (SpruceFoliagePlacer
+            // .java:57-60); pine height.sample (PineFoliagePlacer.java:56-59);
+            // mega_pine crown_height.sample (MegaPineFoliagePlacer.java:61-64);
+            // cherry height.sample (CherryFoliagePlacer.java:89-92).
             int foliageHeight;
             switch (config->foliageKind) {
                 case TreeConfig::Foliage::Spruce:
@@ -1295,7 +2034,14 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
                 case TreeConfig::Foliage::Pine:
                 case TreeConfig::Foliage::MegaPine:
                 case TreeConfig::Foliage::RandomSpread:   // foliage_height.sample (RandomSpreadFoliagePlacer.java:66-69)
+                case TreeConfig::Foliage::Cherry:
                     foliageHeight = config->foliageHeightProvider->sample(random);
+                    break;
+                case TreeConfig::Foliage::Acacia:
+                    foliageHeight = 0;                    // AcaciaFoliagePlacer.java:44-46
+                    break;
+                case TreeConfig::Foliage::DarkOak:
+                    foliageHeight = 4;                    // DarkOakFoliagePlacer.java:53-55
                     break;
                 default:
                     foliageHeight = config->foliageHeightParam;
@@ -1308,16 +2054,23 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
             if (config->foliageKind == TreeConfig::Foliage::Pine) {
                 leafRadius += random.nextInt(std::max(trunkHeight + 1, 1));
             }
-            const BlockPos trunkOrigin = origin;                                // no root placer
-            const int minY = origin.y;
-            const int maxY = origin.y + treeHeight + 1;
+            // rootPlacer.getTrunkOrigin (RootPlacer.java:96-98): origin.above(
+            // trunk_offset_y.sample(random)) — the draw fires whenever a root placer
+            // is configured (TreeFeature.java:71).
+            const BlockPos trunkOrigin = config->rootPlacer
+                ? BlockPos{ origin.x, origin.y + config->rootPlacer->trunkOffsetY->sample(random), origin.z }
+                : origin;
+            const int minY = std::min(origin.y, trunkOrigin.y);
+            const int maxY = std::max(origin.y, trunkOrigin.y) + treeHeight + 1;
             if (minY >= hooks->levelMinY + 1 && maxY <= hooks->levelMaxY + 1) {
-                // getMaxFreeTreeHeight (TreeFeature.java:96-113)
+                // getMaxFreeTreeHeight (TreeFeature.java:96-113); the radius per layer
+                // comes from minimumSize.getSizeAtHeight(maxTreeHeight, y) (two- or
+                // three-layers, ThreeLayersFeatureSize.java:47-53).
                 TrunkPlacerOps ops{ &level, config.get(), hooks.get(), trunkSetter };
                 int clippedTreeHeight = treeHeight;
                 bool clipped = false;
                 for (int y = 0; y <= treeHeight + 1 && !clipped; ++y) {
-                    const int r = y < config->sizeLimit ? config->lowerSize : config->upperSize;
+                    const int r = config->sizeAtHeight(treeHeight, y);
                     for (int x = -r; x <= r && !clipped; ++x) {
                         for (int z = -r; z <= r; ++z) {
                             const BlockPos p{ trunkOrigin.x + x, trunkOrigin.y + y, trunkOrigin.z + z };
@@ -1332,19 +2085,45 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
                 }
                 if (clippedTreeHeight >= treeHeight
                     || (config->minClippedHeight.has_value() && clippedTreeHeight >= *config->minClippedHeight)) {
-                    std::vector<FoliageAttachment> attachments =
-                        config->trunkKind == TreeConfig::Trunk::Straight
-                            ? placeStraightTrunk(ops, random, clippedTreeHeight, trunkOrigin)
-                        : config->trunkKind == TreeConfig::Trunk::Giant
-                            ? placeGiantTrunk(ops, random, clippedTreeHeight, trunkOrigin)
-                        : config->trunkKind == TreeConfig::Trunk::Bending
-                            ? placeBendingTrunk(ops, random, clippedTreeHeight, trunkOrigin)
-                            : placeFancyTrunk(ops, random, clippedTreeHeight, trunkOrigin);
-                    for (const FoliageAttachment& attachment : attachments) {
-                        createFoliage(*config, *hooks, level, foliageSetter, random,
-                                      attachment, foliageHeight, leafRadius);
+                    // config.rootPlacer.placeRoots (TreeFeature.java:80-82): a failed
+                    // root simulation aborts the whole tree.
+                    bool rootsOk = true;
+                    if (config->rootPlacer) {
+                        auto rootSetterFn = [&](BlockPos pos, const std::string& state) {
+                            rootPositions.add(pos);
+                            return level.setBlockChecked(pos, state, 19);
+                        };
+                        rootsOk = mangrove_detail::placeRoots(level, *hooks, *config->rootPlacer,
+                                                              random, origin, trunkOrigin, rootSetterFn);
                     }
-                    result = true;
+                    if (rootsOk) {
+                        std::vector<FoliageAttachment> attachments;
+                        switch (config->trunkKind) {
+                            case TreeConfig::Trunk::Straight:
+                                attachments = placeStraightTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::Giant:
+                                attachments = placeGiantTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::Bending:
+                                attachments = placeBendingTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::Forking:
+                                attachments = placeForkingTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::DarkOak:
+                                attachments = placeDarkOakTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::MegaJungle:
+                                attachments = placeMegaJungleTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::Cherry:
+                                attachments = placeCherryTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::UpwardsBranching:
+                                attachments = placeUpwardsBranchingTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                            case TreeConfig::Trunk::Fancy:
+                                attachments = placeFancyTrunk(ops, random, clippedTreeHeight, trunkOrigin); break;
+                        }
+                        for (const FoliageAttachment& attachment : attachments) {
+                            createFoliage(*config, *hooks, level, foliageSetter, random,
+                                          attachment, foliageHeight, leafRadius);
+                        }
+                        result = true;
+                    }
                 }
             }
         }
@@ -1368,6 +2147,11 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
                         case TreeDecoratorConfig::Kind::PlaceOnGround: placeOnGroundDecorator(ctx, dec); break;
                         case TreeDecoratorConfig::Kind::AlterGround: placeAlterGroundDecorator(ctx, dec); break;
                         case TreeDecoratorConfig::Kind::LeaveVine: placeLeaveVineDecorator(ctx, dec.probability); break;
+                        case TreeDecoratorConfig::Kind::Cocoa: placeCocoaDecorator(ctx, dec.probability, hooks->putCocoaFacing); break;
+                        case TreeDecoratorConfig::Kind::TrunkVine: placeTrunkVineDecorator(ctx); break;
+                        case TreeDecoratorConfig::Kind::AttachedToLeaves: placeAttachedToLeavesDecorator(ctx, dec); break;
+                        case TreeDecoratorConfig::Kind::PaleMoss: placePaleMossDecorator(ctx, dec); break;
+                        case TreeDecoratorConfig::Kind::CreakingHeart: placeCreakingHeartDecorator(ctx, dec.probability); break;
                     }
                 }
             }

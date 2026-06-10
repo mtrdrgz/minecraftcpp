@@ -121,6 +121,12 @@ import net.minecraft.world.level.levelgen.carver.CarvingContext;
 import net.minecraft.world.level.levelgen.carver.ConfiguredWorldCarver;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.feature.FossilFeatureConfiguration;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 
 public class FullChunkDecorateParity {
     // Real stderr, captured at class load BEFORE Bootstrap.bootStrap() wraps System.err
@@ -155,6 +161,75 @@ public class FullChunkDecorateParity {
     // section writes that bypass setBlock, e.g. OreFeature via BulkSectionAccess)
     static List<BlockPos> WATCH = new ArrayList<>();
     static BlockState[] WATCH_LAST;
+    // Fossil structure templates, loaded from the extracted vanilla NBTs (the jar's
+    // data/minecraft/structure/fossil/*.nbt) via StructureTemplate.load — the
+    // harness has no ServerLevel, so FossilFeature's
+    // level.getLevel().getServer().getStructureManager() (FossilFeature.java:33-36)
+    // is replaced by this direct loader; everything else in placeFossilVerbatim is
+    // the FossilFeature.place body verbatim.
+    static Map<String, StructureTemplate> FOSSIL_TEMPLATES = new HashMap<>();
+
+    static StructureTemplate fossilTemplate(net.minecraft.resources.Identifier id) {
+        return FOSSIL_TEMPLATES.computeIfAbsent(id.toString(), key -> {
+            try {
+                Path file = Path.of("26.1.2", "data", id.getNamespace(), "structure", id.getPath() + ".nbt");
+                net.minecraft.nbt.CompoundTag tag = net.minecraft.nbt.NbtIo.readCompressed(
+                    file, net.minecraft.nbt.NbtAccounter.unlimitedHeap());
+                StructureTemplate template = new StructureTemplate();
+                template.load(BuiltInRegistries.BLOCK, tag);
+                return template;
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("cannot load fossil structure " + key, e);
+            }
+        });
+    }
+
+    // FossilFeature.place (FossilFeature.java:26-72) verbatim, with the structure
+    // templates resolved by fossilTemplate() instead of the ServerLevel-bound
+    // StructureTemplateManager. Called for each surviving placement position of a
+    // fossil placed feature (see decorate()).
+    static boolean placeFossilVerbatim(WorldGenLevel level, RandomSource random, BlockPos origin,
+                                       FossilFeatureConfiguration config) {
+        Rotation rotation = Rotation.getRandom(random);
+        int fossilIndex = random.nextInt(config.fossilStructures.size());
+        StructureTemplate fossilBase = fossilTemplate(config.fossilStructures.get(fossilIndex));
+        StructureTemplate fossilOverlay = fossilTemplate(config.overlayStructures.get(fossilIndex));
+        ChunkPos chunkPos = ChunkPos.containing(origin);
+        BoundingBox boundingBox = new BoundingBox(
+            chunkPos.getMinBlockX() - 16, level.getMinY(), chunkPos.getMinBlockZ() - 16,
+            chunkPos.getMaxBlockX() + 16, level.getMaxY(), chunkPos.getMaxBlockZ() + 16);
+        StructurePlaceSettings settings = new StructurePlaceSettings().setRotation(rotation)
+            .setBoundingBox(boundingBox).setRandom(random);
+        net.minecraft.core.Vec3i size = fossilBase.getSize(rotation);
+        BlockPos lowCorner = origin.offset(-size.getX() / 2, 0, -size.getZ() / 2);
+        int lowestSurfaceY = origin.getY();
+        for (int xscan = 0; xscan < size.getX(); xscan++) {
+            for (int zscan = 0; zscan < size.getZ(); zscan++) {
+                lowestSurfaceY = Math.min(lowestSurfaceY,
+                    level.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, lowCorner.getX() + xscan, lowCorner.getZ() + zscan));
+            }
+        }
+        int targetY = Math.max(lowestSurfaceY - 15 - random.nextInt(10), level.getMinY() + 10);
+        BlockPos targetPos = fossilBase.getZeroPositionWithTransform(lowCorner.atY(targetY), Mirror.NONE, rotation);
+        // countEmptyCorners (FossilFeature.java:74-83)
+        final int[] count = { 0 };
+        fossilBase.getBoundingBox(settings, targetPos).forAllCorners(pos -> {
+            BlockState state = level.getBlockState(pos);
+            if (state.isAir() || state.is(Blocks.LAVA) || state.is(Blocks.WATER)) {
+                count[0]++;
+            }
+        });
+        if (count[0] > config.maxEmptyCornersAllowed) {
+            return false;
+        }
+        settings.clearProcessors();
+        config.fossilProcessors.value().list().forEach(settings::addProcessor);
+        fossilBase.placeInWorld((net.minecraft.world.level.ServerLevelAccessor) level, targetPos, targetPos, settings, random, 260);
+        settings.clearProcessors();
+        config.overlayProcessors.value().list().forEach(settings::addProcessor);
+        fossilOverlay.placeInWorld((net.minecraft.world.level.ServerLevelAccessor) level, targetPos, targetPos, settings, random, 260);
+        return true;
+    }
 
     static void watchPoll(String where) {
         for (int i = 0; i < WATCH.size(); i++) {
@@ -596,7 +671,28 @@ public class FullChunkDecorateParity {
                         ERR.println("LAKEPROBE chunk=(" + ncx + "," + ncz + ") " + CUR_FEATURE_ID
                             + " final=" + (cur.isEmpty() ? "REJECT" : cur.get(0).toString()) + " |" + stages);
                     }
-                    boolean ok = feature.placeWithBiomeCheck(LEVEL, GEN, random, origin);
+                    boolean ok;
+                    if (feature.feature().value().config() instanceof FossilFeatureConfiguration fossilConfig) {
+                        // FOSSIL: FossilFeature.place needs a ServerLevel-bound
+                        // StructureTemplateManager (FossilFeature.java:33-36) the harness
+                        // cannot provide. Replicate PlacedFeature.placeWithContext
+                        // (PlacedFeature.java:43-61: lazy flatMap stream over the
+                        // placement modifiers, then the feature per surviving position)
+                        // with placeFossilVerbatim as the feature body.
+                        net.minecraft.world.level.levelgen.placement.PlacementContext pctx =
+                            new net.minecraft.world.level.levelgen.placement.PlacementContext(LEVEL, GEN, java.util.Optional.of(feature));
+                        java.util.stream.Stream<BlockPos> placements = java.util.stream.Stream.of(origin);
+                        for (net.minecraft.world.level.levelgen.placement.PlacementModifier modifier : feature.placement()) {
+                            placements = placements.flatMap(p -> modifier.getPositions(pctx, random, p));
+                        }
+                        org.apache.commons.lang3.mutable.MutableBoolean placedAny = new org.apache.commons.lang3.mutable.MutableBoolean();
+                        placements.forEach(pos -> {
+                            if (placeFossilVerbatim(LEVEL, random, pos, fossilConfig)) placedAny.setTrue();
+                        });
+                        ok = placedAny.isTrue();
+                    } else {
+                        ok = feature.placeWithBiomeCheck(LEVEL, GEN, random, origin);
+                    }
                     if (!WATCH.isEmpty()) watchPoll("turn=" + ncx + "," + ncz + " step=" + stepIndex + " gi=" + globalIndexOfFeature
                         + " " + (PF_ID != null ? PF_ID.getOrDefault(feature, "?") : "?"));
                     if (DEBUG && ncx == DBG_CX && ncz == DBG_CZ) {
@@ -730,6 +826,14 @@ public class FullChunkDecorateParity {
                     case "playSound": case "levelEvent": case "gameEvent": case "markPosForPostprocessing":
                     case "blockUpdated": case "neighborShapeChanged": case "updateNeighborsAt":
                         return null;
+                    // ServerLevelAccessor (the placeInWorld parameter type): the fossil
+                    // path never reaches getLevel()/difficulty (no entities, no nbt
+                    // block entities in the fossil templates) — keep them as hard
+                    // tripwires so any new structure use fails loudly.
+                    case "getLevel": throw new UnsupportedOperationException(
+                        "ServerLevelAccessor.getLevel: not available in the harness (fossil placeInWorld must not need it)");
+                    case "getCurrentDifficultyAt": throw new UnsupportedOperationException(
+                        "ServerLevelAccessor.getCurrentDifficultyAt: not available in the harness");
                     case "toString": return "MultiChunkWorldGenLevel";
                     case "hashCode": return System.identityHashCode(proxy);
                     case "equals": return proxy == a[0];
@@ -739,8 +843,10 @@ public class FullChunkDecorateParity {
                 }
             }
         };
+        // ServerLevelAccessor added for StructureTemplate.placeInWorld's parameter
+        // type (fossils); its two methods are hard tripwires above.
         return (WorldGenLevel) Proxy.newProxyInstance(WorldGenLevel.class.getClassLoader(),
-            new Class<?>[] { WorldGenLevel.class }, h);
+            new Class<?>[] { WorldGenLevel.class, net.minecraft.world.level.ServerLevelAccessor.class }, h);
     }
 
     // WorldGenRegion.ensureCanWrite: Chebyshev distance from the center (currently-
