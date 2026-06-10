@@ -17,6 +17,7 @@
 #include "Joml.h"
 
 #include <cmath>
+#include <utility>
 
 namespace mc::render::model {
 
@@ -141,6 +142,45 @@ inline void bakeVertexUV(const UVs& uvs, int uvShift, int index, bool hasUvTrans
     uvTransform.transformPosition(t);
     outU = centerToCorner(t.x);
     outV = centerToCorner(t.y);
+}
+
+// FaceInfo.Extent.select(minX,minY,minZ,maxX,maxY,maxZ) — the 6-arg form (FaceInfo.java:89-98).
+inline float extentSelect6(int e, float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
+    switch (e) {
+        case 0: return minX; case 1: return minY; case 2: return minZ;
+        case 3: return maxX; case 4: return maxY; default: return maxZ; // 5
+    }
+}
+// FaceBakery.findVertex — first index >= start whose position exactly equals (x,y,z), else -1.
+inline int findVertexEq(const Vector3f pos[4], int start, float x, float y, float z) {
+    for (int i = start; i < 4; ++i)
+        if (x == pos[i].x && y == pos[i].y && z == pos[i].z) return i;
+    return -1;
+}
+// FaceBakery.recalculateWinding (FaceBakery.java:207-262) — reorders the 4 face
+// vertices (and a parallel perm/uv array) into FaceInfo's canonical winding for the
+// face's axis-aligned bounding corners. Returns false if a corner can't be matched
+// (the Java throws IllegalStateException).
+inline bool recalculateWinding(Vector3f pos[4], int perm[4], int facing) {
+    float minX = 999.0F, minY = 999.0F, minZ = 999.0F, maxX = -999.0F, maxY = -999.0F, maxZ = -999.0F;
+    for (int i = 0; i < 4; ++i) {
+        float x = pos[i].x, y = pos[i].y, z = pos[i].z;
+        if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
+        if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
+    }
+    for (int vertex = 0; vertex < 4; ++vertex) {
+        const int* e = FACE_INFO[facing][vertex];
+        float newX = extentSelect6(e[0], minX, minY, minZ, maxX, maxY, maxZ);
+        float newY = extentSelect6(e[1], minX, minY, minZ, maxX, maxY, maxZ);
+        float newZ = extentSelect6(e[2], minX, minY, minZ, maxX, maxY, maxZ);
+        int swapIdx = findVertexEq(pos, vertex, newX, newY, newZ);
+        if (swapIdx == -1) return false;
+        if (swapIdx != vertex) {
+            std::swap(pos[swapIdx], pos[vertex]);
+            std::swap(perm[swapIdx], perm[vertex]);
+        }
+    }
+    return true;
 }
 
 } // namespace fb

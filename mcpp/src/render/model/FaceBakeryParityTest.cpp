@@ -93,6 +93,20 @@ int main(int argc, char** argv) {
             if (fbits(u) != static_cast<uint32_t>(std::stoul(p[8], nullptr, 16)) ||
                 fbits(v) != static_cast<uint32_t>(std::stoul(p[9], nullptr, 16))) fail(line);
         }
+        else if (t == "RWND") {
+            int facing = std::stoi(p[1]);
+            j::Vector3f pos[4]; int perm[4] = {0, 1, 2, 3};
+            for (int i = 0; i < 4; ++i) pos[i] = j::Vector3f{bf(p[2 + i*3]), bf(p[3 + i*3]), bf(p[4 + i*3])};
+            fb::recalculateWinding(pos, perm, facing);
+            bool ok = true;
+            for (int i = 0; i < 4 && ok; ++i) {
+                if (fbits(pos[i].x) != static_cast<uint32_t>(std::stoul(p[14 + i*3], nullptr, 16)) ||
+                    fbits(pos[i].y) != static_cast<uint32_t>(std::stoul(p[15 + i*3], nullptr, 16)) ||
+                    fbits(pos[i].z) != static_cast<uint32_t>(std::stoul(p[16 + i*3], nullptr, 16))) ok = false;
+            }
+            for (int i = 0; i < 4 && ok; ++i) if (perm[i] != std::stoi(p[26 + i])) ok = false;
+            if (!ok) fail(line);
+        }
         else fail("UNKNOWN_TAG " + t);
     }
 

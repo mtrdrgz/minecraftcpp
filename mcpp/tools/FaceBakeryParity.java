@@ -130,5 +130,28 @@ public class FaceBakeryParity {
                 }
             }
         }
+
+        // ── recalculateWinding: feed canonical face corners in a shuffled order ──
+        Method recalcWinding = FaceBakery.class.getDeclaredMethod("recalculateWinding", Vector3fc[].class, long[].class, Direction.class);
+        recalcWinding.setAccessible(true);
+        int[][] SHUFFLES = { {0,1,2,3}, {1,2,3,0}, {3,2,1,0}, {2,0,3,1}, {0,3,2,1} };
+        for (int f = 0; f < 6; f++) for (float[] box : BOXES) {
+            Vector3f from = new Vector3f(box[0], box[1], box[2]);
+            Vector3f to = new Vector3f(box[3], box[4], box[5]);
+            // canonical corners for this face
+            Vector3f[] canon = new Vector3f[4];
+            for (int i = 0; i < 4; i++) canon[i] = FaceInfo.fromFacing(DIRS[f]).getVertexInfo(i).select(from, to).div(16.0F);
+            for (int[] sh : SHUFFLES) {
+                Vector3fc[] pos = new Vector3fc[4];
+                long[] uvs = new long[4];
+                for (int i = 0; i < 4; i++) { pos[i] = new Vector3f(canon[sh[i]]); uvs[i] = i; }
+                StringBuilder sb = new StringBuilder("RWND\t" + f);
+                for (int i = 0; i < 4; i++) sb.append('\t').append(b(pos[i].x())).append('\t').append(b(pos[i].y())).append('\t').append(b(pos[i].z())); // input
+                recalcWinding.invoke(null, pos, uvs, DIRS[f]);
+                for (int i = 0; i < 4; i++) sb.append('\t').append(b(pos[i].x())).append('\t').append(b(pos[i].y())).append('\t').append(b(pos[i].z())); // output
+                for (int i = 0; i < 4; i++) sb.append('\t').append(uvs[i]); // output perm
+                O.println(sb.toString());
+            }
+        }
     }
 }
