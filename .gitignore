@@ -30,7 +30,9 @@ mcpp/test_align.cpp
 mcpp/*.log
 
 # Profiling output (debug only)
-profiling/
+# profiling/ sources are build dependencies (mcpp target compiles Profiler.cpp);
+# only the generated profile OUTPUT stays ignored:
+profiling/profiles/
 
 # Java/class outputs from local parity helpers
 *.class
