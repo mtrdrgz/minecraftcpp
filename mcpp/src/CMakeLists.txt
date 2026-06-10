@@ -2036,3 +2036,299 @@ set_target_properties(weighted_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ===== Parallel-authored bounded gates (workflow wave 6) =====
+
+# net.minecraft.util.ARGB
+# Second ARGB parity GATE â€” VERIFIES the existing certified port util/ARGB.h against
+# fresh ground truth. Focus: color(a,r,g,b)/red/green/blue/alpha, srgbLerp/linearLerp,
+# multiply, scaleRGB (all overloads), opaque, colorFromFloat, PLUS the two-arg
+# color(int,int)/color(float,int) overloads the original argb_parity gate did not
+# exercise. Header-only (ARGB.h + Mth.h + embedded ARGBTables.inc are all inline), so
+# no extra sources. Ground truth: tools/ArgbVerifyParity.java.
+add_executable(argb_verify_parity
+    world/level/levelgen/ArgbVerifyParityTest.cpp
+)
+target_include_directories(argb_verify_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(argb_verify_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.world.level.ClipContext
+# net.minecraft.world.level.ClipContext (nested enums Block + Fluid: ordinal()/name())
+add_executable(clip_context_enums_parity world/level/ClipContextEnumsParityTest.cpp)
+target_include_directories(clip_context_enums_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(clip_context_enums_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.Crypt
+# net.minecraft.util.Crypt (PURE byte helpers: digestData SHA-1 + server-id hash)
+# Verifies mc::crypt in util/Crypt.h (header-only): genuine RFC 3174 SHA-1 over the
+# concatenated byte inputs of Crypt.digestData(byte[]...), plus the signed-BigInteger
+# "server id hash" string (login line 182). `--cases <tsv>` compares byte-for-byte
+# against ground truth from tools\CryptDigestParity.java. No extra link sources.
+add_executable(crypt_digest_parity util/CryptDigestParityTest.cpp)
+target_include_directories(crypt_digest_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(crypt_digest_parity PRIVATE bcrypt)
+endif()
+set_target_properties(crypt_digest_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.CubicSpline
+add_executable(cubic_spline_verify_parity
+    world/level/levelgen/CubicSplineVerifyParityTest.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(cubic_spline_verify_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+target_link_libraries(cubic_spline_verify_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(cubic_spline_verify_parity PRIVATE bcrypt)
+endif()
+set_target_properties(cubic_spline_verify_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.DependencySorter
+add_executable(dependency_sorter_parity util/DependencySorterParityTest.cpp)
+target_include_directories(dependency_sorter_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(dependency_sorter_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.entity.EntityDimensions
+# VERIFY gate for net.minecraft.world.entity.EntityDimensions (26.1.2) â€” an
+# independent re-verification of the already-certified header
+# mcpp/src/world/entity/EntityDimensions.h (no new header; verify-existing).
+# Exercises scalable/fixed/scale(f)/scale(fw,fh)/withEyeHeight/makeBoundingBox +
+# the default EntityAttachments points, bit-exact. Header-only deps (AABB.h pulls
+# in glm::dvec3, the only link lib needed â€” mirrors entity_dimensions_parity).
+# GT: tools/EntityDimensionsVerifyParity.java.
+add_executable(entity_dimensions_verify_parity world/level/levelgen/EntityDimensionsVerifyParityTest.cpp)
+target_include_directories(entity_dimensions_verify_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(entity_dimensions_verify_parity PRIVATE glm)
+set_target_properties(entity_dimensions_verify_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.InteractionResult
+add_executable(interaction_result_parity world/InteractionResultParityTest.cpp)
+target_include_directories(interaction_result_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(interaction_result_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.item.ItemUseAnimation
+# net.minecraft.world.item.ItemUseAnimation
+# Pure-data StringRepresentable enum (12 constants): id / ordinal /
+# getSerializedName / hasCustomArmTransform, plus the BY_ID lookup
+# (ByIdMap.continuous, ZERO strategy). Header-only, pure standard C++ (no
+# glm/world/registry deps). `--cases <tsv>` compares against ground truth from
+# tools/ItemUseAnimationParity.java (the real decompiled enum).
+add_executable(item_use_animation_parity world/item/ItemUseAnimationParityTest.cpp)
+target_include_directories(item_use_animation_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(item_use_animation_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.Mth
+# mth_color_verify_parity â€” VERIFIES the colour/hash helpers already ported in
+# world/level/levelgen/Mth.h (mc::levelgen::mth): hsvToRgb / hsvToArgb /
+# murmurHash3Mixer / binarySearch / frac(float/double) / smoothstep /
+# smoothstepDerivative, plus net.minecraft.util.ARGB.color(a,r,g,b) against a
+# corrected masked reference. Bit-exact vs the real 26.1.2 class. Header-only port;
+# no link sources. Ground truth: tools/MthColorVerifyParity.java.
+add_executable(mth_color_verify_parity
+    world/level/levelgen/MthColorVerifyParityTest.cpp
+)
+target_include_directories(mth_color_verify_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mth_color_verify_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundChatCommandPacket
+# Byte-exact parity for net.minecraft.network.protocol.game.ServerboundChatCommandPacket
+# (UNSIGNED chat-command packet) vs the REAL STREAM_CODEC. Codec is exactly
+# writeUtf(command)/readUtf(); reuses the certified PacketBuffer (Utf8String port).
+# Ground truth: tools/PktChatCommandParity.java.
+add_executable(pkt_chat_command_parity
+    network/protocol/game/PktChatCommandParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_chat_command_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_chat_command_parity PRIVATE miniz)
+set_target_properties(pkt_chat_command_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundClientCommandPacket
+add_executable(pkt_client_command_parity
+    network/protocol/game/PktClientCommandParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_client_command_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_client_command_parity PRIVATE miniz)
+set_target_properties(pkt_client_command_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.common.ClientboundKeepAlivePacket
+# ClientboundKeepAlivePacket: byte-exact packet codec parity vs the REAL
+# net.minecraft STREAM_CODEC. A single big-endian 64-bit long (id) â€” verified
+# against the Java: write -> FriendlyByteBuf.writeLong, read -> readLong (no VarLong).
+add_executable(pkt_keepalive_cb_parity
+    network/protocol/common/PktKeepAliveCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_keepalive_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_keepalive_cb_parity PRIVATE miniz)
+set_target_properties(pkt_keepalive_cb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.common.ServerboundKeepAlivePacket
+# ServerboundKeepAlivePacket codec parity vs the REAL StreamCodec/FriendlyByteBuf.
+# The packet body is exactly one writeLong (8 big-endian bytes); byte-match.
+# Ground truth: tools/PktKeepAliveSbParity.java.
+add_executable(pkt_keepalive_sb_parity
+    network/protocol/common/PktKeepAliveSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_keepalive_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_keepalive_sb_parity PRIVATE miniz)
+set_target_properties(pkt_keepalive_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.common.ClientboundPingPacket
+# net.minecraft.network.protocol.common.ClientboundPingPacket â€” packet codec
+# byte parity vs the real STREAM_CODEC. Body is a single fixed-width big-endian
+# int (FriendlyByteBuf.writeInt). Ground truth: tools/PktPingCbParity.java.
+add_executable(pkt_ping_cb_parity
+    network/protocol/common/PktPingCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_ping_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_ping_cb_parity PRIVATE miniz)
+set_target_properties(pkt_ping_cb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.common.ServerboundPongPacket
+# ServerboundPongPacket codec parity vs the REAL net.minecraft StreamCodec.
+# Body is a single FriendlyByteBuf.writeInt(id) -> 4-byte big-endian int; the C++
+# PacketBuffer must reproduce the bytes exactly and round-trip-decode them.
+# Ground truth: tools/PktPongSbParity.java.
+add_executable(pkt_pong_sb_parity
+    network/protocol/common/PktPongSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_pong_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_pong_sb_parity PRIVATE miniz)
+set_target_properties(pkt_pong_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket
+# ServerboundSetCarriedItemPacket StreamCodec parity vs the REAL net.minecraft
+# codec. Body is exactly FriendlyByteBuf.writeShort(slot)/readShort() (low 16 bits
+# big-endian on write; signed 16-bit sign-extended on read). Verifies the certified
+# PacketBuffer (FriendlyByteBuf port) directly. Ground truth: tools/PktSetCarriedParity.java.
+add_executable(pkt_set_carried_parity
+    network/protocol/game/PktSetCarriedParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_carried_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_carried_parity PRIVATE miniz)
+set_target_properties(pkt_set_carried_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetTimePacket
+# Byte-exact parity for ClientboundSetTimePacket vs the real STREAM_CODEC
+# (long gameTime + Map<Holder<WorldClock>, ClockNetworkState> clockUpdates).
+# Ground truth: tools/PktSetTimeParity.java (encodes through RegistryFriendlyByteBuf
+# with a real WORLD_CLOCK registry; overworld id 0, the_end id 1).
+add_executable(pkt_set_time_parity
+    network/protocol/game/PktSetTimeParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_time_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_time_parity PRIVATE miniz)
+set_target_properties(pkt_set_time_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundSwingPacket
+# ServerboundSwingPacket StreamCodec parity vs the REAL net.minecraft codec.
+# Body == FriendlyByteBuf.writeEnum(hand) == writeVarInt(hand.ordinal());
+# InteractionHand MAIN_HAND=0 / OFF_HAND=1 -> wire 0x00 / 0x01.
+# Reuses the certified PacketBuffer (FriendlyByteBuf port). GT: tools/PktSwingParity.java.
+add_executable(pkt_swing_parity
+    network/protocol/game/PktSwingParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_swing_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_swing_parity PRIVATE miniz)
+set_target_properties(pkt_swing_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.common.ClientboundTransferPacket
+# ClientboundTransferPacket codec parity vs the REAL STREAM_CODEC: writeUtf(host)
+# + writeVarInt(port), byte-exact + read round trip. Ground truth:
+# tools/PktTransferCbParity.java. Reuses the certified PacketBuffer (FriendlyByteBuf
+# port); links its full closure (NbtIo/Tag pulled in for writeNbt symbols) + miniz.
+add_executable(pkt_transfer_cb_parity
+    network/protocol/common/PktTransferCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_transfer_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_transfer_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_transfer_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_transfer_cb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.StringDecomposer
+# net.minecraft.util.StringDecomposer
+add_executable(string_decomposer_parity util/StringDecomposerParityTest.cpp)
+target_include_directories(string_decomposer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(string_decomposer_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.core.Vec3i
+# net.minecraft.core.Vec3i (verify-existing: core/Vec3i.h, header-only deps)
+add_executable(vec3i_verify_parity world/level/levelgen/Vec3iVerifyParityTest.cpp)
+target_include_directories(vec3i_verify_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vec3i_verify_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
