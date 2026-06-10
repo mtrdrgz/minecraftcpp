@@ -5359,3 +5359,8 @@ set_target_properties(model_element_bake_parity PROPERTIES RUNTIME_OUTPUT_DIRECT
 add_executable(texture_slots_parity render/model/TextureSlotsResolveParityTest.cpp)
 target_include_directories(texture_slots_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(texture_slots_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: ResolvedModel parent-chain resolution (findTop ao/guiLight/geometry/slots) =====
+add_executable(resolved_model_parity render/model/ResolvedModelResolveParityTest.cpp)
+target_include_directories(resolved_model_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(resolved_model_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
