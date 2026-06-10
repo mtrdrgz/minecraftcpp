@@ -3427,7 +3427,7 @@ net/minecraft/server/level/ThreadedLevelLightEngine.java	unvisited
 net/minecraft/server/level/ThrottlingChunkTaskDispatcher.java	unvisited	
 net/minecraft/server/level/Ticket.java	unvisited	
 net/minecraft/server/level/TicketType.java	unvisited	
-net/minecraft/server/level/WorldGenRegion.java	unvisited	
+net/minecraft/server/level/WorldGenRegion.java	partial	getHeight+1/setBlock+marks/positional getRandom/getBlockEntity DUMMY/ensureCanWrite Chebyshev<=1 ported+gated vs server; rest of region API partial
 net/minecraft/server/level/package-info.java	unvisited	
 net/minecraft/server/level/progress/ChunkLoadStatusView.java	unvisited	
 net/minecraft/server/level/progress/LevelLoadListener.java	unvisited	
@@ -4297,23 +4297,23 @@ net/minecraft/util/thread/ReentrantBlockableEventLoop.java	unvisited
 net/minecraft/util/thread/StrictQueue.java	unvisited	
 net/minecraft/util/thread/TaskScheduler.java	unvisited	
 net/minecraft/util/thread/package-info.java	unvisited	
-net/minecraft/util/valueproviders/BiasedToBottomInt.java	unvisited	
-net/minecraft/util/valueproviders/ClampedInt.java	unvisited	
-net/minecraft/util/valueproviders/ClampedNormalFloat.java	unvisited	
-net/minecraft/util/valueproviders/ClampedNormalInt.java	unvisited	
-net/minecraft/util/valueproviders/ConstantFloat.java	unvisited	
-net/minecraft/util/valueproviders/ConstantInt.java	unvisited	
-net/minecraft/util/valueproviders/FloatProvider.java	unvisited	
+net/minecraft/util/valueproviders/BiasedToBottomInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/ClampedInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/ClampedNormalFloat.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/ClampedNormalInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/ConstantFloat.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/ConstantInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/FloatProvider.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/util/valueproviders/FloatProviders.java	unvisited	
-net/minecraft/util/valueproviders/IntProvider.java	unvisited	
+net/minecraft/util/valueproviders/IntProvider.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/util/valueproviders/IntProviders.java	unvisited	
 net/minecraft/util/valueproviders/MultipliedFloats.java	unvisited	
 net/minecraft/util/valueproviders/SampledFloat.java	unvisited	
 net/minecraft/util/valueproviders/TrapezoidFloat.java	unvisited	
-net/minecraft/util/valueproviders/TrapezoidInt.java	unvisited	
-net/minecraft/util/valueproviders/UniformFloat.java	unvisited	
-net/minecraft/util/valueproviders/UniformInt.java	unvisited	
-net/minecraft/util/valueproviders/WeightedListInt.java	unvisited	
+net/minecraft/util/valueproviders/TrapezoidInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/UniformFloat.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/UniformInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/util/valueproviders/WeightedListInt.java	ported	IntProvider.h + loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/util/valueproviders/package-info.java	unvisited	
 net/minecraft/util/worldupdate/FileToUpgrade.java	unvisited	
 net/minecraft/util/worldupdate/RegionStorageUpgrader.java	unvisited	
@@ -5564,7 +5564,7 @@ net/minecraft/world/level/StructureManager.java	unvisited
 net/minecraft/world/level/TicketStorage.java	unvisited	
 net/minecraft/world/level/WorldDataConfiguration.java	unvisited	
 net/minecraft/world/level/WorldGenLevel.java	unvisited	
-net/minecraft/world/level/biome/Biome.java	unvisited	
+net/minecraft/world/level/biome/Biome.java	partial	shouldFreeze/shouldSnow/climate/TemperatureModifier.FROZEN ported (SnowAndFreezeFeature gate); rest of Biome partial
 net/minecraft/world/level/biome/BiomeGenerationSettings.java	unvisited	
 net/minecraft/world/level/biome/BiomeManager.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 8f55e4e6
 net/minecraft/world/level/biome/BiomeResolver.java	unvisited	
@@ -6051,7 +6051,7 @@ net/minecraft/world/level/border/package-info.java	unvisited
 net/minecraft/world/level/chunk/BlockColumn.java	unvisited	
 net/minecraft/world/level/chunk/BulkSectionAccess.java	unvisited	
 net/minecraft/world/level/chunk/CarvingMask.java	unvisited	
-net/minecraft/world/level/chunk/ChunkAccess.java	unvisited	
+net/minecraft/world/level/chunk/ChunkAccess.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; full chunk API partial
 net/minecraft/world/level/chunk/ChunkGenerator.java	unvisited	
 net/minecraft/world/level/chunk/ChunkGeneratorStructureState.java	unvisited	
 net/minecraft/world/level/chunk/ChunkGenerators.java	unvisited	
@@ -6063,7 +6063,7 @@ net/minecraft/world/level/chunk/GlobalPalette.java	unvisited
 net/minecraft/world/level/chunk/HashMapPalette.java	unvisited	
 net/minecraft/world/level/chunk/ImposterProtoChunk.java	unvisited	
 net/minecraft/world/level/chunk/LevelChunk.java	unvisited	
-net/minecraft/world/level/chunk/LevelChunkSection.java	unvisited	
+net/minecraft/world/level/chunk/LevelChunkSection.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; full chunk API partial
 net/minecraft/world/level/chunk/LightChunk.java	unvisited	
 net/minecraft/world/level/chunk/LightChunkGetter.java	unvisited	
 net/minecraft/world/level/chunk/LinearPalette.java	unvisited	
@@ -6073,18 +6073,18 @@ net/minecraft/world/level/chunk/PaletteResize.java	unvisited
 net/minecraft/world/level/chunk/PalettedContainer.java	unvisited	
 net/minecraft/world/level/chunk/PalettedContainerFactory.java	unvisited	
 net/minecraft/world/level/chunk/PalettedContainerRO.java	unvisited	
-net/minecraft/world/level/chunk/ProtoChunk.java	unvisited	
+net/minecraft/world/level/chunk/ProtoChunk.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; full chunk API partial
 net/minecraft/world/level/chunk/SingleValuePalette.java	unvisited	
 net/minecraft/world/level/chunk/Strategy.java	unvisited	
 net/minecraft/world/level/chunk/StructureAccess.java	unvisited	
 net/minecraft/world/level/chunk/UpgradeData.java	unvisited	
 net/minecraft/world/level/chunk/package-info.java	unvisited	
-net/minecraft/world/level/chunk/status/ChunkDependencies.java	unvisited	
-net/minecraft/world/level/chunk/status/ChunkPyramid.java	unvisited	
-net/minecraft/world/level/chunk/status/ChunkStatus.java	unvisited	
+net/minecraft/world/level/chunk/status/ChunkDependencies.java	partial	semantics ported+gated (heightmap lifecycle FINAL-live/WG-frozen, FEATURES xz order+barriers, blockStateWriteRadius, generateFeatures prime set); full task surface partial; gates as above + server byte-match
+net/minecraft/world/level/chunk/status/ChunkPyramid.java	partial	semantics ported+gated (heightmap lifecycle FINAL-live/WG-frozen, FEATURES xz order+barriers, blockStateWriteRadius, generateFeatures prime set); full task surface partial; gates as above + server byte-match
+net/minecraft/world/level/chunk/status/ChunkStatus.java	partial	semantics ported+gated (heightmap lifecycle FINAL-live/WG-frozen, FEATURES xz order+barriers, blockStateWriteRadius, generateFeatures prime set); full task surface partial; gates as above + server byte-match
 net/minecraft/world/level/chunk/status/ChunkStatusTask.java	unvisited	
-net/minecraft/world/level/chunk/status/ChunkStatusTasks.java	unvisited	
-net/minecraft/world/level/chunk/status/ChunkStep.java	unvisited	
+net/minecraft/world/level/chunk/status/ChunkStatusTasks.java	partial	semantics ported+gated (heightmap lifecycle FINAL-live/WG-frozen, FEATURES xz order+barriers, blockStateWriteRadius, generateFeatures prime set); full task surface partial; gates as above + server byte-match
+net/minecraft/world/level/chunk/status/ChunkStep.java	partial	semantics ported+gated (heightmap lifecycle FINAL-live/WG-frozen, FEATURES xz order+barriers, blockStateWriteRadius, generateFeatures prime set); full task surface partial; gates as above + server byte-match
 net/minecraft/world/level/chunk/status/ChunkType.java	unvisited	
 net/minecraft/world/level/chunk/status/WorldGenContext.java	unvisited	
 net/minecraft/world/level/chunk/status/package-info.java	unvisited	
@@ -6196,23 +6196,23 @@ net/minecraft/world/level/levelgen/XoroshiroRandomSource.java	ported	terrain gat
 net/minecraft/world/level/levelgen/blending/Blender.java	unvisited	
 net/minecraft/world/level/levelgen/blending/BlendingData.java	unvisited	
 net/minecraft/world/level/levelgen/blending/package-info.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/AllOfPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/AnyOfPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/BlockPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/BlockPredicateType.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/CombiningPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/HasSturdyFacePredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/InsideWorldBoundsPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/MatchingBlockTagPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/MatchingBlocksPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/MatchingFluidsPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/NotPredicate.java	unvisited	
+net/minecraft/world/level/levelgen/blockpredicates/AllOfPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/AnyOfPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/BlockPredicate.java	partial	dispatch ported for exercised types; full codec surface partial; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/BlockPredicateType.java	partial	dispatch ported for exercised types; full codec surface partial; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/CombiningPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/HasSturdyFacePredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/InsideWorldBoundsPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/MatchingBlockTagPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/MatchingBlocksPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/MatchingFluidsPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/NotPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/blockpredicates/ReplaceablePredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/SolidPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/StateTestingPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/TrueBlockPredicate.java	unvisited	
+net/minecraft/world/level/levelgen/blockpredicates/SolidPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/StateTestingPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/blockpredicates/TrueBlockPredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/blockpredicates/UnobstructedPredicate.java	unvisited	
-net/minecraft/world/level/levelgen/blockpredicates/WouldSurvivePredicate.java	unvisited	
+net/minecraft/world/level/levelgen/blockpredicates/WouldSurvivePredicate.java	ported	harness predicate loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/blockpredicates/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/carver/CanyonCarverConfiguration.java	ported	carver gate (terrain byte-exact incl carvers)
 net/minecraft/world/level/levelgen/carver/CanyonWorldCarver.java	ported	carver gate (terrain byte-exact incl carvers)
@@ -6363,14 +6363,14 @@ net/minecraft/world/level/levelgen/feature/rootplacers/package-info.java	unvisit
 net/minecraft/world/level/levelgen/feature/stateproviders/BlockStateProvider.java	unvisited	
 net/minecraft/world/level/levelgen/feature/stateproviders/BlockStateProviderType.java	unvisited	
 net/minecraft/world/level/levelgen/feature/stateproviders/DualNoiseProvider.java	unvisited	
-net/minecraft/world/level/levelgen/feature/stateproviders/NoiseBasedStateProvider.java	unvisited	
-net/minecraft/world/level/levelgen/feature/stateproviders/NoiseProvider.java	unvisited	
-net/minecraft/world/level/levelgen/feature/stateproviders/NoiseThresholdProvider.java	unvisited	
-net/minecraft/world/level/levelgen/feature/stateproviders/RandomizedIntStateProvider.java	unvisited	
+net/minecraft/world/level/levelgen/feature/stateproviders/NoiseBasedStateProvider.java	ported	harness provider loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/feature/stateproviders/NoiseProvider.java	ported	harness provider loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/feature/stateproviders/NoiseThresholdProvider.java	ported	harness provider loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/feature/stateproviders/RandomizedIntStateProvider.java	ported	harness provider loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/feature/stateproviders/RotatedBlockProvider.java	unvisited	
 net/minecraft/world/level/levelgen/feature/stateproviders/RuleBasedStateProvider.java	unvisited	
-net/minecraft/world/level/levelgen/feature/stateproviders/SimpleStateProvider.java	unvisited	
-net/minecraft/world/level/levelgen/feature/stateproviders/WeightedStateProvider.java	unvisited	
+net/minecraft/world/level/levelgen/feature/stateproviders/SimpleStateProvider.java	ported	harness provider loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/feature/stateproviders/WeightedStateProvider.java	ported	harness provider loaders; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/feature/stateproviders/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/feature/treedecorators/AlterGroundDecorator.java	ported	TreeFeature.h decorators; newclasses gate
 net/minecraft/world/level/levelgen/feature/treedecorators/AttachedToLeavesDecorator.java	ported	TreeFeature.h decorators; class gates (d5ff8a5e)
@@ -6414,28 +6414,28 @@ net/minecraft/world/level/levelgen/heightproviders/package-info.java	unvisited
 net/minecraft/world/level/levelgen/material/MaterialRuleList.java	unvisited	
 net/minecraft/world/level/levelgen/material/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/package-info.java	unvisited	
-net/minecraft/world/level/levelgen/placement/BiomeFilter.java	unvisited	
-net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java	unvisited	
+net/minecraft/world/level/levelgen/placement/BiomeFilter.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/BlockPredicateFilter.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/placement/CaveSurface.java	unvisited	
 net/minecraft/world/level/levelgen/placement/CountOnEveryLayerPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/CountPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java	unvisited	
+net/minecraft/world/level/levelgen/placement/CountPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/EnvironmentScanPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/placement/FixedPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/InSquarePlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/NoiseBasedCountPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/NoiseThresholdCountPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/PlacedFeature.java	unvisited	
-net/minecraft/world/level/levelgen/placement/PlacementContext.java	unvisited	
-net/minecraft/world/level/levelgen/placement/PlacementFilter.java	unvisited	
-net/minecraft/world/level/levelgen/placement/PlacementModifier.java	unvisited	
-net/minecraft/world/level/levelgen/placement/PlacementModifierType.java	unvisited	
-net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/RarityFilter.java	unvisited	
-net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java	unvisited	
-net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java	unvisited	
-net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java	unvisited	
+net/minecraft/world/level/levelgen/placement/HeightRangePlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/HeightmapPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/InSquarePlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/NoiseBasedCountPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/NoiseThresholdCountPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/PlacedFeature.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/PlacementContext.java	partial	modifier driver + context ported (depth-first flatMap, ensureCanWrite); type registry surface partial; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/PlacementFilter.java	partial	modifier driver + context ported (depth-first flatMap, ensureCanWrite); type registry surface partial; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/PlacementModifier.java	partial	modifier driver + context ported (depth-first flatMap, ensureCanWrite); type registry surface partial; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/PlacementModifierType.java	partial	modifier driver + context ported (depth-first flatMap, ensureCanWrite); type registry surface partial; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/RandomOffsetPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/RarityFilter.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/RepeatingPlacement.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/SurfaceRelativeThresholdFilter.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
+net/minecraft/world/level/levelgen/placement/SurfaceWaterDepthFilter.java	ported	harness loaders + placement/*.h; family gates: newclasses 1867776/0 + forest 884736/0 + ocean 589824/0 (fail-closed loaders => exercised types are proven)
 net/minecraft/world/level/levelgen/placement/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/presets/WorldPreset.java	unvisited	
 net/minecraft/world/level/levelgen/presets/WorldPresets.java	unvisited	
