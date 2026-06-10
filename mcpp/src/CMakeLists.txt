@@ -293,6 +293,18 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# SimpleBitStorage parity vs the real net.minecraft.util.SimpleBitStorage (packed
+# chunk/heightmap long-array, non-spanning, magic-division cellIndex). The disk +
+# network wire layout. Ground truth: tools/SimpleBitStorageParity.java.
+add_executable(bit_storage_parity
+    util/SimpleBitStorageParityTest.cpp
+)
+target_include_directories(bit_storage_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(bit_storage_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Position long-packing codecs parity vs the real BlockPos/ChunkPos/SectionPos
 # (asLong/getX/getY/getZ/offset, blockToSectionCoord, sectionRelative*). The basis
 # of chunk/region serialization + long-keyed maps. Ground truth: tools/PosCodecParity.java.

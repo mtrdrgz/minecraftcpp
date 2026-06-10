@@ -10,51 +10,35 @@ PalettedContainer::PalettedContainer() {
     m_data.resize(calcLongsNeeded(m_bitsPerEntry), 0ULL);
 }
 
+// Both palette and direct modes use the vanilla SimpleBitStorage layout: values
+// are packed valuesPerLong = 64/bits per long, NON-SPANNING (the high 64%bits bits
+// of each long are padding). This is the disk + network wire layout, certified by
+// bit_storage_parity. Direct mode is just this layout with bits=15 and the stored
+// value being the state id itself (no palette indirection). The previous direct
+// path used a pre-1.16 cross-long-spanning packing ((index*15)/64), which is
+// self-consistent for in-memory set/get but MIS-DECODES chunk data read from a real
+// server or disk (readNetwork stores the server's non-spanning longs verbatim).
 uint32_t PalettedContainer::getRaw(int index) const {
-    if (isDirect()) {
-        // Direct: full state ID packed in 15 bits
-        int longIndex = (index * 15) / 64;
-        int bitOffset = (index * 15) % 64;
-        if (longIndex >= (int)m_data.size()) return 0;
-        uint64_t v = m_data[longIndex] >> bitOffset;
-        if (bitOffset + 15 > 64 && longIndex + 1 < (int)m_data.size())
-            v |= m_data[longIndex + 1] << (64 - bitOffset);
-        return (uint32_t)(v & 0x7FFF);
-    }
-    // Palette-based: values do NOT span longs in vanilla MC (aligned per long)
-    int valuesPerLong = 64 / m_bitsPerEntry;
-    int longIndex  = index / valuesPerLong;
-    int bitOffset  = (index % valuesPerLong) * m_bitsPerEntry;
+    const int bits         = m_bitsPerEntry;
+    const int valuesPerLong = 64 / bits;
+    const int longIndex    = index / valuesPerLong;
+    const int bitOffset    = (index % valuesPerLong) * bits;
     if (longIndex >= (int)m_data.size()) return 0;
-    uint64_t mask = (1ULL << m_bitsPerEntry) - 1;
-    uint32_t palIdx = (uint32_t)((m_data[longIndex] >> bitOffset) & mask);
-    if (palIdx < m_palette.size()) return m_palette[palIdx];
-    return 0;
+    const uint64_t mask    = (1ULL << bits) - 1;
+    const uint32_t stored  = (uint32_t)((m_data[longIndex] >> bitOffset) & mask);
+    if (isDirect()) return stored;            // direct: the stored value IS the state id
+    return stored < m_palette.size() ? m_palette[stored] : 0;
 }
 
-void PalettedContainer::setRaw(int index, uint32_t paletteIdx) {
-    if (isDirect()) {
-        // Direct: 15-bit values SPAN long boundaries (must mirror getRaw exactly).
-        int longIndex = (index * 15) / 64;
-        int bitOffset = (index * 15) % 64;
-        if (longIndex >= (int)m_data.size()) return;
-        uint64_t mask = 0x7FFFULL;
-        m_data[longIndex] = (m_data[longIndex] & ~(mask << bitOffset))
-                            | ((uint64_t)(paletteIdx & mask) << bitOffset);
-        if (bitOffset + 15 > 64 && longIndex + 1 < (int)m_data.size()) {
-            int lowBits = 64 - bitOffset;        // bits that fit in the first long
-            uint64_t hiMask = mask >> lowBits;   // remaining high bits in the next long
-            m_data[longIndex + 1] = (m_data[longIndex + 1] & ~hiMask)
-                                    | ((uint64_t)(paletteIdx & mask) >> lowBits);
-        }
-        return;
-    }
-    int valuesPerLong = 64 / m_bitsPerEntry;
-    int longIndex  = index / valuesPerLong;
-    int bitOffset  = (index % valuesPerLong) * m_bitsPerEntry;
-    uint64_t mask  = (1ULL << m_bitsPerEntry) - 1;
+void PalettedContainer::setRaw(int index, uint32_t value) {
+    const int bits         = m_bitsPerEntry;
+    const int valuesPerLong = 64 / bits;
+    const int longIndex    = index / valuesPerLong;
+    const int bitOffset    = (index % valuesPerLong) * bits;
+    if (longIndex >= (int)m_data.size()) return;
+    const uint64_t mask    = (1ULL << bits) - 1;
     m_data[longIndex] = (m_data[longIndex] & ~(mask << bitOffset))
-                        | ((uint64_t)(paletteIdx & mask) << bitOffset);
+                        | (((uint64_t)value & mask) << bitOffset);
 }
 
 void PalettedContainer::resize(int newBits) {
