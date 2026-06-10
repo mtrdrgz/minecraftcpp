@@ -11,6 +11,7 @@
 //   DST  <name> <1 hex>   distanceToSqr(from)
 import java.util.Optional;
 import java.util.Random;
+import net.minecraft.core.Direction;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -73,6 +74,27 @@ public class AabbParity {
         OUT.append("DST\t").append(name).append('\t');
         hex(box.distanceToSqr(from));
         OUT.append('\n');
+
+        // Extended surface (all already implemented in the C++ AABB; previously ungated).
+        AABB box2 = new AABB(from, to);
+        Vec3 ctr = box.getCenter();
+        OUT.append("CENTER\t").append(name).append('\t'); hex(ctr.x); hex(ctr.y); hex(ctr.z); OUT.append('\n');
+        Vec3 bctr = box.getBottomCenter();
+        OUT.append("BOTCENTER\t").append(name).append('\t'); hex(bctr.x); hex(bctr.y); hex(bctr.z); OUT.append('\n');
+        OUT.append("SIZES\t").append(name).append('\t'); hex(box.getSize()); hex(box.getXsize()); hex(box.getYsize()); hex(box.getZsize()); OUT.append('\n');
+        OUT.append("AXIS\t").append(name).append('\t');
+        hex(box.min(Direction.Axis.X)); hex(box.min(Direction.Axis.Y)); hex(box.min(Direction.Axis.Z));
+        hex(box.max(Direction.Axis.X)); hex(box.max(Direction.Axis.Y)); hex(box.max(Direction.Axis.Z)); OUT.append('\n');
+        AABB inf = box.inflate(0.25);
+        OUT.append("INFLATE\t").append(name).append('\t'); hex(inf.minX); hex(inf.minY); hex(inf.minZ); hex(inf.maxX); hex(inf.maxY); hex(inf.maxZ); OUT.append('\n');
+        AABB def = box.deflate(0.1);
+        OUT.append("DEFLATE\t").append(name).append('\t'); hex(def.minX); hex(def.minY); hex(def.minZ); hex(def.maxX); hex(def.maxY); hex(def.maxZ); OUT.append('\n');
+        AABB it = box.intersect(box2);
+        OUT.append("INTERSECT\t").append(name).append('\t'); hex(it.minX); hex(it.minY); hex(it.minZ); hex(it.maxX); hex(it.maxY); hex(it.maxZ); OUT.append('\n');
+        AABB mm = box.minmax(box2);
+        OUT.append("MINMAX\t").append(name).append('\t'); hex(mm.minX); hex(mm.minY); hex(mm.minZ); hex(mm.maxX); hex(mm.maxY); hex(mm.maxZ); OUT.append('\n');
+        OUT.append("INTERSECTS\t").append(name).append('\t').append(box.intersects(box2) ? 1 : 0).append('\n');
+        OUT.append("CONTAINS\t").append(name).append('\t').append(box.contains(from) ? 1 : 0).append('\n');
     }
 
     static void hex(double d) {

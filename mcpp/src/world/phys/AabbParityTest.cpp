@@ -103,6 +103,25 @@ int main(int argc, char** argv) {
             std::cerr << "DST-MISMATCH " << name << "\n";
             ++failures;
         }
+
+        // Extended surface
+        auto chk = [&](const char* kind, const std::vector<double>& got) {
+            auto it = c.expect.find(kind);
+            if (it == c.expect.end()) return;
+            for (size_t i = 0; i < got.size(); ++i)
+                if (toBits(got[i]) != it->second[i]) { std::cerr << kind << "-MISMATCH " << name << " [" << i << "]\n"; ++failures; return; }
+        };
+        glm::dvec3 ctr = box.getCenter();      chk("CENTER", {ctr.x, ctr.y, ctr.z});
+        glm::dvec3 bctr = box.getBottomCenter(); chk("BOTCENTER", {bctr.x, bctr.y, bctr.z});
+        chk("SIZES", {box.getSize(), box.getXsize(), box.getYsize(), box.getZsize()});
+        chk("AXIS", {box.min(mc::Axis::X), box.min(mc::Axis::Y), box.min(mc::Axis::Z), box.max(mc::Axis::X), box.max(mc::Axis::Y), box.max(mc::Axis::Z)});
+        AABB inf = box.inflate(0.25); chk("INFLATE", {inf.minCorner.x, inf.minCorner.y, inf.minCorner.z, inf.maxCorner.x, inf.maxCorner.y, inf.maxCorner.z});
+        AABB def = box.deflate(0.1);  chk("DEFLATE", {def.minCorner.x, def.minCorner.y, def.minCorner.z, def.maxCorner.x, def.maxCorner.y, def.maxCorner.z});
+        AABB box2(from, to);
+        AABB it2 = box.intersect(box2); chk("INTERSECT", {it2.minCorner.x, it2.minCorner.y, it2.minCorner.z, it2.maxCorner.x, it2.maxCorner.y, it2.maxCorner.z});
+        AABB mm = box.minmax(box2);     chk("MINMAX", {mm.minCorner.x, mm.minCorner.y, mm.minCorner.z, mm.maxCorner.x, mm.maxCorner.y, mm.maxCorner.z});
+        if (c.expect.count("INTERSECTS") && (box.intersects(box2) ? "1" : "0") != c.expect["INTERSECTS"][0]) { std::cerr << "INTERSECTS-MISMATCH " << name << "\n"; ++failures; }
+        if (c.expect.count("CONTAINS") && (box.contains(from) ? "1" : "0") != c.expect["CONTAINS"][0]) { std::cerr << "CONTAINS-MISMATCH " << name << "\n"; ++failures; }
     }
 
     std::cout << "AabbParity cases=" << n << " failures=" << failures << "\n";

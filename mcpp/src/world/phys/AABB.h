@@ -183,11 +183,17 @@ public:
             && p.z >= minCorner.z && p.z < maxCorner.z;
     }
 
-    // Java: getCenter()  — Mth.lerp(0.5, a, b) == (a + b) * 0.5
+    // Java: getCenter() = Mth.lerp(0.5, a, b) = a + 0.5*(b-a). NOT (a+b)*0.5 — those
+    // differ by a ULP in double, and the ground truth uses the lerp form.
     constexpr glm::dvec3 getCenter() const noexcept {
-        return glm::dvec3((minCorner.x + maxCorner.x) * 0.5,
-                          (minCorner.y + maxCorner.y) * 0.5,
-                          (minCorner.z + maxCorner.z) * 0.5);
+        return glm::dvec3(minCorner.x + 0.5 * (maxCorner.x - minCorner.x),
+                          minCorner.y + 0.5 * (maxCorner.y - minCorner.y),
+                          minCorner.z + 0.5 * (maxCorner.z - minCorner.z));
+    }
+    // Java: getBottomCenter() = (lerp X, minY, lerp Z).
+    constexpr glm::dvec3 getBottomCenter() const noexcept {
+        return glm::dvec3(minCorner.x + 0.5 * (maxCorner.x - minCorner.x), minCorner.y,
+                          minCorner.z + 0.5 * (maxCorner.z - minCorner.z));
     }
 
     constexpr glm::dvec3 getMinPosition() const noexcept { return minCorner; }
