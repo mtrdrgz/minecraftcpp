@@ -90,4 +90,6 @@ replay, commit). The goal is **zero `unvisited` rows** and every `no-op` justifi
   SegmentedAnglePrecision saturating round, DensityFunctions YClampedGradient
   endpoint (1-ULP). Documented platform ceiling: java.lang.Math.{sin,log} HotSpot
   intrinsics != std::*/StrictMath (handled with tight ULP allowlists/tolerances).
-  Ledger: 225 ported.
+  Wave 5 (+36 gates): pos/coord math (AxisCycle/SectionPos/GlobalPos), value math,
+  and NBT/packet-relevant enums (Difficulty/GameType/ChatFormatting/Heightmap.Types/
+  block-state enums/Rotation/Mirror/...). Ledger: 263 ported / 6124 unvisited.
