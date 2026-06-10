@@ -5364,3 +5364,8 @@ set_target_properties(texture_slots_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "
 add_executable(resolved_model_parity render/model/ResolvedModelResolveParityTest.cpp)
 target_include_directories(resolved_model_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(resolved_model_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: atlas Stitcher (sprite bin-packing -> x/y placement -> u0/u1) =====
+add_executable(stitcher_parity render/texture/StitcherParityTest.cpp)
+target_include_directories(stitcher_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(stitcher_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
