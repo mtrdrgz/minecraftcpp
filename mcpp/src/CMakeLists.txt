@@ -5344,3 +5344,8 @@ set_target_properties(uvpair_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE
 add_executable(face_bakery_bakequad_parity render/model/FaceBakeryBakeQuadParityTest.cpp)
 target_include_directories(face_bakery_bakequad_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(face_bakery_bakequad_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: element-bake helpers (defaultFaceUV + Direction.rotate cull-remap) =====
+add_executable(model_element_helpers_parity render/model/ModelElementHelpersParityTest.cpp)
+target_include_directories(model_element_helpers_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(model_element_helpers_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

@@ -128,6 +128,19 @@ struct UVs {
     float getVertexU(int index) const { return (index != 0 && index != 1) ? maxU : minU; }
     float getVertexV(int index) const { return (index != 0 && index != 3) ? maxV : minV; }
 };
+
+// FaceBakery.defaultFaceUV (FaceBakery.java:26-35) — the auto-generated face UV when a
+// model face declares no explicit "uv" (the from/to box mapped per facing into [0,16]).
+inline UVs defaultFaceUV(const Vector3f& from, const Vector3f& to, int facing) {
+    switch (facing) {
+        case 0: return UVs{from.x, 16.0F - to.z, to.x, 16.0F - from.z};                  // DOWN
+        case 1: return UVs{from.x, from.z, to.x, to.z};                                    // UP
+        case 2: return UVs{16.0F - to.x, 16.0F - to.y, 16.0F - from.x, 16.0F - from.y};   // NORTH
+        case 3: return UVs{from.x, 16.0F - to.y, to.x, 16.0F - from.y};                    // SOUTH
+        case 4: return UVs{from.z, 16.0F - to.y, to.z, 16.0F - from.y};                    // WEST
+        default: return UVs{16.0F - to.z, 16.0F - to.y, 16.0F - from.z, 16.0F - from.y};  // EAST
+    }
+}
 // Quadrant.rotateVertexIndex(index) = (index + shift) % 4, shift = quadrant ordinal.
 inline int quadrantRotateVertexIndex(int shift, int index) { return (index + shift) % 4; }
 // CuboidFace.getU/getV.
