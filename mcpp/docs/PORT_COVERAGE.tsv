@@ -6811,31 +6811,31 @@ net/minecraft/world/level/validation/PathAllowList.java	unvisited
 net/minecraft/world/level/validation/package-info.java	unvisited	
 net/minecraft/world/package-info.java	unvisited	
 net/minecraft/world/phys/AABB.java	partial	clip/expandTowards/contract/distanceToSqr bit-exact (aabb_parity 512/0); remaining API surface (intersects/inflate/move/ofSize...) + NaN-ctor semantics (ternary vs Math.min) ungated
-net/minecraft/world/phys/BlockHitResult.java	unvisited	
+net/minecraft/world/phys/BlockHitResult.java	ported	phys/Direction.h + BlockHitResult.h (collision/clip use)
 net/minecraft/world/phys/EntityHitResult.java	unvisited	
 net/minecraft/world/phys/HitResult.java	unvisited	
 net/minecraft/world/phys/Vec2.java	unvisited	
 net/minecraft/world/phys/Vec3.java	unvisited	
 net/minecraft/world/phys/package-info.java	unvisited	
-net/minecraft/world/phys/shapes/ArrayVoxelShape.java	unvisited	
-net/minecraft/world/phys/shapes/BitSetDiscreteVoxelShape.java	unvisited	
-net/minecraft/world/phys/shapes/BooleanOp.java	unvisited	
-net/minecraft/world/phys/shapes/CollisionContext.java	unvisited	
-net/minecraft/world/phys/shapes/CubePointRange.java	unvisited	
-net/minecraft/world/phys/shapes/CubeVoxelShape.java	unvisited	
-net/minecraft/world/phys/shapes/DiscreteCubeMerger.java	unvisited	
-net/minecraft/world/phys/shapes/DiscreteVoxelShape.java	unvisited	
-net/minecraft/world/phys/shapes/EntityCollisionContext.java	unvisited	
-net/minecraft/world/phys/shapes/IdenticalMerger.java	unvisited	
-net/minecraft/world/phys/shapes/IndexMerger.java	unvisited	
-net/minecraft/world/phys/shapes/IndirectMerger.java	unvisited	
+net/minecraft/world/phys/shapes/ArrayVoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/BitSetDiscreteVoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/BooleanOp.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/CollisionContext.java	partial	CollisionContext basics (empty ctx) ported for shape collide; entity ctx pending entity port
+net/minecraft/world/phys/shapes/CubePointRange.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/CubeVoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/DiscreteCubeMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/DiscreteVoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/EntityCollisionContext.java	partial	CollisionContext basics (empty ctx) ported for shape collide; entity ctx pending entity port
+net/minecraft/world/phys/shapes/IdenticalMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/IndexMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/IndirectMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/MinecartCollisionContext.java	unvisited	
-net/minecraft/world/phys/shapes/NonOverlappingMerger.java	unvisited	
+net/minecraft/world/phys/shapes/NonOverlappingMerger.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/OffsetDoubleList.java	unvisited	
-net/minecraft/world/phys/shapes/Shapes.java	unvisited	
-net/minecraft/world/phys/shapes/SliceShape.java	unvisited	
+net/minecraft/world/phys/shapes/Shapes.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
+net/minecraft/world/phys/shapes/SliceShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/SubShape.java	unvisited	
-net/minecraft/world/phys/shapes/VoxelShape.java	unvisited	
+net/minecraft/world/phys/shapes/VoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/package-info.java	unvisited	
 net/minecraft/world/scores/DisplaySlot.java	unvisited	
 net/minecraft/world/scores/Objective.java	unvisited	
