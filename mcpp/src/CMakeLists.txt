@@ -5306,3 +5306,17 @@ set_target_properties(pkt_set_player_inventory_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ===== netcode ItemStack layer B (start): DataComponentPatch int components =====
+add_executable(dcp_int_parity
+    network/DataComponentPatchParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(dcp_int_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(dcp_int_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(dcp_int_parity PRIVATE bcrypt)
+endif()
+set_target_properties(dcp_int_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
