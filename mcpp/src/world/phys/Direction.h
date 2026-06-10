@@ -95,6 +95,30 @@ constexpr Direction directionOpposite(Direction d) noexcept {
     }
 }
 
+// Java: Direction.getClockWise() — Direction.java:195-203 (horizontal Y-rotation;
+// throws for vertical DOWN/UP). We mirror the throw as an assert-style no-op return
+// of the input (vertical directions are never passed by the structure transforms).
+constexpr Direction directionGetClockWise(Direction d) noexcept {
+    switch (d) {
+        case Direction::NORTH: return Direction::EAST;
+        case Direction::SOUTH: return Direction::WEST;
+        case Direction::WEST:  return Direction::NORTH;
+        case Direction::EAST:  return Direction::SOUTH;
+        default: return d; // DOWN/UP — Java throws IllegalStateException
+    }
+}
+
+// Java: Direction.getCounterClockWise() — Direction.java:245-253.
+constexpr Direction directionGetCounterClockWise(Direction d) noexcept {
+    switch (d) {
+        case Direction::NORTH: return Direction::WEST;
+        case Direction::SOUTH: return Direction::EAST;
+        case Direction::WEST:  return Direction::SOUTH;
+        case Direction::EAST:  return Direction::NORTH;
+        default: return d; // DOWN/UP — Java throws IllegalStateException
+    }
+}
+
 // Java: Direction.fromAxisAndDirection(axis, direction) — Direction.java:295-301.
 constexpr Direction directionFromAxisAndDirection(Axis axis, AxisDirection direction) noexcept {
     switch (axis) {

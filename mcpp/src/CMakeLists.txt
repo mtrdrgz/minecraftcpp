@@ -281,6 +281,18 @@ set_target_properties(structure_placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Structure TRANSFORM parity vs the real Rotation/Mirror/BoundingBox +
+# StructureTemplate static transforms (the pure math under all template/jigsaw
+# placement). Header-only; ground truth: tools/StructureTransformsParity.java.
+add_executable(structure_transform_parity
+    world/level/levelgen/structure/templatesystem/StructureTransformsParityTest.cpp
+)
+target_include_directories(structure_transform_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(structure_transform_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Network primitive codec parity vs the real FriendlyByteBuf/VarInt/VarLong.
 # Ground truth: tools/FriendlyByteBufParity.java.
 add_executable(packet_buffer_parity
