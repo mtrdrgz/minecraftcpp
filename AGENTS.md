@@ -303,7 +303,42 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 
 ## CURRENT STATE
 
-**Last updated**: Session 66 (worldgen 1:1 — C++ FULL-CELL server byte-match on 6 chunks; forest GT certified; tree port in flight)
+**Last updated**: Session 66+ (worldgen ≈8M cells certified; engine decorates in-game; full-port goal set; audits + parallel pillars running)
+
+**Session 66 continued (2026-06-10) — engine integration + full-port kickoff:**
+- GOAL EXPANDED by the user: full 1:1 port of EVERYTHING (rendering, GUI, netcode,
+  entities/movement, structures, packaging single .exe, optimization, cleanup), every
+  Java file visited with proof. Master ledger: `mcpp/docs/PORT_COVERAGE.tsv` (6,882
+  files; 143 ported / 36 partial / 449 reasoned-n/a) + `PORT_COVERAGE.md` roadmap
+  (per-subsystem verification gates). Maintain via `mcpp/tools/port_coverage.sh`.
+- BIOME BREADTH: 9 classes certified vs server (cfd5b3d3: taiga/plains/birch/swamp/
+  snowy×2/ice_spikes/desert@seed4/old-growth + lush/dripstone caves; 1,867,776 cells)
+  then 16 more at C++==GT 0 (d5ff8a5e: jungle/savanna/dark_forest/cherry/mangrove/
+  mushroom/bamboo/meadow/mountains; sculk closed the deep_dark residual). Leftovers
+  (pale_garden 1363, stony_peaks 151, icebergs, corals, GT↔server triage) in flight.
+- ENGINE INTEGRATION (9035e916): mcpp.exe decorates in-game with the certified
+  machinery — the decoration TU compiles into the engine as a library
+  (MCPP_DECORATE_NO_MAIN; the parity executable stays the truth). Run from repo
+  root: `mcpp\build\mcpp.exe --quickPlaySingleplayer`. Smoke: 65 biomes, 199 placed
+  features (0 no-ops), 300+ chunks, zero failures. Deltas documented in
+  EngineDecoration.h (neighbour-availability order; disk-only data; legacy
+  approximate runStructures pending #18).
+- SUBSYSTEM AUDITS with byte-exact gates — six real infidelities found in "done"
+  code: NBT (7c53c091: insertion-ordered compounds, modified-UTF-8, real gzip;
+  nbt_parity 6/0), PacketBuffer (25bade31: VarLong 10-byte, Utf8String UTF-16
+  semantics + replacement decode, unnamed network NBT; packet_buffer_parity 31/0),
+  AABB (1c3949ac: bit-exact 512/0, zero findings). Plus: NbtIo gzip silent
+  truncation fixed (d5ff8a5e), SurfaceSystem +2→+1 biome sample (75f80bea),
+  PalettedContainer corruption (1321bc56), engine build fix + profiling/ tracked
+  (09f28fce — was a gitignored build dependency).
+- STANDING GATE SUITE (regression-gate EVERY change): newclasses 1867776/0 ·
+  forest 884736/0 · ocean 589824/0 · terrain 2359296/0 · nbt 6/0 · packets 31/0 ·
+  aabb 512/0 · ninja mcpp builds.
+- PARALLEL TRACKS RUNNING: breadth leftovers; VoxelShapes/collision port (movement
+  foundation); embedded-assets packaging groundwork; rendering gate #1 (block-model
+  baking parity). Specs for structures (#18) and nether/end (#12) in the task list.
+
+**Last updated prior**: Session 66 (worldgen 1:1 — C++ FULL-CELL server byte-match on 6 chunks; forest GT certified; tree port in flight)
 
 **Session 66 continued — the day's full arc (commits 2772bdb6 → 8c1ab5be):**
 1. Java GT = server byte-match on the 6 ocean chunks (see below).
