@@ -315,18 +315,34 @@ void initBlocks() {
                 g_blocksByName[name] = blk;
             }
 
-            if (!g_defaultStateByName.contains(name)) {
+            // Vanilla Block.defaultBlockState is NOT necessarily the block's first
+            // registered state (e.g. pillar defaults are axis=y): the regenerated
+            // table marks the true default with "default":true. Fall back to first
+            // occurrence only if a table predates the marker.
+            const bool isDefault = jst.value("default", false);
+            if (isDefault || !g_defaultStateByName.contains(name)) {
                 g_defaultStateByName[name] = (uint32_t)id;
                 blk->defaultStateId = (uint32_t)id;
             }
 
             g_blockStates[id].block   = blk;
             g_blockStates[id].stateId = (uint32_t)id;
-            const uint32_t baseId = getDefaultBlockStateId(name, (uint32_t)id);
-            const uint32_t offset = (uint32_t)id - baseId;
-            if (isPillarBlockName(name) && offset < 3) {
-                static constexpr const char* AXES[3] = { "x", "y", "z" };
-                g_blockStates[id].properties["axis"] = AXES[offset];
+            // Per-state properties come verbatim from the vanilla registry dump
+            // (canonical "a=x,b=y" order). Parse into the state's property map —
+            // this replaces the old name-based pillar-axis offset inference.
+            if (auto pit = jst.find("props"); pit != jst.end() && !pit->get<std::string>().empty()) {
+                const std::string& ps = pit->get_ref<const std::string&>();
+                size_t start = 0;
+                while (start < ps.size()) {
+                    size_t comma = ps.find(',', start);
+                    if (comma == std::string::npos) comma = ps.size();
+                    size_t eq = ps.find('=', start);
+                    if (eq != std::string::npos && eq < comma) {
+                        g_blockStates[id].properties[ps.substr(start, eq - start)] =
+                            ps.substr(eq + 1, comma - eq - 1);
+                    }
+                    start = comma + 1;
+                }
             }
         }
 

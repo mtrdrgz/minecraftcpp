@@ -279,6 +279,29 @@ set_target_properties(packet_buffer_parity PROPERTIES
 # NBT tag-codec parity vs the real net.minecraft.nbt: canonical read dumps +
 # byte-exact rewrite of real world payloads (level.dat, chunk NBTs) + a synthetic
 # all-tag-types / modified-UTF-8 case. Ground truth: tools/NbtParity.java.
+# Regenerates assets/block_states.json from the registry ground truth (dev tool).
+add_executable(block_states_regen
+    world/level/block/BlockStatesRegen.cpp
+)
+target_include_directories(block_states_regen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_states_regen PRIVATE nlohmann_json)
+set_target_properties(block_states_regen PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# Block-state REGISTRY parity vs the real Block.BLOCK_STATE_REGISTRY (id order,
+# names, trusted flags). Ground truth: tools/BlockStateRegistryParity.java.
+add_executable(block_state_registry_parity
+    world/level/block/BlockStateRegistryParityTest.cpp
+)
+target_include_directories(block_state_registry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_state_registry_parity PRIVATE nlohmann_json)
+set_target_properties(block_state_registry_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # AABB (ray clip / expandTowards / contract / distanceToSqr) parity vs the real
 # net.minecraft.world.phys.AABB. Ground truth: tools/AabbParity.java (bit-exact).
 add_executable(aabb_parity
