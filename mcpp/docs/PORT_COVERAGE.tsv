@@ -2667,36 +2667,36 @@ net/minecraft/gizmos/package-info.java	unvisited
 net/minecraft/locale/DeprecatedTranslationsInfo.java	unvisited	
 net/minecraft/locale/Language.java	unvisited	
 net/minecraft/locale/package-info.java	unvisited	
-net/minecraft/nbt/ByteArrayTag.java	unvisited	
-net/minecraft/nbt/ByteTag.java	unvisited	
-net/minecraft/nbt/CollectionTag.java	unvisited	
-net/minecraft/nbt/CompoundTag.java	unvisited	
-net/minecraft/nbt/DoubleTag.java	unvisited	
-net/minecraft/nbt/EndTag.java	unvisited	
-net/minecraft/nbt/FloatTag.java	unvisited	
-net/minecraft/nbt/IntArrayTag.java	unvisited	
-net/minecraft/nbt/IntTag.java	unvisited	
-net/minecraft/nbt/ListTag.java	unvisited	
-net/minecraft/nbt/LongArrayTag.java	unvisited	
-net/minecraft/nbt/LongTag.java	unvisited	
+net/minecraft/nbt/ByteArrayTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/ByteTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/CollectionTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/CompoundTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/DoubleTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/EndTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/FloatTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/IntArrayTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/IntTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/ListTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/LongArrayTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/LongTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
 net/minecraft/nbt/NbtAccounter.java	unvisited	
 net/minecraft/nbt/NbtAccounterException.java	unvisited	
 net/minecraft/nbt/NbtException.java	unvisited	
 net/minecraft/nbt/NbtFormatException.java	unvisited	
-net/minecraft/nbt/NbtIo.java	unvisited	
+net/minecraft/nbt/NbtIo.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
 net/minecraft/nbt/NbtOps.java	unvisited	
 net/minecraft/nbt/NbtUtils.java	unvisited	
-net/minecraft/nbt/NumericTag.java	unvisited	
-net/minecraft/nbt/PrimitiveTag.java	unvisited	
+net/minecraft/nbt/NumericTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
+net/minecraft/nbt/PrimitiveTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
 net/minecraft/nbt/ReportedNbtException.java	unvisited	
-net/minecraft/nbt/ShortTag.java	unvisited	
+net/minecraft/nbt/ShortTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
 net/minecraft/nbt/SnbtGrammar.java	unvisited	
 net/minecraft/nbt/SnbtOperations.java	unvisited	
 net/minecraft/nbt/SnbtPrinterTagVisitor.java	unvisited	
 net/minecraft/nbt/StreamTagVisitor.java	unvisited	
-net/minecraft/nbt/StringTag.java	unvisited	
+net/minecraft/nbt/StringTag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
 net/minecraft/nbt/StringTagVisitor.java	unvisited	
-net/minecraft/nbt/Tag.java	unvisited	
+net/minecraft/nbt/Tag.java	partial	binary tag codec proven byte-exact (nbt_parity cases=6 failures=0: real level.dat+chunk NBTs+synthetic MUTF-8); in-memory API surface & SNBT/visitors/accounter unproven
 net/minecraft/nbt/TagParser.java	unvisited	
 net/minecraft/nbt/TagType.java	unvisited	
 net/minecraft/nbt/TagTypes.java	unvisited	

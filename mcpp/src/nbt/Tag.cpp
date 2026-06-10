@@ -4,18 +4,24 @@
 namespace mc::nbt {
 
 bool NbtCompound::has(std::string_view key) const {
-    return tags.find(std::string(key)) != tags.end();
+    return index.find(std::string(key)) != index.end();
 }
 NbtTag* NbtCompound::get(std::string_view key) {
-    auto it = tags.find(std::string(key));
-    return it == tags.end() ? nullptr : &it->second;
+    auto it = index.find(std::string(key));
+    return it == index.end() ? nullptr : &entries[it->second].second;
 }
 const NbtTag* NbtCompound::get(std::string_view key) const {
-    auto it = tags.find(std::string(key));
-    return it == tags.end() ? nullptr : &it->second;
+    auto it = index.find(std::string(key));
+    return it == index.end() ? nullptr : &entries[it->second].second;
 }
 void NbtCompound::put(std::string key, NbtTag tag) {
-    tags[std::move(key)] = std::move(tag);
+    auto it = index.find(key);
+    if (it != index.end()) {
+        entries[it->second].second = std::move(tag);   // replace in place, keep position
+    } else {
+        index.emplace(key, entries.size());
+        entries.emplace_back(std::move(key), std::move(tag));
+    }
 }
 
 #define GET_TYPED(name, cpptype, tagtype, field) \

@@ -69,13 +69,66 @@ static std::vector<uint8_t> gzipDecompress(std::span<const uint8_t> in) {
 
 // ── NbtReader ────────────────────────────────────────────────────────────────
 
+// java.io.DataInputStream.readUTF 1:1: the wire format is MODIFIED UTF-8
+// (U+0000 as C0 80; surrogate halves as individual 3-byte sequences; no 4-byte
+// forms). Internally we store real UTF-8, so decode MUTF-8 -> UTF-16 code units
+// exactly like Java, then encode UTF-16 -> UTF-8 like String.getBytes(UTF_8)
+// (surrogate pairs combine to one 4-byte char; an unpaired surrogate becomes '?',
+// the UTF-8 CharsetEncoder's REPLACE substitution).
 std::string NbtReader::readString() {
     uint16_t len = (uint16_t)readBE<uint16_t>();
     if (m_pos + len > m_data.size())
         throw std::runtime_error("NBT: string read past end");
-    std::string s((const char*)m_data.data() + m_pos, len);
+    const uint8_t* b = m_data.data() + m_pos;
     m_pos += len;
-    return s;
+
+    std::vector<uint16_t> u16;
+    u16.reserve(len);
+    for (size_t i = 0; i < len; ) {
+        uint8_t a = b[i];
+        if (a < 0x80) {                       // 0xxxxxxx (readUTF accepts raw 0x00)
+            u16.push_back(a); i += 1;
+        } else if ((a & 0xE0) == 0xC0) {      // 110xxxxx 10xxxxxx
+            if (i + 1 >= len || (b[i + 1] & 0xC0) != 0x80)
+                throw std::runtime_error("NBT: malformed MUTF-8 (2-byte)");
+            u16.push_back((uint16_t)(((a & 0x1F) << 6) | (b[i + 1] & 0x3F))); i += 2;
+        } else if ((a & 0xF0) == 0xE0) {      // 1110xxxx 10xxxxxx 10xxxxxx
+            if (i + 2 >= len || (b[i + 1] & 0xC0) != 0x80 || (b[i + 2] & 0xC0) != 0x80)
+                throw std::runtime_error("NBT: malformed MUTF-8 (3-byte)");
+            u16.push_back((uint16_t)(((a & 0x0F) << 12) | ((b[i + 1] & 0x3F) << 6) | (b[i + 2] & 0x3F))); i += 3;
+        } else {
+            throw std::runtime_error("NBT: malformed MUTF-8 (lead byte)");
+        }
+    }
+
+    std::string out;
+    out.reserve(u16.size());
+    for (size_t i = 0; i < u16.size(); ++i) {
+        uint32_t cp = u16[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < u16.size()
+            && u16[i + 1] >= 0xDC00 && u16[i + 1] <= 0xDFFF) {
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (u16[i + 1] - 0xDC00);
+            ++i;
+        } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+            out.push_back('?');               // unpaired surrogate -> REPLACE
+            continue;
+        }
+        if (cp < 0x80) out.push_back((char)cp);
+        else if (cp < 0x800) {
+            out.push_back((char)(0xC0 | (cp >> 6)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            out.push_back((char)(0xE0 | (cp >> 12)));
+            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        } else {
+            out.push_back((char)(0xF0 | (cp >> 18)));
+            out.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
+            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        }
+    }
+    return out;
 }
 
 NbtTag NbtReader::readTag(TagType type) {
@@ -171,9 +224,45 @@ std::optional<NbtCompound> NbtReader::readZlib(std::span<const uint8_t> data) {
 
 // ── NbtWriter ────────────────────────────────────────────────────────────────
 
+// java.io.DataOutputStream.writeUTF 1:1: internal UTF-8 -> MODIFIED UTF-8 wire
+// form (U+0000 -> C0 80; supplementary code points -> surrogate pair, each half a
+// 3-byte sequence; u16 length prefix counts MUTF-8 bytes; >65535 throws like
+// Java's UTFDataFormatException).
 void NbtWriter::writeString(std::string_view s) {
-    writeShort((int16_t)s.size());
-    m_buf.insert(m_buf.end(), (const uint8_t*)s.data(), (const uint8_t*)s.data() + s.size());
+    std::vector<uint8_t> m;
+    m.reserve(s.size());
+    const uint8_t* b = (const uint8_t*)s.data();
+    size_t n = s.size();
+    auto emitUnit = [&m](uint16_t u) {            // one UTF-16 code unit -> MUTF-8
+        if (u >= 0x01 && u <= 0x7F) m.push_back((uint8_t)u);
+        else if (u <= 0x7FF) {                    // includes 0 -> C0 80
+            m.push_back((uint8_t)(0xC0 | (u >> 6)));
+            m.push_back((uint8_t)(0x80 | (u & 0x3F)));
+        } else {
+            m.push_back((uint8_t)(0xE0 | (u >> 12)));
+            m.push_back((uint8_t)(0x80 | ((u >> 6) & 0x3F)));
+            m.push_back((uint8_t)(0x80 | (u & 0x3F)));
+        }
+    };
+    for (size_t i = 0; i < n; ) {
+        uint8_t a = b[i];
+        uint32_t cp;
+        if (a < 0x80) { cp = a; i += 1; }
+        else if ((a & 0xE0) == 0xC0 && i + 1 < n) { cp = ((a & 0x1F) << 6) | (b[i+1] & 0x3F); i += 2; }
+        else if ((a & 0xF0) == 0xE0 && i + 2 < n) { cp = ((a & 0x0F) << 12) | ((b[i+1] & 0x3F) << 6) | (b[i+2] & 0x3F); i += 3; }
+        else if ((a & 0xF8) == 0xF0 && i + 3 < n) { cp = ((a & 0x07) << 18) | ((b[i+1] & 0x3F) << 12) | ((b[i+2] & 0x3F) << 6) | (b[i+3] & 0x3F); i += 4; }
+        else throw std::runtime_error("NBT: invalid internal UTF-8 in writeString");
+        if (cp >= 0x10000) {                      // supplementary -> surrogate pair
+            cp -= 0x10000;
+            emitUnit((uint16_t)(0xD800 + (cp >> 10)));
+            emitUnit((uint16_t)(0xDC00 + (cp & 0x3FF)));
+        } else {
+            emitUnit((uint16_t)cp);
+        }
+    }
+    if (m.size() > 0xFFFF) throw std::runtime_error("NBT: string too long for writeUTF");
+    writeShort((int16_t)(uint16_t)m.size());
+    m_buf.insert(m_buf.end(), m.begin(), m.end());
 }
 
 void NbtWriter::writeTag(const NbtTag& tag) {
@@ -207,7 +296,8 @@ void NbtWriter::writeTag(const NbtTag& tag) {
 }
 
 void NbtWriter::writeCompound(const NbtCompound& c) {
-    for (auto& [name, tag] : c.tags) {
+    // insertion order (see NbtCompound) — matches Java's read->write byte stability
+    for (auto& [name, tag] : c.entries) {
         writeByte((int8_t)tag.type());
         writeString(name);
         writeTag(tag);
@@ -230,16 +320,34 @@ std::vector<uint8_t> NbtWriter::writeRootCompound(std::string_view name, const N
 }
 
 std::vector<uint8_t> NbtWriter::writeGzip(std::string_view name, const NbtCompound& c) {
+    // REAL gzip framing (RFC 1952), as java.util.zip.GZIPOutputStream produces:
+    // 10-byte header (magic 1F 8B, method 8, flags 0, mtime 0, XFL 0, OS 0),
+    // raw deflate body, CRC32 + ISIZE footer (little-endian). The previous
+    // implementation emitted a ZLIB stream labelled gzip — Java's GZIPInputStream
+    // would reject it.
     auto raw = writeRootCompound(name, c);
-    mz_ulong compLen = mz_compressBound((mz_ulong)raw.size());
-    std::vector<uint8_t> comp(compLen + 18); // extra for gzip header/footer
-    // Use miniz gzip helper
-    comp.resize(compLen);
-    // Fallback: write zlib-wrapped since miniz doesn't have a clean gzip write API
-    if (mz_compress(comp.data(), &compLen, raw.data(), (mz_ulong)raw.size()) != MZ_OK)
-        throw std::runtime_error("NBT gzip compress failed");
-    comp.resize(compLen);
-    return comp;
+
+    size_t deflateCap = (size_t)mz_compressBound((mz_ulong)raw.size()) + 64;
+    std::vector<uint8_t> body(deflateCap);
+    tdefl_compressor comp;
+    // miniz default probe count for level 6 equivalent; raw deflate (no zlib header)
+    tdefl_init(&comp, nullptr, nullptr, TDEFL_DEFAULT_MAX_PROBES);
+    size_t inLen = raw.size(), outLen = deflateCap;
+    tdefl_status st = tdefl_compress(&comp, raw.data(), &inLen, body.data(), &outLen, TDEFL_FINISH);
+    if (st != TDEFL_STATUS_DONE)
+        throw std::runtime_error("NBT gzip deflate failed");
+    body.resize(outLen);
+
+    std::vector<uint8_t> out;
+    out.reserve(10 + body.size() + 8);
+    const uint8_t header[10] = { 0x1F, 0x8B, 8, 0, 0, 0, 0, 0, 0, 0 };
+    out.insert(out.end(), header, header + 10);
+    out.insert(out.end(), body.begin(), body.end());
+    uint32_t crc = (uint32_t)mz_crc32(MZ_CRC32_INIT, raw.data(), raw.size());
+    uint32_t isize = (uint32_t)raw.size();
+    for (int i = 0; i < 4; ++i) out.push_back((uint8_t)(crc >> (8 * i)));
+    for (int i = 0; i < 4; ++i) out.push_back((uint8_t)(isize >> (8 * i)));
+    return out;
 }
 
 std::vector<uint8_t> NbtWriter::writeZlib(std::string_view name, const NbtCompound& c) {

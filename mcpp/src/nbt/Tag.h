@@ -38,7 +38,13 @@ struct NbtList {
 };
 
 struct NbtCompound {
-    std::unordered_map<std::string, NbtTag> tags;
+    // INSERTION-ORDERED storage (CompoundTag semantics that matter for 1:1 byte
+    // round-trips: Java reads keys into its map in file order and writes them back
+    // in that same order for an identical insertion sequence, so read->write is
+    // byte-stable. put() of an existing key replaces the value IN PLACE, keeping
+    // the original position, like java.util.HashMap.put).
+    std::vector<std::pair<std::string, NbtTag>> entries;
+    std::unordered_map<std::string, std::size_t> index;
 
     bool        has(std::string_view key) const;
     NbtTag*     get(std::string_view key);
