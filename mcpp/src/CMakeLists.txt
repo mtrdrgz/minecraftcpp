@@ -3636,3 +3636,667 @@ set_target_properties(pkt_reset_score_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ===== Parallel-authored packet-codec gates (workflow wave 9, netcode play) =====
+
+# net.minecraft.network.protocol.game.ServerboundBlockEntityTagQueryPacket
+# Byte-exact parity vs the REAL ServerboundBlockEntityTagQueryPacket.STREAM_CODEC.
+# Codec body (write(FriendlyByteBuf), lines 26-29) is, VERBATIM:
+#   writeVarInt(transactionId);  writeBlockPos(pos) == writeLong(pos.asLong())
+# No registry/Holder/ItemStack/Component/NBT on the wire, so the certified
+# PacketBuffer (the FriendlyByteBuf port) rebuilds the body directly. Links its
+# full closure (NbtIo/Tag for writeNbt symbols) + miniz, and bcrypt on WIN32.
+add_executable(pkt_block_entity_tag_query_sb_parity
+    network/protocol/game/PktBlockEntityTagQuerySbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_block_entity_tag_query_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_block_entity_tag_query_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_block_entity_tag_query_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_block_entity_tag_query_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundChangeDifficultyPacket
+# Byte-exact parity for the ServerboundChangeDifficultyPacket STREAM_CODEC vs the REAL
+# net.minecraft codec. Body (ServerboundChangeDifficultyPacket.java:9-12):
+#   STREAM_CODEC = StreamCodec.composite(Difficulty.STREAM_CODEC, ::difficulty, ::new)
+#   -> exactly one field: VarInt(difficulty.getId()) via ByteBufCodecs.idMapper
+#      (ByteBufCodecs.idMapper lines 542-553 write VarInt.write(getId())).
+#      getId(): PEACEFUL=0/EASY=1/NORMAL=2/HARD=3. No boolean, no trailing data
+#      (unlike the clientbound variant). Reuses the certified PacketBuffer
+#      (FriendlyByteBuf port). Ground truth: tools/PktChangeDifficultySbParity.java.
+add_executable(pkt_change_difficulty_sb_parity
+    network/protocol/game/PktChangeDifficultySbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_change_difficulty_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_change_difficulty_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_change_difficulty_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_change_difficulty_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundChangeGameModePacket
+# Body is a single GameType encoded via ByteBufCodecs.idMapper -> VarInt(getId()).
+add_executable(pkt_change_gamemode_sb_parity
+    network/protocol/game/PktChangeGameModeSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_change_gamemode_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_change_gamemode_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_change_gamemode_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_change_gamemode_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket
+# Byte-exact parity for ServerboundChunkBatchReceivedPacket vs the real STREAM_CODEC.
+# Record = (float desiredChunksPerTick); write(FriendlyByteBuf) is a single
+# writeFloat(desiredChunksPerTick) -> big-endian IEEE-754 4-byte float; decode = readFloat().
+# Packet.codec -> no packet-id prefix, just the body.
+# Ground truth: tools/PktChunkBatchReceivedSbParity.java (encode/decode through the real codec).
+add_executable(pkt_chunk_batch_received_sb_parity
+    network/protocol/game/PktChunkBatchReceivedSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_chunk_batch_received_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_chunk_batch_received_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_chunk_batch_received_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_chunk_batch_received_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundClientTickEndPacket
+# Byte-exact parity for ServerboundClientTickEndPacket vs the REAL STREAM_CODEC.
+# This is a UNIT/EMPTY packet: STREAM_CODEC = StreamCodec.unit(INSTANCE), so encode() writes
+# ZERO bytes and decode() reads ZERO bytes and returns the singleton. The wire payload is the
+# empty byte string. The C++ side re-encodes via PacketBuffer (writes nothing), requires the
+# produced bytes match the empty expected payload and readableBytes==0, then "decodes" the
+# empty payload and requires the buffer is fully consumed. Verifies the certified PacketBuffer
+# (FriendlyByteBuf port) handles the no-field unit case. Ground truth:
+# tools/PktClientTickEndSbParity.java. Links the PacketBuffer closure (NbtIo/Tag pulled in for
+# writeNbt symbols) + miniz, bcrypt on WIN32.
+add_executable(pkt_client_tick_end_sb_parity
+    network/protocol/game/PktClientTickEndSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_client_tick_end_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_client_tick_end_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_client_tick_end_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_client_tick_end_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundConfigurationAcknowledgedPacket byte-exact
+# codec parity vs tools/PktConfigAckSbParity.java. STREAM_CODEC == StreamCodec.unit(INSTANCE):
+# the encoder writes NOTHING and the decoder returns the singleton, so the on-wire body is
+# exactly zero bytes. The C++ test mirrors that (empty PacketBuffer, hex "") and verifies the
+# empty Java bytes decode to an empty/exhausted buffer. Reuses the certified PacketBuffer
+# (FriendlyByteBuf port); links its full closure (NbtIo/Tag pulled in for writeNbt symbols) + miniz.
+add_executable(pkt_config_ack_sb_parity
+    network/protocol/game/PktConfigAckSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_config_ack_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_config_ack_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_config_ack_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_config_ack_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundEntityTagQueryPacket
+# Byte-exact packet codec parity vs the REAL net.minecraft STREAM_CODEC.
+# Body = Packet.codec(write, new); write(FriendlyByteBuf) in wire order:
+#   writeVarInt(transactionId);  -> LEB128 VarInt of signed transactionId
+#   writeVarInt(entityId);       -> LEB128 VarInt of signed entityId
+# No packet-id prefix. writeVarInt does NOT zig-zag (negatives = 5 bytes).
+# Reuses the certified PacketBuffer (FriendlyByteBuf port). GT: tools/PktEntityTagQuerySbParity.java.
+add_executable(pkt_entity_tag_query_sb_parity
+    network/protocol/game/PktEntityTagQuerySbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_entity_tag_query_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_entity_tag_query_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_entity_tag_query_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_entity_tag_query_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundLockDifficultyPacket
+# Byte-exact parity for the ServerboundLockDifficultyPacket STREAM_CODEC vs the REAL
+# net.minecraft codec. Body (ServerboundLockDifficultyPacket.java:9-24):
+#   write : FriendlyByteBuf.writeBoolean(locked)  -> single byte 0x01/0x00
+#   read  : input.readBoolean()
+# Packet.codec -> StreamCodec.ofMember: body only, no id/length prefix. Reuses the
+# certified PacketBuffer (FriendlyByteBuf port). Ground truth: tools/PktLockDifficultySbParity.java.
+add_executable(pkt_lock_difficulty_sb_parity
+    network/protocol/game/PktLockDifficultySbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_lock_difficulty_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_lock_difficulty_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_lock_difficulty_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_lock_difficulty_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(pkt_paddle_boat_sb_parity
+    network/protocol/game/PktPaddleBoatSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_paddle_boat_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_paddle_boat_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_paddle_boat_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_paddle_boat_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket
+# Byte-exact parity for the SERVERBOUND ServerboundPlayerAbilitiesPacket STREAM_CODEC vs
+# the REAL net.minecraft codec. The packet body is exactly ONE byte: a bitfield that packs
+# only isFlying (FLAG_FLYING = 2):
+#   write : byte bitfield = 0; if (isFlying) bitfield |= 2; output.writeByte(bitfield)
+#   read  : byte bitfield = input.readByte(); isFlying = (bitfield & 2) != 0
+# Packet.codec -> StreamCodec.ofMember: no id/length prefix, just the 1-byte body
+# (0x00 not-flying / 0x02 flying). Reuses the certified PacketBuffer (FriendlyByteBuf port)
+# writeByte/readByte. The DEC battery covers EVERY input byte 0..255 for the (& 2) mask.
+# Ground truth: tools/PktPlayerAbilitiesSbParity.java.
+add_executable(pkt_player_abilities_sb_parity
+    network/protocol/game/PktPlayerAbilitiesSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_player_abilities_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_player_abilities_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_player_abilities_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_player_abilities_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundPlayerActionPacket
+# Byte-exact parity for ServerboundPlayerActionPacket vs the REAL STREAM_CODEC.
+# Body (write(FriendlyByteBuf), ServerboundPlayerActionPacket.java:37-42):
+#   writeEnum(action)            == writeVarInt(action.ordinal())  (Action: 0..7)
+#   writeBlockPos(pos)           == writeLong(pos.asLong())         (BE 8-byte 26/12/26 long)
+#   writeByte(direction.get3DDataValue())                          (one byte, 0..5)
+#   writeVarInt(sequence)        == LEB128 VarInt
+# All fields decompose to primitives the certified PacketBuffer (FriendlyByteBuf port)
+# rebuilds directly. Ground truth: tools/PktPlayerActionSbParity.java.
+add_executable(pkt_player_action_sb_parity
+    network/protocol/game/PktPlayerActionSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_player_action_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_player_action_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_player_action_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_player_action_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket byte-exact codec parity
+# vs tools/PktPlayerLoadedSbParity.java. The packet's STREAM_CODEC is StreamCodec.unit(...):
+# a zero-component record whose encoder writes NOTHING (zero-byte body). Reuses the certified
+# PacketBuffer (FriendlyByteBuf port); links its full closure (NbtIo/Tag pulled in for
+# writeNbt symbols) + miniz (+ bcrypt on WIN32).
+add_executable(pkt_player_loaded_sb_parity
+    network/protocol/game/PktPlayerLoadedSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_player_loaded_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_player_loaded_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_player_loaded_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_player_loaded_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundSeenAdvancementsPacket
+# Byte-exact packet codec parity vs the REAL net.minecraft STREAM_CODEC.
+# STREAM_CODEC = Packet.codec(write, new) -> no packet-id prefix, just the body.
+#   write: writeEnum(action) = writeVarInt(ordinal);
+#          if action == OPENED_TAB: writeIdentifier(tab) = writeUtf(namespace:path)
+#   (the tab is written ONLY for OPENED_TAB; there is NO leading boolean present-flag.)
+# Verifies the certified PacketBuffer (FriendlyByteBuf port) writeVarInt (LEB128) and
+# writeString (== writeUtf: VarInt byte-length + UTF-8 bytes) directly.
+# Ground truth: tools/PktSeenAdvancementsSbParity.java.
+add_executable(pkt_seen_advancements_sb_parity
+    network/protocol/game/PktSeenAdvancementsSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_seen_advancements_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_seen_advancements_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_seen_advancements_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_seen_advancements_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSelectAdvancementsTabPacket
+# Byte-exact parity for ClientboundSelectAdvancementsTabPacket vs the real STREAM_CODEC.
+# The packet body is exactly: writeNullable(tab, writeIdentifier) ==
+#   writeBoolean(present) + (if present) writeUtf(namespace:path).
+# So wire = 0x00 (null tab) OR 0x01 + VarInt(utf8 len) + utf8 bytes (present tab).
+# Reuses the certified PacketBuffer (FriendlyByteBuf port): writeBool (single byte)
+# and writeString (== writeUtf: VarInt byte-length + UTF-8 bytes). Links its full
+# closure (NbtIo/Tag pulled in for writeNbt symbols) + miniz. No packet-id prefix
+# (StreamCodec via Packet.codec). Ground truth: tools/PktSelectAdvancementsTabParity.java.
+add_executable(pkt_select_advancements_tab_parity
+    network/protocol/game/PktSelectAdvancementsTabParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_select_advancements_tab_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_select_advancements_tab_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_select_advancements_tab_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_select_advancements_tab_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundSelectBundleItemPacket
+# Byte-exact parity for the ServerboundSelectBundleItemPacket STREAM_CODEC vs the REAL
+# net.minecraft codec. Body (ServerboundSelectBundleItemPacket.java:20-23):
+#   writeVarInt(slotId) + writeVarInt(selectedItemIndex).
+# Packet.codec -> StreamCodec.ofMember: body only, no id/length prefix. No zig-zag, so
+# negatives encode as 5-byte LEB128. Reuses the certified PacketBuffer (FriendlyByteBuf
+# port). Ground truth: tools/PktSelectBundleItemSbParity.java.
+add_executable(pkt_select_bundle_item_sb_parity
+    network/protocol/game/PktSelectBundleItemSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_select_bundle_item_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_select_bundle_item_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_select_bundle_item_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_select_bundle_item_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetBorderCenterPacket STREAM_CODEC parity.
+# Body = double(newCenterX) ++ double(newCenterZ), 16 bytes, no packet-id prefix
+# (Packet.codec body codec). Both fields plain doubles -> exercises the certified
+# PacketBuffer (FriendlyByteBuf port) writeDouble/readDouble. Ground truth:
+# tools/PktSetBorderCenterParity.java.
+add_executable(pkt_set_border_center_parity
+    network/protocol/game/PktSetBorderCenterParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_border_center_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_border_center_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_border_center_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_border_center_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket
+# Byte-exact parity vs the REAL ClientboundSetBorderLerpSizePacket.STREAM_CODEC
+# (Packet.codec over a plain FriendlyByteBuf). Codec body, VERBATIM
+# (ClientboundSetBorderLerpSizePacket.java:29-33): writeDouble(oldSize);
+# writeDouble(newSize); writeVarLong(lerpTime). All-primitive wire
+# (double/double/VarLong) -- no registry/ItemStack/Component/Holder/NBT -- so the
+# certified PacketBuffer (FriendlyByteBuf port) rebuilds the body directly. Links
+# PacketBuffer's full closure (NbtIo/Tag for the writeNbt member it references).
+add_executable(pkt_set_border_lerp_size_parity
+    network/protocol/game/PktSetBorderLerpSizeParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_border_lerp_size_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_border_lerp_size_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_border_lerp_size_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_border_lerp_size_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket
+# Byte-exact parity vs the REAL ClientboundSetBorderSizePacket.STREAM_CODEC
+# (Packet.codec(::write, ::new) over a plain FriendlyByteBuf). Codec body, VERBATIM
+# (ClientboundSetBorderSizePacket.java:23-25): writeDouble(size). Single primitive
+# double (FLOAT64 big-endian) -- no registry/ItemStack/Component/Holder/NBT -- so the
+# certified PacketBuffer (FriendlyByteBuf port) rebuilds the body directly. Links
+# PacketBuffer's full closure (NbtIo/Tag) so the certified port compiles unchanged.
+add_executable(pkt_set_border_size_parity
+    network/protocol/game/PktSetBorderSizeParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_border_size_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_border_size_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_border_size_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_border_size_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(pkt_set_border_warn_delay_parity
+    network/protocol/game/PktSetBorderWarnDelayParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_border_warn_delay_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_border_warn_delay_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_border_warn_delay_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_border_warn_delay_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetBorderWarningDistancePacket
+# 26.1.2 STREAM_CODEC = Packet.codec(::write, ::new); write = FriendlyByteBuf.writeVarInt(this.warningBlocks),
+# read = input.readVarInt(). Packet.codec -> StreamCodec.ofMember: no packet-id prefix, so the whole
+# wire payload is a single signed-int VarInt (LEB128, no zig-zag; negatives -> 5 bytes). The test
+# reproduces it via PacketBuffer.writeVarInt/readVarInt, requiring byte+count parity vs the REAL codec.
+# GT: tools/PktSetBorderWarnDistParity.java. Reuses the certified PacketBuffer (FriendlyByteBuf port);
+# links its closure (NbtIo/Tag for writeNbt symbols) + miniz, bcrypt on WIN32.
+add_executable(pkt_set_border_warn_dist_parity
+    network/protocol/game/PktSetBorderWarnDistParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_border_warn_dist_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_border_warn_dist_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_border_warn_dist_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_border_warn_dist_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket
+# Byte-exact parity vs the REAL ClientboundSetDefaultSpawnPositionPacket.STREAM_CODEC.
+# The packet wraps LevelData.RespawnData(GlobalPos globalPos, float yaw, float pitch).
+# Wire body, in codec order:
+#   writeUtf(dimensionId)   (Identifier.STREAM_CODEC -> STRING_UTF8: VarInt len + UTF-8 bytes)
+#   writeLong(pos.asLong()) (BlockPos.STREAM_CODEC -> writeBlockPos, big-endian long)
+#   writeFloat(yaw)         (ByteBufCodecs.FLOAT, big-endian rawIntBits)
+#   writeFloat(pitch)       (ByteBufCodecs.FLOAT, big-endian rawIntBits)
+# No Holder/ItemStack/Component/NBT/registry-id on the wire -- the dimension is a plain
+# ResourceLocation string -- so the certified PacketBuffer (FriendlyByteBuf port) rebuilds it.
+# Links PacketBuffer.cpp + its closure (NbtIo/Tag for writeNbt symbols) + miniz, bcrypt on WIN32.
+# Ground truth: tools/PktSetDefaultSpawnParity.java.
+add_executable(pkt_set_default_spawn_parity
+    network/protocol/game/PktSetDefaultSpawnParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_default_spawn_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_default_spawn_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_default_spawn_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_default_spawn_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(pkt_set_display_objective_parity
+    network/protocol/game/PktSetDisplayObjectiveParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_display_objective_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_display_objective_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_display_objective_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_display_objective_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(pkt_set_simulation_distance_parity
+    network/protocol/game/PktSetSimulationDistanceParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_simulation_distance_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_simulation_distance_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_simulation_distance_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_simulation_distance_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket
+# Byte-exact parity for ClientboundSetTitlesAnimationPacket vs the REAL STREAM_CODEC:
+# class(int fadeIn, int stay, int fadeOut) -> writeInt(fadeIn) + writeInt(stay) +
+# writeInt(fadeOut) (big-endian 4-byte ints), byte-exact + read round trip. No
+# registry/ItemStack/Component/Holder/NBT, so it exercises the certified PacketBuffer
+# (FriendlyByteBuf port) directly. Ground truth: tools/PktSetTitlesAnimationParity.java.
+# Links the PacketBuffer closure (NbtIo/Tag pulled in for writeNbt symbols) + miniz,
+# and bcrypt on WIN32.
+add_executable(pkt_set_titles_animation_parity
+    network/protocol/game/PktSetTitlesAnimationParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_titles_animation_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_titles_animation_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_titles_animation_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_titles_animation_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundSignUpdatePacket
+# Byte-exact codec parity vs the REAL STREAM_CODEC. Body is exactly:
+#   writeBlockPos(pos)==writeLong(asLong) + writeBoolean(isFrontText) + 4x writeUtf(line).
+# Reuses the certified mc::net::PacketBuffer (the FriendlyByteBuf port); no packet
+# header on the wire. Ground truth: tools/PktSignUpdateSbParity.java.
+add_executable(pkt_signedit_sb_parity
+    network/protocol/game/PktSignUpdateSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_signedit_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_signedit_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_signedit_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_signedit_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundTeleportToEntityPacket
+# Byte-exact parity for the ServerboundTeleportToEntityPacket STREAM_CODEC vs the REAL
+# net.minecraft codec. Body (ServerboundTeleportToEntityPacket.java:13-28):
+#   write : FriendlyByteBuf.writeUUID(this.uuid)
+#   read  : input.readUUID()
+# FriendlyByteBuf.writeUUID = writeLong(MSB) ++ writeLong(LSB), both big-endian 8-byte
+# longs (FriendlyByteBuf.java:498-501). Packet.codec -> StreamCodec.ofMember: body only,
+# no id/length prefix, so the whole wire payload is exactly 16 bytes = MSB(BE)++LSB(BE).
+# Reuses the certified PacketBuffer (FriendlyByteBuf port). GT: tools/PktTeleportToEntitySbParity.java.
+add_executable(pkt_spectate_entity_sb_parity
+    network/protocol/game/PktTeleportToEntitySbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_spectate_entity_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_spectate_entity_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ClientboundStopSoundPacket byte-exact codec
+# parity vs tools/PktStopSoundParity.java. STREAM_CODEC = Packet.codec(write, ctor)
+# (no packet-id prefix). write() branches on (source!=null, name!=null):
+#   both  -> writeByte(3) + writeEnum(source)=writeVarInt(ordinal) + writeIdentifier(name)=writeUtf(toString)
+#   src   -> writeByte(1) + writeEnum(source)
+#   name  -> writeByte(2) + writeIdentifier(name)
+#   none  -> writeByte(0)
+# (ClientboundStopSoundPacket.java 40-56; FriendlyByteBuf.writeEnum 471-473 /
+#  writeIdentifier 585-588 / writeUtf). Reuses the certified PacketBuffer
+# (FriendlyByteBuf port); links its closure (NbtIo/Tag for writeNbt symbols) + miniz
+# (+ bcrypt on Windows).
+add_executable(pkt_stop_sound_parity
+    network/protocol/game/PktStopSoundParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_stop_sound_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_stop_sound_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_stop_sound_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_stop_sound_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundUseItemOnPacket
+# Byte-exact parity vs the REAL ServerboundUseItemOnPacket.STREAM_CODEC. Codec body
+# (write(FriendlyByteBuf), ServerboundUseItemOnPacket.java:30-34) is:
+#   writeEnum(hand) -> VarInt(hand.ordinal()) [MAIN_HAND=0, OFF_HAND=1];
+#   writeBlockHitResult(blockHit) (FriendlyByteBuf.java:636-646):
+#     writeBlockPos(pos) -> writeLong(asLong) BE long;
+#     writeEnum(direction) -> VarInt(direction.ordinal()) [DOWN=0..EAST=5];
+#     writeFloat(loc.x-pos.x()); writeFloat(loc.y-pos.y()); writeFloat(loc.z-pos.z()) BE;
+#     writeBoolean(inside); writeBoolean(worldBorder);
+#   writeVarInt(sequence).
+# No Holder/ItemStack/Component/NBT on the wire -- all primitives. Reuses the certified
+# PacketBuffer (FriendlyByteBuf port); links its full closure (NbtIo/Tag for writeNbt
+# symbols) + miniz, and bcrypt on WIN32. Ground truth: tools/PktUseItemOnSbParity.java.
+add_executable(pkt_use_item_on_sb_parity
+    network/protocol/game/PktUseItemOnSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_use_item_on_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_use_item_on_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_use_item_on_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_use_item_on_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.network.protocol.game.ServerboundUseItemPacket
+# Byte-exact parity for the ServerboundUseItemPacket STREAM_CODEC vs the REAL
+# net.minecraft codec. Body (ServerboundUseItemPacket.java:32-37 write / 25-30 read),
+# IN ORDER: writeEnum(hand)==writeVarInt(hand.ordinal()); writeVarInt(sequence);
+# writeFloat(yRot); writeFloat(xRot). InteractionHand MAIN_HAND=0/OFF_HAND=1
+# (InteractionHand.java:10-13). All fields are primitives PacketBuffer supports
+# (VarInt/VarInt/float/float). Packet.codec -> body only, no id/length prefix.
+# Reuses the certified PacketBuffer (FriendlyByteBuf port); links its full closure
+# (NbtIo/Tag pulled in for writeNbt symbols) + miniz (+ bcrypt on WIN32). Ground
+# truth: tools/PktUseItemSbParity.java.
+add_executable(pkt_use_item_sb_parity
+    network/protocol/game/PktUseItemSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_use_item_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_use_item_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_use_item_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_use_item_sb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
