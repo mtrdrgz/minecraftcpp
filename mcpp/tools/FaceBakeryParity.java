@@ -7,8 +7,10 @@
 //
 //   tools/run_groundtruth.ps1 -Tool FaceBakeryParity -Out mcpp/build/face_bakery.tsv
 
+import com.mojang.math.Quadrant;
 import java.lang.reflect.Method;
 import net.minecraft.client.renderer.FaceInfo;
+import net.minecraft.client.resources.model.cuboid.CuboidFace;
 import net.minecraft.client.resources.model.cuboid.CuboidRotation;
 import net.minecraft.client.resources.model.cuboid.FaceBakery;
 import net.minecraft.core.Direction;
@@ -98,6 +100,34 @@ public class FaceBakeryParity {
                     + "\t" + elemFlag + "\t" + (int) el[1] + "\t" + b(el[2]) + "\t" + (int) el[3]
                     + "\t" + b(elemOrigin.x)+"\t"+b(elemOrigin.y)+"\t"+b(elemOrigin.z)
                     + "\t" + mdl + "\t" + v3(vertex));
+            }
+        }
+
+        // ── bakeVertex UV path: CuboidFace.getU/getV + uvRotation + optional uvTransform ──
+        Quadrant[] QUADS = Quadrant.values(); // R0,R90,R180,R270 -> shift 0,1,2,3
+        float[][] UVSETS = { {0,0,16,16}, {2,4,14,12}, {16,0,0,16}, {5,5,11,11} };
+        for (float[] uv : UVSETS) {
+            CuboidFace.UVs uvs = new CuboidFace.UVs(uv[0], uv[1], uv[2], uv[3]);
+            for (int q = 0; q < QUADS.length; q++) {
+                for (int idx = 0; idx < 4; idx++) {
+                    for (int mdl : new int[]{ -1, 2 }) { // -1 = identity uvTransform, else rotation(QS[mdl])
+                        float rawU = CuboidFace.getU(uvs, QUADS[q], idx);
+                        float rawV = CuboidFace.getV(uvs, QUADS[q], idx);
+                        float tu, tv;
+                        if (mdl < 0) { tu = rawU; tv = rawV; }
+                        else {
+                            Matrix4f uvm = new Matrix4f().rotation(new Quaternionf(QS[mdl][0], QS[mdl][1], QS[mdl][2], QS[mdl][3]));
+                            float cu = (float) cornerToCenter.invoke(null, rawU);
+                            float cv = (float) cornerToCenter.invoke(null, rawV);
+                            Vector3f t = new Vector3f(cu, cv, 0.0F);
+                            uvm.transformPosition(t);
+                            tu = (float) centerToCorner.invoke(null, t.x);
+                            tv = (float) centerToCorner.invoke(null, t.y);
+                        }
+                        O.println("BVUV\t" + b(uv[0])+"\t"+b(uv[1])+"\t"+b(uv[2])+"\t"+b(uv[3])
+                            + "\t" + q + "\t" + idx + "\t" + mdl + "\t" + b(tu) + "\t" + b(tv));
+                    }
+                }
             }
         }
     }

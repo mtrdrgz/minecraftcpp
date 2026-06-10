@@ -117,6 +117,32 @@ inline Vector3f bakeVertexPosition(int facing, int index, const Vector3f& from, 
     return vertex;
 }
 
+// ── CuboidFace UV pipeline (CuboidFace.java:18-24,76-86; Quadrant.rotateVertexIndex) ──
+struct UVs {
+    float minU, minV, maxU, maxV;
+    // CuboidFace.UVs.getVertexU/getVertexV.
+    float getVertexU(int index) const { return (index != 0 && index != 1) ? maxU : minU; }
+    float getVertexV(int index) const { return (index != 0 && index != 3) ? maxV : minV; }
+};
+// Quadrant.rotateVertexIndex(index) = (index + shift) % 4, shift = quadrant ordinal.
+inline int quadrantRotateVertexIndex(int shift, int index) { return (index + shift) % 4; }
+// CuboidFace.getU/getV.
+inline float cuboidFaceGetU(const UVs& uvs, int uvShift, int vertex) { return uvs.getVertexU(quadrantRotateVertexIndex(uvShift, vertex)) / 16.0F; }
+inline float cuboidFaceGetV(const UVs& uvs, int uvShift, int index)  { return uvs.getVertexV(quadrantRotateVertexIndex(uvShift, index)) / 16.0F; }
+
+// FaceBakery.bakeVertex — UV path (FaceBakery.java:151-162). Returns the (u,v) before
+// the atlas-sprite mapping (sprite.getU/getV is texture-dependent, not ported here).
+inline void bakeVertexUV(const UVs& uvs, int uvShift, int index, bool hasUvTransform,
+                         const Matrix4f& uvTransform, float& outU, float& outV) {
+    float rawU = cuboidFaceGetU(uvs, uvShift, index);
+    float rawV = cuboidFaceGetV(uvs, uvShift, index);
+    if (!hasUvTransform) { outU = rawU; outV = rawV; return; }
+    Vector3f t{cornerToCenter(rawU), cornerToCenter(rawV), 0.0F};
+    uvTransform.transformPosition(t);
+    outU = centerToCorner(t.x);
+    outV = centerToCorner(t.y);
+}
+
 } // namespace fb
 
 } // namespace mc::render::model

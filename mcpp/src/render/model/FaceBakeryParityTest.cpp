@@ -84,6 +84,15 @@ int main(int argc, char** argv) {
             j::Vector3f got = fb::bakeVertexPosition(facing, index, from, to, hasElement, origin, elemT, mdl >= 0, modelM);
             v3(got, p, 17, line);
         }
+        else if (t == "BVUV") {
+            fb::UVs uvs{bf(p[1]), bf(p[2]), bf(p[3]), bf(p[4])};
+            int q = std::stoi(p[5]), index = std::stoi(p[6]), mdl = std::stoi(p[7]);
+            j::Matrix4f uvm = mdl >= 0 ? rotM(mdl) : j::Matrix4f{};
+            float u, v;
+            fb::bakeVertexUV(uvs, q, index, mdl >= 0, uvm, u, v);
+            if (fbits(u) != static_cast<uint32_t>(std::stoul(p[8], nullptr, 16)) ||
+                fbits(v) != static_cast<uint32_t>(std::stoul(p[9], nullptr, 16))) fail(line);
+        }
         else fail("UNKNOWN_TAG " + t);
     }
 
