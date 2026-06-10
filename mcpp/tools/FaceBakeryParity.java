@@ -8,6 +8,8 @@
 //   tools/run_groundtruth.ps1 -Tool FaceBakeryParity -Out mcpp/build/face_bakery.tsv
 
 import java.lang.reflect.Method;
+import net.minecraft.client.renderer.FaceInfo;
+import net.minecraft.client.resources.model.cuboid.CuboidRotation;
 import net.minecraft.client.resources.model.cuboid.FaceBakery;
 import net.minecraft.core.Direction;
 import org.joml.Matrix4f;
@@ -66,6 +68,37 @@ public class FaceBakeryParity {
             Vector3fc[] pos = new Vector3fc[]{ new Vector3f(p0[0],p0[1],p0[2]), new Vector3f(p1[0],p1[1],p1[2]), new Vector3f(p2[0],p2[1],p2[2]) };
             Direction r = (Direction) calcFacing.invoke(null, (Object) pos);
             O.println("FACE\t" + b(p0[0])+"\t"+b(p0[1])+"\t"+b(p0[2])+"\t"+b(p1[0])+"\t"+b(p1[1])+"\t"+b(p1[2])+"\t"+b(p2[0])+"\t"+b(p2[1])+"\t"+b(p2[2])+"\t" + (r == null ? -1 : r.ordinal()));
+        }
+
+        // ── bakeVertex POSITION path (FaceInfo.select.div(16) + element + model rotation) ──
+        Direction[] DIRS = Direction.values();
+        Direction.Axis[] AXES = { Direction.Axis.X, Direction.Axis.Y, Direction.Axis.Z };
+        Vector3f BLOCK_MIDDLE = new Vector3f(0.5f, 0.5f, 0.5f);
+        float[][] BOXES = { {0,0,0, 16,16,16}, {2,3,4, 14,12,10} };
+        // element variants: {flag, axis, angle, rescale}; -1 axis means none
+        float[][] ELEMS = { {0,0,0,0}, {1,0,22.5f,0}, {1,1,45f,1}, {1,2,-45f,1} };
+        Vector3f elemOrigin = new Vector3f(0.5f, 0.5f, 0.5f);
+        int[] MODELS = { -1, 1, 3 }; // index into QS, or -1 for none
+        for (int f = 0; f < 6; f++) for (int idx = 0; idx < 4; idx++) for (float[] box : BOXES) {
+            Vector3f from = new Vector3f(box[0], box[1], box[2]);
+            Vector3f to = new Vector3f(box[3], box[4], box[5]);
+            for (float[] el : ELEMS) for (int mdl : MODELS) {
+                Vector3f vertex = FaceInfo.fromFacing(DIRS[f]).getVertexInfo(idx).select(from, to).div(16.0F);
+                int elemFlag = (int) el[0];
+                if (elemFlag == 1) {
+                    CuboidRotation cr = new CuboidRotation(elemOrigin, new CuboidRotation.SingleAxisRotation(AXES[(int) el[1]], el[2]), el[3] != 0);
+                    rotateVertexBy.invoke(null, vertex, cr.origin(), cr.transform());
+                }
+                if (mdl >= 0) {
+                    Matrix4f mm = new Matrix4f().rotation(new Quaternionf(QS[mdl][0], QS[mdl][1], QS[mdl][2], QS[mdl][3]));
+                    rotateVertexBy.invoke(null, vertex, BLOCK_MIDDLE, mm);
+                }
+                O.println("BVP\t" + f + "\t" + idx
+                    + "\t" + b(box[0])+"\t"+b(box[1])+"\t"+b(box[2])+"\t"+b(box[3])+"\t"+b(box[4])+"\t"+b(box[5])
+                    + "\t" + elemFlag + "\t" + (int) el[1] + "\t" + b(el[2]) + "\t" + (int) el[3]
+                    + "\t" + b(elemOrigin.x)+"\t"+b(elemOrigin.y)+"\t"+b(elemOrigin.z)
+                    + "\t" + mdl + "\t" + v3(vertex));
+            }
         }
     }
 }

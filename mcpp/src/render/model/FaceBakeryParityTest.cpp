@@ -5,6 +5,7 @@
 //   face_bakery_parity --cases mcpp/build/face_bakery.tsv
 
 #include "FaceBakery.h"
+#include "CuboidRotation.h"
 
 #include <bit>
 #include <cstdint>
@@ -69,6 +70,19 @@ int main(int argc, char** argv) {
         else if (t == "FACE") {
             int got = fb::calculateFacing(j::Vector3f{bf(p[1]),bf(p[2]),bf(p[3])}, j::Vector3f{bf(p[4]),bf(p[5]),bf(p[6])}, j::Vector3f{bf(p[7]),bf(p[8]),bf(p[9])});
             if (got != std::stoi(p[10])) fail(line + " got=" + std::to_string(got));
+        }
+        else if (t == "BVP") {
+            namespace cr = mc::render::model::cuboid;
+            int facing = std::stoi(p[1]), index = std::stoi(p[2]);
+            j::Vector3f from{bf(p[3]),bf(p[4]),bf(p[5])}, to{bf(p[6]),bf(p[7]),bf(p[8])};
+            bool hasElement = std::stoi(p[9]) != 0;
+            int axis = std::stoi(p[10]); float angle = bf(p[11]); bool rescale = std::stoi(p[12]) != 0;
+            j::Vector3f origin{bf(p[13]),bf(p[14]),bf(p[15])};
+            int mdl = std::stoi(p[16]);
+            j::Matrix4f elemT = hasElement ? cr::computeTransform(cr::singleAxisTransformation(axis, angle), rescale) : j::Matrix4f{};
+            j::Matrix4f modelM = mdl >= 0 ? rotM(mdl) : j::Matrix4f{};
+            j::Vector3f got = fb::bakeVertexPosition(facing, index, from, to, hasElement, origin, elemT, mdl >= 0, modelM);
+            v3(got, p, 17, line);
         }
         else fail("UNKNOWN_TAG " + t);
     }

@@ -71,6 +71,52 @@ inline int calculateFacing(const Vector3f& p0, const Vector3f& p1, const Vector3
     return findClosestDirection(normal);
 }
 
+// ── net.minecraft.client.renderer.FaceInfo corner tables (FaceInfo.java:11-105) ──
+// Extent ordinals: MIN_X=0,MIN_Y=1,MIN_Z=2,MAX_X=3,MAX_Y=4,MAX_Z=5.
+// FACE_INFO[facing][vertex] = {xFace, yFace, zFace} extents; facing = Direction ordinal.
+inline constexpr int FACE_INFO[6][4][3] = {
+    // DOWN
+    {{0,1,5},{0,1,2},{3,1,2},{3,1,5}},
+    // UP
+    {{0,4,2},{0,4,5},{3,4,5},{3,4,2}},
+    // NORTH
+    {{3,4,2},{3,1,2},{0,1,2},{0,4,2}},
+    // SOUTH
+    {{0,4,5},{0,1,5},{3,1,5},{3,4,5}},
+    // WEST
+    {{0,4,2},{0,1,2},{0,1,5},{0,4,5}},
+    // EAST
+    {{3,4,5},{3,1,5},{3,1,2},{3,4,2}},
+};
+// FaceInfo.Extent.select(min,max).
+inline float extentSelect(int extent, const Vector3f& mn, const Vector3f& mx) {
+    switch (extent) {
+        case 0: return mn.x; case 1: return mn.y; case 2: return mn.z;
+        case 3: return mx.x; case 4: return mx.y; default: return mx.z; // 5
+    }
+}
+// FaceInfo.VertexInfo.select(min,max) -> corner position.
+inline Vector3f faceInfoSelect(int facing, int index, const Vector3f& from, const Vector3f& to) {
+    const int* e = FACE_INFO[facing][index];
+    return Vector3f{extentSelect(e[0], from, to), extentSelect(e[1], from, to), extentSelect(e[2], from, to)};
+}
+
+inline const Vector3f BLOCK_MIDDLE{0.5f, 0.5f, 0.5f};
+
+// FaceBakery.bakeVertex — POSITION path only (FaceBakery.java:141-149,164). The UV
+// path (CuboidFace.getU/getV + uvRotation + uvTransform) is not yet ported.
+//   hasElement -> apply rotateVertexBy(vertex, elementOrigin, elementTransform)
+//   hasModel   -> apply rotateVertexBy(vertex, BLOCK_MIDDLE, modelMatrix)
+inline Vector3f bakeVertexPosition(int facing, int index, const Vector3f& from, const Vector3f& to,
+                                   bool hasElement, const Vector3f& elementOrigin, const Matrix4f& elementTransform,
+                                   bool hasModel, const Matrix4f& modelMatrix) {
+    Vector3f vertex = faceInfoSelect(facing, index, from, to);
+    vertex.div(16.0F);
+    if (hasElement) rotateVertexBy(vertex, elementOrigin, elementTransform);
+    if (hasModel)   rotateVertexBy(vertex, BLOCK_MIDDLE, modelMatrix);
+    return vertex;
+}
+
 } // namespace fb
 
 } // namespace mc::render::model

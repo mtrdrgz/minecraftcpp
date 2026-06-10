@@ -23,7 +23,12 @@
 namespace mc::render::model::joml {
 
 // ── org.joml.Math ────────────────────────────────────────────────────────────
-inline float jfma(float a, float b, float c) { return std::fmaf(a, b, c); }
+// org.joml.Math.fma — by DEFAULT org.joml.Options.USE_MATH_FMA is false, so JOML
+// uses a plain (two-rounding) multiply-add, NOT java.lang.Math.fma. Matching it with
+// std::fmaf (a true single-rounding FMA) is a 1-ULP bug that only shows on certain
+// operands (e.g. axis-angle element-rotation matrices in FaceBakery.bakeVertex);
+// plain a*b+c is the correct port for the default config the ground truth runs under.
+inline float jfma(float a, float b, float c) { return a * b + c; }
 
 inline float jsin(float x) { return (float)std::sin((double)x); }
 
