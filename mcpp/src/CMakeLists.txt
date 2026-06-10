@@ -5334,3 +5334,8 @@ if(WIN32)
     target_link_libraries(dcp_misc_parity PRIVATE bcrypt)
 endif()
 set_target_properties(dcp_misc_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: UVPair packed-UV (BakedQuad vertex UV packing) =====
+add_executable(uvpair_parity render/model/UVPairParityTest.cpp)
+target_include_directories(uvpair_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(uvpair_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
