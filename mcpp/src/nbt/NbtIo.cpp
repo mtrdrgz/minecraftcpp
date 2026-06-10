@@ -200,6 +200,14 @@ std::optional<NbtCompound> NbtReader::readRootCompound() {
     }
 }
 
+NbtReader::AnyCompoundResult NbtReader::readAnyRootCompound() {
+    uint8_t typeByte = read<uint8_t>();
+    if ((TagType)typeByte == TagType::End) return { std::nullopt, true };
+    if ((TagType)typeByte != TagType::Compound)
+        throw std::runtime_error("Not a compound tag: type " + std::to_string((int)typeByte));
+    return { readCompound(), false };
+}
+
 std::optional<NbtCompound> NbtReader::readGzip(std::span<const uint8_t> data) {
     try {
         auto decompressed = gzipDecompress(data);
@@ -315,6 +323,13 @@ std::vector<uint8_t> NbtWriter::writeRootCompound(std::string_view name, const N
     NbtWriter w;
     w.writeByte((int8_t)TagType::Compound);
     w.writeString(name);
+    w.writeCompound(c);
+    return std::move(w.m_buf);
+}
+
+std::vector<uint8_t> NbtWriter::writeAnyRootCompound(const NbtCompound& c) {
+    NbtWriter w;
+    w.writeByte((int8_t)TagType::Compound);
     w.writeCompound(c);
     return std::move(w.m_buf);
 }

@@ -254,6 +254,21 @@ set_target_properties(placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Network primitive codec parity vs the real FriendlyByteBuf/VarInt/VarLong.
+# Ground truth: tools/FriendlyByteBufParity.java.
+add_executable(packet_buffer_parity
+    network/PacketBufferParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(packet_buffer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(packet_buffer_parity PRIVATE miniz)
+set_target_properties(packet_buffer_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # NBT tag-codec parity vs the real net.minecraft.nbt: canonical read dumps +
 # byte-exact rewrite of real world payloads (level.dat, chunk NBTs) + a synthetic
 # all-tag-types / modified-UTF-8 case. Ground truth: tools/NbtParity.java.

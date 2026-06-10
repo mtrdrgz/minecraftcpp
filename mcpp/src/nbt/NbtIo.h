@@ -31,6 +31,12 @@ public:
     // Read a root named compound (top-level of .nbt files, level.dat payload after gzip)
     std::optional<NbtCompound> readRootCompound();
 
+    // NbtIo.readAnyTag framing (the NETWORK form since 1.20.2, NbtIo.java:146-149):
+    // type byte + UNNAMED payload; type 0 (EndTag) is Java's encoding of null.
+    // Returns {nullopt, wasEnd=true} for EndTag, a compound for type 10, throws else.
+    struct AnyCompoundResult { std::optional<NbtCompound> compound; bool wasEnd = false; };
+    AnyCompoundResult readAnyRootCompound();
+
     // Read from gzip-compressed data (level.dat etc.)
     static std::optional<NbtCompound> readGzip(std::span<const uint8_t> compressed);
     // Read from zlib-compressed data (chunk data in region files)
@@ -75,6 +81,9 @@ class NbtWriter {
 public:
     // Writes a root named compound to a byte vector
     static std::vector<uint8_t> writeRootCompound(std::string_view name, const NbtCompound&);
+    // NbtIo.writeAnyTag framing (network, NbtIo.java:151-156): type byte + UNNAMED
+    // payload (no root name string).
+    static std::vector<uint8_t> writeAnyRootCompound(const NbtCompound&);
     // Writes with gzip compression
     static std::vector<uint8_t> writeGzip(std::string_view name, const NbtCompound&);
     // Writes with zlib compression

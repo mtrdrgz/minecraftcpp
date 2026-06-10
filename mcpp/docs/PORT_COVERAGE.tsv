@@ -2720,7 +2720,7 @@ net/minecraft/network/CompressionEncoder.java	unvisited
 net/minecraft/network/Connection.java	unvisited	
 net/minecraft/network/ConnectionProtocol.java	unvisited	
 net/minecraft/network/DisconnectionDetails.java	unvisited	
-net/minecraft/network/FriendlyByteBuf.java	unvisited	
+net/minecraft/network/FriendlyByteBuf.java	partial	primitives+NBT framing proven (packet_buffer_parity 31/0); the remaining read/write surface (BlockPos/UUID/collections/components/...) unproven
 net/minecraft/network/HandlerNames.java	unvisited	
 net/minecraft/network/HashedPatchMap.java	unvisited	
 net/minecraft/network/HashedStack.java	unvisited	
@@ -2746,9 +2746,9 @@ net/minecraft/network/SkipPacketEncoderException.java	unvisited
 net/minecraft/network/SkipPacketException.java	unvisited	
 net/minecraft/network/TickablePacketListener.java	unvisited	
 net/minecraft/network/UnconfiguredPipelineHandler.java	unvisited	
-net/minecraft/network/Utf8String.java	unvisited	
-net/minecraft/network/VarInt.java	unvisited	
-net/minecraft/network/VarLong.java	unvisited	
+net/minecraft/network/Utf8String.java	ported	PacketBuffer.cpp; packet_buffer_parity 31/0
+net/minecraft/network/VarInt.java	ported	PacketBuffer.cpp; packet_buffer_parity 31/0
+net/minecraft/network/VarLong.java	ported	PacketBuffer.cpp; packet_buffer_parity 31/0
 net/minecraft/network/Varint21FrameDecoder.java	unvisited	
 net/minecraft/network/Varint21LengthFieldPrepender.java	unvisited	
 net/minecraft/network/chat/ChatDecorator.java	unvisited	
