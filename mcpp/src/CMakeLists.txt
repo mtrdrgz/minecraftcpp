@@ -293,6 +293,18 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Position long-packing codecs parity vs the real BlockPos/ChunkPos/SectionPos
+# (asLong/getX/getY/getZ/offset, blockToSectionCoord, sectionRelative*). The basis
+# of chunk/region serialization + long-keyed maps. Ground truth: tools/PosCodecParity.java.
+add_executable(pos_codec_parity
+    core/PosCodecParityTest.cpp
+)
+target_include_directories(pos_codec_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(pos_codec_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Mth (engine-wide math utility) parity vs the real net.minecraft.util.Mth — pure
 # functions, bit-exact (sin/cos table, atan2 LUT, fastInvSqrt/CubeRoot, hsv,
 # murmur, wrapDegrees, lerp/map families, ...). Ground truth: tools/MthParity.java.
