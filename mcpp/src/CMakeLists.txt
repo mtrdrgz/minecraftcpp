@@ -330,6 +330,23 @@ set_target_properties(joml_math_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Entity collision-slide parity vs net.minecraft.world.entity.Entity.collideWithShapes
+# (axis-ordered AABB-vs-VoxelShape resolution). On certified Shapes.collide + AABB +
+# Vec3. Ground truth: tools/EntityCollisionParity.java.
+add_executable(entity_collision_parity
+    world/entity/EntityCollisionParityTest.cpp
+    world/phys/AABB.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/Shapes.cpp
+)
+target_include_directories(entity_collision_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(entity_collision_parity PRIVATE glm)
+set_target_properties(entity_collision_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Entity movement-input math parity vs net.minecraft.world.entity.Entity.getInputVector
 # (WASD input + yaw -> world delta; core of moveRelative). On certified Vec3 + Mth.
 # Ground truth: tools/EntityMovementParity.java.
