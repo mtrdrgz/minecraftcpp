@@ -69,6 +69,16 @@
 #include "SimpleBlockFeature.h"
 #include "RandomSelectorFeature.h"
 #include "MonsterRoomFeature.h"
+#include "SnowAndFreezeFeature.h"
+#include "LakeFeature.h"
+#include "BlockColumnFeature.h"
+#include "SpikeFeature.h"
+#include "BlockBlobFeature.h"
+#include "GeodeFeature.h"
+#include "DesertWellFeature.h"
+#include "CaveFeatures.h"
+#include "DripstoneFeatures.h"
+#include "../FloatProvider.h"
 #include "FeatureSorter.h"
 #include "BiomeFeatures.h"
 #include "GenerationStep.h"
@@ -87,6 +97,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <optional>
@@ -207,9 +218,15 @@ struct DecoBiomeContext {
     std::function<std::string(int, int, int)> noiseBiome;       // quart -> biome (chunk-cache clamped)
     const BiomeFeatures* features = nullptr;
 
-    bool hasFeatureAt(const std::string& featureKey, mc::BlockPos pos) const {
+    // WorldGenRegion.getBiome(pos) == BiomeManager zoomed lookup over the
+    // chunk-cached quart biomes (the same resolution the surface/biome filter use).
+    std::string zoomBiome(mc::BlockPos pos) const {
         const std::array<int, 3> q = BiomeManager::debugSelectQuart(zoomSeed, pos.x, pos.y, pos.z);
-        const std::string biome = noiseBiome(q[0], q[1], q[2]);
+        return noiseBiome(q[0], q[1], q[2]);
+    }
+
+    bool hasFeatureAt(const std::string& featureKey, mc::BlockPos pos) const {
+        const std::string biome = zoomBiome(pos);
         // BiomeGenerationSettings.hasFeature: the flattened feature set over all steps.
         for (int step = 0; step < GenerationStep::COUNT; ++step)
             if (features->biomeHasFeature(biome, step, featureKey)) return true;
@@ -217,6 +234,13 @@ struct DecoBiomeContext {
     }
 };
 const DecoBiomeContext* g_biomeCtx = nullptr;   // set per case before decorating
+
+// Per-biome climate settings (Biome.ClimateSettings codec: has_precipitation,
+// temperature, optional temperature_modifier), loaded once from the biome JSONs;
+// fail-closed lookup for freeze_top_layer / lake freeze.
+std::map<std::string, mc::levelgen::feature::BiomeClimate> g_biomeClimate;
+long long g_curLevelSeed = 0;                   // level.getSeed() for the running case
+long long g_skippedScheduleTicks = 0;           // scheduleTick: needs a ServerLevel (hard no-op, counted)
 
 // The per-case level, reachable from cached feature placers (the multiface side
 // map and postprocess marks live on it). Set/cleared alongside g_biomeCtx.
@@ -236,6 +260,25 @@ IntProviderPtr loadIntProvider(const json& j) {
     if (t == "biased_to_bottom") return BiasedToBottomInt::of(j.at("min_inclusive").get<int>(), j.at("max_inclusive").get<int>());
     if (t == "clamped") return ClampedInt::of(loadIntProvider(j.at("source")), j.at("min_inclusive").get<int>(), j.at("max_inclusive").get<int>());
     if (t == "trapezoid") return TrapezoidInt::of(j.at("min").get<int>(), j.at("max").get<int>(), j.value("plateau", 0));
+    // ClampedNormalInt.sample (ClampedNormalInt.java:31-37):
+    // (int)Mth.clamp(Mth.normal(random, mean, deviation), min, max) — one
+    // nextGaussian draw.
+    if (t == "clamped_normal") {
+        struct ClampedNormalInt final : public mc::valueproviders::IntProvider {
+            float mean, deviation, minInclusiveF, maxInclusiveF;
+            ClampedNormalInt(float m, float d, float mn, float mx) : mean(m), deviation(d), minInclusiveF(mn), maxInclusiveF(mx) {}
+            std::int32_t sample(RandomSource& random) const override {
+                const float v = mc::valueproviders::mthClampF(
+                    mc::valueproviders::mthNormal(random, mean, deviation), minInclusiveF, maxInclusiveF);
+                return static_cast<std::int32_t>(v);
+            }
+            std::int32_t minInclusive() const override { return static_cast<std::int32_t>(minInclusiveF); }
+            std::int32_t maxInclusive() const override { return static_cast<std::int32_t>(maxInclusiveF); }
+        };
+        return std::make_shared<ClampedNormalInt>(
+            j.at("mean").get<float>(), j.at("deviation").get<float>(),
+            static_cast<float>(j.at("min_inclusive").get<int>()), static_cast<float>(j.at("max_inclusive").get<int>()));
+    }
     // WeightedListInt (WeightedListInt.java): distribution entries {data: IntProvider,
     // weight}; one nextInt(totalWeight) then the chosen provider samples.
     if (t == "weighted_list") {
@@ -246,6 +289,20 @@ IntProviderPtr loadIntProvider(const json& j) {
     }
     throw std::runtime_error("unsupported int_provider: " + t);
 }
+// FloatProvider codecs: a bare number is a constant (FloatProviderType dispatch
+// falls back to the inline constant), else {type: uniform|clamped_normal|trapezoid}.
+mc::valueproviders::FloatProviderPtr loadFloatProvider(const json& j) {
+    using namespace mc::valueproviders;
+    if (j.is_number()) return ConstantFloat::of(j.get<float>());
+    const std::string t = stripNs(j.at("type").get<std::string>());
+    if (t == "constant") return ConstantFloat::of(j.at("value").get<float>());
+    if (t == "uniform") return UniformFloat::of(j.at("min_inclusive").get<float>(), j.at("max_exclusive").get<float>());
+    if (t == "clamped_normal") return ClampedNormalFloat::of(
+        j.at("mean").get<float>(), j.at("deviation").get<float>(), j.at("min").get<float>(), j.at("max").get<float>());
+    if (t == "trapezoid") return TrapezoidFloat::of(j.at("min").get<float>(), j.at("max").get<float>(), j.at("plateau").get<float>());
+    throw std::runtime_error("unsupported float_provider: " + t);
+}
+
 mc::levelgen::VerticalAnchorPtr loadVerticalAnchor(const json& j) {
     if (j.contains("absolute")) return mc::levelgen::VerticalAnchors::absolute(j.at("absolute").get<int>());
     if (j.contains("above_bottom")) return mc::levelgen::VerticalAnchors::aboveBottom(j.at("above_bottom").get<int>());
@@ -367,6 +424,42 @@ std::function<bool(WorldGenLevel&, BlockPos)> loadBlockPredicate(const json& j) 
             return level.canSurvive(state, BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] });
         };
     }
+    // HasSturdyFacePredicate (HasSturdyFacePredicate.java): the state at
+    // origin+offset isFaceSturdy(direction).
+    if (t == "has_sturdy_face") {
+        const std::string d = j.at("direction").get<std::string>();
+        int dirIdx;
+        if (d == "down") dirIdx = 0; else if (d == "up") dirIdx = 1;
+        else if (d == "north") dirIdx = 2; else if (d == "south") dirIdx = 3;
+        else if (d == "west") dirIdx = 4; else if (d == "east") dirIdx = 5;
+        else throw std::runtime_error("has_sturdy_face: bad direction " + d);
+        return [off, dirIdx](WorldGenLevel& level, BlockPos p) {
+            const std::string st = level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] });
+            bool defaulted = false;
+            const bool r = mc::block::isFaceSturdyFull(st, dirIdx, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(st));
+            return r;
+        };
+    }
+    // SolidPredicate (SolidPredicate.java:17-19): state.isSolid() at origin+offset.
+    if (t == "solid") {
+        return [off](WorldGenLevel& level, BlockPos p) {
+            bool defaulted = false;
+            const bool r = mc::block::isSolid(
+                level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] }), &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(
+                level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] })));
+            return r;
+        };
+    }
+    // InsideWorldBoundsPredicate (InsideWorldBoundsPredicate.java:19-21):
+    // level.isInsideBuildHeight(pos + offset) — minY <= y < maxY.
+    if (t == "inside_world_bounds") {
+        return [off](WorldGenLevel&, BlockPos p) {
+            const int y = p.y + off[1];
+            return y >= mc::CHUNK_MIN_Y && y < mc::CHUNK_MAX_Y;
+        };
+    }
     throw std::runtime_error("unsupported block_predicate: " + t);
 }
 
@@ -427,6 +520,79 @@ mc::levelgen::feature::DiskStateProvider loadStateProvider(const json& j) {
             throw std::logic_error("weighted_state_provider: selection exceeded total weight");
         };
     }
+    // NoiseThresholdProvider.getState (NoiseThresholdProvider.java:58-66) over
+    // NoiseBasedStateProvider's noise = NormalNoise.create(WorldgenRandom(
+    // LegacyRandomSource(seed)), parameters) and getNoiseValue(pos, scale) =
+    // noise.getValue(x*scale, y*scale, z*scale) (NoiseBasedStateProvider.java:28-38).
+    // value < threshold -> Util.getRandom(lowStates) (one nextInt); else ONE
+    // nextFloat: < highChance -> Util.getRandom(highStates) else defaultState.
+    if (t == "noise_threshold_provider") {
+        const long long seed = j.at("seed").get<long long>();
+        const json& nj = j.at("noise");
+        mc::levelgen::NoiseParameters params;
+        params.firstOctave = nj.at("firstOctave").get<int>();
+        for (const auto& a : nj.at("amplitudes")) params.amplitudes.push_back(a.get<double>());
+        const float scale = j.at("scale").get<float>();
+        const float threshold = j.at("threshold").get<float>();
+        const float highChance = j.at("high_chance").get<float>();
+        const std::string defaultState = stateName(j.at("default_state"));
+        auto lowStates = std::make_shared<std::vector<std::string>>();
+        for (const auto& s : j.at("low_states")) lowStates->push_back(stateName(s));
+        auto highStates = std::make_shared<std::vector<std::string>>();
+        for (const auto& s : j.at("high_states")) highStates->push_back(stateName(s));
+        if (lowStates->empty() || highStates->empty()) throw std::runtime_error("noise_threshold_provider: empty state list");
+        auto noise = std::make_shared<mc::levelgen::NormalNoise>([&] {
+            mc::levelgen::WorldgenRandom random(std::make_shared<mc::levelgen::LegacyRandomSource>(seed));
+            return mc::levelgen::NormalNoise::create(random, params);
+        }());
+        return [noise, scale, threshold, highChance, defaultState, lowStates, highStates](
+                   WorldGenLevel&, RandomSource& random, BlockPos pos) -> std::optional<std::string> {
+            const double s = static_cast<double>(scale);
+            const double localValue = noise->getValue(pos.x * s, pos.y * s, pos.z * s);
+            if (localValue < static_cast<double>(threshold)) {
+                return (*lowStates)[static_cast<std::size_t>(random.nextInt(static_cast<int>(lowStates->size())))];
+            }
+            return random.nextFloat() < highChance
+                ? (*highStates)[static_cast<std::size_t>(random.nextInt(static_cast<int>(highStates->size())))]
+                : defaultState;
+        };
+    }
+    // NoiseProvider.getState (NoiseProvider.java:38-52): pick states[(int)
+    // (clamp((1+noise)/2, 0, 0.9999) * size)] — NO RNG draws.
+    if (t == "noise_provider") {
+        const long long seed = j.at("seed").get<long long>();
+        const json& nj = j.at("noise");
+        mc::levelgen::NoiseParameters params;
+        params.firstOctave = nj.at("firstOctave").get<int>();
+        for (const auto& a : nj.at("amplitudes")) params.amplitudes.push_back(a.get<double>());
+        const float scale = j.at("scale").get<float>();
+        auto states = std::make_shared<std::vector<std::string>>();
+        for (const auto& e : j.at("states")) states->push_back(stateName(e));
+        if (states->empty()) throw std::runtime_error("noise_provider: empty states");
+        auto noise = std::make_shared<mc::levelgen::NormalNoise>([&] {
+            mc::levelgen::WorldgenRandom random(std::make_shared<mc::levelgen::LegacyRandomSource>(seed));
+            return mc::levelgen::NormalNoise::create(random, params);
+        }());
+        return [noise, scale, states](WorldGenLevel&, RandomSource&, BlockPos pos) -> std::optional<std::string> {
+            const double sc = static_cast<double>(scale);
+            const double noiseValue = noise->getValue(pos.x * sc, pos.y * sc, pos.z * sc);
+            double placementValue = (1.0 + noiseValue) / 2.0;                       // Mth.clamp(.., 0, 0.9999)
+            placementValue = placementValue < 0.0 ? 0.0 : std::min(placementValue, 0.9999);
+            return (*states)[static_cast<std::size_t>(placementValue * static_cast<double>(states->size()))];
+        };
+    }
+    // RandomizedIntStateProvider.getState (RandomizedIntStateProvider.java:58-70):
+    // source.getState first, then values.sample(random) — the DRAW HAPPENS even
+    // though the int property (cave_vines AGE) is id-invisible.
+    if (t == "randomized_int_state_provider") {
+        auto source = std::make_shared<mc::levelgen::feature::DiskStateProvider>(loadStateProvider(j.at("source")));
+        auto values = loadIntProvider(j.at("values"));
+        return [source, values](WorldGenLevel& level, RandomSource& random, BlockPos pos) -> std::optional<std::string> {
+            std::optional<std::string> state = (*source)(level, random, pos);
+            (void)values->sample(random);   // setValue(property, sample): id unchanged
+            return state;
+        };
+    }
     throw std::runtime_error("unsupported state_provider: " + t);
 }
 
@@ -475,6 +641,24 @@ std::shared_ptr<const PlacementModifier> loadModifier(const json& j, const std::
     // xz_spread sampled for X, then y_spread, then xz_spread again for Z.
     if (t == "random_offset")
         return std::make_shared<RandomOffsetPlacement>(loadIntProvider(j.at("xz_spread")), loadIntProvider(j.at("y_spread")));
+    // NoiseThresholdCountPlacement.count (NoiseThresholdCountPlacement.java:33-37):
+    // BIOME_INFO_NOISE at (x/200, z/200) < noise_level ? below_noise : above_noise.
+    if (t == "noise_threshold_count")
+        return std::make_shared<NoiseThresholdCountPlacement>(
+            j.at("noise_level").get<double>(), j.at("below_noise").get<int>(), j.at("above_noise").get<int>());
+    // EnvironmentScanPlacement (EnvironmentScanPlacement.java:48-71); the codec's
+    // allowed_search_condition defaults to BlockPredicate.alwaysTrue() (:22).
+    if (t == "environment_scan") {
+        const std::string dir = j.at("direction_of_search").get<std::string>();
+        if (dir != "up" && dir != "down") throw std::runtime_error("environment_scan: bad direction " + dir);
+        auto target = loadBlockPredicate(j.at("target_condition"));
+        std::function<bool(WorldGenLevel&, BlockPos)> allowed;
+        if (j.contains("allowed_search_condition")) allowed = loadBlockPredicate(j.at("allowed_search_condition"));
+        else allowed = [](WorldGenLevel&, BlockPos) { return true; };
+        return std::make_shared<EnvironmentScanPlacement>(
+            dir == "up" ? 1 : -1, std::move(target), std::move(allowed),
+            j.at("max_steps").get<int>(), mc::CHUNK_MIN_Y, mc::CHUNK_MAX_Y);
+    }
     throw std::runtime_error("unsupported placement modifier: " + t);
 }
 
@@ -732,7 +916,10 @@ public:
         // lilac, rose_bush, peony — DoublePlantBlock.java:77-84 defers to super for
         // LOWER, the half the features test).
         static const std::set<std::string> vegetationFamily = {
-            "minecraft:oak_sapling", "minecraft:birch_sapling",
+            "minecraft:oak_sapling", "minecraft:birch_sapling", "minecraft:spruce_sapling",
+            // FlowerBedBlock (wildflowers, pink_petals) extends VegetationBlock
+            // without overriding canSurvive/mayPlaceOn (FlowerBedBlock.java:23).
+            "minecraft:wildflowers", "minecraft:pink_petals",
             "minecraft:short_grass", "minecraft:fern", "minecraft:bush", "minecraft:firefly_bush",
             "minecraft:dandelion", "minecraft:poppy", "minecraft:blue_orchid", "minecraft:allium",
             "minecraft:azure_bluet", "minecraft:red_tulip", "minecraft:orange_tulip",
@@ -773,6 +960,131 @@ public:
             const bool sturdy = mc::block::isFaceSturdyUp(mc::block::blockName(getBlockState(belowPos)), &defaulted);
             if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(getBlockState(belowPos)));
             return sturdy;
+        }
+        // CactusBlock.canSurvive (CactusBlock.java:113-123): every horizontal
+        // neighbour must be non-solid and not lava; below cactus or
+        // #supports_cactus; above must not be liquid.
+        if (block == "minecraft:cactus") {
+            static constexpr int HX[4] = { 0, 1, 0, -1 }, HZ[4] = { -1, 0, 1, 0 };   // N,E,S,W
+            for (int d = 0; d < 4; ++d) {
+                const BlockPos np{ pos.x + HX[d], pos.y, pos.z + HZ[d] };
+                const std::string neighbor = getBlockState(np);
+                bool defaulted = false;
+                const bool solid = mc::block::isSolid(neighbor, &defaulted);
+                if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(neighbor));
+                if (solid || mc::material::fluidStateOf(neighbor).is(*g_fluidTags, "minecraft:lava")) return false;
+            }
+            const std::string below = mc::block::blockName(getBlockState(belowPos));
+            const std::string above = getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z });
+            const bool aboveLiquid = above == "minecraft:water" || above == "minecraft:lava";   // BlockStateBase.liquid()
+            return (below == "minecraft:cactus" || g_tags->isInTag(below, "minecraft:supports_cactus")) && !aboveLiquid;
+        }
+        // SugarCaneBlock.canSurvive (SugarCaneBlock.java:89-108): below sugar_cane
+        // -> true; below #supports_sugar_cane -> true iff any horizontal neighbour
+        // OF THE BELOW CELL has fluid #supports_sugar_cane_adjacently or block
+        // #supports_sugar_cane_adjacently.
+        if (block == "minecraft:sugar_cane") {
+            const std::string below = mc::block::blockName(getBlockState(belowPos));
+            if (below == "minecraft:sugar_cane") return true;
+            if (g_tags->isInTag(below, "minecraft:supports_sugar_cane")) {
+                static constexpr int HX[4] = { 0, 1, 0, -1 }, HZ[4] = { -1, 0, 1, 0 };   // N,E,S,W
+                for (int d = 0; d < 4; ++d) {
+                    const BlockPos np{ belowPos.x + HX[d], belowPos.y, belowPos.z + HZ[d] };
+                    const std::string st = getBlockState(np);
+                    if (mc::material::fluidStateOf(st).is(*g_fluidTags, "minecraft:supports_sugar_cane_adjacently")
+                        || g_tags->isInTag(mc::block::blockName(st), "minecraft:supports_sugar_cane_adjacently")) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        // LilyPadBlock via VegetationBlock.canSurvive: mayPlaceOn(belowState, level,
+        // belowPos) (LilyPadBlock.java:49-53) = (fluid(below) #supports_lily_pad ||
+        // belowBlock #supports_lily_pad) && fluid(below.above() == pos) is EMPTY.
+        if (block == "minecraft:lily_pad") {
+            const std::string below = getBlockState(belowPos);
+            const bool support = mc::material::fluidStateOf(below).is(*g_fluidTags, "minecraft:supports_lily_pad")
+                || g_tags->isInTag(mc::block::blockName(below), "minecraft:supports_lily_pad");
+            return support && mc::material::fluidStateOf(getBlockState(pos)).isEmpty();
+        }
+        // HangingRootsBlock.canSurvive (HangingRootsBlock.java:59-63): the block
+        // ABOVE must be face-sturdy DOWN.
+        if (block == "minecraft:hanging_roots") {
+            bool defaulted = false;
+            const bool r = mc::block::isFaceSturdyFull(
+                mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z })), 0, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z })));
+            return r;
+        }
+        // CaveVinesBlock/CaveVinesPlantBlock via GrowingPlantBlock.canSurvive
+        // (GrowingPlantBlock.java:47-55, growthDirection DOWN, canAttachTo true):
+        // above is head/body or face-sturdy DOWN.
+        if (block == "minecraft:cave_vines" || block == "minecraft:cave_vines_plant") {
+            const BlockPos abovePos{ pos.x, pos.y + 1, pos.z };
+            const std::string above = mc::block::blockName(getBlockState(abovePos));
+            if (above == "minecraft:cave_vines" || above == "minecraft:cave_vines_plant") return true;
+            bool defaulted = false;
+            const bool r = mc::block::isFaceSturdyFull(above, 0, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(above);
+            return r;
+        }
+        // SporeBlossomBlock.canSurvive (SporeBlossomBlock.java:35-37):
+        // Block.canSupportCenter(level, above, DOWN) && !isWaterAt(pos). CENTER
+        // support coincides with FULL for the cave ceiling blocks here (full cubes);
+        // partial-center supporters (fences, ...) cannot occur in this pipeline.
+        if (block == "minecraft:spore_blossom") {
+            const std::string above = mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z }));
+            bool defaulted = false;
+            const bool sturdy = mc::block::isFaceSturdyFull(above, 0, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(above);
+            return sturdy && getBlockState(pos) != "minecraft:water";
+        }
+        // CarpetBlock.canSurvive (CarpetBlock.java:50-52): below not empty.
+        if (block == "minecraft:moss_carpet") {
+            return !mc::block::isAirBlock(getBlockState(belowPos));
+        }
+        // AzaleaBlock via VegetationBlock.canSurvive with mayPlaceOn override
+        // (AzaleaBlock.java:38-40): below in #supports_azalea.
+        if (block == "minecraft:azalea" || block == "minecraft:flowering_azalea") {
+            return g_tags->isInTag(mc::block::blockName(getBlockState(belowPos)), "minecraft:supports_azalea");
+        }
+        // SmallDripleafBlock (LOWER half) via DoublePlantBlock.canSurvive with
+        // mayPlaceOn override (SmallDripleafBlock.java:51-54): below in
+        // #supports_small_dripleaf OR (source water AT pos && below in
+        // #supports_vegetation).
+        if (block == "minecraft:small_dripleaf") {
+            const std::string below = mc::block::blockName(getBlockState(belowPos));
+            if (g_tags->isInTag(below, "minecraft:supports_small_dripleaf")) return true;
+            const mc::material::FluidState fs = mc::material::fluidStateOf(getBlockState(pos));
+            return fs.is(*g_fluidTags, "minecraft:water") && fs.isSource()
+                && g_tags->isInTag(below, "minecraft:supports_vegetation");
+        }
+        // BigDripleafBlock.canSurvive (BigDripleafBlock.java:139-143).
+        if (block == "minecraft:big_dripleaf") {
+            const std::string below = mc::block::blockName(getBlockState(belowPos));
+            return below == "minecraft:big_dripleaf" || below == "minecraft:big_dripleaf_stem"
+                || g_tags->isInTag(below, "minecraft:supports_big_dripleaf");
+        }
+        // BigDripleafStemBlock.canSurvive (BigDripleafStemBlock.java:60-64).
+        if (block == "minecraft:big_dripleaf_stem") {
+            const std::string below = mc::block::blockName(getBlockState(belowPos));
+            const std::string above = mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z }));
+            return (below == "minecraft:big_dripleaf_stem" || g_tags->isInTag(below, "minecraft:supports_big_dripleaf"))
+                && (above == "minecraft:big_dripleaf_stem" || above == "minecraft:big_dripleaf");
+        }
+        // SnowLayerBlock.canSurvive (SnowLayerBlock.java:77-86): below
+        // #cannot_support_snow_layer -> false; #support_override_snow_layer -> true;
+        // else collision top-face-full (Block.isFaceFull(getCollisionShape, UP)) ||
+        // (below is snow && LAYERS == 8 — worldgen places layers=1 only, never 8).
+        if (block == "minecraft:snow") {
+            const std::string below = mc::block::blockName(getBlockState(belowPos));
+            if (g_tags->isInTag(below, "minecraft:cannot_support_snow_layer")) return false;
+            if (g_tags->isInTag(below, "minecraft:support_override_snow_layer")) return true;
+            bool defaulted = false;
+            const bool full = mc::block::isCollisionFaceFullUp(below, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(below);
+            return full;
         }
         throw std::logic_error("canSurvive not ported for " + block);
     }
@@ -933,15 +1245,53 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
         // BubbleColumnBlock.updateShape BubbleColumnBlock.java:160-179)
         "minecraft:water", "minecraft:lava", "minecraft:bubble_column",
         // LeavesBlock.updateShape: DISTANCE tick scheduling only (id unchanged)
-        "minecraft:oak_leaves", "minecraft:birch_leaves",
+        "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:spruce_leaves",
         // RotatedPillarBlock/Block default updateShape: unchanged
-        "minecraft:oak_log", "minecraft:birch_log",
+        "minecraft:oak_log", "minecraft:birch_log", "minecraft:spruce_log",
         "minecraft:cobblestone", "minecraft:mossy_cobblestone",
         // ChestBlock.updateShape only reconnects the TYPE property; SpawnerBlock /
         // BeehiveBlock use the Block default
         "minecraft:chest", "minecraft:spawner", "minecraft:bee_nest",
+        // SnowyBlock.updateShape (SnowyBlock.java:32-45): UP -> SNOWY property only
+        // (id unchanged); grass_block/podzol already in the static list above.
+        "minecraft:mycelium",
+        // CactusBlock.updateShape (CactusBlock.java:95-110) and SugarCaneBlock
+        // .updateShape (SugarCaneBlock.java:81-86): !canSurvive only SCHEDULES a
+        // tick (no ServerLevel during worldgen) — id unchanged.
+        "minecraft:cactus", "minecraft:sugar_cane",
+        // SlabBlock.updateShape (SlabBlock.java:116-130): waterlogged tick only;
+        // BrushableBlock.updateShape schedules a tick — both id-unchanged.
+        "minecraft:sandstone_slab", "minecraft:suspicious_sand",
+        // Geode shell full cubes: Block default updateShape.
+        "minecraft:amethyst_block", "minecraft:budding_amethyst",
+        "minecraft:calcite", "minecraft:smooth_basalt",
+        // Lush/dripstone cave full cubes (Block default updateShape) + the
+        // tick-only updateShapes: GrowingPlantBlock head/body (cave_vines: schedule
+        // only when the support breaks — the head->body conversion needs the plant
+        // directly below which postprocess marks cannot create), pointed_dripstone
+        // (PointedDripstoneBlock.updateShape: tick scheduling, returns state).
+        "minecraft:moss_block", "minecraft:rooted_dirt", "minecraft:dripstone_block",
+        "minecraft:raw_iron_block", "minecraft:raw_copper_block", "minecraft:raw_gold_block",
+        "minecraft:azalea_leaves", "minecraft:flowering_azalea_leaves",
+        "minecraft:pointed_dripstone",
     };
     if (idNoOp.count(bs) != 0) return bs;
+    // HangingRootsBlock.updateShape (HangingRootsBlock.java:81-83): UP ->
+    // !canSurvive -> AIR; SporeBlossomBlock likewise (SporeBlossomBlock.java:50-51);
+    // BigDripleaf DOWN -> !canSurvive -> AIR (BigDripleafBlock.java:156-157).
+    if (bs == "minecraft:hanging_roots" || bs == "minecraft:spore_blossom") {
+        if (direction == 1 && !level.canSurvive(bs, pos)) return "minecraft:air";
+        return bs;
+    }
+    if (bs == "minecraft:big_dripleaf") {
+        if (direction == 0 && !level.canSurvive(bs, pos)) return "minecraft:air";
+        return bs;
+    }
+    // SnowLayerBlock.updateShape (SnowLayerBlock.java:88-102): !canSurvive -> AIR,
+    // direction-independent; otherwise unchanged.
+    if (bs == "minecraft:snow") {
+        return level.canSurvive(bs, pos) ? bs : "minecraft:air";
+    }
     // VegetationBlock.updateShape (VegetationBlock.java:28-41): !canSurvive -> AIR,
     // direction-independent. The single-cell family: TallGrassBlock, BushBlock,
     // FireflyBushBlock, FlowerBlock, SaplingBlock, SweetBerryBushBlock,
@@ -956,8 +1306,15 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
         "minecraft:pink_tulip", "minecraft:oxeye_daisy", "minecraft:cornflower",
         "minecraft:sweet_berry_bush", "minecraft:brown_mushroom", "minecraft:red_mushroom",
         "minecraft:dead_bush", "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
-        "minecraft:oak_sapling", "minecraft:birch_sapling",
+        "minecraft:oak_sapling", "minecraft:birch_sapling", "minecraft:spruce_sapling",
         "minecraft:leaf_litter",
+        // LilyPadBlock extends VegetationBlock without overriding updateShape.
+        "minecraft:lily_pad",
+        // FlowerBedBlock: VegetationBlock updateShape (canSurvive-or-air).
+        "minecraft:wildflowers", "minecraft:pink_petals",
+        // AzaleaBlock (VegetationBlock) and CarpetBlock both collapse to AIR when
+        // canSurvive fails (CarpetBlock.java:34-47).
+        "minecraft:azalea", "minecraft:flowering_azalea", "minecraft:moss_carpet",
     };
     if (vegUpdateShape.count(bs) != 0) {
         return level.canSurvive(bs, pos) ? bs : "minecraft:air";
@@ -980,14 +1337,15 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
         };
         std::uint8_t updated = faces;
         if ((faces & (1u << 1)) != 0
-            && !mc::levelgen::feature::multiface_detail::canAttachTo(level, above)) {
+            && !mc::levelgen::feature::multiface_detail::canAttachTo(level, above, 0)) {
             updated &= static_cast<std::uint8_t>(~(1u << 1));
         }
         for (int d : { 2, 5, 3, 4 }) {   // Direction.Plane.HORIZONTAL: N, E, S, W
             if ((faces & (1u << d)) == 0) continue;
+            static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
             const bool canSupport =
                 mc::levelgen::feature::multiface_detail::canAttachTo(
-                    level, mc::levelgen::feature::treeRelative(pos, d))
+                    level, mc::levelgen::feature::treeRelative(pos, d), OPP[d])
                 || aboveVineFace(d);
             if (!canSupport) updated &= static_cast<std::uint8_t>(~(1u << d));
         }
@@ -1052,10 +1410,20 @@ void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const st
         // schedules ticks (dropped during worldgen) and returns super == unchanged.
         "minecraft:bubble_column",
         // LeavesBlock (tick-only), logs, dungeon shell, chest/spawner/bee_nest.
-        "minecraft:oak_leaves", "minecraft:birch_leaves",
-        "minecraft:oak_log", "minecraft:birch_log",
+        "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:spruce_leaves",
+        "minecraft:oak_log", "minecraft:birch_log", "minecraft:spruce_log",
         "minecraft:cobblestone", "minecraft:mossy_cobblestone",
         "minecraft:chest", "minecraft:spawner", "minecraft:bee_nest",
+        // SnowyBlock UP -> SNOWY property only; cactus/sugar_cane/slab/brushable
+        // updateShape are tick-only (see updateShapeOnce); geode shell = Block default.
+        "minecraft:mycelium", "minecraft:cactus", "minecraft:sugar_cane",
+        "minecraft:sandstone_slab", "minecraft:suspicious_sand",
+        "minecraft:amethyst_block", "minecraft:budding_amethyst",
+        "minecraft:calcite", "minecraft:smooth_basalt",
+        "minecraft:moss_block", "minecraft:rooted_dirt", "minecraft:dripstone_block",
+        "minecraft:raw_iron_block", "minecraft:raw_copper_block", "minecraft:raw_gold_block",
+        "minecraft:azalea_leaves", "minecraft:flowering_azalea_leaves",
+        "minecraft:pointed_dripstone",
     };
     if (staticNoOp.count(bs) != 0) return;
 
@@ -1070,10 +1438,15 @@ void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const st
         "minecraft:pink_tulip", "minecraft:oxeye_daisy", "minecraft:cornflower",
         "minecraft:sweet_berry_bush", "minecraft:brown_mushroom", "minecraft:red_mushroom",
         "minecraft:dead_bush", "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
-        "minecraft:oak_sapling", "minecraft:birch_sapling", "minecraft:leaf_litter",
+        "minecraft:oak_sapling", "minecraft:birch_sapling", "minecraft:spruce_sapling",
+        "minecraft:leaf_litter",
         "minecraft:lilac", "minecraft:rose_bush", "minecraft:peony",
         "minecraft:tall_grass", "minecraft:large_fern", "minecraft:sunflower",
         "minecraft:pumpkin", "minecraft:melon",
+        "minecraft:lily_pad", "minecraft:snow",
+        "minecraft:wildflowers", "minecraft:pink_petals",
+        "minecraft:hanging_roots", "minecraft:spore_blossom", "minecraft:big_dripleaf",
+        "minecraft:azalea", "minecraft:flowering_azalea", "minecraft:moss_carpet",
     };
     if (landPlants.count(bs) != 0) {
         static const int order[6] = { 4, 5, 2, 3, 0, 1 };
@@ -1094,8 +1467,9 @@ void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const st
         mc::levelgen::feature::MultifaceBlockState st = level.multifaceStateAt(bp);
         static const int order[6] = { 4, 5, 2, 3, 0, 1 };
         bool changed = false;
+        static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
         for (int dir : order) {
-            if (md::hasFace(st, dir) && !md::canAttachTo(level, md::relative(bp, dir))) {
+            if (md::hasFace(st, dir) && !md::canAttachTo(level, md::relative(bp, dir), OPP[dir])) {
                 st.faces = static_cast<std::uint8_t>(st.faces & ~(1u << dir));
                 changed = true;
             }
@@ -1206,6 +1580,23 @@ int main(int argc, char** argv) {
     g_fluidTags = &fluidTags;
     BiomeFeatures biomeFeatures = BiomeFeatures::loadFromDirectory(dataDir + "/worldgen/biome");
 
+    // Per-biome climate (Biome.ClimateSettings codec fields straight from the biome
+    // JSONs: temperature, has_precipitation, optional temperature_modifier) for
+    // freeze_top_layer / lake-rim freezing. Fail-closed: unknown biome -> throw.
+    {
+        namespace fs = std::filesystem;
+        for (const auto& entry : fs::directory_iterator(dataDir + "/worldgen/biome")) {
+            if (entry.path().extension() != ".json") continue;
+            std::ifstream f(entry.path());
+            json bj; f >> bj;
+            mc::levelgen::feature::BiomeClimate climate;
+            climate.temperature = bj.at("temperature").get<float>();
+            climate.hasPrecipitation = bj.at("has_precipitation").get<bool>();
+            climate.frozenModifier = bj.value("temperature_modifier", std::string("none")) == "frozen";
+            g_biomeClimate["minecraft:" + entry.path().stem().string()] = climate;
+        }
+    }
+
     // Global per-step feature order/index (== the setFeatureSeed index), over all biomes.
     const std::vector<std::string> sources = BiomeSource::collectOverworldPossibleBiomes();
     const std::set<std::string> sourcesSet(sources.begin(), sources.end());
@@ -1287,6 +1678,98 @@ int main(int argc, char** argv) {
         return r;
     };
 
+    // ---- hooks for freeze_top_layer / lake / geode ----
+    auto snowFreezeHooks = std::make_shared<mc::levelgen::feature::SnowFreezeHooks>();
+    snowFreezeHooks->getBiome = [](BlockPos pos) { return g_biomeCtx->zoomBiome(pos); };
+    snowFreezeHooks->climate = [](const std::string& biome) -> const mc::levelgen::feature::BiomeClimate& {
+        auto it = g_biomeClimate.find(biome);
+        if (it == g_biomeClimate.end()) throw std::logic_error("no climate loaded for biome " + biome);
+        return it->second;
+    };
+    snowFreezeHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
+    snowFreezeHooks->snowCanSurvive = [](BlockPos pos) {
+        // SnowLayerBlock.canSurvive — one implementation, on the level (also used
+        // by SnowLayerBlock.updateShape during tree-edge/postprocess revalidation).
+        return g_level->canSurvive("minecraft:snow", pos);
+    };
+    snowFreezeHooks->hasSnowyProperty = [](const std::string& s) {
+        // SnowyBlock.SNOWY holders: the SnowyDirtBlock registrations (Blocks.java:
+        // grass_block GrassBlock, podzol SnowyDirtBlock, mycelium MyceliumBlock).
+        const std::string b = mc::block::blockName(s);
+        return b == "minecraft:grass_block" || b == "minecraft:podzol" || b == "minecraft:mycelium";
+    };
+    snowFreezeHooks->seaLevel = 63;   // NoiseGeneratorSettings.overworld sea_level
+    snowFreezeHooks->levelMinY = mc::CHUNK_MIN_Y;
+    snowFreezeHooks->levelMaxY = mc::CHUNK_MAX_Y;
+
+    auto lakeHooks = std::make_shared<mc::levelgen::feature::LakeHooks>();
+    lakeHooks->featuresCannotReplace = [](const std::string& s) {
+        return g_tags->isInTag(mc::block::blockName(s), "minecraft:features_cannot_replace");
+    };
+    lakeHooks->lavaPoolStoneCannotReplace = [](const std::string& s) {
+        return g_tags->isInTag(mc::block::blockName(s), "minecraft:lava_pool_stone_cannot_replace");
+    };
+    lakeHooks->isSolid = [](const std::string& s) {
+        bool defaulted = false;
+        const bool r = mc::block::isSolid(s, &defaulted);
+        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        return r;
+    };
+    lakeHooks->isLiquid = [](const std::string& s) {
+        // BlockStateBase.liquid(): the LiquidBlock states only.
+        return s == "minecraft:water" || s == "minecraft:lava";
+    };
+    lakeHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
+    lakeHooks->markAboveForPostProcessing = [](BlockPos placePos) {
+        // Feature.markAboveForPostProcessing (Feature.java:206-217).
+        BlockPos pos = placePos;
+        for (int i = 0; i < 2; ++i) {
+            pos = BlockPos{ pos.x, pos.y + 1, pos.z };
+            if (mc::block::isAirBlock(g_level->getBlockState(pos))) return;
+            g_level->markPosForPostprocessing(pos);
+        }
+    };
+    lakeHooks->countSkippedScheduleTick = [] { ++g_skippedScheduleTicks; };
+    lakeHooks->snowFreeze = snowFreezeHooks;
+
+    auto geodeHooks = std::make_shared<mc::levelgen::feature::GeodeHooks>();
+    geodeHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
+    geodeHooks->levelSeed = [] { return static_cast<std::int64_t>(g_curLevelSeed); };
+    geodeHooks->countSkippedScheduleTick = [] { ++g_skippedScheduleTicks; };
+
+    auto caveHooks = std::make_shared<mc::levelgen::feature::CaveFeatureHooks>();
+    caveHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
+    caveHooks->isFaceSturdyFull = [](const std::string& s, int dir) {
+        bool defaulted = false;
+        const bool r = mc::block::isFaceSturdyFull(s, dir, &defaulted);
+        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        return r;
+    };
+    caveHooks->isSolid = [](const std::string& s) {
+        bool defaulted = false;
+        const bool r = mc::block::isSolid(s, &defaulted);
+        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        return r;
+    };
+    caveHooks->isWaterFluid = [](const std::string& s) {
+        return mc::material::fluidStateOf(s).is(*g_fluidTags, "minecraft:water");
+    };
+    caveHooks->isLavaFluid = [](const std::string& s) {
+        return mc::material::fluidStateOf(s).is(*g_fluidTags, "minecraft:lava");
+    };
+
+    auto dripstoneHooks = std::make_shared<mc::levelgen::feature::DripstoneHooks>();
+    dripstoneHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
+    dripstoneHooks->dripstoneReplaceable = [](const std::string& s) {
+        return g_tags->isInTag(mc::block::blockName(s), "minecraft:dripstone_replaceable_blocks");
+    };
+    dripstoneHooks->baseStoneOverworld = [](const std::string& s) {
+        return g_tags->isInTag(mc::block::blockName(s), "minecraft:base_stone_overworld");
+    };
+    dripstoneHooks->isWaterFluid = [](const std::string& s) {
+        return mc::material::fluidStateOf(s).is(*g_fluidTags, "minecraft:water");
+    };
+
     auto parseDirection = [](const std::string& d) -> int {
         if (d == "down") return 0;
         if (d == "up") return 1;
@@ -1321,6 +1804,14 @@ int main(int argc, char** argv) {
             dec.radius = dj.value("radius", 2);
             dec.height = dj.value("height", 1);
             dec.provider = loadStateProvider(dj.at("block_state_provider"));
+        } else if (dtype == "alter_ground") {
+            // AlterGroundDecorator codec: provider (AlterGroundDecorator.java:11).
+            dec.kind = mc::levelgen::feature::TreeDecoratorConfig::Kind::AlterGround;
+            dec.provider = loadStateProvider(dj.at("provider"));
+        } else if (dtype == "leave_vine") {
+            // LeaveVineDecorator codec: probability (LeaveVineDecorator.java:11-13).
+            dec.kind = mc::levelgen::feature::TreeDecoratorConfig::Kind::LeaveVine;
+            dec.probability = dj.at("probability").get<float>();
         } else {
             throw std::runtime_error("unsupported tree decorator: " + dtype);
         }
@@ -1514,18 +2005,47 @@ int main(int argc, char** argv) {
                 const std::string tpt = stripNs(tp.at("type").get<std::string>());
                 if (tpt == "straight_trunk_placer") tc->trunkKind = mc::levelgen::feature::TreeConfig::Trunk::Straight;
                 else if (tpt == "fancy_trunk_placer") tc->trunkKind = mc::levelgen::feature::TreeConfig::Trunk::Fancy;
+                else if (tpt == "giant_trunk_placer") tc->trunkKind = mc::levelgen::feature::TreeConfig::Trunk::Giant;
+                else if (tpt == "bending_trunk_placer") {
+                    // BendingTrunkPlacer codec: min_height_for_leaves orElse 1 + bend_length.
+                    tc->trunkKind = mc::levelgen::feature::TreeConfig::Trunk::Bending;
+                    tc->minHeightForLeaves = tp.value("min_height_for_leaves", 1);
+                    tc->bendLength = loadIntProvider(tp.at("bend_length"));
+                }
                 else throw std::runtime_error("unsupported trunk_placer: " + tpt);
                 tc->baseHeight = tp.at("base_height").get<int>();
                 tc->heightRandA = tp.at("height_rand_a").get<int>();
                 tc->heightRandB = tp.at("height_rand_b").get<int>();
                 const json& fp = cc.at("foliage_placer");
                 const std::string fpt = stripNs(fp.at("type").get<std::string>());
-                if (fpt == "blob_foliage_placer") tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::Blob;
-                else if (fpt == "fancy_foliage_placer") tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::Fancy;
-                else throw std::runtime_error("unsupported foliage_placer: " + fpt);
+                // blob/fancy carry a constant int "height"; spruce/pine/mega_pine carry
+                // an IntProvider field (trunk_height / height / crown_height) sampled in
+                // foliageHeight (Spruce/Pine/MegaPineFoliagePlacer codecs).
+                if (fpt == "blob_foliage_placer") {
+                    tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::Blob;
+                    tc->foliageHeightParam = fp.at("height").get<int>();
+                } else if (fpt == "fancy_foliage_placer") {
+                    tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::Fancy;
+                    tc->foliageHeightParam = fp.at("height").get<int>();
+                } else if (fpt == "spruce_foliage_placer") {
+                    tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::Spruce;
+                    tc->foliageHeightProvider = loadIntProvider(fp.at("trunk_height"));
+                } else if (fpt == "pine_foliage_placer") {
+                    tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::Pine;
+                    tc->foliageHeightProvider = loadIntProvider(fp.at("height"));
+                } else if (fpt == "mega_pine_foliage_placer") {
+                    tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::MegaPine;
+                    tc->foliageHeightProvider = loadIntProvider(fp.at("crown_height"));
+                } else if (fpt == "random_spread_foliage_placer") {
+                    // RandomSpreadFoliagePlacer codec: foliage_height + leaf_placement_attempts.
+                    tc->foliageKind = mc::levelgen::feature::TreeConfig::Foliage::RandomSpread;
+                    tc->foliageHeightProvider = loadIntProvider(fp.at("foliage_height"));
+                    tc->leafPlacementAttempts = fp.at("leaf_placement_attempts").get<int>();
+                } else {
+                    throw std::runtime_error("unsupported foliage_placer: " + fpt);
+                }
                 tc->foliageRadius = loadIntProvider(fp.at("radius"));
                 tc->foliageOffset = loadIntProvider(fp.at("offset"));
-                tc->foliageHeightParam = fp.at("height").get<int>();
                 const json& ms = cc.at("minimum_size");
                 if (stripNs(ms.at("type").get<std::string>()) != "two_layers_feature_size")
                     throw std::runtime_error("unsupported minimum_size: " + ms.at("type").get<std::string>());
@@ -1548,6 +2068,191 @@ int main(int argc, char** argv) {
                 placer = mc::levelgen::feature::makeFallenTreePlacer(std::move(fc), treeHooks, isFaceSturdyUpState);
             } else if (type == "monster_room") {
                 placer = mc::levelgen::feature::makeMonsterRoomPlacer(monsterHooks);
+            } else if (type == "freeze_top_layer") {
+                placer = mc::levelgen::feature::makeSnowAndFreezePlacer(snowFreezeHooks);
+            } else if (type == "lake") {
+                const json& cc = cfgJson.at("config");
+                placer = mc::levelgen::feature::makeLakePlacer(
+                    loadStateProvider(cc.at("fluid")), loadStateProvider(cc.at("barrier")), lakeHooks);
+            } else if (type == "block_column") {
+                // BlockColumnConfiguration: layers [{height, provider}], direction,
+                // allowed_placement, prioritize_tip (BlockColumnConfiguration codec).
+                const json& cc = cfgJson.at("config");
+                std::vector<mc::levelgen::feature::BlockColumnLayerFn> layers;
+                for (const auto& lj : cc.at("layers"))
+                    layers.push_back({ loadIntProvider(lj.at("height")), loadStateProvider(lj.at("provider")) });
+                const int dirIdx = parseDirection(cc.at("direction").get<std::string>());
+                const BlockPos dir{ mc::levelgen::feature::TREE_DIR_DX[dirIdx],
+                                    mc::levelgen::feature::TREE_DIR_DY[dirIdx],
+                                    mc::levelgen::feature::TREE_DIR_DZ[dirIdx] };
+                placer = mc::levelgen::feature::makeBlockColumnPlacer(
+                    std::move(layers), dir, cc.at("prioritize_tip").get<bool>(),
+                    loadBlockPredicate(cc.at("allowed_placement")));
+            } else if (type == "spike") {
+                // SpikeConfiguration: can_place_on, can_replace, state.
+                const json& cc = cfgJson.at("config");
+                placer = mc::levelgen::feature::makeSpikePlacer(
+                    loadBlockPredicate(cc.at("can_place_on")),
+                    loadBlockPredicate(cc.at("can_replace")),
+                    stateName(cc.at("state")),
+                    [](const std::string& s) { return mc::block::isAirBlock(s); });
+            } else if (type == "block_blob") {
+                // BlockBlobConfiguration: state, can_place_on.
+                const json& cc = cfgJson.at("config");
+                placer = mc::levelgen::feature::makeBlockBlobPlacer(
+                    loadBlockPredicate(cc.at("can_place_on")), stateName(cc.at("state")));
+            } else if (type == "geode") {
+                const json& cc = cfgJson.at("config");
+                const json& bj = cc.at("blocks");
+                const json& lj = cc.at("layers");
+                const json& kj = cc.at("crack");
+                auto gc = std::make_shared<mc::levelgen::feature::GeodeConfig>();
+                gc->fillingProvider = loadStateProvider(bj.at("filling_provider"));
+                gc->innerLayerProvider = loadStateProvider(bj.at("inner_layer_provider"));
+                gc->alternateInnerLayerProvider = loadStateProvider(bj.at("alternate_inner_layer_provider"));
+                gc->middleLayerProvider = loadStateProvider(bj.at("middle_layer_provider"));
+                gc->outerLayerProvider = loadStateProvider(bj.at("outer_layer_provider"));
+                for (const auto& s : bj.at("inner_placements")) gc->innerPlacements.push_back(stateName(s));
+                if (gc->innerPlacements.empty()) throw std::runtime_error("geode: empty inner_placements");
+                { auto member = loadHolderSet(bj.at("cannot_replace"), g_tags);
+                  gc->cannotReplace = [member](const std::string& s) { return member(mc::block::blockName(s)); }; }
+                { auto member = loadHolderSet(bj.at("invalid_blocks"), g_tags);
+                  gc->invalidBlocks = [member](const std::string& s) { return member(mc::block::blockName(s)); }; }
+                gc->filling = lj.value("filling", 1.7);
+                gc->innerLayer = lj.value("inner_layer", 2.2);
+                gc->middleLayer = lj.value("middle_layer", 3.2);
+                gc->outerLayer = lj.value("outer_layer", 4.2);
+                gc->baseCrackSize = kj.value("base_crack_size", 2.0);
+                gc->generateCrackChance = kj.value("generate_crack_chance", 1.0);
+                gc->crackPointOffset = kj.value("crack_point_offset", 2);
+                // Codec defaults: GeodeConfiguration.java (0.35 / 0.0 / true / U(4,5) /
+                // U(3,4) / U(1,2) / -16 / 16 / 0.05), GeodeCrackSettings.java (1.0 / 2.0 / 2).
+                gc->noiseMultiplier = cc.value("noise_multiplier", 0.05);
+                gc->usePotentialPlacementsChance = cc.value("use_potential_placements_chance", 0.35);
+                gc->useAlternateLayer0Chance = cc.value("use_alternate_layer0_chance", 0.0);
+                gc->placementsRequireLayer0Alternate = cc.value("placements_require_layer0_alternate", true);
+                gc->outerWallDistance = cc.contains("outer_wall_distance")
+                    ? loadIntProvider(cc.at("outer_wall_distance")) : UniformInt::of(4, 5);
+                // crackSizeAdjustment divides by outerWallDistance.maxInclusive() (GeodeFeature.java:48).
+                gc->outerWallDistanceMax = cc.contains("outer_wall_distance")
+                    ? cc.at("outer_wall_distance").at("max_inclusive").get<int>() : 5;
+                gc->distributionPoints = cc.contains("distribution_points")
+                    ? loadIntProvider(cc.at("distribution_points")) : UniformInt::of(3, 4);
+                gc->pointOffset = cc.contains("point_offset")
+                    ? loadIntProvider(cc.at("point_offset")) : UniformInt::of(1, 2);
+                gc->minGenOffset = cc.value("min_gen_offset", -16);
+                gc->maxGenOffset = cc.value("max_gen_offset", 16);
+                gc->invalidBlocksThreshold = cc.at("invalid_blocks_threshold").get<int>();
+                placer = mc::levelgen::feature::makeGeodePlacer(std::move(gc), geodeHooks);
+            } else if (type == "desert_well") {
+                placer = mc::levelgen::feature::makeDesertWellPlacer();
+            } else if (type == "random_boolean_selector") {
+                // RandomBooleanSelectorFeature (RandomBooleanSelectorFeature.java):
+                // one nextBoolean picks feature_true/feature_false.
+                const json& cc = cfgJson.at("config");
+                auto featureTrue = resolvePlacedRef(cc.at("feature_true"), "?nested");
+                auto featureFalse = resolvePlacedRef(cc.at("feature_false"), "?nested");
+                placer = [featureTrue, featureFalse, genMinY, genDepth](
+                             WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+                    const bool result = random.nextBoolean();
+                    return (result ? featureTrue : featureFalse)->place(level, random, origin, genMinY, genDepth);
+                };
+            } else if (type == "vegetation_patch" || type == "waterlogged_vegetation_patch") {
+                const json& cc = cfgJson.at("config");
+                auto vc = std::make_shared<mc::levelgen::feature::VegetationPatchConfig>();
+                {   // TagKey.hashedCodec: the field is a "#tag" string.
+                    const std::string tagRef = cc.at("replaceable").get<std::string>();
+                    if (tagRef.empty() || tagRef[0] != '#') throw std::runtime_error("vegetation_patch replaceable: expected #tag");
+                    const std::string tag = tagRef.substr(1);
+                    vc->replaceable = [tag](const std::string& st) { return g_tags->isInTag(mc::block::blockName(st), tag); };
+                }
+                vc->groundState = loadStateProvider(cc.at("ground_state"));
+                vc->vegetationFeature = resolvePlacedRef(cc.at("vegetation_feature"), "?nested");
+                const std::string surface = stripNs(cc.at("surface").get<std::string>());
+                if (surface == "floor") vc->surfaceDirection = 0;        // CaveSurface.FLOOR -> DOWN
+                else if (surface == "ceiling") vc->surfaceDirection = 1; // CaveSurface.CEILING -> UP
+                else throw std::runtime_error("unsupported cave surface: " + surface);
+                vc->depth = loadIntProvider(cc.at("depth"));
+                vc->extraBottomBlockChance = cc.at("extra_bottom_block_chance").get<float>();
+                vc->verticalRange = cc.at("vertical_range").get<int>();
+                vc->vegetationChance = cc.at("vegetation_chance").get<float>();
+                vc->xzRadius = loadIntProvider(cc.at("xz_radius"));
+                vc->extraEdgeColumnChance = cc.at("extra_edge_column_chance").get<float>();
+                vc->waterlogged = type == "waterlogged_vegetation_patch";
+                vc->genMinY = genMinY;
+                vc->genDepth = genDepth;
+                placer = mc::levelgen::feature::makeVegetationPatchPlacer(std::move(vc), caveHooks);
+            } else if (type == "root_system") {
+                const json& cc = cfgJson.at("config");
+                auto rc = std::make_shared<mc::levelgen::feature::RootSystemConfig>();
+                rc->treeFeature = resolvePlacedRef(cc.at("feature"), "?nested");
+                rc->requiredVerticalSpaceForTree = cc.at("required_vertical_space_for_tree").get<int>();
+                rc->allowedVerticalWaterForTree = cc.at("allowed_vertical_water_for_tree").get<int>();
+                {   auto pred = loadBlockPredicate(cc.at("allowed_tree_position"));
+                    rc->allowedTreePosition = [pred](WorldGenLevel& level, BlockPos p) { return pred(level, p); }; }
+                rc->rootRadius = cc.at("root_radius").get<int>();
+                {   const std::string tagRef = cc.at("root_replaceable").get<std::string>();
+                    if (tagRef.empty() || tagRef[0] != '#') throw std::runtime_error("root_system root_replaceable: expected #tag");
+                    const std::string tag = tagRef.substr(1);
+                    rc->rootReplaceable = [tag](const std::string& st) { return g_tags->isInTag(mc::block::blockName(st), tag); }; }
+                rc->rootStateProvider = loadStateProvider(cc.at("root_state_provider"));
+                rc->rootPlacementAttempts = cc.at("root_placement_attempts").get<int>();
+                rc->rootColumnMaxHeight = cc.at("root_column_max_height").get<int>();
+                rc->hangingRootRadius = cc.at("hanging_root_radius").get<int>();
+                rc->hangingRootsVerticalSpan = cc.at("hanging_roots_vertical_span").get<int>();
+                rc->hangingRootStateProvider = loadStateProvider(cc.at("hanging_root_state_provider"));
+                rc->hangingRootPlacementAttempts = cc.at("hanging_root_placement_attempts").get<int>();
+                rc->genMinY = genMinY;
+                rc->genDepth = genDepth;
+                placer = mc::levelgen::feature::makeRootSystemPlacer(std::move(rc), caveHooks);
+            } else if (type == "vines") {
+                // VineBlock.isAcceptableNeighbour == MultifaceBlock.canAttachTo
+                // (VineBlock.java:118-120) — direction-independent full-face test in
+                // the multiface port.
+                placer = mc::levelgen::feature::makeVinesPlacer(
+                    [](WorldGenLevel& level, BlockPos neighbour, int direction) {
+                        static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+                        return mc::levelgen::feature::multiface_detail::canAttachTo(level, neighbour, OPP[direction]);
+                    },
+                    [](BlockPos at, int faceDir) { g_level->putVineFaces(at, static_cast<std::uint8_t>(1u << faceDir)); });
+            } else if (type == "pointed_dripstone") {
+                const json& cc = cfgJson.at("config");
+                mc::levelgen::feature::PointedDripstoneConfig pc;
+                // PointedDripstoneConfiguration codec defaults all 4 chances (orElse).
+                pc.chanceOfTallerDripstone = cc.value("chance_of_taller_dripstone", 0.2f);
+                pc.chanceOfDirectionalSpread = cc.value("chance_of_directional_spread", 0.7f);
+                pc.chanceOfSpreadRadius2 = cc.value("chance_of_spread_radius2", 0.5f);
+                pc.chanceOfSpreadRadius3 = cc.value("chance_of_spread_radius3", 0.5f);
+                placer = mc::levelgen::feature::makePointedDripstonePlacer(pc, dripstoneHooks);
+            } else if (type == "large_dripstone") {
+                const json& cc = cfgJson.at("config");
+                auto lc = std::make_shared<mc::levelgen::feature::LargeDripstoneConfig>();
+                lc->floorToCeilingSearchRange = cc.value("floor_to_ceiling_search_range", 30);
+                lc->columnRadiusMin = cc.at("column_radius").at("min_inclusive").get<int>();
+                lc->columnRadiusMax = cc.at("column_radius").at("max_inclusive").get<int>();
+                lc->heightScale = loadFloatProvider(cc.at("height_scale"));
+                lc->maxColumnRadiusToCaveHeightRatio = cc.at("max_column_radius_to_cave_height_ratio").get<float>();
+                lc->stalactiteBluntness = loadFloatProvider(cc.at("stalactite_bluntness"));
+                lc->stalagmiteBluntness = loadFloatProvider(cc.at("stalagmite_bluntness"));
+                lc->windSpeed = loadFloatProvider(cc.at("wind_speed"));
+                lc->minRadiusForWind = cc.at("min_radius_for_wind").get<int>();
+                lc->minBluntnessForWind = cc.at("min_bluntness_for_wind").get<float>();
+                placer = mc::levelgen::feature::makeLargeDripstonePlacer(std::move(lc), dripstoneHooks);
+            } else if (type == "dripstone_cluster") {
+                const json& cc = cfgJson.at("config");
+                auto dc = std::make_shared<mc::levelgen::feature::DripstoneClusterConfig>();
+                dc->floorToCeilingSearchRange = cc.at("floor_to_ceiling_search_range").get<int>();
+                dc->height = loadIntProvider(cc.at("height"));
+                dc->radius = loadIntProvider(cc.at("radius"));
+                dc->maxStalagmiteStalactiteHeightDiff = cc.at("max_stalagmite_stalactite_height_diff").get<int>();
+                dc->heightDeviation = cc.at("height_deviation").get<int>();
+                dc->dripstoneBlockLayerThickness = loadIntProvider(cc.at("dripstone_block_layer_thickness"));
+                dc->density = loadFloatProvider(cc.at("density"));
+                dc->wetness = loadFloatProvider(cc.at("wetness"));
+                dc->chanceOfDripstoneColumnAtMaxDistanceFromCenter = cc.at("chance_of_dripstone_column_at_max_distance_from_center").get<float>();
+                dc->maxDistanceFromEdgeAffectingChanceOfDripstoneColumn = cc.at("max_distance_from_edge_affecting_chance_of_dripstone_column").get<int>();
+                dc->maxDistanceFromCenterAffectingHeightBias = cc.at("max_distance_from_center_affecting_height_bias").get<int>();
+                placer = mc::levelgen::feature::makeDripstoneClusterPlacer(std::move(dc), dripstoneHooks);
             } else {
                 // Not yet ported: throw — resolveFeature records the hard no-op.
                 throw UnportedFeatureType{ type };
@@ -1600,6 +2305,7 @@ int main(int argc, char** argv) {
     for (const auto& [key, cells] : server) {
         const long long seed = std::get<0>(key);
         const int Cx = std::get<1>(key), Cz = std::get<2>(key);
+        g_curLevelSeed = seed;   // level.getSeed() for cached placers (geode noise)
 
         NoiseBasedChunkGenerator gen(static_cast<std::uint64_t>(seed));
 
@@ -1817,6 +2523,9 @@ int main(int argc, char** argv) {
         std::cout << "DecorateAllTransition got=" << t.first << " want=" << t.second << " n=" << n << "\n";
     for (const auto& [type, n] : g_unportedSkips)
         std::cout << "UNPORTED-FEATURE-TYPE " << type << " skipped_placed_features=" << n << "\n";
+    if (g_skippedScheduleTicks > 0)
+        std::cout << "SKIPPED-SCHEDULE-TICKS (need a ServerLevel; hard no-op as in the Java GT): "
+                  << g_skippedScheduleTicks << "\n";
     if (!g_blocksMotionDefaulted.empty()) {
         std::cout << "BLOCKSMOTION-DEFAULTED (verify each vs Blocks.java and add to the table):";
         for (const auto& b : g_blocksMotionDefaulted) std::cout << " " << b;

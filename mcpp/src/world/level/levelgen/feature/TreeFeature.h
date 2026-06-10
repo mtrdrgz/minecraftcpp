@@ -1,9 +1,12 @@
 #pragma once
 
 // 1:1 port of net.minecraft.world.level.levelgen.feature.TreeFeature with
-//   trunk placers:   StraightTrunkPlacer, FancyTrunkPlacer
-//   foliage placers: BlobFoliagePlacer, FancyFoliagePlacer
-//   decorators:      BeehiveDecorator, PlaceOnGroundDecorator
+//   trunk placers:   StraightTrunkPlacer, FancyTrunkPlacer, GiantTrunkPlacer,
+//                    BendingTrunkPlacer
+//   foliage placers: BlobFoliagePlacer, FancyFoliagePlacer, SpruceFoliagePlacer,
+//                    PineFoliagePlacer, MegaPineFoliagePlacer, RandomSpreadFoliagePlacer
+//   decorators:      BeehiveDecorator, PlaceOnGroundDecorator, AlterGroundDecorator,
+//                    LeaveVineDecorator
 //   minimum size:    TwoLayersFeatureSize
 // plus the post-placement leaf DISTANCE update (TreeFeature.updateLeaves) and
 // StructureTemplate.updateShapeAtEdge over the resulting DiscreteVoxelShape.
@@ -12,9 +15,13 @@
 //   treeHeight  = base + nextInt(randA+1) + nextInt(randB+1)   (TrunkPlacer.java:58-60;
 //                 randB=0 still consumes a nextInt(1) draw)
 //   foliageHeight = placer.foliageHeight(...)                  (blob/fancy: constant, no draw,
-//                 BlobFoliagePlacer.java:50-53)
+//                 BlobFoliagePlacer.java:50-53; spruce: max(4, treeHeight -
+//                 trunk_height.sample), SpruceFoliagePlacer.java:57-60; pine:
+//                 height.sample, PineFoliagePlacer.java:56-59; mega_pine:
+//                 crown_height.sample, MegaPineFoliagePlacer.java:61-64)
 //   leafRadius  = radius.sample(random)                        (FoliagePlacer.java:65-67;
-//                 ConstantInt: no draw)
+//                 ConstantInt: no draw); pine OVERRIDES foliageRadius: radius.sample +
+//                 nextInt(max(trunkHeight+1,1)) (PineFoliagePlacer.java:51-54)
 //   bounds + getMaxFreeTreeHeight: world reads only, no draws
 //   placeTrunk:
 //     straight (StraightTrunkPlacer.java:27-43): placeBelowTrunkBlock (rule-based
@@ -97,15 +104,28 @@ inline void javaShuffle(std::vector<T>& list, RandomSource& random) {
 }
 
 // ---------------------------------------------------------------------------
-// java.util.HashSet<BlockPos> with Java iteration order.
+// java.util.HashSet<BlockPos> with the EXACT java.util.HashMap iteration order,
+// including TREE BINS. A bucket-sort model (final capacity mask, insertion-order
+// ties) is NOT sufficient: once a bin chain reaches TREEIFY_THRESHOLD (8) at
+// table capacity >= MIN_TREEIFY_CAPACITY (64) the bin treeifies, and the
+// iteration chain (the Node.next links) is re-threaded:
+//   - treeify() ends with moveRootToFront (HashMap.java:1991-2010): the RB root
+//     is unlinked and placed at the chain head
+//   - putTreeVal (HashMap.java:2134-2177) inserts the new node IN-CHAIN directly
+//     AFTER its tree parent (xpn juggling), then balanceInsertion +
+//     moveRootToFront
+//   - resize() splits chains preserving order (lo/hi tails); tree bins split via
+//     TreeNode.split (HashMap.java:2298-2335): <= UNTREEIFY_THRESHOLD (6) -> plain
+//     chain in chain order; else re-treeify ONLY when the bin actually split
+// This is a 1:1 port of those JDK methods over an index-based node arena.
 //   hash:    Vec3i.hashCode = (y + z*31)*31 + x  (Vec3i.java)
-//   spread:  java.util.HashMap.hash: h ^ (h >>> 16)
-//   bucket:  spread & (capacity-1); buckets iterate ascending, entries within a
-//            bucket in insertion order. Resizes (cap 16 -> x2 whenever
-//            ++size > 0.75*cap, HashMap.putVal/resize) split each bucket
-//            preserving relative order, and bucket bits are capacity-suffix
-//            bits — so the final order equals: sort by (spread & (finalCap-1))
-//            ascending, ties by insertion order.
+//   spread:  HashMap.hash: h ^ (h >>> 16)
+//   compare: BlockPos does NOT satisfy comparableClassFor (its Comparable<Vec3i>
+//     comes from the Vec3i superclass and is parameterized on Vec3i, not the key
+//     class), so equal-hash nodes fall to tieBreakOrder -> System.identityHashCode
+//     — NON-DETERMINISTIC. Distinct BlockPos with equal hashes cannot co-occur in
+//     the feature-sized sets here (hash = (y+z*31)*31+x collides only across
+//     spans >= 31 in one axis); fail closed (throw) if it ever happens.
 class JavaBlockPosHashSet {
 public:
     bool add(BlockPos p) {
@@ -122,29 +142,328 @@ public:
     static std::int32_t vec3iHash(BlockPos p) {
         return (p.y + p.z * 31) * 31 + p.x;
     }
-    // Iteration order of the equivalent java.util.HashSet.
+
+    // Iteration order of the equivalent java.util.HashSet (full HashMap simulation).
     std::vector<BlockPos> javaOrder() const {
-        int cap = 16, threshold = 12;
-        for (std::size_t i = 1; i <= m_items.size(); ++i) {
-            if (static_cast<int>(i) > threshold) { cap <<= 1; threshold = cap / 4 * 3; }
-        }
-        std::vector<std::pair<std::uint32_t, std::size_t>> keyed;   // (bucket, insertion index)
-        keyed.reserve(m_items.size());
-        for (std::size_t i = 0; i < m_items.size(); ++i) {
-            const std::uint32_t h = static_cast<std::uint32_t>(vec3iHash(m_items[i]));
-            const std::uint32_t spread = h ^ (h >> 16);
-            keyed.emplace_back(spread & static_cast<std::uint32_t>(cap - 1), i);
-        }
-        std::stable_sort(keyed.begin(), keyed.end(),
-                         [](const auto& a, const auto& b) { return a.first < b.first; });
-        std::vector<BlockPos> out;
-        out.reserve(m_items.size());
-        for (const auto& [bucket, idx] : keyed) out.push_back(m_items[idx]);
-        return out;
+        Sim sim;
+        for (const BlockPos& p : m_items) sim.put(p);
+        return sim.iterate();
     }
 
 private:
     std::vector<BlockPos> m_items;   // insertion order, deduped
+
+    struct Sim {
+        static constexpr int TREEIFY_THRESHOLD = 8;
+        static constexpr int UNTREEIFY_THRESHOLD = 6;
+        static constexpr int MIN_TREEIFY_CAPACITY = 64;
+        struct Node {
+            BlockPos key{};
+            std::uint32_t hash = 0;
+            int next = -1, prev = -1;            // chain links (prev used by tree bins)
+            int parent = -1, left = -1, right = -1;
+            bool red = false;
+        };
+        std::vector<Node> a;                     // arena
+        std::vector<int> tab = std::vector<int>(16, -1);
+        std::vector<bool> isTree = std::vector<bool>(16, false);
+        int sz = 0, threshold = 12;
+
+        static std::uint32_t spread(std::int32_t h) {
+            const std::uint32_t u = static_cast<std::uint32_t>(h);
+            return u ^ (u >> 16);
+        }
+
+        // HashMap.putVal (no duplicate keys reach here).
+        void put(BlockPos key) {
+            const std::uint32_t h = spread(vec3iHash(key));
+            const int n = static_cast<int>(tab.size());
+            const int i = static_cast<int>(h & static_cast<std::uint32_t>(n - 1));
+            if (tab[static_cast<std::size_t>(i)] < 0) {
+                tab[static_cast<std::size_t>(i)] = newNode(key, h);
+            } else if (isTree[static_cast<std::size_t>(i)]) {
+                putTreeVal(i, key, h);
+            } else {
+                int p = tab[static_cast<std::size_t>(i)];
+                for (int binCount = 0;; ++binCount) {
+                    if (a[static_cast<std::size_t>(p)].next < 0) {
+                        a[static_cast<std::size_t>(p)].next = newNode(key, h);
+                        if (binCount >= TREEIFY_THRESHOLD - 1) treeifyBin(i);
+                        break;
+                    }
+                    p = a[static_cast<std::size_t>(p)].next;
+                }
+            }
+            if (++sz > threshold) resize();
+        }
+
+        std::vector<BlockPos> iterate() const {
+            std::vector<BlockPos> out;
+            out.reserve(static_cast<std::size_t>(sz));
+            for (int b : tab) {
+                for (int e = b; e >= 0; e = a[static_cast<std::size_t>(e)].next) {
+                    out.push_back(a[static_cast<std::size_t>(e)].key);
+                }
+            }
+            return out;
+        }
+
+        int newNode(BlockPos key, std::uint32_t h) {
+            Node node; node.key = key; node.hash = h;
+            a.push_back(node);
+            return static_cast<int>(a.size()) - 1;
+        }
+
+        // dir for unequal hashes; equal hashes are unreachable here (see header note).
+        int dirOf(std::uint32_t h, int pNode) const {
+            const std::uint32_t ph = a[static_cast<std::size_t>(pNode)].hash;
+            if (ph > h) return -1;
+            if (ph < h) return 1;
+            throw std::logic_error("JavaBlockPosHashSet: equal-hash tree-bin pair (tieBreakOrder is identity-hash based; port it before relying on this order)");
+        }
+
+        // HashMap.TreeNode.rotateLeft/rotateRight (HashMap.java).
+        int rotateLeft(int root, int p) {
+            if (p < 0) return root;
+            const int r = a[static_cast<std::size_t>(p)].right;
+            if (r < 0) return root;
+            const int rl = a[static_cast<std::size_t>(r)].left;
+            a[static_cast<std::size_t>(p)].right = rl;
+            if (rl >= 0) a[static_cast<std::size_t>(rl)].parent = p;
+            const int pp = a[static_cast<std::size_t>(p)].parent;
+            a[static_cast<std::size_t>(r)].parent = pp;
+            if (pp < 0) { root = r; a[static_cast<std::size_t>(r)].red = false; }
+            else if (a[static_cast<std::size_t>(pp)].left == p) a[static_cast<std::size_t>(pp)].left = r;
+            else a[static_cast<std::size_t>(pp)].right = r;
+            a[static_cast<std::size_t>(r)].left = p;
+            a[static_cast<std::size_t>(p)].parent = r;
+            return root;
+        }
+        int rotateRight(int root, int p) {
+            if (p < 0) return root;
+            const int l = a[static_cast<std::size_t>(p)].left;
+            if (l < 0) return root;
+            const int lr = a[static_cast<std::size_t>(l)].right;
+            a[static_cast<std::size_t>(p)].left = lr;
+            if (lr >= 0) a[static_cast<std::size_t>(lr)].parent = p;
+            const int pp = a[static_cast<std::size_t>(p)].parent;
+            a[static_cast<std::size_t>(l)].parent = pp;
+            if (pp < 0) { root = l; a[static_cast<std::size_t>(l)].red = false; }
+            else if (a[static_cast<std::size_t>(pp)].right == p) a[static_cast<std::size_t>(pp)].right = l;
+            else a[static_cast<std::size_t>(pp)].left = l;
+            a[static_cast<std::size_t>(l)].right = p;
+            a[static_cast<std::size_t>(p)].parent = l;
+            return root;
+        }
+
+        // HashMap.TreeNode.balanceInsertion, verbatim control flow.
+        int balanceInsertion(int root, int x) {
+            a[static_cast<std::size_t>(x)].red = true;
+            for (int xp, xpp, xppl, xppr;;) {
+                if ((xp = a[static_cast<std::size_t>(x)].parent) < 0) {
+                    a[static_cast<std::size_t>(x)].red = false;
+                    return x;
+                }
+                if (!a[static_cast<std::size_t>(xp)].red || (xpp = a[static_cast<std::size_t>(xp)].parent) < 0) {
+                    return root;
+                }
+                if (xp == (xppl = a[static_cast<std::size_t>(xpp)].left)) {
+                    if ((xppr = a[static_cast<std::size_t>(xpp)].right) >= 0 && a[static_cast<std::size_t>(xppr)].red) {
+                        a[static_cast<std::size_t>(xppr)].red = false;
+                        a[static_cast<std::size_t>(xp)].red = false;
+                        a[static_cast<std::size_t>(xpp)].red = true;
+                        x = xpp;
+                    } else {
+                        if (x == a[static_cast<std::size_t>(xp)].right) {
+                            root = rotateLeft(root, x = xp);
+                            xp = a[static_cast<std::size_t>(x)].parent;
+                            xpp = xp < 0 ? -1 : a[static_cast<std::size_t>(xp)].parent;
+                        }
+                        if (xp >= 0) {
+                            a[static_cast<std::size_t>(xp)].red = false;
+                            if (xpp >= 0) {
+                                a[static_cast<std::size_t>(xpp)].red = true;
+                                root = rotateRight(root, xpp);
+                            }
+                        }
+                    }
+                } else {
+                    if (xppl >= 0 && a[static_cast<std::size_t>(xppl)].red) {
+                        a[static_cast<std::size_t>(xppl)].red = false;
+                        a[static_cast<std::size_t>(xp)].red = false;
+                        a[static_cast<std::size_t>(xpp)].red = true;
+                        x = xpp;
+                    } else {
+                        if (x == a[static_cast<std::size_t>(xp)].left) {
+                            root = rotateRight(root, x = xp);
+                            xp = a[static_cast<std::size_t>(x)].parent;
+                            xpp = xp < 0 ? -1 : a[static_cast<std::size_t>(xp)].parent;
+                        }
+                        if (xp >= 0) {
+                            a[static_cast<std::size_t>(xp)].red = false;
+                            if (xpp >= 0) {
+                                a[static_cast<std::size_t>(xpp)].red = true;
+                                root = rotateLeft(root, xpp);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // HashMap.TreeNode.moveRootToFront (HashMap.java:1991-2010).
+        void moveRootToFront(int root) {
+            if (root < 0) return;
+            const int n = static_cast<int>(tab.size());
+            const int index = static_cast<int>(a[static_cast<std::size_t>(root)].hash & static_cast<std::uint32_t>(n - 1));
+            const int first = tab[static_cast<std::size_t>(index)];
+            if (root != first) {
+                tab[static_cast<std::size_t>(index)] = root;
+                const int rp = a[static_cast<std::size_t>(root)].prev;
+                const int rn = a[static_cast<std::size_t>(root)].next;
+                if (rn >= 0) a[static_cast<std::size_t>(rn)].prev = rp;
+                if (rp >= 0) a[static_cast<std::size_t>(rp)].next = rn;
+                if (first >= 0) a[static_cast<std::size_t>(first)].prev = root;
+                a[static_cast<std::size_t>(root)].next = first;
+                a[static_cast<std::size_t>(root)].prev = -1;
+            }
+        }
+
+        // HashMap.TreeNode.treeify (HashMap.java:2072-2112) on the chain at bucket i.
+        void treeify(int i) {
+            int root = -1;
+            for (int x = tab[static_cast<std::size_t>(i)], next; x >= 0; x = next) {
+                next = a[static_cast<std::size_t>(x)].next;
+                a[static_cast<std::size_t>(x)].left = a[static_cast<std::size_t>(x)].right = -1;
+                if (root < 0) {
+                    a[static_cast<std::size_t>(x)].parent = -1;
+                    a[static_cast<std::size_t>(x)].red = false;
+                    root = x;
+                } else {
+                    const std::uint32_t h = a[static_cast<std::size_t>(x)].hash;
+                    for (int p = root;;) {
+                        const int dir = dirOf(h, p);
+                        const int xp = p;
+                        p = dir <= 0 ? a[static_cast<std::size_t>(p)].left : a[static_cast<std::size_t>(p)].right;
+                        if (p < 0) {
+                            a[static_cast<std::size_t>(x)].parent = xp;
+                            if (dir <= 0) a[static_cast<std::size_t>(xp)].left = x;
+                            else a[static_cast<std::size_t>(xp)].right = x;
+                            root = balanceInsertion(root, x);
+                            break;
+                        }
+                    }
+                }
+            }
+            isTree[static_cast<std::size_t>(i)] = true;
+            moveRootToFront(root);
+        }
+
+        // HashMap.treeifyBin (HashMap.java:762-775): resize below MIN_TREEIFY_CAPACITY,
+        // else convert the chain (prev links primed) and treeify.
+        void treeifyBin(int i) {
+            if (static_cast<int>(tab.size()) < MIN_TREEIFY_CAPACITY) {
+                resize();
+                return;
+            }
+            int prev = -1;
+            for (int e = tab[static_cast<std::size_t>(i)]; e >= 0; e = a[static_cast<std::size_t>(e)].next) {
+                a[static_cast<std::size_t>(e)].prev = prev;
+                prev = e;
+            }
+            treeify(i);
+        }
+
+        // HashMap.TreeNode.putTreeVal (HashMap.java:2134-2177); duplicates unreachable.
+        void putTreeVal(int i, BlockPos key, std::uint32_t h) {
+            const int x = newNode(key, h);
+            int root = tab[static_cast<std::size_t>(i)];
+            for (int p = root;;) {
+                const int dir = dirOf(h, p);
+                const int xp = p;
+                p = dir <= 0 ? a[static_cast<std::size_t>(p)].left : a[static_cast<std::size_t>(p)].right;
+                if (p < 0) {
+                    const int xpn = a[static_cast<std::size_t>(xp)].next;
+                    if (dir <= 0) a[static_cast<std::size_t>(xp)].left = x;
+                    else a[static_cast<std::size_t>(xp)].right = x;
+                    a[static_cast<std::size_t>(xp)].next = x;
+                    a[static_cast<std::size_t>(x)].parent = a[static_cast<std::size_t>(x)].prev = xp;
+                    a[static_cast<std::size_t>(x)].next = xpn;
+                    if (xpn >= 0) a[static_cast<std::size_t>(xpn)].prev = x;
+                    moveRootToFront(balanceInsertion(root, x));
+                    return;
+                }
+            }
+        }
+
+        // HashMap.TreeNode.untreeify == relink as a plain chain (chain order kept).
+        void untreeifyChain(int head) {
+            for (int q = head; q >= 0; q = a[static_cast<std::size_t>(q)].next) {
+                a[static_cast<std::size_t>(q)].prev = -1;
+                a[static_cast<std::size_t>(q)].parent = a[static_cast<std::size_t>(q)].left = a[static_cast<std::size_t>(q)].right = -1;
+                a[static_cast<std::size_t>(q)].red = false;
+            }
+        }
+
+        // HashMap.resize (order-preserving lo/hi split; TreeNode.split semantics).
+        void resize() {
+            const int oldCap = static_cast<int>(tab.size());
+            const int newCap = oldCap << 1;
+            threshold <<= 1;
+            std::vector<int> oldTab = tab;
+            std::vector<bool> oldIsTree = isTree;
+            tab.assign(static_cast<std::size_t>(newCap), -1);
+            isTree.assign(static_cast<std::size_t>(newCap), false);
+            for (int j = 0; j < oldCap; ++j) {
+                const int e = oldTab[static_cast<std::size_t>(j)];
+                if (e < 0) continue;
+                const bool tree = oldIsTree[static_cast<std::size_t>(j)];
+                // Relink into lo/hi preserving chain order (both plain chains and
+                // TreeNode.split walk the next-chain identically).
+                int loHead = -1, loTail = -1, hiHead = -1, hiTail = -1, lc = 0, hc = 0;
+                for (int q = e, next; q >= 0; q = next) {
+                    next = a[static_cast<std::size_t>(q)].next;
+                    a[static_cast<std::size_t>(q)].next = -1;
+                    if ((a[static_cast<std::size_t>(q)].hash & static_cast<std::uint32_t>(oldCap)) == 0) {
+                        a[static_cast<std::size_t>(q)].prev = loTail;
+                        if (loTail < 0) loHead = q; else a[static_cast<std::size_t>(loTail)].next = q;
+                        loTail = q; ++lc;
+                    } else {
+                        a[static_cast<std::size_t>(q)].prev = hiTail;
+                        if (hiTail < 0) hiHead = q; else a[static_cast<std::size_t>(hiTail)].next = q;
+                        hiTail = q; ++hc;
+                    }
+                }
+                if (!tree) {
+                    if (loHead >= 0) tab[static_cast<std::size_t>(j)] = loHead;
+                    if (hiHead >= 0) tab[static_cast<std::size_t>(j + oldCap)] = hiHead;
+                } else {
+                    // TreeNode.split (HashMap.java:2298-2335)
+                    if (loHead >= 0) {
+                        if (lc <= UNTREEIFY_THRESHOLD) {
+                            tab[static_cast<std::size_t>(j)] = loHead;
+                            untreeifyChain(loHead);
+                        } else {
+                            tab[static_cast<std::size_t>(j)] = loHead;
+                            isTree[static_cast<std::size_t>(j)] = true;
+                            if (hiHead >= 0) treeify(j);
+                            // else: already treeified (tree fields intact, root chain head)
+                        }
+                    }
+                    if (hiHead >= 0) {
+                        if (hc <= UNTREEIFY_THRESHOLD) {
+                            tab[static_cast<std::size_t>(j + oldCap)] = hiHead;
+                            untreeifyChain(hiHead);
+                        } else {
+                            tab[static_cast<std::size_t>(j + oldCap)] = hiHead;
+                            isTree[static_cast<std::size_t>(j + oldCap)] = true;
+                            if (loHead >= 0) treeify(j + oldCap);
+                        }
+                    }
+                }
+            }
+        }
+    };
 };
 
 // ---------------------------------------------------------------------------
@@ -266,24 +585,33 @@ struct TreeHooks {
 // ---------------------------------------------------------------------------
 // Configuration (TreeConfiguration.java + the placer/decorator codecs).
 struct TreeDecoratorConfig {
-    enum class Kind { Beehive, PlaceOnGround };
+    enum class Kind { Beehive, PlaceOnGround, AlterGround, LeaveVine };
     Kind kind = Kind::Beehive;
-    float probability = 0.0f;                 // beehive
+    float probability = 0.0f;                 // beehive / leave_vine
     int tries = 128, radius = 2, height = 1;  // place_on_ground codec defaults (PlaceOnGroundDecorator.java:19-21)
-    DiskStateProvider provider;               // place_on_ground block_state_provider
+    DiskStateProvider provider;               // place_on_ground block_state_provider / alter_ground provider
 };
 
 struct TreeConfig {
     DiskStateProvider trunkProvider;       // getState (never null)
     DiskStateProvider foliageProvider;     // getState (never null)
     DiskStateProvider belowTrunkProvider;  // getOptionalState (nullopt == none)
-    enum class Trunk { Straight, Fancy };
+    enum class Trunk { Straight, Fancy, Giant, Bending };
     Trunk trunkKind = Trunk::Straight;
     int baseHeight = 0, heightRandA = 0, heightRandB = 0;
-    enum class Foliage { Blob, Fancy };
+    // bending_trunk_placer extras (BendingTrunkPlacer codec): min_height_for_leaves
+    // (default 1) + bend_length IntProvider.
+    int minHeightForLeaves = 1;
+    mc::valueproviders::IntProviderPtr bendLength;
+    enum class Foliage { Blob, Fancy, Spruce, Pine, MegaPine, RandomSpread };
     Foliage foliageKind = Foliage::Blob;
     mc::valueproviders::IntProviderPtr foliageRadius, foliageOffset;
     int foliageHeightParam = 0;            // blob/fancy "height"
+    // spruce "trunk_height" / pine "height" / mega_pine "crown_height" / random_spread
+    // "foliage_height" (each an IntProvider sampled in foliageHeight — the respective
+    // FoliagePlacer codecs).
+    mc::valueproviders::IntProviderPtr foliageHeightProvider;
+    int leafPlacementAttempts = 0;         // random_spread_foliage_placer
     int sizeLimit = 1, lowerSize = 0, upperSize = 1;   // two_layers_feature_size
     std::optional<int> minClippedHeight;
     bool ignoreVines = false;
@@ -409,6 +737,96 @@ inline void placeOnGroundDecorator(TreeDecoratorContext& ctx, const TreeDecorato
     }
 }
 
+// AlterGroundDecorator.place (AlterGroundDecorator.java:24-44): on every lowest-Y
+// trunk/root position, four fixed 5x5 "circles" (corners cut) at the NW/NE/SW/SE
+// diagonals, then 5 nextInt(64) draws each placing a circle only when the 8x8
+// cell decodes to the ring (xx/zz == 0 or 7).
+inline void placeAlterGroundDecorator(TreeDecoratorContext& ctx, const TreeDecoratorConfig& cfg) {
+    const std::vector<BlockPos> blockPositions = lowestTrunkOrRoot(ctx);   // TreeFeature.getLowestTrunkOrRootOfTree
+    if (blockPositions.empty()) return;
+    // AlterGroundDecorator.placeBlockAt (:56-69): scan dy 2..-3; the provider's
+    // getOptionalState (rule_based, no fallback: null unless the rule matches)
+    // decides the write; a non-air miss below ground level (dy < 0) stops the scan.
+    auto placeBlockAt = [&](BlockPos pos) {
+        for (int dy = 2; dy >= -3; --dy) {
+            const BlockPos cursor{ pos.x, pos.y + dy, pos.z };
+            const std::optional<std::string> replaceWith = cfg.provider(*ctx.level, *ctx.random, cursor);
+            if (replaceWith.has_value()) {
+                ctx.setBlock(cursor, *replaceWith);
+                break;
+            }
+            if (!ctx.isAir(cursor) && dy < 0) break;
+        }
+    };
+    // AlterGroundDecorator.placeCircle (:46-54).
+    auto placeCircle = [&](BlockPos pos) {
+        for (int xx = -2; xx <= 2; ++xx) {
+            for (int zz = -2; zz <= 2; ++zz) {
+                if (std::abs(xx) != 2 || std::abs(zz) != 2) {
+                    placeBlockAt(BlockPos{ pos.x + xx, pos.y, pos.z + zz });
+                }
+            }
+        }
+    };
+    const int minY = blockPositions.front().y;
+    for (const BlockPos& pos : blockPositions) {
+        if (pos.y != minY) continue;
+        placeCircle(BlockPos{ pos.x - 1, pos.y, pos.z - 1 });   // pos.west().north()
+        placeCircle(BlockPos{ pos.x + 2, pos.y, pos.z - 1 });   // pos.east(2).north()
+        placeCircle(BlockPos{ pos.x - 1, pos.y, pos.z + 2 });   // pos.west().south(2)
+        placeCircle(BlockPos{ pos.x + 2, pos.y, pos.z + 2 });   // pos.east(2).south(2)
+        for (int i = 0; i < 5; ++i) {
+            const int placement = ctx.random->nextInt(64);
+            const int xx = placement % 8;
+            const int zz = placement / 8;
+            if (xx == 0 || xx == 7 || zz == 0 || zz == 7) {
+                placeCircle(BlockPos{ pos.x - 3 + xx, pos.y, pos.z - 3 + zz });
+            }
+        }
+    }
+}
+
+// LeaveVineDecorator.place (LeaveVineDecorator.java:26-57): per leaf, four
+// UNCONDITIONAL nextFloat draws (west/east/north/south); each pass gated by
+// isAir places a hanging vine (addHangingVine :59-67: the face vine, then up
+// to 4 more downward while air). Context.placeVine (TreeDecorator.java:53-55)
+// = setBlock(VINE with the single face property) — id "minecraft:vine" plus
+// the face side map when the write lands.
+inline void placeLeaveVineDecorator(TreeDecoratorContext& ctx, float probability) {
+    RandomSource& random = *ctx.random;
+    auto placeVine = [&](BlockPos at, int faceDir) {
+        if (ctx.setBlock(at, "minecraft:vine")) {
+            ctx.hooks->putVineFace(at, faceDir);
+        }
+    };
+    auto addHangingVine = [&](BlockPos pos, int faceDir) {
+        placeVine(pos, faceDir);
+        int maxDir = 4;
+        for (BlockPos v{ pos.x, pos.y - 1, pos.z }; ctx.isAir(v) && maxDir > 0; --maxDir) {
+            placeVine(v, faceDir);
+            v = BlockPos{ v.x, v.y - 1, v.z };
+        }
+    };
+    for (const BlockPos& pos : ctx.leaves) {
+        if (random.nextFloat() < probability) {
+            const BlockPos west{ pos.x - 1, pos.y, pos.z };
+            if (ctx.isAir(west)) addHangingVine(west, 5);   // VineBlock.EAST
+        }
+        if (random.nextFloat() < probability) {
+            const BlockPos east{ pos.x + 1, pos.y, pos.z };
+            if (ctx.isAir(east)) addHangingVine(east, 4);   // VineBlock.WEST
+        }
+        if (random.nextFloat() < probability) {
+            const BlockPos north{ pos.x, pos.y, pos.z - 1 };
+            if (ctx.isAir(north)) addHangingVine(north, 3); // VineBlock.SOUTH
+        }
+        if (random.nextFloat() < probability) {
+            const BlockPos south{ pos.x, pos.y, pos.z + 1 };
+            if (ctx.isAir(south)) addHangingVine(south, 2); // VineBlock.NORTH
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Trunk placer helpers (TrunkPlacer.java).
 struct TrunkPlacerOps {
@@ -449,6 +867,71 @@ inline std::vector<FoliageAttachment> placeStraightTrunk(
         ops.placeLog(random, BlockPos{ origin.x, origin.y + y, origin.z });
     }
     return { FoliageAttachment{ BlockPos{ origin.x, origin.y + treeHeight, origin.z }, 0, false } };
+}
+
+// GiantTrunkPlacer.placeTrunk (GiantTrunkPlacer.java:28-53): 2x2 below-trunk
+// dirt (below, below.east, below.south, below.south.east — :36-40), then per
+// level the (0,*,0) column full height and the (1,*,0),(1,*,1),(0,*,1) columns
+// to treeHeight-1 via placeLogIfFree (:43-50; placeLogIfFree = isFree gate then
+// placeLog, TrunkPlacer.java:101-111). One attachment at origin.above(height),
+// radiusOffset 0, doubleTrunk TRUE (:52).
+inline std::vector<FoliageAttachment> placeGiantTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    const BlockPos below{ origin.x, origin.y - 1, origin.z };
+    ops.placeBelowTrunkBlock(random, below);
+    ops.placeBelowTrunkBlock(random, BlockPos{ below.x + 1, below.y, below.z });          // east
+    ops.placeBelowTrunkBlock(random, BlockPos{ below.x, below.y, below.z + 1 });          // south
+    ops.placeBelowTrunkBlock(random, BlockPos{ below.x + 1, below.y, below.z + 1 });      // south.east
+    auto placeLogIfFree = [&](int dx, int dy, int dz) {
+        const BlockPos pos{ origin.x + dx, origin.y + dy, origin.z + dz };
+        if (ops.isFree(pos)) ops.placeLog(random, pos);
+    };
+    for (int hh = 0; hh < treeHeight; ++hh) {
+        placeLogIfFree(0, hh, 0);
+        if (hh < treeHeight - 1) {
+            placeLogIfFree(1, hh, 0);
+            placeLogIfFree(1, hh, 1);
+            placeLogIfFree(0, hh, 1);
+        }
+    }
+    return { FoliageAttachment{ BlockPos{ origin.x, origin.y + treeHeight, origin.z }, 0, true } };
+}
+
+// BendingTrunkPlacer.placeTrunk (BendingTrunkPlacer.java:46-89): one horizontal
+// direction draw (Plane.HORIZONTAL.getRandomDirection = faces[nextInt(4)],
+// Direction.java:577,588-590), below-trunk block, then per level 0..logHeight one
+// nextInt(2) deciding the bend step (i+1 >= logHeight + draw), validTreePos-gated
+// placeLog, foliage attachments from minHeightForLeaves; finally bend_length.sample
+// more logs+attachments along the bend direction.
+inline std::vector<FoliageAttachment> placeBendingTrunk(
+        const TrunkPlacerOps& ops, RandomSource& random, int treeHeight, BlockPos origin) {
+    static constexpr int HORIZONTAL[4] = { 2, 5, 3, 4 };   // NORTH, EAST, SOUTH, WEST
+    const int direction = HORIZONTAL[random.nextInt(4)];
+    const int logHeight = treeHeight - 1;
+    BlockPos pos = origin;
+    ops.placeBelowTrunkBlock(random, BlockPos{ pos.x, pos.y - 1, pos.z });
+    std::vector<FoliageAttachment> foliagePoints;
+    for (int i = 0; i <= logHeight; ++i) {
+        if (i + 1 >= logHeight + random.nextInt(2)) {
+            pos = treeRelative(pos, direction);
+        }
+        if (ops.validTreePos(pos)) {
+            ops.placeLog(random, pos);
+        }
+        if (i >= ops.config->minHeightForLeaves) {
+            foliagePoints.push_back(FoliageAttachment{ pos, 0, false });
+        }
+        pos = BlockPos{ pos.x, pos.y + 1, pos.z };
+    }
+    const int dirLength = ops.config->bendLength->sample(random);
+    for (int i = 0; i <= dirLength; ++i) {
+        if (ops.validTreePos(pos)) {
+            ops.placeLog(random, pos);
+        }
+        foliagePoints.push_back(FoliageAttachment{ pos, 0, false });
+        pos = treeRelative(pos, direction);
+    }
+    return foliagePoints;
 }
 
 // FancyTrunkPlacer (FancyTrunkPlacer.java) — the gnarled big oak.
@@ -608,11 +1091,20 @@ inline void placeLeavesRow(const TreeConfig& config, const TreeHooks& hooks, Wor
                 // the nextInt(2) draw fires at every corner BEFORE the || y == 0.
                 skip = minDx == currentRadius && minDz == currentRadius
                        && (random.nextInt(2) == 0 || y == 0);
-            } else {
+            } else if (config.foliageKind == TreeConfig::Foliage::Fancy) {
                 // FancyFoliagePlacer.shouldSkipLocation (FancyFoliagePlacer.java:41-44).
                 const float fx = static_cast<float>(minDx) + 0.5f;
                 const float fz = static_cast<float>(minDz) + 0.5f;
                 skip = fx * fx + fz * fz > static_cast<float>(currentRadius * currentRadius);
+            } else if (config.foliageKind == TreeConfig::Foliage::MegaPine) {
+                // MegaPineFoliagePlacer.shouldSkipLocation (MegaPineFoliagePlacer.java:66-69):
+                // dx + dz >= 7 || dx*dx + dz*dz > r*r (no draw).
+                skip = minDx + minDz >= 7
+                       || minDx * minDx + minDz * minDz > currentRadius * currentRadius;
+            } else {
+                // Spruce/PineFoliagePlacer.shouldSkipLocation (SpruceFoliagePlacer.java:62-65,
+                // PineFoliagePlacer.java:61-64): the exact corner at positive radius (no draw).
+                skip = minDx == currentRadius && minDz == currentRadius && currentRadius > 0;
             }
             if (!skip) {
                 tryPlaceLeaf(config, hooks, level, setter, random,
@@ -622,8 +1114,9 @@ inline void placeLeavesRow(const TreeConfig& config, const TreeHooks& hooks, Wor
     }
 }
 
-// Blob/FancyFoliagePlacer.createFoliage (BlobFoliagePlacer.java:32-48,
-// FancyFoliagePlacer.java:23-39); the shared offset draw happens in
+// Per-placer createFoliage (BlobFoliagePlacer.java:32-48, FancyFoliagePlacer.java:
+// 23-39, SpruceFoliagePlacer.java:28-55, PineFoliagePlacer.java:27-49,
+// MegaPineFoliagePlacer.java:29-59); the shared offset draw happens in
 // FoliagePlacer.createFoliage (FoliagePlacer.java:38-49).
 inline void createFoliage(const TreeConfig& config, const TreeHooks& hooks, WorldGenLevel& level,
                           const FoliageSetterState& setter, RandomSource& random,
@@ -634,10 +1127,69 @@ inline void createFoliage(const TreeConfig& config, const TreeHooks& hooks, Worl
             const int currentRadius = std::max(leafRadius + attachment.radiusOffset - 1 - yo / 2, 0);
             placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
         }
-    } else {
+    } else if (config.foliageKind == TreeConfig::Foliage::Fancy) {
         for (int yo = offset; yo >= offset - foliageHeight; --yo) {
             const int currentRadius = leafRadius + (yo != offset && yo != offset - foliageHeight ? 1 : 0);
             placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
+        }
+    } else if (config.foliageKind == TreeConfig::Foliage::Spruce) {
+        // SpruceFoliagePlacer.createFoliage (SpruceFoliagePlacer.java:28-55): ONE
+        // nextInt(2) draw seeds currentRadius; rows from offset down to -foliageHeight
+        // (NOT offset-foliageHeight); radius cycles 0..maxRadius with maxRadius
+        // capped at leafRadius + radiusOffset.
+        int currentRadius = random.nextInt(2);
+        int maxRadius = 1;
+        int minRadius = 0;
+        for (int yo = offset; yo >= -foliageHeight; --yo) {
+            placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
+            if (currentRadius >= maxRadius) {
+                currentRadius = minRadius;
+                minRadius = 1;
+                maxRadius = std::min(maxRadius + 1, leafRadius + attachment.radiusOffset);
+            } else {
+                ++currentRadius;
+            }
+        }
+    } else if (config.foliageKind == TreeConfig::Foliage::Pine) {
+        // PineFoliagePlacer.createFoliage (PineFoliagePlacer.java:27-49): radius 0
+        // widening to leafRadius+radiusOffset, narrowing by 1 on the second-lowest row.
+        int currentRadius = 0;
+        for (int yo = offset; yo >= offset - foliageHeight; --yo) {
+            placeLeavesRow(config, hooks, level, setter, random, attachment.pos, currentRadius, yo, attachment.doubleTrunk);
+            if (currentRadius >= 1 && yo == offset - foliageHeight + 1) {
+                --currentRadius;
+            } else if (currentRadius < leafRadius + attachment.radiusOffset) {
+                ++currentRadius;
+            }
+        }
+    } else if (config.foliageKind == TreeConfig::Foliage::RandomSpread) {
+        // RandomSpreadFoliagePlacer.createFoliage (RandomSpreadFoliagePlacer.java:39-63):
+        // per attempt SIX nextInt draws (x: r,r; y: h,h; z: r,r) then tryPlaceLeaf
+        // (the provider draw fires only on a valid position).
+        const BlockPos origin = attachment.pos;
+        for (int i = 0; i < config.leafPlacementAttempts; ++i) {
+            const BlockPos pos{
+                origin.x + random.nextInt(leafRadius) - random.nextInt(leafRadius),
+                origin.y + random.nextInt(foliageHeight) - random.nextInt(foliageHeight),
+                origin.z + random.nextInt(leafRadius) - random.nextInt(leafRadius) };
+            tryPlaceLeaf(config, hooks, level, setter, random, pos);
+        }
+    } else {
+        // MegaPineFoliagePlacer.createFoliage (MegaPineFoliagePlacer.java:29-59):
+        // absolute-y rows from pos.y - foliageHeight + offset up to pos.y + offset;
+        // smoothRadius += floor(yo/foliageHeight * 3.5f); jagged +1 when the radius
+        // repeats on an even y (yy & 1) == 0 above the crown base.
+        const BlockPos foliagePos = attachment.pos;
+        int prevRadius = 0;
+        for (int yy = foliagePos.y - foliageHeight + offset; yy <= foliagePos.y + offset; ++yy) {
+            const int yo = foliagePos.y - yy;
+            const int smoothRadius = leafRadius + attachment.radiusOffset
+                + mthFloorF(static_cast<float>(yo) / static_cast<float>(foliageHeight) * 3.5f);
+            const int jaggedRadius = (yo > 0 && smoothRadius == prevRadius && (yy & 1) == 0)
+                ? smoothRadius + 1 : smoothRadius;
+            placeLeavesRow(config, hooks, level, setter, random,
+                           BlockPos{ foliagePos.x, yy, foliagePos.z }, jaggedRadius, 0, attachment.doubleTrunk);
+            prevRadius = smoothRadius;
         }
     }
 }
@@ -731,10 +1283,31 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
         {
             const int treeHeight = config->baseHeight + random.nextInt(config->heightRandA + 1)
                                    + random.nextInt(config->heightRandB + 1);   // TrunkPlacer.getTreeHeight
-            const int foliageHeight = config->foliageHeightParam;               // blob/fancy foliageHeight: constant
+            // foliagePlacer.foliageHeight (TreeFeature.java:67): blob/fancy constant
+            // (no draw); spruce max(4, treeHeight - trunk_height.sample)
+            // (SpruceFoliagePlacer.java:57-60); pine height.sample (PineFoliagePlacer
+            // .java:56-59); mega_pine crown_height.sample (MegaPineFoliagePlacer.java:61-64).
+            int foliageHeight;
+            switch (config->foliageKind) {
+                case TreeConfig::Foliage::Spruce:
+                    foliageHeight = std::max(4, treeHeight - config->foliageHeightProvider->sample(random));
+                    break;
+                case TreeConfig::Foliage::Pine:
+                case TreeConfig::Foliage::MegaPine:
+                case TreeConfig::Foliage::RandomSpread:   // foliage_height.sample (RandomSpreadFoliagePlacer.java:66-69)
+                    foliageHeight = config->foliageHeightProvider->sample(random);
+                    break;
+                default:
+                    foliageHeight = config->foliageHeightParam;
+            }
             const int trunkHeight = treeHeight - foliageHeight;
-            (void)trunkHeight;   // foliageRadius(random, trunkHeight) ignores it for blob/fancy
-            const int leafRadius = config->foliageRadius->sample(random);
+            // foliagePlacer.foliageRadius(random, trunkHeight) (TreeFeature.java:69):
+            // radius.sample for all placers (FoliagePlacer.java:65-67); pine ADDS
+            // nextInt(max(trunkHeight+1, 1)) (PineFoliagePlacer.java:51-54).
+            int leafRadius = config->foliageRadius->sample(random);
+            if (config->foliageKind == TreeConfig::Foliage::Pine) {
+                leafRadius += random.nextInt(std::max(trunkHeight + 1, 1));
+            }
             const BlockPos trunkOrigin = origin;                                // no root placer
             const int minY = origin.y;
             const int maxY = origin.y + treeHeight + 1;
@@ -762,6 +1335,10 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
                     std::vector<FoliageAttachment> attachments =
                         config->trunkKind == TreeConfig::Trunk::Straight
                             ? placeStraightTrunk(ops, random, clippedTreeHeight, trunkOrigin)
+                        : config->trunkKind == TreeConfig::Trunk::Giant
+                            ? placeGiantTrunk(ops, random, clippedTreeHeight, trunkOrigin)
+                        : config->trunkKind == TreeConfig::Trunk::Bending
+                            ? placeBendingTrunk(ops, random, clippedTreeHeight, trunkOrigin)
                             : placeFancyTrunk(ops, random, clippedTreeHeight, trunkOrigin);
                     for (const FoliageAttachment& attachment : attachments) {
                         createFoliage(*config, *hooks, level, foliageSetter, random,
@@ -786,10 +1363,11 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeTreePlacer(
                 ctx.roots = sortedByYJavaOrder(rootPositions);
                 ctx.hooks = hooks.get();
                 for (const TreeDecoratorConfig& dec : config->decorators) {
-                    if (dec.kind == TreeDecoratorConfig::Kind::Beehive) {
-                        placeBeehiveDecorator(ctx, dec.probability);
-                    } else {
-                        placeOnGroundDecorator(ctx, dec);
+                    switch (dec.kind) {
+                        case TreeDecoratorConfig::Kind::Beehive: placeBeehiveDecorator(ctx, dec.probability); break;
+                        case TreeDecoratorConfig::Kind::PlaceOnGround: placeOnGroundDecorator(ctx, dec); break;
+                        case TreeDecoratorConfig::Kind::AlterGround: placeAlterGroundDecorator(ctx, dec); break;
+                        case TreeDecoratorConfig::Kind::LeaveVine: placeLeaveVineDecorator(ctx, dec.probability); break;
                     }
                 }
             }

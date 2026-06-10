@@ -36,13 +36,11 @@
 // searchDirection)` INSIDE the i-loop — the probed position is origin+dir for
 // every i (it does not walk outward). Replicated verbatim.
 //
-// canAttachTo (MultifaceBlock.java:256-261): Block.isFaceFull(getBlockSupportShape
-// || getCollisionShape, opposite). For the worldgen block set this is the
-// full-collision-cube test, which coincides with mc::block::isFaceSturdyUp's
-// table on every block reachable here (full cubes are face-full on all six
-// faces; the non-colliding/liquid set is face-full on none). snow (2/16 layer:
-// DOWN face full, others not) would diverge — it cannot occur adjacent to the
-// underground lichen set, and isFaceSturdyUp flags it via `defaulted` for review.
+// canAttachTo (MultifaceBlock.java:256-261): Block.isFaceFull(getBlockSupportShape,
+// opposite) || Block.isFaceFull(getCollisionShape, opposite). BOTH disjuncts are
+// face-exact ports (isFaceSturdyFull / isCollisionFaceFull): leaves attach via
+// the COLLISION cube although their support shape is empty (vines hang from
+// leaves); snow/mud/slabs attach on DOWN only; azalea on UP only.
 
 #include "../placement/PlacementContext.h"   // WorldGenLevel
 #include "../placement/PlacedFeature.h"      // FeaturePlacer
@@ -115,11 +113,13 @@ inline bool hasFace(const MultifaceBlockState& s, int dir) {
     return s.isPlaceBlock && ((s.faces >> dir) & 1) != 0;
 }
 
-// MultifaceBlock.canAttachTo (:256-261) over the full-cube table.
-inline bool canAttachTo(WorldGenLevel& level, BlockPos neighbourPos) {
+// MultifaceBlock.canAttachTo (:256-261): faceDir is the face of the NEIGHBOUR
+// pointing back at the attaching block (directionTowardsNeighbour.getOpposite()).
+inline bool canAttachTo(WorldGenLevel& level, BlockPos neighbourPos, int faceDir) {
     const std::string neighbour = level.getBlockState(neighbourPos);
     bool defaulted = false;
-    const bool full = mc::block::isFaceSturdyUp(neighbour, &defaulted);
+    const bool full = mc::block::isFaceSturdyFull(neighbour, faceDir, &defaulted)
+                   || mc::block::isCollisionFaceFull(neighbour, faceDir, &defaulted);
     if (defaulted) multifaceAttachDefaulted().insert(neighbour);
     return full;
 }
@@ -138,7 +138,8 @@ inline bool isValidStateForPlacement(WorldGenLevel& level, const MultifaceBlockS
                                      BlockPos placementPos, int placementDirection) {
     if (!oldState.isPlaceBlock || !hasFace(oldState, placementDirection)) {
         const BlockPos neighbourPos = relative(placementPos, placementDirection);
-        return canAttachTo(level, neighbourPos);
+        static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+        return canAttachTo(level, neighbourPos, OPP[placementDirection]);
     }
     return false;
 }

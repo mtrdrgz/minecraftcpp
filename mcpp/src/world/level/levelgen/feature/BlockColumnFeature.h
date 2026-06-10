@@ -87,4 +87,73 @@ private:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Harness-style factory over level-aware providers (BlockStateProvider.getState
+// takes the WorldGenLevel in vanilla — BlockColumnFeature.java:50). Same 1:1
+// algorithm as the class above (BlockColumnFeature.java:14-71):
+//   RNG: one height.sample per layer (biased_to_bottom / weighted_list draws);
+//   totalHeight == 0 -> false; the allowedPlacement scan and the writes draw
+//   nothing (simple providers).
+struct BlockColumnLayerFn {
+    IntProviderPtr height;
+    std::function<std::optional<std::string>(WorldGenLevel&, RandomSource&, BlockPos)> provider;
+};
+
+inline std::function<bool(WorldGenLevel&, RandomSource&, BlockPos)> makeBlockColumnPlacer(
+        std::vector<BlockColumnLayerFn> layers, BlockPos direction, bool prioritizeTip,
+        std::function<bool(WorldGenLevel&, BlockPos)> allowedPlacement) {
+    return [layers = std::move(layers), direction, prioritizeTip,
+            allowedPlacement = std::move(allowedPlacement)](
+               WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+        const int layerCount = static_cast<int>(layers.size());
+        std::vector<int> layerHeights(static_cast<std::size_t>(layerCount));
+        int totalHeight = 0;
+        for (int i = 0; i < layerCount; ++i) {
+            layerHeights[static_cast<std::size_t>(i)] = layers[static_cast<std::size_t>(i)].height->sample(random);
+            totalHeight += layerHeights[static_cast<std::size_t>(i)];
+        }
+        if (totalHeight == 0) return false;
+
+        auto add = [](BlockPos a, BlockPos d) { return BlockPos{ a.x + d.x, a.y + d.y, a.z + d.z }; };
+        const bool dbg = std::getenv("MCPP_BLOCKCOL_DEBUG") != nullptr;
+        if (dbg) {
+            fprintf(stderr, "BLOCKCOL origin=%d,%d,%d total=%d heights=", origin.x, origin.y, origin.z, totalHeight);
+            for (int h : layerHeights) fprintf(stderr, "%d,", h);
+            fprintf(stderr, "\n");
+        }
+        BlockPos placePos = origin;
+        BlockPos nextPos = add(origin, direction);
+        for (int y = 0; y < totalHeight; ++y) {
+            if (!allowedPlacement(level, nextPos)) {
+                if (dbg) fprintf(stderr, "BLOCKCOL truncate at y=%d nextPos=%d,%d,%d state=%s\n",
+                                 y, nextPos.x, nextPos.y, nextPos.z, level.getBlockState(nextPos).c_str());
+                // BlockColumnFeature.truncate (:59-71)
+                int amountToRemove = totalHeight - y;
+                const int dir = prioritizeTip ? 1 : -1;
+                const int start = prioritizeTip ? 0 : layerCount - 1;
+                const int end = prioritizeTip ? layerCount : -1;
+                for (int i = start; i != end && amountToRemove > 0; i += dir) {
+                    const int toRemove = std::min(layerHeights[static_cast<std::size_t>(i)], amountToRemove);
+                    amountToRemove -= toRemove;
+                    layerHeights[static_cast<std::size_t>(i)] -= toRemove;
+                }
+                break;
+            }
+            nextPos = add(nextPos, direction);
+        }
+
+        for (int i = 0; i < layerCount; ++i) {
+            const int count = layerHeights[static_cast<std::size_t>(i)];
+            if (count != 0) {
+                const BlockColumnLayerFn& layer = layers[static_cast<std::size_t>(i)];
+                for (int y = 0; y < count; ++y) {
+                    level.setBlock(placePos, layer.provider(level, random, placePos).value(), 2);
+                    placePos = add(placePos, direction);
+                }
+            }
+        }
+        return true;
+    };
+}
+
 } // namespace mc::levelgen::feature

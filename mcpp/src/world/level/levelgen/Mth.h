@@ -45,5 +45,24 @@ inline int ceil(float v)   { return static_cast<int>(std::ceil(static_cast<doubl
 
 // Mth.lerp(double delta, double start, double end) = start + delta * (end - start).
 inline double lerp(double delta, double start, double end) { return start + delta * (end - start); }
+inline float lerpF(float delta, float start, float end) { return start + delta * (end - start); }   // Mth.java:532-534
+
+// Mth.inverseLerp (Mth.java:326-332) + clampedLerp (:109-123) + clampedMap (:636-642),
+// in BOTH precisions: callers mix them (e.g. DripstoneClusterFeature uses the float
+// overload for the column chance and the double overload for the height bias).
+inline double clampedLerpD(double factor, double min, double max) {
+    if (factor < 0.0) return min;
+    return factor > 1.0 ? max : lerp(factor, min, max);
+}
+inline float clampedLerpF(float factor, float min, float max) {
+    if (factor < 0.0f) return min;
+    return factor > 1.0f ? max : lerpF(factor, min, max);
+}
+inline double clampedMapD(double value, double fromMin, double fromMax, double toMin, double toMax) {
+    return clampedLerpD((value - fromMin) / (fromMax - fromMin), toMin, toMax);
+}
+inline float clampedMapF(float value, float fromMin, float fromMax, float toMin, float toMax) {
+    return clampedLerpF((value - fromMin) / (fromMax - fromMin), toMin, toMax);
+}
 
 } // namespace mc::levelgen::mth

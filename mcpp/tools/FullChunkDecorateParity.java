@@ -443,6 +443,10 @@ public class FullChunkDecorateParity {
             List.copyOf(BIOMES.possibleBiomes()), b -> b.value().getGenerationSettings().features(), true);
 
         DBG_CX = Cx; DBG_CZ = Cz;
+        if (System.getenv("MCPP_DBG_CHUNK") != null) {   // debug-output-only override
+            String[] dc = System.getenv("MCPP_DBG_CHUNK").split(",");
+            DBG_CX = Integer.parseInt(dc[0]); DBG_CZ = Integer.parseInt(dc[1]);
+        }
         if (DEBUG) {
             PF_ID = new HashMap<>();
             provider.lookupOrThrow(Registries.PLACED_FEATURE).listElements()
@@ -669,24 +673,38 @@ public class FullChunkDecorateParity {
                     // WorldGenRegion.getBlockEntity verbatim: lazily realize the DUMMY-tagged
                     // block entity so e.g. RandomizableContainer.setBlockEntityLootTable finds
                     // the container and consumes its random.nextLong() exactly like the server.
+                    // The proxy dispatches by NAME, so the TYPED 2-arg overload (the
+                    // BlockGetter.java:27-30 default: Optional.of(be) iff be.getType() == type,
+                    // else Optional.empty() — used by BeehiveDecorator.java:57) lands here too
+                    // and must wrap the 1-arg result instead of leaking the raw BlockEntity.
                     case "getBlockEntity": {
                         BlockPos p = (BlockPos) a[0];
+                        net.minecraft.world.level.block.entity.BlockEntity found = null;
                         ProtoChunk c = chunkAt(p.getX() >> 4, p.getZ() >> 4);
-                        if (c == null) return null;
-                        net.minecraft.world.level.block.entity.BlockEntity be = c.getBlockEntity(p);
-                        if (be != null) return be;
-                        net.minecraft.nbt.CompoundTag tag = c.getBlockEntityNbt(p);
-                        BlockState state = c.getBlockState(p);
-                        if (tag != null) {
-                            if ("DUMMY".equals(tag.getStringOr("id", ""))) {
-                                if (!state.hasBlockEntity()) return null;
-                                be = ((net.minecraft.world.level.block.EntityBlock) state.getBlock()).newBlockEntity(p, state);
+                        if (c != null) {
+                            net.minecraft.world.level.block.entity.BlockEntity be = c.getBlockEntity(p);
+                            if (be != null) {
+                                found = be;
                             } else {
-                                be = net.minecraft.world.level.block.entity.BlockEntity.loadStatic(p, state, tag, registries);
+                                net.minecraft.nbt.CompoundTag tag = c.getBlockEntityNbt(p);
+                                BlockState state = c.getBlockState(p);
+                                if (tag != null) {
+                                    if ("DUMMY".equals(tag.getStringOr("id", ""))) {
+                                        if (state.hasBlockEntity()) {
+                                            be = ((net.minecraft.world.level.block.EntityBlock) state.getBlock()).newBlockEntity(p, state);
+                                        }
+                                    } else {
+                                        be = net.minecraft.world.level.block.entity.BlockEntity.loadStatic(p, state, tag, registries);
+                                    }
+                                    if (be != null) { c.setBlockEntity(be); found = be; }
+                                }
                             }
-                            if (be != null) { c.setBlockEntity(be); return be; }
                         }
-                        return null;
+                        if (a.length == 2) {   // BlockGetter.java:27-30 typed default
+                            return found != null && found.getType() == a[1]
+                                ? java.util.Optional.of(found) : java.util.Optional.empty();
+                        }
+                        return found;
                     }
                     case "getMinY": return minY;
                     case "getMaxY": return maxY - 1;

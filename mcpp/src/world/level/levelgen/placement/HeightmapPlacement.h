@@ -13,6 +13,7 @@
 #include "PlacementModifier.h"
 
 #include <cstdint>
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -96,6 +97,52 @@ public:
 
 private:
     HeightProviderPtr m_height;
+};
+
+// EnvironmentScanPlacement.getPositions (EnvironmentScanPlacement.java:48-71):
+// walk up/down from origin while allowed_search_condition holds, returning the
+// first position passing target_condition; stepping outside the build height
+// aborts; after max_steps the FINAL cursor gets one more target test. No RNG.
+class EnvironmentScanPlacement final : public PlacementModifier {
+public:
+    EnvironmentScanPlacement(int directionY,
+                             std::function<bool(WorldGenLevel&, BlockPos)> targetCondition,
+                             std::function<bool(WorldGenLevel&, BlockPos)> allowedSearchCondition,
+                             int maxSteps, int levelMinY, int levelMaxY)
+        : m_directionY(directionY), m_target(std::move(targetCondition)),
+          m_allowed(std::move(allowedSearchCondition)), m_maxSteps(maxSteps),
+          m_levelMinY(levelMinY), m_levelMaxY(levelMaxY) {}
+
+    std::vector<BlockPos> getPositions(PlacementContext* context, RandomSource&, BlockPos origin) const override {
+        WorldGenLevel& level = *context->getLevel();
+        BlockPos pos = origin;
+        if (!m_allowed(level, pos)) {
+            return {};
+        }
+        for (int i = 0; i < m_maxSteps; ++i) {
+            if (m_target(level, pos)) {
+                return { pos };
+            }
+            pos = BlockPos{ pos.x, pos.y + m_directionY, pos.z };
+            if (pos.y < m_levelMinY || pos.y >= m_levelMaxY) {   // isOutsideBuildHeight
+                return {};
+            }
+            if (!m_allowed(level, pos)) {
+                break;
+            }
+        }
+        if (m_target(level, pos)) {
+            return { pos };
+        }
+        return {};
+    }
+
+private:
+    int m_directionY;
+    std::function<bool(WorldGenLevel&, BlockPos)> m_target;
+    std::function<bool(WorldGenLevel&, BlockPos)> m_allowed;
+    int m_maxSteps;
+    int m_levelMinY, m_levelMaxY;
 };
 
 } // namespace mc::levelgen::placement
