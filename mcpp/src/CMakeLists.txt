@@ -293,6 +293,18 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# CuboidRotation parity vs net.minecraft...cuboid.CuboidRotation (block-model element
+# rotation transform + rescale; single-axis + EulerXYZ). Builds on certified JOML
+# (rotation/rotationZYX/scale/transformDirection). Ground truth: tools/CuboidRotationParity.java.
+add_executable(cuboid_rotation_parity
+    render/model/CuboidRotationParityTest.cpp
+)
+target_include_directories(cuboid_rotation_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cuboid_rotation_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # FaceBakery geometry-helper parity vs net.minecraft...cuboid.FaceBakery (private
 # rotateVertexBy/findClosestDirection/calculateFacing/corner<->center). Block-model
 # bake geometry on the certified JOML. Ground truth: tools/FaceBakeryParity.java.
