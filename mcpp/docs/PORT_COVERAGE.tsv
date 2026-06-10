@@ -2379,7 +2379,7 @@ net/minecraft/core/component/DataComponentHolder.java	unvisited
 net/minecraft/core/component/DataComponentInitializers.java	unvisited	
 net/minecraft/core/component/DataComponentLookup.java	unvisited	
 net/minecraft/core/component/DataComponentMap.java	unvisited	
-net/minecraft/core/component/DataComponentPatch.java	unvisited	
+net/minecraft/core/component/DataComponentPatch.java	partial	OPTIONAL_STREAM_CODEC no-component wire form ported+gated (itemstack_stream_parity 61/0); DataComponents patch codecs pending; commit 21c97104
 net/minecraft/core/component/DataComponentType.java	unvisited	
 net/minecraft/core/component/DataComponents.java	unvisited	
 net/minecraft/core/component/PatchedDataComponentMap.java	unvisited	
@@ -5250,7 +5250,7 @@ net/minecraft/world/item/ItemCooldowns.java	ported	C++ *ParityTest.cpp + tools/*
 net/minecraft/world/item/ItemDisplayContext.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/item/ItemFrameItem.java	unvisited	
 net/minecraft/world/item/ItemInstance.java	unvisited	
-net/minecraft/world/item/ItemStack.java	unvisited	
+net/minecraft/world/item/ItemStack.java	partial	OPTIONAL_STREAM_CODEC no-component wire form ported+gated (itemstack_stream_parity 61/0); DataComponents patch codecs pending; commit 21c97104
 net/minecraft/world/item/ItemStackLinkedSet.java	unvisited	
 net/minecraft/world/item/ItemStackTemplate.java	unvisited	
 net/minecraft/world/item/ItemUseAnimation.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
