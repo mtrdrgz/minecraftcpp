@@ -5618,9 +5618,9 @@ net/minecraft/world/level/block/BellBlock.java	unvisited
 net/minecraft/world/level/block/BigDripleafBlock.java	unvisited	
 net/minecraft/world/level/block/BigDripleafStemBlock.java	unvisited	
 net/minecraft/world/level/block/BlastFurnaceBlock.java	unvisited	
-net/minecraft/world/level/block/Block.java	unvisited	
+net/minecraft/world/level/block/Block.java	partial	registry order/flags/defaults proven via block_state_registry_parity; Block class behavior surface partial
 net/minecraft/world/level/block/BlockTypes.java	unvisited	
-net/minecraft/world/level/block/Blocks.java	unvisited	
+net/minecraft/world/level/block/Blocks.java	partial	registry order/flags/defaults proven via block_state_registry_parity; Block class behavior surface partial
 net/minecraft/world/level/block/BonemealableBlock.java	unvisited	
 net/minecraft/world/level/block/BonemealableFeaturePlacerBlock.java	unvisited	
 net/minecraft/world/level/block/BrewingStandBlock.java	unvisited	
@@ -6001,9 +6001,9 @@ net/minecraft/world/level/block/piston/package-info.java	unvisited
 net/minecraft/world/level/block/sounds/AmbientDesertBlockSoundsPlayer.java	unvisited	
 net/minecraft/world/level/block/sounds/package-info.java	unvisited	
 net/minecraft/world/level/block/state/BlockBehaviour.java	unvisited	
-net/minecraft/world/level/block/state/BlockState.java	unvisited	
-net/minecraft/world/level/block/state/StateDefinition.java	unvisited	
-net/minecraft/world/level/block/state/StateHolder.java	unvisited	
+net/minecraft/world/level/block/state/BlockState.java	partial	state registry table + true defaults + canonical props now 1:1 (block_state_registry_parity 29873/29873 all-zero); block BEHAVIOR (classes) still per-feature tables
+net/minecraft/world/level/block/state/StateDefinition.java	partial	state registry table + true defaults + canonical props now 1:1 (block_state_registry_parity 29873/29873 all-zero); block BEHAVIOR (classes) still per-feature tables
+net/minecraft/world/level/block/state/StateHolder.java	partial	state registry table + true defaults + canonical props now 1:1 (block_state_registry_parity 29873/29873 all-zero); block BEHAVIOR (classes) still per-feature tables
 net/minecraft/world/level/block/state/package-info.java	unvisited	
 net/minecraft/world/level/block/state/pattern/BlockInWorld.java	unvisited	
 net/minecraft/world/level/block/state/pattern/BlockPattern.java	unvisited	
