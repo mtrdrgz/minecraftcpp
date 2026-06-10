@@ -6226,7 +6226,7 @@ net/minecraft/world/level/levelgen/carver/NetherWorldCarver.java	unvisited
 net/minecraft/world/level/levelgen/carver/WorldCarver.java	ported	carver gate (terrain byte-exact incl carvers)
 net/minecraft/world/level/levelgen/carver/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/feature/AbstractHugeMushroomFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/BambooFeature.java	unvisited	
+net/minecraft/world/level/levelgen/feature/BambooFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/BasaltColumnsFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/BasaltPillarFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/BlockBlobFeature.java	ported	feature headers; newclasses gate 1867776c/62 sculk-owned; see commit
@@ -6236,10 +6236,10 @@ net/minecraft/world/level/levelgen/feature/BlueIceFeature.java	unvisited
 net/minecraft/world/level/levelgen/feature/BonusChestFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/ChorusPlantFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/ConfiguredFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/CoralClawFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/CoralFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/CoralMushroomFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/CoralTreeFeature.java	unvisited	
+net/minecraft/world/level/levelgen/feature/CoralClawFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
+net/minecraft/world/level/levelgen/feature/CoralFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
+net/minecraft/world/level/levelgen/feature/CoralMushroomFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
+net/minecraft/world/level/levelgen/feature/CoralTreeFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/DeltaFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/DesertWellFeature.java	ported	feature headers; newclasses gate 1867776c/62 sculk-owned; see commit
 net/minecraft/world/level/levelgen/feature/DiskFeature.java	ported	feature/DiskFeature.h; DecorateAll=0; 8d6668ad
@@ -6255,7 +6255,7 @@ net/minecraft/world/level/levelgen/feature/Feature.java	unvisited
 net/minecraft/world/level/levelgen/feature/FeatureCountTracker.java	unvisited	
 net/minecraft/world/level/levelgen/feature/FeaturePlaceContext.java	unvisited	
 net/minecraft/world/level/levelgen/feature/FillLayerFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/FossilFeature.java	unvisited	
+net/minecraft/world/level/levelgen/feature/FossilFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/FossilFeatureConfiguration.java	unvisited	
 net/minecraft/world/level/levelgen/feature/GeodeFeature.java	ported	feature headers; newclasses gate 1867776c/62 sculk-owned; see commit
 net/minecraft/world/level/levelgen/feature/GlowstoneFeature.java	unvisited	
@@ -6263,7 +6263,7 @@ net/minecraft/world/level/levelgen/feature/HugeBrownMushroomFeature.java	unvisit
 net/minecraft/world/level/levelgen/feature/HugeFungusConfiguration.java	unvisited	
 net/minecraft/world/level/levelgen/feature/HugeFungusFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/HugeRedMushroomFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/IcebergFeature.java	unvisited	
+net/minecraft/world/level/levelgen/feature/IcebergFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/KelpFeature.java	ported	feature/KelpFeature.h; vegetal gate; 1321bc56
 net/minecraft/world/level/levelgen/feature/LakeFeature.java	ported	feature headers; newclasses gate 1867776c/62 sculk-owned; see commit
 net/minecraft/world/level/levelgen/feature/LargeDripstoneFeature.java	ported	feature headers; newclasses gate 1867776c/62 sculk-owned; see commit
@@ -6279,7 +6279,7 @@ net/minecraft/world/level/levelgen/feature/ReplaceBlobsFeature.java	unvisited
 net/minecraft/world/level/levelgen/feature/ReplaceBlockFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/RootSystemFeature.java	ported	feature headers; newclasses gate 1867776c/62 sculk-owned; see commit
 net/minecraft/world/level/levelgen/feature/ScatteredOreFeature.java	unvisited	
-net/minecraft/world/level/levelgen/feature/SculkPatchFeature.java	unvisited	
+net/minecraft/world/level/levelgen/feature/SculkPatchFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/SeaPickleFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/SeagrassFeature.java	ported	feature/SeagrassFeature.h; vegetal gate 668/0; 1321bc56
 net/minecraft/world/level/levelgen/feature/SimpleBlockFeature.java	ported	feature/SimpleBlockFeature.h; forest gate; 8f55e4e6
@@ -6339,15 +6339,15 @@ net/minecraft/world/level/levelgen/feature/featuresize/FeatureSizeType.java	unvi
 net/minecraft/world/level/levelgen/feature/featuresize/ThreeLayersFeatureSize.java	unvisited	
 net/minecraft/world/level/levelgen/feature/featuresize/TwoLayersFeatureSize.java	ported	feature/TreeFeature.h (size); forest gate; 8f55e4e6
 net/minecraft/world/level/levelgen/feature/featuresize/package-info.java	unvisited	
-net/minecraft/world/level/levelgen/feature/foliageplacers/AcaciaFoliagePlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/foliageplacers/AcaciaFoliagePlacer.java	ported	TreeFeature.h foliage; class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/foliageplacers/BlobFoliagePlacer.java	ported	feature/TreeFeature.h (foliage); forest gate; 8f55e4e6
 net/minecraft/world/level/levelgen/feature/foliageplacers/BushFoliagePlacer.java	unvisited	
-net/minecraft/world/level/levelgen/feature/foliageplacers/CherryFoliagePlacer.java	unvisited	
-net/minecraft/world/level/levelgen/feature/foliageplacers/DarkOakFoliagePlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/foliageplacers/CherryFoliagePlacer.java	ported	TreeFeature.h foliage; class gates (d5ff8a5e)
+net/minecraft/world/level/levelgen/feature/foliageplacers/DarkOakFoliagePlacer.java	ported	TreeFeature.h foliage; class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/foliageplacers/FancyFoliagePlacer.java	ported	feature/TreeFeature.h (foliage); forest gate; 8f55e4e6
 net/minecraft/world/level/levelgen/feature/foliageplacers/FoliagePlacer.java	unvisited	
 net/minecraft/world/level/levelgen/feature/foliageplacers/FoliagePlacerType.java	unvisited	
-net/minecraft/world/level/levelgen/feature/foliageplacers/MegaJungleFoliagePlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/foliageplacers/MegaJungleFoliagePlacer.java	ported	TreeFeature.h foliage; class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/foliageplacers/MegaPineFoliagePlacer.java	ported	TreeFeature.h foliage; newclasses gate
 net/minecraft/world/level/levelgen/feature/foliageplacers/PineFoliagePlacer.java	ported	TreeFeature.h foliage; newclasses gate
 net/minecraft/world/level/levelgen/feature/foliageplacers/RandomSpreadFoliagePlacer.java	ported	TreeFeature.h foliage; newclasses gate
@@ -6373,10 +6373,10 @@ net/minecraft/world/level/levelgen/feature/stateproviders/SimpleStateProvider.ja
 net/minecraft/world/level/levelgen/feature/stateproviders/WeightedStateProvider.java	unvisited	
 net/minecraft/world/level/levelgen/feature/stateproviders/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/feature/treedecorators/AlterGroundDecorator.java	ported	TreeFeature.h decorators; newclasses gate
-net/minecraft/world/level/levelgen/feature/treedecorators/AttachedToLeavesDecorator.java	unvisited	
+net/minecraft/world/level/levelgen/feature/treedecorators/AttachedToLeavesDecorator.java	ported	TreeFeature.h decorators; class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/treedecorators/AttachedToLogsDecorator.java	ported	feature/TreeFeature.h (decorators); forest gate; 8f55e4e6
 net/minecraft/world/level/levelgen/feature/treedecorators/BeehiveDecorator.java	ported	feature/TreeFeature.h (decorators); forest gate; 8f55e4e6
-net/minecraft/world/level/levelgen/feature/treedecorators/CocoaDecorator.java	unvisited	
+net/minecraft/world/level/levelgen/feature/treedecorators/CocoaDecorator.java	ported	TreeFeature.h decorators; class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/treedecorators/CreakingHeartDecorator.java	unvisited	
 net/minecraft/world/level/levelgen/feature/treedecorators/LeaveVineDecorator.java	ported	TreeFeature.h decorators; newclasses gate
 net/minecraft/world/level/levelgen/feature/treedecorators/PaleMossDecorator.java	unvisited	
@@ -6386,16 +6386,16 @@ net/minecraft/world/level/levelgen/feature/treedecorators/TreeDecoratorType.java
 net/minecraft/world/level/levelgen/feature/treedecorators/TrunkVineDecorator.java	ported	feature/TreeFeature.h (decorators); forest gate; 8f55e4e6
 net/minecraft/world/level/levelgen/feature/treedecorators/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/feature/trunkplacers/BendingTrunkPlacer.java	ported	TreeFeature.h placers; newclasses gate
-net/minecraft/world/level/levelgen/feature/trunkplacers/CherryTrunkPlacer.java	unvisited	
-net/minecraft/world/level/levelgen/feature/trunkplacers/DarkOakTrunkPlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/trunkplacers/CherryTrunkPlacer.java	ported	TreeFeature.h; jungle/savanna/dark_forest/cherry/mangrove/pale class gates (d5ff8a5e)
+net/minecraft/world/level/levelgen/feature/trunkplacers/DarkOakTrunkPlacer.java	ported	TreeFeature.h; jungle/savanna/dark_forest/cherry/mangrove/pale class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/trunkplacers/FancyTrunkPlacer.java	ported	feature/TreeFeature.h (placers); forest gate; 8f55e4e6
-net/minecraft/world/level/levelgen/feature/trunkplacers/ForkingTrunkPlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/trunkplacers/ForkingTrunkPlacer.java	ported	TreeFeature.h; jungle/savanna/dark_forest/cherry/mangrove/pale class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/trunkplacers/GiantTrunkPlacer.java	ported	TreeFeature.h placers; newclasses gate
-net/minecraft/world/level/levelgen/feature/trunkplacers/MegaJungleTrunkPlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/trunkplacers/MegaJungleTrunkPlacer.java	ported	TreeFeature.h; jungle/savanna/dark_forest/cherry/mangrove/pale class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/trunkplacers/StraightTrunkPlacer.java	ported	feature/TreeFeature.h (placers); forest gate; 8f55e4e6
 net/minecraft/world/level/levelgen/feature/trunkplacers/TrunkPlacer.java	unvisited	
 net/minecraft/world/level/levelgen/feature/trunkplacers/TrunkPlacerType.java	unvisited	
-net/minecraft/world/level/levelgen/feature/trunkplacers/UpwardsBranchingTrunkPlacer.java	unvisited	
+net/minecraft/world/level/levelgen/feature/trunkplacers/UpwardsBranchingTrunkPlacer.java	ported	TreeFeature.h; jungle/savanna/dark_forest/cherry/mangrove/pale class gates (d5ff8a5e)
 net/minecraft/world/level/levelgen/feature/trunkplacers/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/flat/FlatLayerInfo.java	unvisited	
 net/minecraft/world/level/levelgen/flat/FlatLevelGeneratorPreset.java	unvisited	
