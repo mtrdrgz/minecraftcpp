@@ -109,9 +109,13 @@ inline void shuffle(std::vector<int>& list, RandomSource& random) {
     }
 }
 
-// MultifaceGrowthFeature.isAirOrWater (:86-88).
+// MultifaceGrowthFeature.isAirOrWater (:86-88): state.isAir() || state.is(WATER).
+// isAir is the BlockStateBase property — TRUE for all three AirBlock registrations
+// (air, cave_air, void_air; Blocks.java .air()). Carved caves store cave_air, so a
+// plain "minecraft:air" compare desyncs the run's RNG at carved-cave origins
+// (caught by deep_frozen (-14,-192): one extra lichen at (-219,22,-3058)).
 inline bool isAirOrWater(const MultifaceBlockState& s) {
-    return s.block == "minecraft:air" || s.block == "minecraft:water";
+    return mc::block::isAirBlock(s.block) || s.block == "minecraft:water";
 }
 
 inline bool hasFace(const MultifaceBlockState& s, int dir) {
@@ -192,9 +196,10 @@ inline bool writeLichen(const Config& cfg, WorldGenLevel& level, BlockPos pos,
 
 // MultifaceSpreader.DefaultSpreaderConfig.stateCanBeReplaced (:131-135):
 // existingState.isAir() || existingState.is(this.block) || water-source —
-// `this.block` is the CONFIG's block, not "any multiface block".
+// `this.block` is the CONFIG's block, not "any multiface block". isAir() is the
+// BlockStateBase property (air, cave_air, void_air — Blocks.java .air()).
 inline bool stateCanBeReplacedDefault(const Config& cfg, const MultifaceBlockState& existing) {
-    return existing.block == "minecraft:air" || existing.block == cfg.blockId
+    return mc::block::isAirBlock(existing.block) || existing.block == cfg.blockId
         || existing.block == "minecraft:water";   // worldgen water is always a source
 }
 

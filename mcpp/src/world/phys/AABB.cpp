@@ -70,78 +70,125 @@ bool AABB::hasNaN() const noexcept {
 
 // ---------------------------------------------------------------------------
 // Ray clip — slab method with EPSILON, faithful to AABB.java#clip and the
-// private getDirection/clipPoint helpers. The Direction return value from the
-// Java version is dropped here; we only return the hit point as an Optional,
-// matching the public Optional<Vec3> clip(from, to) entrypoint.
+// private getDirection/clipPoint helpers (AABB.java:290-395), including the
+// Direction-returning forms used by the Iterable<AABB> overload.
 // ---------------------------------------------------------------------------
 
-// Tracks: did we find a hit? what's the current minimum scale [0, 1]?
-struct ClipState {
-    double scale = 1.0;
-    bool   hit   = false;
-};
+namespace {
+// Sentinel standing in for Java's @Nullable Direction.
+constexpr int NO_DIRECTION = -1;
 
-// Mirrors Java's clipPoint(): test a slab face plane perpendicular to axis A.
-// 'point' is the plane's coordinate on axis A; (minB, maxB) and (minC, maxC)
-// are the bounds on the other two axes. (da, db, dc) is the ray delta and
-// (fromA, fromB, fromC) is the ray origin, both reordered to (A, B, C).
-static void clipPoint(ClipState& state,
-                      double da, double db, double dc,
-                      double point,
-                      double minB, double maxB,
-                      double minC, double maxC,
-                      double fromA, double fromB, double fromC) noexcept {
+// Java: private static @Nullable Direction clipPoint(...) — AABB.java:370-395.
+// Tests a slab face plane perpendicular to axis A; 'point' is the plane's
+// coordinate on axis A; (minB, maxB)/(minC, maxC) bound the other two axes;
+// (da, db, dc) is the ray delta and (fromA, fromB, fromC) the origin, both
+// reordered to (A, B, C).
+int clipPoint(double scaleReference[1], int direction,
+              double da, double db, double dc,
+              double point,
+              double minB, double maxB,
+              double minC, double maxC,
+              int newDirection,
+              double fromA, double fromB, double fromC) noexcept {
     const double s  = (point - fromA) / da;
     const double pb = fromB + s * db;
     const double pc = fromC + s * dc;
-    if (0.0 < s && s < state.scale
+    if (0.0 < s && s < scaleReference[0]
         && minB - AABB::EPSILON < pb && pb < maxB + AABB::EPSILON
         && minC - AABB::EPSILON < pc && pc < maxC + AABB::EPSILON) {
-        state.scale = s;
-        state.hit   = true;
+        scaleReference[0] = s;
+        return newDirection;
     }
+    return direction;
 }
 
+// Java: private static @Nullable Direction getDirection(...) — AABB.java:335-368.
+int getDirection(double minX, double minY, double minZ,
+                 double maxX, double maxY, double maxZ,
+                 const glm::dvec3& from, double scaleReference[1], int direction,
+                 double dx, double dy, double dz) noexcept {
+    using D = mc::Direction;
+    if (dx > AABB::EPSILON) {
+        direction = clipPoint(scaleReference, direction, dx, dy, dz,
+                              minX, minY, maxY, minZ, maxZ,
+                              static_cast<int>(D::WEST), from.x, from.y, from.z);
+    } else if (dx < -AABB::EPSILON) {
+        direction = clipPoint(scaleReference, direction, dx, dy, dz,
+                              maxX, minY, maxY, minZ, maxZ,
+                              static_cast<int>(D::EAST), from.x, from.y, from.z);
+    }
+
+    if (dy > AABB::EPSILON) {
+        direction = clipPoint(scaleReference, direction, dy, dz, dx,
+                              minY, minZ, maxZ, minX, maxX,
+                              static_cast<int>(D::DOWN), from.y, from.z, from.x);
+    } else if (dy < -AABB::EPSILON) {
+        direction = clipPoint(scaleReference, direction, dy, dz, dx,
+                              maxY, minZ, maxZ, minX, maxX,
+                              static_cast<int>(D::UP), from.y, from.z, from.x);
+    }
+
+    if (dz > AABB::EPSILON) {
+        direction = clipPoint(scaleReference, direction, dz, dx, dy,
+                              minZ, minX, maxX, minY, maxY,
+                              static_cast<int>(D::NORTH), from.z, from.x, from.y);
+    } else if (dz < -AABB::EPSILON) {
+        direction = clipPoint(scaleReference, direction, dz, dx, dy,
+                              maxZ, minX, maxX, minY, maxY,
+                              static_cast<int>(D::SOUTH), from.z, from.x, from.y);
+    }
+
+    return direction;
+}
+} // namespace
+
+// Java: static Optional<Vec3> clip(minX..maxZ, from, to) — AABB.java:294-308.
 std::optional<glm::dvec3> AABB::clip(double minX, double minY, double minZ,
                                      double maxX, double maxY, double maxZ,
                                      const glm::dvec3& from,
                                      const glm::dvec3& to) noexcept {
-    ClipState state;
+    double scaleReference[1] = {1.0};
     const double dx = to.x - from.x;
     const double dy = to.y - from.y;
     const double dz = to.z - from.z;
-
-    // X slabs
-    if (dx > EPSILON) {
-        clipPoint(state, dx, dy, dz, minX, minY, maxY, minZ, maxZ, from.x, from.y, from.z);
-    } else if (dx < -EPSILON) {
-        clipPoint(state, dx, dy, dz, maxX, minY, maxY, minZ, maxZ, from.x, from.y, from.z);
-    }
-
-    // Y slabs (axis reorder: A=y, B=z, C=x — matches Java)
-    if (dy > EPSILON) {
-        clipPoint(state, dy, dz, dx, minY, minZ, maxZ, minX, maxX, from.y, from.z, from.x);
-    } else if (dy < -EPSILON) {
-        clipPoint(state, dy, dz, dx, maxY, minZ, maxZ, minX, maxX, from.y, from.z, from.x);
-    }
-
-    // Z slabs (axis reorder: A=z, B=x, C=y — matches Java)
-    if (dz > EPSILON) {
-        clipPoint(state, dz, dx, dy, minZ, minX, maxX, minY, maxY, from.z, from.x, from.y);
-    } else if (dz < -EPSILON) {
-        clipPoint(state, dz, dx, dy, maxZ, minX, maxX, minY, maxY, from.z, from.x, from.y);
-    }
-
-    if (!state.hit) return std::nullopt;
-    return glm::dvec3(from.x + state.scale * dx,
-                      from.y + state.scale * dy,
-                      from.z + state.scale * dz);
+    int direction = getDirection(minX, minY, minZ, maxX, maxY, maxZ,
+                                 from, scaleReference, NO_DIRECTION, dx, dy, dz);
+    if (direction == NO_DIRECTION) return std::nullopt;
+    const double scale = scaleReference[0];
+    return glm::dvec3(from.x + scale * dx, from.y + scale * dy, from.z + scale * dz);
 }
 
 std::optional<glm::dvec3> AABB::clip(const glm::dvec3& from,
                                      const glm::dvec3& to) const noexcept {
     return clip(minCorner.x, minCorner.y, minCorner.z,
                 maxCorner.x, maxCorner.y, maxCorner.z, from, to);
+}
+
+// Java: static @Nullable BlockHitResult clip(Iterable<AABB>, Vec3, Vec3, BlockPos)
+// — AABB.java:310-327.
+std::optional<BlockHitResult> AABB::clip(const std::vector<AABB>& aabbs,
+                                         const glm::dvec3& from,
+                                         const glm::dvec3& to,
+                                         const BlockPos& pos) noexcept {
+    double scaleReference[1] = {1.0};
+    int direction = NO_DIRECTION;
+    const double dx = to.x - from.x;
+    const double dy = to.y - from.y;
+    const double dz = to.z - from.z;
+
+    for (const AABB& aabb : aabbs) {
+        // Java: getDirection(aabb.move(pos), from, ...) — AABB.java:318,329-333.
+        const AABB moved = aabb.move(pos.x, pos.y, pos.z);
+        direction = getDirection(moved.minCorner.x, moved.minCorner.y, moved.minCorner.z,
+                                 moved.maxCorner.x, moved.maxCorner.y, moved.maxCorner.z,
+                                 from, scaleReference, direction, dx, dy, dz);
+    }
+
+    if (direction == NO_DIRECTION) return std::nullopt;
+    const double scale = scaleReference[0];
+    return BlockHitResult(glm::dvec3(from.x + scale * dx, from.y + scale * dy,
+                                     from.z + scale * dz),
+                          static_cast<Direction>(direction), pos, false);
 }
 
 } // namespace mc

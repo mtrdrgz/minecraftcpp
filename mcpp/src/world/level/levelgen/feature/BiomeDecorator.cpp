@@ -29,9 +29,9 @@ bool ensureEngineDecoration(const std::string& dataMinecraftDir, std::uint64_t w
     if (g_ctx && g_ctxSeed == worldSeed && g_ctxChunks == chunks) return true;
     resetEngineDecoration();
     if (dataMinecraftDir.empty()) {
-        MC_LOG_WARN("Decoration disabled: worldgen data not found on disk "
-                    "(run from the repo root so 26.1.2/data resolves; the embedded-assets "
-                    "decoration path is deferred to the packaging task)");
+        MC_LOG_WARN("Decoration disabled: no worldgen data source (assets.bin has no embedded "
+                    "data/minecraft entries and 26.1.2/data was not found on disk — rebuild "
+                    "assets.bin, or run from the repo root so 26.1.2/data resolves)");
         g_ctxFailed = true;
         return false;
     }

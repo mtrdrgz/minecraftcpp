@@ -502,3 +502,22 @@ set_target_properties(climate_biome_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# Embedded worldgen assets gate: proves assets.bin carries the worldgen biome
+# JSON + block tags and that BlockTags/BiomeFeatures::loadFromJsonEntries parse
+# them identically to the disk loaders (65 biomes / 244 block tags). Links the
+# same assets.rc resource the engine embeds, so it checks the REAL pack.
+add_executable(embedded_worldgen_assets
+    world/level/levelgen/feature/EmbeddedWorldgenAssetsTest.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/block/BlockTags.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
+    assets/assets.rc
+)
+target_include_directories(embedded_worldgen_assets PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(embedded_worldgen_assets PRIVATE nlohmann_json)
+set_target_properties(embedded_worldgen_assets PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)

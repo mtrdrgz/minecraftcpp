@@ -23,6 +23,7 @@
 #include <ctime>
 #include <iomanip>
 #include <filesystem>
+#include <fstream>
 #include <exception>
 #include <optional>
 #include <sstream>
@@ -301,14 +302,100 @@ namespace {
         }
         return entries;
     }
+
+    // Materialize every embedded "data/minecraft/..." pack entry into a disk
+    // cache and return its ".../data/minecraft" root ("" when the pack lacks a
+    // decoration-critical set — fail closed so the disk path can take over).
+    //
+    // Why a cache and not a reader callback: the CERTIFIED decoration TU
+    // (FullChunkDecorateParityTest.cpp, owned by the decoration-parity work)
+    // loads its worldgen JSON / tag JSON / structure template NBTs from a plain
+    // dataDir via std::ifstream. Surfacing the embedded bytes as files keeps
+    // that TU byte-identical to what the parity gates certify, with zero
+    // changes to it. Files already present with the same size are not
+    // rewritten, so steady-state startups only stat the cache.
+    std::string materializeEmbeddedData() {
+        namespace fs = std::filesystem;
+        auto& assets = AssetManager::instance();
+        const std::vector<std::string> paths = assets.list("data/minecraft/");
+
+        std::size_t biomes = 0, blockTags = 0, fluidTags = 0, structures = 0;
+        for (const std::string& p : paths) {
+            if (p.starts_with("data/minecraft/worldgen/biome/")) ++biomes;
+            else if (p.starts_with("data/minecraft/tags/block/")) ++blockTags;
+            else if (p.starts_with("data/minecraft/tags/fluid/")) ++fluidTags;
+            else if (p.starts_with("data/minecraft/structure/")) ++structures;
+        }
+        if (biomes == 0 || blockTags == 0 || fluidTags == 0 || structures == 0) {
+            if (!paths.empty()) {
+                MC_LOG_WARN("Embedded worldgen data incomplete (biome={} tags/block={} tags/fluid={} "
+                            "structure={}); rebuild assets.bin — falling back to disk data",
+                            biomes, blockTags, fluidTags, structures);
+            }
+            return "";
+        }
+
+        std::error_code ec;
+        const fs::path root = fs::temp_directory_path(ec);
+        if (ec) return "";
+        const fs::path cache = root / "mcpp_embedded_data";
+        std::size_t written = 0;
+        for (const std::string& p : paths) {
+            const std::vector<uint8_t> bytes = assets.readRaw(p);
+            if (bytes.empty()) continue;
+            const fs::path dst = cache / fs::path(p);
+            if (fs::exists(dst, ec) && fs::file_size(dst, ec) == bytes.size()) continue;
+            fs::create_directories(dst.parent_path(), ec);
+            std::ofstream f(dst, std::ios::binary | std::ios::trunc);
+            f.write(reinterpret_cast<const char*>(bytes.data()),
+                    static_cast<std::streamsize>(bytes.size()));
+            if (!f) {
+                MC_LOG_WARN("Cannot write embedded-data cache file {} — falling back to disk data",
+                            dst.generic_string());
+                return "";
+            }
+            ++written;
+        }
+        MC_LOG_INFO("Embedded worldgen data cache: {} pack entries ({} written, rest up to date) at {}",
+                    paths.size(), written, cache.generic_string());
+        return (cache / "data" / "minecraft").generic_string();
+    }
 }
 
 void Minecraft::ensureWorldgenData() {
     if (m_worldgenTried) return;
     m_worldgenTried = true;
 
-    std::string dataRoot = discoverDataRoot();
     try {
+        // EMBEDDED FIRST: the shipped exe must decorate in a directory with no
+        // 26.1.2/ data checkout. (The parity gate binaries keep reading the
+        // disk data directly and are unaffected by this preference.)
+        if (std::string embedded = materializeEmbeddedData(); !embedded.empty()) {
+            const auto biomeEntries = readJsonAssetEntries("data/minecraft/worldgen/biome/");
+            const auto tagEntries = readJsonAssetEntries("data/minecraft/tags/block/");
+
+            levelgen::feature::setJsonAssetReader([](std::string_view path) -> std::optional<std::string> {
+                std::vector<uint8_t> bytes = AssetManager::instance().readRaw(path);
+                if (bytes.empty()) {
+                    return std::nullopt;
+                }
+                return std::string(bytes.begin(), bytes.end());
+            });
+            m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
+                levelgen::feature::BiomeFeatures::loadFromJsonEntries(biomeEntries));
+            m_blockTags = std::make_unique<block::BlockTags>(
+                block::BlockTags::loadFromJsonEntries(tagEntries));
+            m_worldgenDir = embedded + "/worldgen";
+            m_dataMinecraftDir = embedded;   // decoration context reads the materialized EMBEDDED bytes
+            m_worldgenReady = true;
+            MC_LOG_INFO("Worldgen decoration data loaded ({} biomes, {} block tags) from EMBEDDED assets",
+                        m_biomeFeatures->biomeCount(), m_blockTags->tagCount());
+            return;
+        }
+
+        // Disk fallback: dev checkouts whose assets.bin predates the embedded
+        // data entries (run from the repo root so 26.1.2/data resolves).
+        std::string dataRoot = discoverDataRoot();
         if (!dataRoot.empty()) {
             m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
                 levelgen::feature::BiomeFeatures::loadFromDirectory(dataRoot + "/minecraft/worldgen/biome"));
@@ -317,34 +404,13 @@ void Minecraft::ensureWorldgenData() {
             m_worldgenDir = dataRoot + "/minecraft/worldgen";
             m_dataMinecraftDir = dataRoot + "/minecraft";   // decoration context loads from DISK
             m_worldgenReady = true;
-            MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from disk: {}",
+            MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from DISK: {}",
                         m_biomeFeatures->biomeCount(), dataRoot);
             return;
         }
 
-        const auto biomeEntries = readJsonAssetEntries("data/minecraft/worldgen/biome/");
-        const auto tagEntries = readJsonAssetEntries("data/minecraft/tags/block/");
-        if (biomeEntries.empty() || tagEntries.empty()) {
-            MC_LOG_WARN("Worldgen data not found in 26.1.2/data or embedded assets; "
-                        "terrain will generate without trees/vegetation");
-            return;
-        }
-
-        levelgen::feature::setJsonAssetReader([](std::string_view path) -> std::optional<std::string> {
-            std::vector<uint8_t> bytes = AssetManager::instance().readRaw(path);
-            if (bytes.empty()) {
-                return std::nullopt;
-            }
-            return std::string(bytes.begin(), bytes.end());
-        });
-        m_biomeFeatures = std::make_unique<levelgen::feature::BiomeFeatures>(
-            levelgen::feature::BiomeFeatures::loadFromJsonEntries(biomeEntries));
-        m_blockTags = std::make_unique<block::BlockTags>(
-            block::BlockTags::loadFromJsonEntries(tagEntries));
-        m_worldgenDir = "data/minecraft/worldgen";
-        m_worldgenReady = true;
-        MC_LOG_INFO("Worldgen decoration data loaded ({} biomes) from embedded assets",
-                    m_biomeFeatures->biomeCount());
+        MC_LOG_WARN("Worldgen data not found in embedded assets or 26.1.2/data; "
+                    "terrain will generate without trees/vegetation");
     } catch (const std::exception& e) {
         MC_LOG_WARN("Failed to load worldgen decoration data: {}", e.what());
         m_worldgenReady = false;

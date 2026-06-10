@@ -44,9 +44,14 @@ static bool shouldPackIndexedAsset(const std::string& path) {
     // - block textures for the terrain atlas fallback
     // - HUD sprites loaded by Gui
     // - title panorama loaded by PanoramaRenderer
+    // - sound events (.ogg) streamed by SoundManager::getOrLoadSound, plus the
+    //   sounds.json registry (the launcher asset index ships sounds OUTSIDE the
+    //   client.jar, so dropping them here would silently mute the runtime)
     if (startsWith(path, "minecraft/textures/block/") && endsWith(path, ".png")) return true;
     if (startsWith(path, "minecraft/textures/gui/sprites/hud/") && endsWith(path, ".png")) return true;
     if (startsWith(path, "minecraft/textures/gui/title/background/") && endsWith(path, ".png")) return true;
+    if (startsWith(path, "minecraft/sounds/") && endsWith(path, ".ogg")) return true;
+    if (path == "minecraft/sounds.json") return true;
     return false;
 }
 
@@ -211,11 +216,15 @@ int main(int argc, char* argv[]) {
         addDirectory(entries, src_assets_dir, "", true, output_path);
     }
 
-    // 3. Add data-driven worldgen JSON needed by standalone terrain decoration.
+    // 3. Add data-driven worldgen data needed by standalone terrain decoration:
+    //    worldgen JSON, block + fluid tags, and the structure template NBTs
+    //    (binary entries; the MCAS format stores raw bytes, so that is fine).
     if (!data_minecraft_dir.empty() && fs::exists(data_minecraft_dir)) {
         std::cout << "Packing worldgen data from: " << data_minecraft_dir << "\n";
         addDirectory(entries, data_minecraft_dir / "worldgen", "data/minecraft/worldgen");
         addDirectory(entries, data_minecraft_dir / "tags" / "block", "data/minecraft/tags/block", false);
+        addDirectory(entries, data_minecraft_dir / "tags" / "fluid", "data/minecraft/tags/fluid", false);
+        addDirectory(entries, data_minecraft_dir / "structure", "data/minecraft/structure");
     }
 
     std::cout << "Packing " << entries.size() << " total assets...\n";

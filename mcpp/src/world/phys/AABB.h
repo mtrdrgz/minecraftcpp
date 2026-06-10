@@ -1,6 +1,11 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <optional>
+#include <vector>
+
+#include "core/Math.h"               // mc::BlockPos
+#include "world/phys/BlockHitResult.h"
+#include "world/phys/Direction.h"
 
 // ---------------------------------------------------------------------------
 // Port of net/minecraft/world/phys/AABB.java (Minecraft Java Edition 26.1.2)
@@ -40,23 +45,23 @@
 //                                Vec3 from, Vec3 to)
 //
 // Skipped (not yet needed at this phase, will be added when callers appear):
+//   - double min(Direction.Axis) / max(Direction.Axis)
+//   - static BlockHitResult clip(Iterable<AABB>, Vec3, Vec3, BlockPos)
+//     (+ the private getDirection/clipPoint helpers, Direction-returning)
+//
+// Skipped (not yet needed at this phase, will be added when callers appear):
 //   - AABB(BlockPos)                              (no BlockPos overload here;
 //                                                  use the 6-double ctor)
 //   - static AABB of(BoundingBox)                 (BoundingBox not ported yet)
 //   - static AABB unitCubeFromLowerCorner(Vec3)   (trivial; not yet needed)
 //   - static AABB encapsulatingFullBlocks(BlockPos, BlockPos)
 //   - setMinX/Y/Z / setMaxX/Y/Z                   (trivial; not yet needed)
-//   - min(Direction.Axis) / max(Direction.Axis)   (Direction not ported yet)
 //   - equals / hashCode / toString                (Java boilerplate)
 //   - AABB move(BlockPos) / AABB move(Vector3f)   (no BlockPos / Vector3f
 //                                                  overloads required)
 //   - boolean intersects(BlockPos)                (no BlockPos overload)
 //   - Vec3 getBottomCenter()                      (not yet needed)
-//   - static BlockHitResult clip(Iterable<AABB>, Vec3, Vec3, BlockPos)
-//     and the private getDirection/clipPoint helpers — these require Direction
-//     and BlockHitResult, which aren't ported yet. The single-AABB
-//     Optional<Vec3> clip(from, to) entrypoint IS ported below.
-//   - boolean collidedAlongVector(Vec3, List<AABB>)  (needs the iterable clip)
+//   - boolean collidedAlongVector(Vec3, List<AABB>)  (not yet needed)
 //   - static class Builder                        (not yet needed)
 // ---------------------------------------------------------------------------
 
@@ -188,6 +193,15 @@ public:
     constexpr glm::dvec3 getMinPosition() const noexcept { return minCorner; }
     constexpr glm::dvec3 getMaxPosition() const noexcept { return maxCorner; }
 
+    // Java: double min(Direction.Axis) = axis.choose(minX, minY, minZ);
+    //       double max(Direction.Axis) = axis.choose(maxX, maxY, maxZ).
+    constexpr double min(Axis axis) const noexcept {
+        return axisChoose(axis, minCorner.x, minCorner.y, minCorner.z);
+    }
+    constexpr double max(Axis axis) const noexcept {
+        return axisChoose(axis, maxCorner.x, maxCorner.y, maxCorner.z);
+    }
+
     // Java: distanceToSqr(Vec3) — minimum squared distance from point to AABB.
     double distanceToSqr(const glm::dvec3& v) const noexcept;
 
@@ -205,6 +219,13 @@ public:
                                           double maxX, double maxY, double maxZ,
                                           const glm::dvec3& from,
                                           const glm::dvec3& to) noexcept;
+
+    // Java: static @Nullable BlockHitResult clip(Iterable<AABB>, Vec3 from,
+    // Vec3 to, BlockPos pos) — AABB.java:310-327. Null is std::nullopt.
+    static std::optional<BlockHitResult> clip(const std::vector<AABB>& aabbs,
+                                              const glm::dvec3& from,
+                                              const glm::dvec3& to,
+                                              const BlockPos& pos) noexcept;
 
     // Matches Java's EPSILON constant.
     static constexpr double EPSILON = 1.0e-7;

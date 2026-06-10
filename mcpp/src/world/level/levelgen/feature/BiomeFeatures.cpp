@@ -79,8 +79,16 @@ BiomeFeatures BiomeFeatures::loadFromDirectory(const std::string& dir) {
 }
 
 BiomeFeatures BiomeFeatures::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
-    (void)entries;
-    return BiomeFeatures{};
+    // Same parse as loadFromDirectory, but from in-memory (path, json-text) pairs
+    // (the embedded asset pack). The biome id is the entry path's stem.
+    BiomeFeatures out;
+    for (const auto& [path, text] : entries) {
+        BiomeEntry be;
+        if (parseBiomeFeatures(text, be.steps, be.stepCount)) {
+            out.m_biomes.emplace(normalizeId(stemFromPath(path)), std::move(be));
+        }
+    }
+    return out;
 }
 
 bool BiomeFeatures::hasBiome(const std::string& biome) const {

@@ -71,8 +71,17 @@ BlockTags BlockTags::loadFromDirectory(const std::string& dir) {
 }
 
 BlockTags BlockTags::loadFromJsonEntries(const std::vector<std::pair<std::string, std::string>>& entries) {
-    (void)entries;
-    return BlockTags{};
+    // Same parse as loadFromDirectory, but from in-memory (path, json-text) pairs
+    // (the embedded asset pack). The tag id is the entry path's stem.
+    BlockTags out;
+    for (const auto& [path, text] : entries) {
+        try {
+            out.m_raw.emplace(normalizeId(stemFromPath(path)), parseTagJson(text));
+        } catch (const std::exception&) {
+            // skip malformed tag JSON
+        }
+    }
+    return out;
 }
 
 const std::set<std::string>& BlockTags::resolve(const std::string& tag, std::set<std::string>& visiting) const {
