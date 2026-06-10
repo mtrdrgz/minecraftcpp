@@ -4763,3 +4763,90 @@ set_target_properties(pkt_set_passengers_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# ===== Parallel-authored bounded gates (workflow wave 11) =====
+
+# net.minecraft.util.CsvOutput
+# net.minecraft.util.CsvOutput
+add_executable(csv_output_parity util/CsvOutputParityTest.cpp)
+target_include_directories(csv_output_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(csv_output_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.food.FoodConstants
+# FoodConstants parity vs net.minecraft.world.food.FoodConstants â€” the hunger/saturation/
+# exhaustion magic numbers (data) + the pure helper saturationByModifier(int,float).
+# Bit-exact (int decimal, float raw IEEE-754 bits). Ground truth reads the values
+# reflectively out of the real class: tools/FoodConstantsParity.java.
+add_executable(food_constants_parity
+    world/food/FoodConstantsParityTest.cpp
+)
+target_include_directories(food_constants_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(food_constants_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.StringUtil
+# net.minecraft.util.StringUtil (extra helpers: stripColor / filterText / isValidPlayerName,
+# plus re-verify truncateStringIfNecessary edge cases + lineCount)
+add_executable(hash_common_parity world/level/levelgen/StringUtilExtraParityTest.cpp)
+target_include_directories(hash_common_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(hash_common_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.valueproviders.ConstantFloat
+# net.minecraft.util.valueproviders.ConstantFloat
+add_executable(int_provider_constant_float_parity util/valueproviders/ConstantFloatParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(int_provider_constant_float_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(int_provider_constant_float_parity PRIVATE bcrypt)
+endif()
+set_target_properties(int_provider_constant_float_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.util.valueproviders.ConstantInt
+# net.minecraft.util.valueproviders.ConstantInt
+# VERIFY-EXISTING: the certified port mc::valueproviders::ConstantInt lives in
+# world/level/levelgen/IntProvider.h (header-only); the test parses the GT TSV and
+# compares minInclusive/maxInclusive + 8 sample() draws per case bit-for-bit. sample()
+# is pure (ignores the rng); the test seeds a LegacyRandomSource (RandomSource.cpp) and
+# perturbs it the same way the Java GT did to prove rng-independence.
+# Link closure: only RandomSource.cpp (certified LegacyRandomSource) + bcrypt on WIN32;
+# IntProvider.h pulls in nothing else (no glm/AABB/Vec3).
+add_executable(int_provider_constant_parity
+    util/valueproviders/ConstantIntParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(int_provider_constant_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(int_provider_constant_parity PRIVATE bcrypt)
+endif()
+set_target_properties(int_provider_constant_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+# net.minecraft.util.LightCoordsUtil
+add_executable(light_coords_util_parity util/LightCoordsUtilParityTest.cpp)
+target_include_directories(light_coords_util_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(light_coords_util_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.resources.ResourceLocation
+add_executable(rl_chars_parity resources/ResourceLocationCharsParityTest.cpp)
+target_include_directories(rl_chars_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(rl_chars_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# net.minecraft.world.level.block.SoundType
+# net.minecraft.world.level.block.SoundType
+# volume()/pitch() float pair for every public-static SoundType constant.
+# VERIFIES the ported table in world/level/block/SoundType.h against ground truth
+# from tools/SoundTypeParity.java (the REAL net.minecraft SoundType + getVolume/
+# getPitch, reflected over the public static finals). Header-only, pure std C++
+# (std::bit_cast); no glm/json/miniz/bcrypt and no extra link sources.
+add_executable(sound_type_parity world/level/block/SoundTypeParityTest.cpp)
+target_include_directories(sound_type_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(sound_type_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
