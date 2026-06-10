@@ -775,3 +775,82 @@ set_target_properties(direction2d_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${
 add_executable(chunk_pos_extra_parity world/level/ChunkPosExtraParityTest.cpp)
 target_include_directories(chunk_pos_extra_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(chunk_pos_extra_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ───────────────────────── Parallel-authored bounded gates (workflow wave 2) ─────────────────────────
+
+add_executable(entity_dimensions_parity world/entity/EntityDimensionsParityTest.cpp)
+target_include_directories(entity_dimensions_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(entity_dimensions_parity PRIVATE glm)
+set_target_properties(entity_dimensions_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(combat_rules_parity world/damagesource/CombatRulesParityTest.cpp)
+target_include_directories(combat_rules_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(combat_rules_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(player_xp_parity world/entity/player/PlayerXpParityTest.cpp)
+target_include_directories(player_xp_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(player_xp_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(attribute_math_parity world/entity/ai/attributes/AttributeMathParityTest.cpp)
+target_include_directories(attribute_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(attribute_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(data_layer_parity world/level/chunk/DataLayerParityTest.cpp)
+target_include_directories(data_layer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(data_layer_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(gui_scale_parity client/GuiScaleParityTest.cpp)
+target_include_directories(gui_scale_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(gui_scale_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(matrix_util_parity render/model/MatrixUtilParityTest.cpp)
+target_include_directories(matrix_util_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(matrix_util_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(pose_stack_parity render/PoseStackParityTest.cpp)
+target_include_directories(pose_stack_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(pose_stack_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(weighted_random_parity util/WeightedRandomParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(weighted_random_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(weighted_random_parity PRIVATE bcrypt)
+endif()
+set_target_properties(weighted_random_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(improved_noise_parity
+    world/level/levelgen/synth/ImprovedNoiseParityTest.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(improved_noise_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+target_link_libraries(improved_noise_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(improved_noise_parity PRIVATE bcrypt)
+endif()
+set_target_properties(improved_noise_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(frustum_parity render/FrustumParityTest.cpp)
+target_include_directories(frustum_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(frustum_parity PRIVATE glm)
+set_target_properties(frustum_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(food_data_parity world/food/FoodDataParityTest.cpp)
+target_include_directories(food_data_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(food_data_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(simplex_noise_parity
+    world/level/levelgen/synth/SimplexNoiseParityTest.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(simplex_noise_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/world/level/levelgen)
+target_link_libraries(simplex_noise_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(simplex_noise_parity PRIVATE bcrypt)
+endif()
+set_target_properties(simplex_noise_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

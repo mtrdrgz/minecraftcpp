@@ -127,6 +127,14 @@ struct Matrix3f {
         return *this;
     }
 
+    // Matrix3f.identity() (MemUtil.identity)
+    Matrix3f& identity() {
+        m00 = 1; m01 = 0; m02 = 0;
+        m10 = 0; m11 = 1; m12 = 0;
+        m20 = 0; m21 = 0; m22 = 1;
+        return *this;
+    }
+
     // Matrix3f.set(int column, int row, float)
     Matrix3f& set(int column, int row, float value) {
         float* cols[3][3] = { { &m00, &m01, &m02 }, { &m10, &m11, &m12 }, { &m20, &m21, &m22 } };
@@ -134,9 +142,94 @@ struct Matrix3f {
         return *this;
     }
 
+    // Matrix3f.set(Matrix3fc): copy 9 elements (skips the self-aliasing guard,
+    // harmless since values are identical when src==dst)
+    Matrix3f& set(const Matrix3f& s) {
+        m00 = s.m00; m01 = s.m01; m02 = s.m02;
+        m10 = s.m10; m11 = s.m11; m12 = s.m12;
+        m20 = s.m20; m21 = s.m21; m22 = s.m22;
+        return *this;
+    }
+
+    // Matrix3f.set(Matrix4fc): copy the upper-left 3x3 block (defined after Matrix4f)
+    Matrix3f& set(const Matrix4f& s);
+
     Matrix3f& scaling(float x, float y, float z) {
         zero();
         m00 = x; m11 = y; m22 = z;
+        return *this;
+    }
+
+    // Matrix3f.scale(float x, float y, float z): column-wise scale (dest=this)
+    Matrix3f& scale(float x, float y, float z) {
+        m00 = m00 * x; m01 = m01 * x; m02 = m02 * x;
+        m10 = m10 * y; m11 = m11 * y; m12 = m12 * y;
+        m20 = m20 * z; m21 = m21 * z; m22 = m22 * z;
+        return *this;
+    }
+
+    // Matrix3f.transpose() -> transpose(this): set(m00,m10,m20, m01,m11,m21, m02,m12,m22)
+    Matrix3f& transpose() {
+        float n00 = m00, n01 = m10, n02 = m20;
+        float n10 = m01, n11 = m11, n12 = m21;
+        float n20 = m02, n21 = m12, n22 = m22;
+        m00 = n00; m01 = n01; m02 = n02;
+        m10 = n10; m11 = n11; m12 = n12;
+        m20 = n20; m21 = n21; m22 = n22;
+        return *this;
+    }
+
+    // Matrix3f.invert() -> invert(this). Math.fma defaults to plain a*b+c (jfma).
+    Matrix3f& invert() {
+        float a = jfma(m00, m11, -m01 * m10);   // local 2
+        float b = jfma(m02, m10, -m00 * m12);   // local 3
+        float c = jfma(m01, m12, -m02 * m11);   // local 4
+        float det = jfma(a, m22, jfma(b, m21, c * m20)); // local 5
+        float s = 1.0f / det;                   // local 6
+        float nm00 = jfma(m11, m22, -m21 * m12) * s; // 7
+        float nm01 = jfma(m21, m02, -m01 * m22) * s; // 8
+        float nm02 = c * s;                          // 9
+        float nm10 = jfma(m20, m12, -m10 * m22) * s; // 10
+        float nm11 = jfma(m00, m22, -m20 * m02) * s; // 11
+        float nm12 = b * s;                          // 12
+        float nm20 = jfma(m10, m21, -m20 * m11) * s; // 13
+        float nm21 = jfma(m20, m01, -m00 * m21) * s; // 14
+        float nm22 = a * s;                          // 15
+        m00 = nm00; m01 = nm01; m02 = nm02;
+        m10 = nm10; m11 = nm11; m12 = nm12;
+        m20 = nm20; m21 = nm21; m22 = nm22;
+        return *this;
+    }
+
+    // Matrix3f.rotate(Quaternionfc) -> rotate(by, this). Plain mul/add (NOT fma).
+    Matrix3f& rotate(const Quaternionf& q) {
+        float w2 = q.w * q.w, x2 = q.x * q.x, y2 = q.y * q.y, z2 = q.z * q.z;
+        float zw = q.z * q.w, dzw = zw + zw;
+        float xy = q.x * q.y, dxy = xy + xy;
+        float xz = q.x * q.z, dxz = xz + xz;
+        float yw = q.y * q.w, dyw = yw + yw;
+        float yz = q.y * q.z, dyz = yz + yz;
+        float xw = q.x * q.w, dxw = xw + xw;
+        float rm00 = w2 + x2 - z2 - y2;     // 19
+        float rm01 = dxy + dzw;             // 20
+        float rm02 = dxz - dyw;             // 21
+        float rm10 = -dzw + dxy;            // 22
+        float rm11 = y2 - z2 + w2 - x2;     // 23
+        float rm12 = dyz + dxw;             // 24
+        float rm20 = dyw + dxz;             // 25
+        float rm21 = dyz - dxw;             // 26
+        float rm22 = z2 - y2 - x2 + w2;     // 27
+        float nm00 = m00 * rm00 + m10 * rm01 + m20 * rm02; // 28
+        float nm01 = m01 * rm00 + m11 * rm01 + m21 * rm02; // 29
+        float nm02 = m02 * rm00 + m12 * rm01 + m22 * rm02; // 30
+        float nm10 = m00 * rm10 + m10 * rm11 + m20 * rm12; // 31
+        float nm11 = m01 * rm10 + m11 * rm11 + m21 * rm12; // 32
+        float nm12 = m02 * rm10 + m12 * rm11 + m22 * rm12; // 33
+        m20 = m00 * rm20 + m10 * rm21 + m20 * rm22;        // written first
+        m21 = m01 * rm20 + m11 * rm21 + m21 * rm22;
+        m22 = m02 * rm20 + m12 * rm21 + m22 * rm22;
+        m00 = nm00; m01 = nm01; m02 = nm02;
+        m10 = nm10; m11 = nm11; m12 = nm12;
         return *this;
     }
 
@@ -363,14 +456,84 @@ struct Matrix4f {
         return *this;
     }
 
-    // rotate(Quaternionfc): the pipeline only ever rotates an IDENTITY matrix
-    // (Transformation.compose with null translation); other dispatch arms are
-    // unreachable here and intentionally hard-fail instead of approximating.
+    // rotateTranslation(Quaternionfc, dest=this): this matrix is a pure translation,
+    // so the result is the quaternion's rotation matrix with the translation column
+    // preserved. Plain mul/add. (JOML Matrix4f.rotateTranslation)
+    Matrix4f& rotateTranslation(const Quaternionf& q) {
+        float w2 = q.w * q.w, x2 = q.x * q.x, y2 = q.y * q.y, z2 = q.z * q.z;
+        float zw = q.z * q.w, dzw = zw + zw;
+        float xy = q.x * q.y, dxy = xy + xy;
+        float xz = q.x * q.z, dxz = xz + xz;
+        float yw = q.y * q.w, dyw = yw + yw;
+        float yz = q.y * q.z, dyz = yz + yz;
+        float xw = q.x * q.w, dxw = xw + xw;
+        float rm00 = w2 + x2 - z2 - y2;   // 19
+        float rm01 = dxy + dzw;           // 20
+        float rm02 = dxz - dyw;           // 21
+        float rm10 = -dzw + dxy;          // 22
+        float rm11 = y2 - z2 + w2 - x2;   // 23
+        float rm12 = dyz + dxw;           // 24
+        float rm20 = dyw + dxz;           // 25
+        float rm21 = dyz - dxw;           // 26
+        float rm22 = z2 - y2 - x2 + w2;   // 27
+        // dest._m20/_m21/_m22/_m23 first (dest==this so order matters for reads;
+        // but rm* are precomputed locals — no field reads remain). Match bytecode.
+        m20 = rm20; m21 = rm21; m22 = rm22; m23 = 0.0f;
+        m00 = rm00; m01 = rm01; m02 = rm02; m03 = 0.0f;
+        m10 = rm10; m11 = rm11; m12 = rm12; m13 = 0.0f;
+        // m30/m31/m32/m33 read from this (unchanged), m33 from this
+        // (already holds the translation column / 1)
+        properties &= -14; // & ~(PERSPECTIVE|IDENTITY|TRANSLATION) = keep AFFINE|ORTHONORMAL
+        return *this;
+    }
+
+    // rotateAffine(Quaternionfc, dest=this): this is affine. Plain mul/add.
+    Matrix4f& rotateAffine(const Quaternionf& q) {
+        float w2 = q.w * q.w, x2 = q.x * q.x, y2 = q.y * q.y, z2 = q.z * q.z;
+        float zw = q.z * q.w, dzw = zw + zw;
+        float xy = q.x * q.y, dxy = xy + xy;
+        float xz = q.x * q.z, dxz = xz + xz;
+        float yw = q.y * q.w, dyw = yw + yw;
+        float yz = q.y * q.z, dyz = yz + yz;
+        float xw = q.x * q.w, dxw = xw + xw;
+        float rm00 = w2 + x2 - z2 - y2;   // 19
+        float rm01 = dxy + dzw;           // 20
+        float rm02 = dxz - dyw;           // 21
+        float rm10 = -dzw + dxy;          // 22
+        float rm11 = y2 - z2 + w2 - x2;   // 23
+        float rm12 = dyz + dxw;           // 24
+        float rm20 = dyw + dxz;           // 25
+        float rm21 = dyz - dxw;           // 26
+        float rm22 = z2 - y2 - x2 + w2;   // 27
+        float nm00 = m00 * rm00 + m10 * rm01 + m20 * rm02; // 28
+        float nm01 = m01 * rm00 + m11 * rm01 + m21 * rm02; // 29
+        float nm02 = m02 * rm00 + m12 * rm01 + m22 * rm02; // 30
+        float nm10 = m00 * rm10 + m10 * rm11 + m20 * rm12; // 31
+        float nm11 = m01 * rm10 + m11 * rm11 + m21 * rm12; // 32
+        float nm12 = m02 * rm10 + m12 * rm11 + m22 * rm12; // 33
+        // dest._m20/_m21/_m22 written first (use original m00..m22)
+        float nm20 = m00 * rm20 + m10 * rm21 + m20 * rm22;
+        float nm21 = m01 * rm20 + m11 * rm21 + m21 * rm22;
+        float nm22 = m02 * rm20 + m12 * rm21 + m22 * rm22;
+        m20 = nm20; m21 = nm21; m22 = nm22; m23 = 0.0f;
+        m00 = nm00; m01 = nm01; m02 = nm02; m03 = 0.0f;
+        m10 = nm10; m11 = nm11; m12 = nm12; m13 = 0.0f;
+        // m30/m31/m32/m33 unchanged
+        properties &= -14;
+        return *this;
+    }
+
+    // rotate(Quaternionfc) -> rotate(by, this): property-dispatched.
+    //   IDENTITY    -> rotation(q)
+    //   TRANSLATION -> rotateTranslation(q)
+    //   AFFINE      -> rotateAffine(q)
+    //   else        -> rotateGeneric (unreachable in the PoseStack pipeline:
+    //                  a Pose's matrix is always affine; intentionally unported)
     Matrix4f& rotate(const Quaternionf& q) {
         if ((properties & PROPERTY_IDENTITY) != 0) return rotation(q);
-        // rotateTranslation / rotateAffine / rotateGeneric: unreachable in the
-        // block-model pipeline (would need a faithful port before use).
-        __builtin_trap();
+        if ((properties & PROPERTY_TRANSLATION) != 0) return rotateTranslation(q);
+        if ((properties & PROPERTY_AFFINE) != 0) return rotateAffine(q);
+        __builtin_trap(); // rotateGeneric: unported (not reached by PoseStack)
     }
 
     // ── mul ─────────────────────────────────────────────────────────────────
@@ -552,6 +715,14 @@ struct Matrix4f {
 
     void transformDirection(Vector3f& v) const { transformDirection(v, v); }
 };
+
+// Matrix3f.set(Matrix4fc): copy the upper-left 3x3 block.
+inline Matrix3f& Matrix3f::set(const Matrix4f& s) {
+    m00 = s.m00; m01 = s.m01; m02 = s.m02;
+    m10 = s.m10; m11 = s.m11; m12 = s.m12;
+    m20 = s.m20; m21 = s.m21; m22 = s.m22;
+    return *this;
+}
 
 // ── org.joml.GeometryUtils.normal(v0, v1, v2, dest) ─────────────────────────
 // cross(v1-v0, v2-v0) then normalize()
