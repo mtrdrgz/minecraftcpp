@@ -5206,7 +5206,7 @@ net/minecraft/world/item/ArrowItem.java	unvisited
 net/minecraft/world/item/AxeItem.java	unvisited	
 net/minecraft/world/item/BannerItem.java	unvisited	
 net/minecraft/world/item/BedItem.java	unvisited	
-net/minecraft/world/item/BlockItem.java	unvisited	
+net/minecraft/world/item/BlockItem.java	partial	registry table 1:1 (item_registry_parity 1506/1506/0, commit 1b461782); Item behavior surface unported
 net/minecraft/world/item/BoatItem.java	unvisited	
 net/minecraft/world/item/BoneMealItem.java	unvisited	
 net/minecraft/world/item/BottleItem.java	unvisited	
@@ -5245,7 +5245,7 @@ net/minecraft/world/item/InkSacItem.java	unvisited
 net/minecraft/world/item/Instrument.java	unvisited	
 net/minecraft/world/item/InstrumentItem.java	unvisited	
 net/minecraft/world/item/Instruments.java	unvisited	
-net/minecraft/world/item/Item.java	unvisited	
+net/minecraft/world/item/Item.java	partial	registry table 1:1 (item_registry_parity 1506/1506/0, commit 1b461782); Item behavior surface unported
 net/minecraft/world/item/ItemCooldowns.java	unvisited	
 net/minecraft/world/item/ItemDisplayContext.java	unvisited	
 net/minecraft/world/item/ItemFrameItem.java	unvisited	
@@ -5255,7 +5255,7 @@ net/minecraft/world/item/ItemStackLinkedSet.java	unvisited
 net/minecraft/world/item/ItemStackTemplate.java	unvisited	
 net/minecraft/world/item/ItemUseAnimation.java	unvisited	
 net/minecraft/world/item/ItemUtils.java	unvisited	
-net/minecraft/world/item/Items.java	unvisited	
+net/minecraft/world/item/Items.java	partial	registry table 1:1 (item_registry_parity 1506/1506/0, commit 1b461782); Item behavior surface unported
 net/minecraft/world/item/JukeboxPlayable.java	unvisited	
 net/minecraft/world/item/JukeboxSong.java	unvisited	
 net/minecraft/world/item/JukeboxSongPlayer.java	unvisited	
