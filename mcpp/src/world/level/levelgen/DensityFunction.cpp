@@ -15,11 +15,19 @@ void DensityFunction::fillArray(std::vector<double>& output, const std::vector<D
 }
 
 namespace {
+    // Mth.clampedMap(value, in0, in1, out0, out1) = Mth.clampedLerp(out0, out1, Mth.inverseLerp(value, in0, in1))
+    //   inverseLerp(v,a,b) = (v-a)/(b-a);  clampedLerp(start,end,delta):
+    //     delta < 0 -> start;  delta > 1 -> end (EXACT endpoint, no lerp);  else lerp(delta,start,end)
+    //     lerp(delta,start,end) = start + delta*(end-start)   (Mth.java)
+    // The >1 branch returning `end` verbatim is load-bearing: a clamp-t-then-lerp form
+    // yields toLow + 1.0*(toHigh-toLow) which is toHigh ± 1 ULP, not toHigh. The degenerate
+    // fromLow==fromHigh case needs no special-casing: (v-a)/0 is ±Inf (-> start/end) or NaN
+    // (v==a -> NaN propagates), matching Java exactly.
     double clampedMap(double value, double fromLow, double fromHigh, double toLow, double toHigh) {
-        if (fromLow == fromHigh) return value < fromLow ? toLow : toHigh;
-        double t = (value - fromLow) / (fromHigh - fromLow);
-        t = std::clamp(t, 0.0, 1.0);
-        return toLow + t * (toHigh - toLow);
+        double delta = (value - fromLow) / (fromHigh - fromLow);
+        if (delta < 0.0) return toLow;
+        if (delta > 1.0) return toHigh;
+        return toLow + delta * (toHigh - toLow);
     }
 
     class Constant final : public DensityFunction {

@@ -140,18 +140,36 @@ public class DensityFnsParity {
 
         // YClampedGradient(fromY, toY, fromValue, toValue) -> Mth.clampedMap(blockY,...).
         // Sweep blockY across, below and above [fromY,toY]; include boundary Y == fromY
-        // and Y == toY (where clamped-lerp endpoint handling can differ from a naive
-        // clamp-then-lerp).
+        // and Y == toY AND y strictly past toY/before fromY (the clamped regions where
+        // clampedLerp short-circuits to the endpoint EXACTLY — a clamp-t-then-lerp form
+        // returns the endpoint +/- 1 ULP, the discrepancy this row family certifies).
         // (fromY != toY only; fromY==toY makes Mth.clampedMap divide by zero -> NaN at
         // y==fromY, a degenerate/non-physical config out of scope for a finite gate.)
-        // YClampedGradient EXCLUDED pending investigation: the existing engine
-        // YClampedGradient returns toValue+1 ULP in the clamped (y>=toY) region where
-        // Java's Mth.clampedMap returns toValue exactly. This is a genuine 1-ULP
-        // discrepancy in the engine's clampedMap/gradient (not a non-physical input) and
-        // is flagged for a dedicated fix+gate — terrain parity tolerates it because the
-        // density->block decision is thresholded. The other DensityFunctions transforms
-        // (Abs/Square/Cube/HalfNegative/QuarterNegative/Squeeze/Clamp/RangeChoice/Constant/
-        // arithmetic) ARE certified bit-exact below.
+        int[][] yGradConfigs = {
+            {0, 128}, {-64, 320}, {-64, 0}, {0, 256}, {10, 20}, {-32, 32}, {64, 192},
+        };
+        // fromValue/toValue pairs chosen so the lerp endpoint does NOT reconstruct
+        // exactly (0.3+(0.9-0.3)=0.9000000000000001 != 0.9) — proves the endpoint
+        // short-circuit, not a coincidental round-trip.
+        double[][] yGradValues = {
+            {0.0, 1.0}, {1.0, 0.0}, {-1.0, 1.0}, {0.3, 0.9}, {0.9, 0.3},
+            {-0.5, 0.5}, {0.0, 16.0}, {1.5, -2.5},
+        };
+        for (int[] cfg : yGradConfigs) {
+            int fromY = cfg[0], toY = cfg[1];
+            int[] ySweep = {
+                fromY - 100, fromY - 1, fromY, fromY + 1,
+                fromY + (toY - fromY) / 4, (fromY + toY) / 2, fromY + 3 * (toY - fromY) / 4,
+                toY - 1, toY, toY + 1, toY + 100,
+            };
+            for (double[] vv : yGradValues) {
+                DensityFunction f = DensityFunctions.yClampedGradient(fromY, toY, vv[0], vv[1]);
+                for (int y : ySweep) {
+                    out.println("YGRAD\t" + fromY + "\t" + toY + "\t" + d(vv[0]) + "\t" + d(vv[1])
+                            + "\t" + y + "\t" + d(compute(f, y)));
+                }
+            }
+        }
 
         // Constant(value).
         for (double v : vals) {

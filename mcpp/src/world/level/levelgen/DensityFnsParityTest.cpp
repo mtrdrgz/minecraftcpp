@@ -19,13 +19,15 @@
 //   mcpp/tools/run_groundtruth.ps1 -Tool DensityFnsParity -Out mcpp/build/density_fns.tsv
 //   density_fns_parity --cases mcpp/build/density_fns.tsv
 //
-// NOTE (engine bug surfaced by this gate): the engine's YClampedGradient uses a local
-// clampedMap that clamps t to [0,1] then returns toLow + t*(toHigh-toLow). Java's
-// Mth.clampedMap = clampedLerp(inverseLerp(...)) returns the ENDPOINT VALUE directly
-// when factor>1 / factor<0. For value pairs whose lerp endpoint does not reconstruct
-// exactly (e.g. from=0.3,to=0.9: 0.3+(0.9-0.3) = 0.9000000000000001 != 0.9), the two
-// differ by 1 ULP out of [fromY,toY]. This gate reports those YGRAD rows as mismatches
-// on purpose — it is a real fidelity bug in DensityFunction.cpp's clampedMap.
+// NOTE (engine bug FIXED, now certified by this gate): the engine's YClampedGradient
+// used a local clampedMap that clamped t to [0,1] then returned toLow + t*(toHigh-toLow).
+// Java's Mth.clampedMap = clampedLerp(inverseLerp(...)) returns the ENDPOINT VALUE
+// directly when factor>1 / factor<0. For value pairs whose lerp endpoint does not
+// reconstruct exactly (e.g. from=0.3,to=0.9: 0.3+(0.9-0.3) = 0.9000000000000001 != 0.9)
+// the two differed by 1 ULP outside [fromY,toY]. DensityFunction.cpp's clampedMap now
+// mirrors clampedLerp(inverseLerp(...)) exactly (endpoint short-circuit), so the YGRAD
+// rows — which deliberately sweep y past toY/before fromY with non-round-tripping
+// endpoints — are bit-exact.
 
 #include "DensityFunction.h"
 
