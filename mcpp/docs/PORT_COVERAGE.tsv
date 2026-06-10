@@ -2901,9 +2901,9 @@ net/minecraft/network/protocol/game/ClientboundClearTitlesPacket.java	ported	C++
 net/minecraft/network/protocol/game/ClientboundCommandSuggestionsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundCommandsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundContainerClosePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
-net/minecraft/network/protocol/game/ClientboundContainerSetContentPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundContainerSetContentPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ClientboundContainerSetDataPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
-net/minecraft/network/protocol/game/ClientboundContainerSetSlotPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundContainerSetSlotPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ClientboundCooldownPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundCustomChatCompletionsPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java	unvisited	
@@ -2972,19 +2972,19 @@ net/minecraft/network/protocol/game/ClientboundSetBorderWarningDistancePacket.ja
 net/minecraft/network/protocol/game/ClientboundSetCameraPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundSetChunkCacheRadiusPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
-net/minecraft/network/protocol/game/ClientboundSetCursorItemPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundSetCursorItemPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ClientboundSetDefaultSpawnPositionPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ClientboundSetDisplayObjectivePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundSetEntityLinkPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ClientboundSetEntityMotionPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
-net/minecraft/network/protocol/game/ClientboundSetEquipmentPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundSetEquipmentPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ClientboundSetExperiencePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundSetHealthPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundSetHeldSlotPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundSetObjectivePacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundSetPassengersPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
-net/minecraft/network/protocol/game/ClientboundSetPlayerInventoryPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundSetPlayerInventoryPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ClientboundSetPlayerTeamPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundSetScorePacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundSetSimulationDistancePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
@@ -3061,7 +3061,7 @@ net/minecraft/network/protocol/game/ServerboundSetBeaconPacket.java	unvisited
 net/minecraft/network/protocol/game/ServerboundSetCarriedItemPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/network/protocol/game/ServerboundSetCommandBlockPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundSetCommandMinecartPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
-net/minecraft/network/protocol/game/ServerboundSetCreativeModeSlotPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundSetCreativeModeSlotPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ServerboundSetGameRulePacket.java	unvisited	
 net/minecraft/network/protocol/game/ServerboundSetJigsawBlockPacket.java	unvisited	
 net/minecraft/network/protocol/game/ServerboundSetStructureBlockPacket.java	unvisited	
