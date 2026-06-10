@@ -33,5 +33,30 @@ public class EntityMovementParity {
             O.println("INPUTVEC\t" + d(in[0])+"\t"+d(in[1])+"\t"+d(in[2]) + "\t" + f(speed) + "\t" + f(yaw)
                 + "\t" + d(r.x) + "\t" + d(r.y) + "\t" + d(r.z));
         }
+
+        // calculateViewVector / calculateUpVector — Entity.calculateViewVector is a
+        // public final stateless method; invoking it reflectively needs an Entity
+        // instance (which needs a Level). Its body is pure Mth.cos/sin arithmetic, so
+        // we replicate it verbatim against the REAL net.minecraft.util.Mth (the same
+        // certified table the C++ uses). calculateUpVector = calculateViewVector(xRot-90,yRot).
+        float[] PITCH = { 0f, 30f, 45f, 90f, -90f, -45f, 22.5f, 60f, -30f };
+        float[] YAW2 = { 0f, 45f, 90f, 135f, 180f, 270f, -90f, 33.3f, 360f };
+        for (float xr : PITCH) for (float yr : YAW2) {
+            Vec3 vv = viewVector(xr, yr);
+            O.println("VIEWVEC\t" + f(xr) + "\t" + f(yr) + "\t" + d(vv.x) + "\t" + d(vv.y) + "\t" + d(vv.z));
+            Vec3 uv = viewVector(xr - 90.0F, yr);
+            O.println("UPVEC\t" + f(xr) + "\t" + f(yr) + "\t" + d(uv.x) + "\t" + d(uv.y) + "\t" + d(uv.z));
+        }
+    }
+
+    // Verbatim copy of Entity.calculateViewVector (Entity.java:1886-1894), real Mth.
+    static Vec3 viewVector(float xRot, float yRot) {
+        float realXRot = xRot * (float) (Math.PI / 180.0);
+        float realYRot = -yRot * (float) (Math.PI / 180.0);
+        float yCos = net.minecraft.util.Mth.cos(realYRot);
+        float ySin = net.minecraft.util.Mth.sin(realYRot);
+        float xCos = net.minecraft.util.Mth.cos(realXRot);
+        float xSin = net.minecraft.util.Mth.sin(realXRot);
+        return new Vec3(ySin * xCos, -xSin, yCos * xCos);
     }
 }

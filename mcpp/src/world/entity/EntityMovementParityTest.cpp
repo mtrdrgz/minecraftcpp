@@ -44,6 +44,11 @@ int main(int argc, char** argv) {
             if (db(r.x) != std::stoull(p[6], nullptr, 16) || db(r.y) != std::stoull(p[7], nullptr, 16) || db(r.z) != std::stoull(p[8], nullptr, 16)) {
                 ++mism; if (shown++ < 30) std::cerr << "MISMATCH " << line << "\n";
             }
+        } else if (p[0] == "VIEWVEC" || p[0] == "UPVEC") {
+            Vec3 r = p[0] == "VIEWVEC" ? mc::calculateViewVector(bf(p[1]), bf(p[2])) : mc::calculateUpVector(bf(p[1]), bf(p[2]));
+            if (db(r.x) != std::stoull(p[3], nullptr, 16) || db(r.y) != std::stoull(p[4], nullptr, 16) || db(r.z) != std::stoull(p[5], nullptr, 16)) {
+                ++mism; if (shown++ < 30) std::cerr << "MISMATCH " << line << "\n";
+            }
         } else { ++mism; if (shown++ < 30) std::cerr << "UNKNOWN_TAG " << p[0] << "\n"; }
     }
     std::cout << "EntityMovement cases=" << total << " mismatches=" << mism << "\n";
