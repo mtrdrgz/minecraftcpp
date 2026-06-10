@@ -302,6 +302,18 @@ set_target_properties(block_state_registry_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Item REGISTRY parity vs the real BuiltInRegistries.ITEM (id order, names,
+# stack/damage, BlockItem linkage, food). Ground truth: tools/ItemRegistryParity.java.
+add_executable(item_registry_parity
+    world/item/ItemRegistryParityTest.cpp
+)
+target_include_directories(item_registry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(item_registry_parity PRIVATE nlohmann_json)
+set_target_properties(item_registry_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # AABB (ray clip / expandTowards / contract / distanceToSqr) parity vs the real
 # net.minecraft.world.phys.AABB. Ground truth: tools/AabbParity.java (bit-exact).
 add_executable(aabb_parity
