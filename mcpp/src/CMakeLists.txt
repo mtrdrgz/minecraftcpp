@@ -293,6 +293,18 @@ set_target_properties(structure_transform_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# ARGB color math parity vs the real net.minecraft.util.ARGB (packing/blend/scale/
+# sRGB<->linear/setBrightness). Rendering+GUI color primitives, bit-exact (sRGB LUTs
+# embedded from the real class). Ground truth: tools/ARGBParity.java.
+add_executable(argb_parity
+    util/ARGBParityTest.cpp
+)
+target_include_directories(argb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(argb_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # SimpleBitStorage parity vs the real net.minecraft.util.SimpleBitStorage (packed
 # chunk/heightmap long-array, non-spanning, magic-division cellIndex). The disk +
 # network wire layout. Ground truth: tools/SimpleBitStorageParity.java.
