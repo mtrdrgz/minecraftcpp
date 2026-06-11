@@ -40,7 +40,11 @@ using mc::Axis;
 using mc::levelgen::structure::Rotation;
 using mc::levelgen::structure::Mirror;
 using mc::levelgen::structure::rotationRotate;
+using mc::levelgen::structure::rotationRotateInt;
 using mc::levelgen::structure::mirrorGetRotation;
+using mc::levelgen::structure::mirrorMirror;
+using mc::levelgen::structure::mirrorMirrorInt;
+using mc::directionAxis;
 
 namespace {
 
@@ -96,6 +100,92 @@ std::string getProp(const std::string& props, const std::string& key) {
         if (eq != std::string::npos && p.substr(0, eq) == key) return p.substr(eq + 1);
     }
     return "";
+}
+
+// Permute the four horizontal directional sub-properties {north,east,south,west} of a
+// CrossCollisionBlock-style state by a Rotation — the SHARED rotate idiom of WallBlock/
+// CrossCollisionBlock/RedStoneWireBlock/MossyCarpetBlock/VineBlock (new.<dir> = old.<rotate(dir)>).
+// Value type (WallSide/RedstoneSide/bool) is irrelevant to the string-level permutation.
+bool permuteNESW(const std::string& props, Rotation rot, std::string& out) {
+    std::string n = getProp(props, "north"), e = getProp(props, "east");
+    std::string s = getProp(props, "south"), w = getProp(props, "west");
+    if (n.empty() || e.empty() || s.empty() || w.empty()) return false;
+    std::string nn, ne, ns, nw;
+    switch (rot) {
+        case Rotation::CLOCKWISE_180:       nn = s; ne = w; ns = n; nw = e; break;
+        case Rotation::COUNTERCLOCKWISE_90: nn = e; ne = s; ns = w; nw = n; break;
+        case Rotation::CLOCKWISE_90:        nn = w; ne = n; ns = e; nw = s; break;
+        default:                            nn = n; ne = e; ns = s; nw = w; break;  // NONE
+    }
+    std::string t;
+    if (!replaceProp(props, "north", nn, t)) return false; out = t;
+    if (!replaceProp(out,   "east",  ne, t)) return false; out = t;
+    if (!replaceProp(out,   "south", ns, t)) return false; out = t;
+    if (!replaceProp(out,   "west",  nw, t)) return false; out = t;
+    return true;
+}
+// Mirror {north,east,south,west}: LEFT_RIGHT swaps N<->S, FRONT_BACK swaps E<->W (NONE = identity).
+bool mirrorNESW(const std::string& props, Mirror mir, std::string& out) {
+    std::string n = getProp(props, "north"), e = getProp(props, "east");
+    std::string s = getProp(props, "south"), w = getProp(props, "west");
+    if (n.empty() || e.empty() || s.empty() || w.empty()) return false;
+    std::string t = props;
+    if (mir == Mirror::LEFT_RIGHT) {
+        if (!replaceProp(t, "north", s, out)) return false; t = out;
+        if (!replaceProp(t, "south", n, out)) return false; t = out;
+    } else if (mir == Mirror::FRONT_BACK) {
+        if (!replaceProp(t, "east", w, out)) return false; t = out;
+        if (!replaceProp(t, "west", e, out)) return false; t = out;
+    } else {
+        out = props;
+    }
+    return true;
+}
+// MultifaceBlock.mapDirections over the SIX face keys: new[map(dir)] = old[dir]; non-face
+// props (waterlogged) untouched. No MultifaceBlock overrides isFaceSupported, so the map
+// always applies. rotate/mirror keep Y (up/down) fixed; only the 4 horizontals move.
+bool mapMultifaceRotate(const std::string& props, Rotation rot, std::string& out) {
+    static const Direction FACES[6] = { Direction::DOWN, Direction::UP, Direction::NORTH,
+                                        Direction::SOUTH, Direction::WEST, Direction::EAST };
+    std::string oldVal[6];
+    for (int i = 0; i < 6; ++i) { oldVal[i] = getProp(props, dirName(FACES[i])); if (oldVal[i].empty()) return false; }
+    out = props; std::string t;
+    for (int i = 0; i < 6; ++i) {
+        if (!replaceProp(out, dirName(rotationRotate(rot, FACES[i])), oldVal[i], t)) return false;
+        out = t;
+    }
+    return true;
+}
+bool mapMultifaceMirror(const std::string& props, Mirror mir, std::string& out) {
+    static const Direction FACES[6] = { Direction::DOWN, Direction::UP, Direction::NORTH,
+                                        Direction::SOUTH, Direction::WEST, Direction::EAST };
+    std::string oldVal[6];
+    for (int i = 0; i < 6; ++i) { oldVal[i] = getProp(props, dirName(FACES[i])); if (oldVal[i].empty()) return false; }
+    out = props; std::string t;
+    for (int i = 0; i < 6; ++i) {
+        if (!replaceProp(out, dirName(mirrorMirror(mir, FACES[i])), oldVal[i], t)) return false;
+        out = t;
+    }
+    return true;
+}
+// HugeMushroomBlock.rotate/mirror permute the 6 directional booleans:
+//   result[transform(d)] = old[d] for d in the 6 faces (a bijection, so order-independent).
+template <typename TransformDir>
+bool permuteFaceBools(const std::string& props, TransformDir xf, std::string& out) {
+    static const char* kDirs[6] = { "north", "south", "east", "west", "up", "down" };
+    std::map<std::string, std::string> dest;   // dest dir-name -> source bool value
+    for (const char* d : kDirs) {
+        std::string v = getProp(props, d);
+        if (v.empty()) return false;
+        dest[dirName(xf(dirByName(d)))] = v;
+    }
+    out = props;
+    for (const auto& [dir, val] : dest) {
+        std::string tmp;
+        if (!replaceProp(out, dir, val, tmp)) return false;
+        out = tmp;
+    }
+    return true;
 }
 
 }  // namespace
@@ -159,8 +249,27 @@ int main(int argc, char** argv) {
     }
 
     // Ported declaring classes. A state is asserted iff its block's declaring class is here.
-    const std::set<std::string> rotPorted = { "BlockBehaviour", "HorizontalDirectionalBlock", "RotatedPillarBlock" };
-    const std::set<std::string> mirPorted = { "BlockBehaviour", "HorizontalDirectionalBlock", "RotatedPillarBlock" };
+    const std::set<std::string> rotPorted = {
+        "BlockBehaviour", "HorizontalDirectionalBlock", "RotatedPillarBlock",
+        "WallBlock", "CrossCollisionBlock", "RedStoneWireBlock", "MossyCarpetBlock", "VineBlock",
+        "MultifaceBlock", "FlowerBedBlock", "LeafLitterBlock",
+        "StairBlock", "DoorBlock", "StandingSignBlock", "CeilingHangingSignBlock",
+        "WallSignBlock", "WallHangingSignBlock", "ShelfBlock", "ChiseledBookShelfBlock",
+        "BannerBlock", "SkullBlock", "WallBannerBlock", "WallSkullBlock", "BaseCoralWallFanBlock",
+        "WallTorchBlock", "RedstoneWallTorchBlock", "AmethystClusterBlock", "CopperGolemStatueBlock",
+        "RodBlock", "LadderBlock", "BellBlock", "GrindstoneBlock", "AttachedStemBlock", "AnvilBlock",
+        "HugeMushroomBlock" };
+    // AnvilBlock declares only rotate; its mirror is the inherited BlockBehaviour identity.
+    const std::set<std::string> mirPorted = {
+        "BlockBehaviour", "HorizontalDirectionalBlock", "RotatedPillarBlock",
+        "WallBlock", "CrossCollisionBlock", "RedStoneWireBlock", "MossyCarpetBlock", "VineBlock",
+        "MultifaceBlock", "FlowerBedBlock", "LeafLitterBlock",
+        "StairBlock", "DoorBlock", "StandingSignBlock", "CeilingHangingSignBlock",
+        "WallSignBlock", "WallHangingSignBlock", "ShelfBlock", "ChiseledBookShelfBlock",
+        "BannerBlock", "SkullBlock", "WallBannerBlock", "WallSkullBlock", "BaseCoralWallFanBlock",
+        "WallTorchBlock", "RedstoneWallTorchBlock", "AmethystClusterBlock", "CopperGolemStatueBlock",
+        "RodBlock", "LadderBlock", "BellBlock", "GrindstoneBlock", "AttachedStemBlock",
+        "HugeMushroomBlock" };
 
     // rotate(stateId, rotation) for a ported declaring class -> new state id (or -1).
     auto doRotate = [&](uint32_t id, Rotation rot, const std::string& f) -> long {
@@ -182,6 +291,56 @@ int main(int argc, char** argv) {
             }
             return id;                                              // 180 / none: unchanged
         }
+        // --- StairBlock: rotate sets only FACING. StairBlock.java:168-171 ---
+        // --- DoorBlock: rotate sets only FACING. DoorBlock.java:251-254 ---
+        // --- WallSignBlock/WallHangingSignBlock/ShelfBlock/ChiseledBookShelfBlock: FACING only ---
+        if (f == "StairBlock" || f == "DoorBlock" || f == "WallSignBlock" ||
+            f == "WallHangingSignBlock" || f == "ShelfBlock" || f == "ChiseledBookShelfBlock") {
+            Direction nf = rotationRotate(rot, dirByName(getProp(s.props, "facing")));
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // --- StandingSignBlock/CeilingHangingSignBlock: rotation ROTATION_16 via Rotation.rotate(int,16).
+        //     StandingSignBlock.java:71-74, CeilingHangingSignBlock.java:158-161 ---
+        if (f == "StandingSignBlock" || f == "CeilingHangingSignBlock") {
+            int v = std::stoi(getProp(s.props, "rotation"));
+            std::string np;
+            if (!replaceProp(s.props, "rotation", std::to_string(rotationRotateInt(rot, v, 16)), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // WallBlock/CrossCollisionBlock/RedStoneWireBlock/MossyCarpetBlock/VineBlock — {N,E,S,W} permute.
+        if (f == "WallBlock" || f == "CrossCollisionBlock" || f == "RedStoneWireBlock" ||
+            f == "MossyCarpetBlock" || f == "VineBlock") {
+            std::string np; if (!permuteNESW(s.props, rot, np)) return -1; return lookup(s.name, np);
+        }
+        if (f == "MultifaceBlock") {                 // mapDirections by rotation.rotate
+            std::string np; if (!mapMultifaceRotate(s.props, rot, np)) return -1; return lookup(s.name, np);
+        }
+        // BannerBlock/SkullBlock — ROTATION_16 via Rotation.rotate(int,16).
+        if (f == "BannerBlock" || f == "SkullBlock") {
+            int v = std::stoi(getProp(s.props, "rotation"));
+            std::string np;
+            if (!replaceProp(s.props, "rotation", std::to_string(rotationRotateInt(rot, v, 16)), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // FACING-only rotate: setValue(FACING, rotation.rotate(FACING)). (Y axis unchanged -> ok for 6-dir.)
+        if (f == "FlowerBedBlock" || f == "LeafLitterBlock" || f == "WallBannerBlock" ||
+            f == "WallSkullBlock" || f == "BaseCoralWallFanBlock" || f == "WallTorchBlock" ||
+            f == "RedstoneWallTorchBlock" || f == "AmethystClusterBlock" || f == "CopperGolemStatueBlock" ||
+            f == "RodBlock" || f == "LadderBlock" || f == "BellBlock" || f == "GrindstoneBlock" ||
+            f == "AttachedStemBlock" || f == "AnvilBlock") {
+            Direction nf = rotationRotate(rot, dirByName(getProp(s.props, "facing")));
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // HugeMushroomBlock — permute 6 face bools by rotation.rotate(Direction).
+        if (f == "HugeMushroomBlock") {
+            std::string np;
+            if (!permuteFaceBools(s.props, [&](Direction d){ return rotationRotate(rot, d); }, np)) return -1;
+            return lookup(s.name, np);
+        }
         return -2;
     };
     // mirror(stateId, mirror) for a ported declaring class -> new state id (or -1).
@@ -192,6 +351,106 @@ int main(int argc, char** argv) {
             Direction facing = dirByName(getProp(s.props, "facing"));
             Rotation r = mirrorGetRotation(mir, facing);
             return doRotate(id, r, "HorizontalDirectionalBlock");
+        }
+        // --- StairBlock mirror depends on SHAPE. StairBlock.java:173-212 ---
+        if (f == "StairBlock") {
+            Axis ax = directionAxis(dirByName(getProp(s.props, "facing")));
+            std::string shape = getProp(s.props, "shape");
+            // state.rotate(CLOCKWISE_180): StairBlock.rotate only touches FACING.
+            Direction nf = rotationRotate(Rotation::CLOCKWISE_180, dirByName(getProp(s.props, "facing")));
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            std::string newShape;
+            if (mir == Mirror::LEFT_RIGHT && ax == Axis::Z) {
+                if (shape == "outer_left") newShape = "outer_right";
+                else if (shape == "inner_right") newShape = "inner_left";
+                else if (shape == "inner_left") newShape = "inner_right";
+                else if (shape == "outer_right") newShape = "outer_left";
+                // straight: no SHAPE change.
+            } else if (mir == Mirror::FRONT_BACK && ax == Axis::X) {
+                if (shape == "outer_left") newShape = "outer_right";
+                else if (shape == "outer_right") newShape = "outer_left";
+                // straight / inner_left / inner_right: no SHAPE change.
+            } else {
+                return id;  // axis mismatch -> super.mirror (BlockBehaviour) = unchanged
+            }
+            if (!newShape.empty()) {
+                std::string np2;
+                if (!replaceProp(np, "shape", newShape, np2)) return -1;
+                np = np2;
+            }
+            return lookup(s.name, np);
+        }
+        // --- DoorBlock: NONE->unchanged; else rotate(mirror.getRotation(FACING)) then cycle(HINGE).
+        //     DoorBlock.java:256-259 ---
+        if (f == "DoorBlock") {
+            if (mir == Mirror::NONE) return id;
+            Direction facing = dirByName(getProp(s.props, "facing"));
+            Direction nf = rotationRotate(mirrorGetRotation(mir, facing), facing);
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            std::string hinge = getProp(np, "hinge");
+            std::string np2;
+            if (!replaceProp(np, "hinge", hinge == "left" ? "right" : "left", np2)) return -1;
+            return lookup(s.name, np2);
+        }
+        // --- WallSignBlock/WallHangingSignBlock/ShelfBlock/ChiseledBookShelfBlock:
+        //     mirror = rotate(mirror.getRotation(FACING)) — FACING only ---
+        if (f == "WallSignBlock" || f == "WallHangingSignBlock" ||
+            f == "ShelfBlock" || f == "ChiseledBookShelfBlock") {
+            Direction facing = dirByName(getProp(s.props, "facing"));
+            Direction nf = rotationRotate(mirrorGetRotation(mir, facing), facing);
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // --- StandingSignBlock/CeilingHangingSignBlock: mirror ROTATION_16 via Mirror.mirror(int,16).
+        //     StandingSignBlock.java:76-79, CeilingHangingSignBlock.java:163-166 ---
+        if (f == "StandingSignBlock" || f == "CeilingHangingSignBlock") {
+            int v = std::stoi(getProp(s.props, "rotation"));
+            std::string np;
+            if (!replaceProp(s.props, "rotation", std::to_string(mirrorMirrorInt(mir, v, 16)), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // WallBlock/CrossCollision/RedStoneWire/MossyCarpet/Vine — LR swaps N<->S, FB swaps E<->W.
+        if (f == "WallBlock" || f == "CrossCollisionBlock" || f == "RedStoneWireBlock" ||
+            f == "MossyCarpetBlock" || f == "VineBlock") {
+            std::string np; if (!mirrorNESW(s.props, mir, np)) return -1; return lookup(s.name, np);
+        }
+        if (f == "MultifaceBlock") {                 // mapDirections by mirror.mirror
+            std::string np; if (!mapMultifaceMirror(s.props, mir, np)) return -1; return lookup(s.name, np);
+        }
+        // BannerBlock/SkullBlock — ROTATION_16 via Mirror.mirror(int,16).
+        if (f == "BannerBlock" || f == "SkullBlock") {
+            int v = std::stoi(getProp(s.props, "rotation"));
+            std::string np;
+            if (!replaceProp(s.props, "rotation", std::to_string(mirrorMirrorInt(mir, v, 16)), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // FACING families: mirror = rotate(mirror.getRotation(FACING)) — i.e. FACING-only rotate by
+        // the mirror-derived rotation. (FlowerBed/LeafLitter share this idiom.)
+        if (f == "FlowerBedBlock" || f == "LeafLitterBlock" || f == "WallBannerBlock" ||
+            f == "WallSkullBlock" || f == "BaseCoralWallFanBlock" || f == "WallTorchBlock" ||
+            f == "RedstoneWallTorchBlock" || f == "AmethystClusterBlock" || f == "CopperGolemStatueBlock" ||
+            f == "LadderBlock" || f == "BellBlock" || f == "GrindstoneBlock" || f == "AttachedStemBlock") {
+            Direction facing = dirByName(getProp(s.props, "facing"));
+            Direction nf = rotationRotate(mirrorGetRotation(mir, facing), facing);
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // RodBlock — mirror: setValue(FACING, mirror.mirror(FACING)) (Direction-mirror, NOT getRotation).
+        if (f == "RodBlock") {
+            Direction nf = mirrorMirror(mir, dirByName(getProp(s.props, "facing")));
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // HugeMushroomBlock — permute 6 face bools by mirror.mirror(Direction).
+        if (f == "HugeMushroomBlock") {
+            std::string np;
+            if (!permuteFaceBools(s.props, [&](Direction d){ return mirrorMirror(mir, d); }, np)) return -1;
+            return lookup(s.name, np);
         }
         return -2;
     };
