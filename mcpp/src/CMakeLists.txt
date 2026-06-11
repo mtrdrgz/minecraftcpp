@@ -6573,3 +6573,42 @@ if(WIN32)
     target_link_libraries(pkt_section_blocks_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_section_blocks_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: RuinedPortalStructure.sample (nextFloat()<limit, 0/1 sentinels no-draw) + getRandomWithinInterval (Mth.randomBetweenInclusive) =====
+add_executable(ruined_portal_yselector_parity
+    world/level/levelgen/structure/structures/RuinedPortalYSelectorParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(ruined_portal_yselector_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(ruined_portal_yselector_parity PRIVATE bcrypt)
+endif()
+set_target_properties(ruined_portal_yselector_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26-adj: DragonFlightHistory 64-slot ring buffer + get(delay,partialTicks) Mth.lerp/rotLerp (head-delay&63 negative-safe) =====
+add_executable(dragon_flight_history_parity world/entity/boss/enderdragon/DragonFlightHistoryParityTest.cpp)
+target_include_directories(dragon_flight_history_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(dragon_flight_history_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: NetherVines.getBlocksToGrowWhenBonemealed (geometric decay loop: while nextDouble()<prob; prob*=0.826) =====
+add_executable(nether_vines_parity
+    world/level/block/NetherVinesParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(nether_vines_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(nether_vines_parity PRIVATE bcrypt)
+endif()
+set_target_properties(nether_vines_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundSelectKnownPacks (List<KnownPack> = VarInt + 3x writeUtf namespace/id/version; CB twin of gated SB) =====
+add_executable(pkt_select_known_packs_cb_parity
+    network/protocol/configuration/PktSelectKnownPacksCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_select_known_packs_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_select_known_packs_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_select_known_packs_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_select_known_packs_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
