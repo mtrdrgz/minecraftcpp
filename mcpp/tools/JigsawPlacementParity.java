@@ -397,7 +397,16 @@ public final class JigsawPlacementParity {
             new SD("trail_ruins", net.minecraft.world.level.levelgen.structure.BuiltinStructures.TRAIL_RUINS, "trail_ruins"),
             // village_plains exercises feature_pool_element + legacy_single_pool_element +
             // empty_pool_element; its pools live under template_pool/village (prefix "village").
-            new SD("village_plains", net.minecraft.world.level.levelgen.structure.BuiltinStructures.VILLAGE_PLAINS, "village")
+            new SD("village_plains", net.minecraft.world.level.levelgen.structure.BuiltinStructures.VILLAGE_PLAINS, "village"),
+            // bastion_remnant: large single-element pools (expansion OFF, no aliases).
+            new SD("bastion_remnant", net.minecraft.world.level.levelgen.structure.BuiltinStructures.BASTION_REMNANT, "bastion")
+            // NOTE: ancient_city is the only vanilla structure using start_jigsaw_name, but
+            // it CANNOT be certified here: its walls/no_corners pool references
+            // ancient_city/walls/intact_horizontal_wall_stairs_5.nbt, which is ABSENT from
+            // this repo's client.jar AND server.jar (only _1.._4 ship). The real generator
+            // would place _5; we must not fabricate it (RULE #0). The startJigsaw anchoring
+            // entry path is ported 1:1 in the C++ test but stays gate-uncertified until that
+            // asset is available (or another start_jigsaw_name structure exists).
         );
 
         for (SD sd : structs) {
@@ -438,7 +447,8 @@ public final class JigsawPlacementParity {
                         + "\t" + maxDistanceFromCenter.horizontal()
                         + "\t" + (useExpansionHack ? 1 : 0)
                         + "\t" + dimensionPadding.bottom() + "\t" + dimensionPadding.top()
-                        + "\t" + (startJigsawName.isPresent() ? 1 : 0));
+                        + "\t" + (startJigsawName.isPresent() ? 1 : 0)
+                        + "\t" + startJigsawName.map(Identifier::toString).orElse("-"));
                     cfgEmitted = true;
                 }
                 PoolAliasLookup poolAliasLookup = PoolAliasLookup.create(poolAliases, startPos, context.seed());

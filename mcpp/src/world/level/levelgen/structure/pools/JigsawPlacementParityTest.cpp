@@ -107,6 +107,33 @@ struct PieceState { int pieceIdx; FreePtr free; int depth; };
 
 constexpr int UNSET_HEIGHT = INT32_MIN;
 
+// StructurePoolElement.getShuffledJigsawBlocks dispatch (shared by the placer BFS and
+// the addPieces ENTRY's getRandomNamedJigsaw anchor search). SINGLE/LEGACY/LIST ->
+// template-backed shuffle (consumes RNG); FEATURE -> one synthetic "bottom" jigsaw
+// (no RNG, no template); EMPTY -> none.
+std::vector<stl::JigsawBlockInfo> shuffledJigsawsOf(
+        std::map<std::string, stl::LoadedTemplate>& templates,
+        const pools::StructurePoolElement& e, const BlockPos& pos, Rotation rot,
+        mc::levelgen::RandomSource& random) {
+    if (e.type == pools::ElementType::FEATURE) {
+        stl::JigsawBlockInfo fj;
+        fj.info.pos = pos;
+        fj.info.blockName = "minecraft:jigsaw";
+        fj.info.orientation = stl::FrontAndTop{mc::Direction::DOWN, mc::Direction::SOUTH};
+        fj.info.hasOrientation = true;
+        fj.jointType = stl::JointType::ROLLABLE;
+        fj.name = "minecraft:bottom";
+        fj.pool = "minecraft:empty";
+        fj.target = "minecraft:empty";
+        fj.placementPriority = 0;
+        fj.selectionPriority = 0;
+        return {fj};
+    }
+    if (e.type == pools::ElementType::EMPTY) return {};
+    const std::string& loc = (e.type == pools::ElementType::LIST) ? e.elements[0].location : e.location;
+    return stl::getShuffledJigsawBlocks(templates.at(loc), pos, rot, random);
+}
+
 struct Placer {
     std::map<std::string, pools::StructureTemplatePool>* poolsMap;
     std::map<std::string, stl::LoadedTemplate>* templates;
@@ -117,34 +144,9 @@ struct Placer {
     std::shared_ptr<mc::levelgen::RandomSource> random;
     mc::util::SequencedPriorityIterator<PieceState> placing;
 
-    // location for getJigsaws: single/legacy -> own; list -> elements[0].
-    const stl::LoadedTemplate& templateOf(const pools::StructurePoolElement& e) {
-        const std::string& loc = (e.type == pools::ElementType::LIST) ? e.elements[0].location : e.location;
-        return templates->at(loc);
-    }
     std::vector<stl::JigsawBlockInfo> shuffledJigsaws(const pools::StructurePoolElement& e,
                                                       const BlockPos& pos, Rotation rot) {
-        // FeaturePoolElement.getShuffledJigsawBlocks (:57-70): exactly ONE synthetic
-        // "bottom" jigsaw at `pos`, orientation FrontAndTop(front=DOWN, top=SOUTH) —
-        // the rotation is IGNORED (no transform) and NO random draw is consumed —
-        // pointing into the empty pool (name="minecraft:bottom", pool/target=empty,
-        // joint=ROLLABLE). It has no template, so templateOf() must NOT be called.
-        if (e.type == pools::ElementType::FEATURE) {
-            stl::JigsawBlockInfo fj;
-            fj.info.pos = pos;
-            fj.info.blockName = "minecraft:jigsaw";
-            fj.info.orientation = stl::FrontAndTop{mc::Direction::DOWN, mc::Direction::SOUTH};
-            fj.info.hasOrientation = true;
-            fj.jointType = stl::JointType::ROLLABLE;
-            fj.name = "minecraft:bottom";
-            fj.pool = "minecraft:empty";
-            fj.target = "minecraft:empty";
-            fj.placementPriority = 0;
-            fj.selectionPriority = 0;
-            return {fj};
-        }
-        if (e.type == pools::ElementType::EMPTY) return {};   // EmptyPoolElement: no jigsaws
-        return stl::getShuffledJigsawBlocks(templateOf(e), pos, rot, *random);
+        return shuffledJigsawsOf(*templates, e, pos, rot, *random);
     }
 
     void tryPlacingChildren(int sourceIdx, FreePtr contextFree, int depth) {
@@ -294,7 +296,8 @@ struct Cfg {
     int maxDist = 0;              // MaxDistance.horizontal()==vertical() for both structures
     bool expansion = false;       // useExpansionHack
     int padBottom = 0, padTop = 0;
-    bool startJigsaw = false;     // unsupported (both structures absent); asserted below
+    bool startJigsaw = false;     // start_jigsaw_name present (ancient_city: city_anchor)
+    std::string startJigsawName;  // the named jigsaw to anchor on, when startJigsaw
 };
 struct Row { std::string loc; int rot; int bb[6]; int gld; int nj; };
 
@@ -323,7 +326,7 @@ int main(int argc, char** argv) {
             auto c = splitTabs(line);
             if (c.empty()) continue;
             if (c[0] == "CONFIG") {
-                // CONFIG name startPool maxDepth posX posY posZ project maxDist expansion padB padT startJigsaw
+                // CONFIG name startPool maxDepth posX posY posZ project maxDist expansion padB padT startJigsaw jigsawName
                 if (c.size() < 13) continue;
                 Cfg cfg;
                 cfg.startPool = c[2];
@@ -334,6 +337,7 @@ int main(int argc, char** argv) {
                 cfg.expansion = std::stoi(c[9]) != 0;
                 cfg.padBottom = std::stoi(c[10]); cfg.padTop = std::stoi(c[11]);
                 cfg.startJigsaw = std::stoi(c[12]) != 0;
+                if (c.size() >= 14 && c[13] != "-") cfg.startJigsawName = c[13];
                 if (cfgs.find(c[1]) == cfgs.end()) structOrder.push_back(c[1]);
                 cfgs[c[1]] = cfg;
             } else if (c[0] == "NBT") {
@@ -362,7 +366,6 @@ int main(int argc, char** argv) {
     long checks = 0, mismatches = 0, seedsBad = 0;
     for (const std::string& sname : structOrder) {
         const Cfg& cfg = cfgs.at(sname);
-        if (cfg.startJigsaw) { std::fprintf(stderr, "%s: startJigsaw unsupported — skipping\n", sname.c_str()); continue; }
         auto& templates = templatesByStruct[sname];
         auto& expected = expectedByStruct[sname];
 
@@ -408,9 +411,28 @@ int main(int argc, char** argv) {
             std::vector<Placed> pieces;
             bool bad = false;
             try {
-                // startJigsaw absent -> anchoredPosition==position==startPos, localAnchor==0.
                 if (centerElement.isEmpty()) { if (!exp.empty()) { ++seedsBad; ++sBad; } continue; }
-                BlockPos adjustedPosition = cfg.startPos;
+                BlockPos position = cfg.startPos;
+                // getRandomNamedJigsaw (addPieces :78-94): when a start jigsaw is named,
+                // anchor on the FIRST shuffled jigsaw of the center element whose name
+                // matches (this shuffle CONSUMES RNG, before the placer re-shuffles); if
+                // none match the structure yields no pieces. Else anchor == position.
+                // NOTE: this startJigsaw branch is a 1:1 port but currently has NO certified
+                // coverage — the only vanilla user (ancient_city) is blocked by a missing
+                // template asset in this repo's jars (see JigsawPlacementParity.java). It is
+                // never taken by the certified structures (all have startJigsaw=false).
+                BlockPos anchoredPosition = position;
+                if (cfg.startJigsaw) {
+                    bool found = false;
+                    for (const auto& jb : shuffledJigsawsOf(templates, centerElement, position, centerRotation, *random)) {
+                        if (jb.name == cfg.startJigsawName) { anchoredPosition = jb.info.pos; found = true; break; }
+                    }
+                    if (!found) { if (!exp.empty()) { ++seedsBad; ++sBad; } continue; }
+                }
+                Vec3i localAnchorPosition{anchoredPosition.x - position.x, anchoredPosition.y - position.y,
+                                          anchoredPosition.z - position.z};
+                BlockPos adjustedPosition{position.x - localAnchorPosition.x, position.y - localAnchorPosition.y,
+                                          position.z - localAnchorPosition.z};
                 BoundingBox box = centerElement.getBoundingBox(sizeOf, adjustedPosition, centerRotation);
                 Placed center;
                 center.element = &centerElement; center.loc = centerElement.locationString();
@@ -418,12 +440,12 @@ int main(int argc, char** argv) {
                 center.rotation = centerRotation; center.box = box;
                 int centerX = (box.maxX + box.minX) / 2;
                 int centerZ = (box.maxZ + box.minZ) / 2;
-                int bottomY = cfg.project ? cfg.startPos.y + 64 : adjustedPosition.y;   // getFirstFreeHeight stub == 64
+                int bottomY = cfg.project ? position.y + 64 : adjustedPosition.y;   // getFirstFreeHeight stub == 64
                 int oldAbsoluteGroundY = box.minY + 1;
                 center.move(0, bottomY - oldAbsoluteGroundY, 0);
                 pieces.push_back(center);
                 if (cfg.maxDepth > 0) {
-                    int centerY = bottomY + 0;   // localAnchor.y == 0
+                    int centerY = bottomY + localAnchorPosition.y;
                     BoundingBox cbox = pieces[0].box;
                     // heightAccessor: overworld minY=-64, maxY(incl)=319 -> maxY+1=320.
                     int loY = std::max(centerY - cfg.maxDist, -64 + cfg.padBottom);
