@@ -74,12 +74,21 @@ int main(int argc, char** argv) {
     auto ruleKey = [](const std::string& list, const std::string& p, const std::string& r) {
         return list + "\x01" + p + "\x01" + r;
     };
+    // BlockRotProcessor configs: key (list, procIdx).
+    struct RotProc { float integrity = 0.f; std::string filter; };  // filter: "-" | "tag:X" | "list:a,b,..."
+    std::map<std::string, RotProc> rotProcs;
+
     std::map<std::string, Rule> rules;
     {
         std::ifstream f(casesPath, std::ios::binary);
         if (!f) { std::cerr << "cannot open " << casesPath << "\n"; return 2; }
         std::string line;
         while (std::getline(f, line)) {
+            if (line.rfind("ROTCFG\t", 0) == 0) {
+                auto c = splitTab(line);   // ROTCFG list proc integrity filter
+                if (c.size() >= 5) rotProcs[c[1] + "\x01" + c[2]] = RotProc{ std::stof(c[3]), c[4] };
+                continue;
+            }
             if (line.rfind("RULE\t", 0) != 0) continue;
             auto c = splitTab(line);   // RULE list proc rule type [args]
             if (c.size() < 5) continue;
@@ -144,8 +153,50 @@ int main(int argc, char** argv) {
         }
     }
 
+    // BlockRotProcessor.processBlock: remove (null) iff rottableMatch && nextFloat(getSeed(pos)) > integrity.
+    // settings.random is null in the GT -> getRandom(pos) = RandomSource.create(Mth.getSeed(pos)).
+    auto rottable = [&](const RotProc& rp, long stateId) -> bool {
+        if (rp.filter == "-") return true;
+        if ((std::size_t)stateId >= blockName.size()) return false;
+        std::string full = "minecraft:" + blockName[stateId];
+        if (rp.filter.rfind("tag:", 0) == 0) return tags.isInTag(full, rp.filter.substr(4));
+        if (rp.filter.rfind("list:", 0) == 0) {
+            std::istringstream ls(rp.filter.substr(5)); std::string id;
+            while (std::getline(ls, id, ',')) if (id == full) return true;
+            return false;
+        }
+        return false;
+    };
+    long rotChecks = 0, rotMis = 0; int shown2 = 0;
+    {
+        std::ifstream f(casesPath, std::ios::binary);
+        std::string line;
+        while (std::getline(f, line)) {
+            if (line.rfind("ROTTEST\t", 0) != 0) continue;
+            auto c = splitTab(line);   // ROTTEST list proc stateId px py pz keep
+            if (c.size() < 8) continue;
+            auto it = rotProcs.find(c[1] + "\x01" + c[2]);
+            if (it == rotProcs.end()) continue;
+            long stateId = std::stol(c[3]);
+            int px = std::stoi(c[4]), py = std::stoi(c[5]), pz = std::stoi(c[6]);
+            int want = std::stoi(c[7]);
+            bool rmatch = rottable(it->second, stateId);
+            auto rng = mc::levelgen::RandomSource::create(mc::levelgen::getMthSeed(px, py, pz));
+            bool keep = !(rmatch && (rng->nextFloat() > it->second.integrity));
+            ++rotChecks;
+            if ((int)keep != want) {
+                ++rotMis;
+                if (shown2++ < 16)
+                    std::cerr << "ROT mismatch list=" << c[1] << " state=" << stateId
+                              << " pos=" << px << "," << py << "," << pz << " got=" << keep << " want=" << want << "\n";
+            }
+        }
+    }
+
     std::cout << "StructureProcessor RuleTest checks=" << checks << " mismatches=" << mismatches
               << " (rules=" << rules.size() << "; tag_match cases excluded from GT cmp="
               << tagSkipped << " — certified-by-composition via block_tags_parity)\n";
-    return mismatches > 0 ? 1 : 0;
+    std::cout << "StructureProcessor BlockRot checks=" << rotChecks << " mismatches=" << rotMis
+              << " (procs=" << rotProcs.size() << ")\n";
+    return (mismatches > 0 || rotMis > 0) ? 1 : 0;
 }
