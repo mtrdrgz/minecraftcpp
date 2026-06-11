@@ -1979,8 +1979,12 @@ set_target_properties(block_collision_shape_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 # ===== updateFromNeighbourShapes (#19): per-block updateShape connection recompute =====
+# Connection families (Wall/Fence/IronBars/FenceGate) need the certified VoxelShape ops
+# (getFaceShape / joinIsNotEmpty) for WallBlock's isCovered post/arm tests.
 add_executable(block_nbrshape_parity
-    world/level/block/BlockUpdateShapeParityTest.cpp)
+    world/level/block/BlockUpdateShapeParityTest.cpp
+    world/phys/AABB.cpp world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp world/phys/shapes/DiscreteVoxelShape.cpp)
 target_include_directories(block_nbrshape_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(block_nbrshape_parity PRIVATE glm nlohmann_json)
 set_target_properties(block_nbrshape_parity PROPERTIES

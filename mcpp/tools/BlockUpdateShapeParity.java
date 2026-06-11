@@ -15,17 +15,30 @@
 //   FAM <blockKey> <updateShapeDeclaringClass>
 //   TOTAL <scenarioCount>
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.tags.TagKey;
+import net.minecraft.tags.TagLoader;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
@@ -43,6 +56,59 @@ public final class BlockUpdateShapeParity {
                 for (int dz = -1; dz <= 1; dz++)
                     if (dx != 0 || dy != 0 || dz != 0) o.add(new int[]{dx, dy, dz});
         return o.toArray(new int[0][]);
+    }
+
+    // ── load the REAL datapack block tags (Bootstrap alone leaves them empty), so connectsTo /
+    // isSameFence (BlockTags.FENCES/WOODEN_FENCES) / copper-chest connection behave like the real
+    // game. Same approach as FullChunkParity.bindVanillaBlockTags. ──
+    static String tagIdFromPath(Path root, Path file) {
+        String rel = root.relativize(file).toString().replace('\\', '/');
+        return "minecraft:" + rel.substring(0, rel.length() - ".json".length());
+    }
+    static String entryId(JsonElement element) {
+        if (element.isJsonPrimitive()) return element.getAsString();
+        JsonObject obj = element.getAsJsonObject();
+        if (obj.has("id")) return obj.get("id").getAsString();
+        throw new IllegalArgumentException("unsupported tag entry: " + element);
+    }
+    static void resolveBlockTag(String id, Map<String, List<String>> rawTags,
+            Map<String, List<Holder<Block>>> resolved, LinkedHashSet<String> resolving) {
+        if (resolved.containsKey(id)) return;
+        if (!resolving.add(id)) throw new IllegalStateException("cyclic block tag: " + id);
+        LinkedHashSet<Holder<Block>> values = new LinkedHashSet<>();
+        for (String entry : rawTags.getOrDefault(id, List.of())) {
+            if (entry.startsWith("#")) {
+                String nested = entry.substring(1);
+                resolveBlockTag(nested, rawTags, resolved, resolving);
+                values.addAll(resolved.getOrDefault(nested, List.of()));
+            } else {
+                Holder<Block> holder = BuiltInRegistries.BLOCK.get(
+                    ResourceKey.create(Registries.BLOCK, Identifier.parse(entry)))
+                    .orElseThrow(() -> new IllegalStateException("unknown block in tag " + id + ": " + entry));
+                values.add(holder);
+            }
+        }
+        resolving.remove(id);
+        resolved.put(id, List.copyOf(values));
+    }
+    static void bindVanillaBlockTags() throws Exception {
+        Path root = Path.of("26.1.2", "data", "minecraft", "tags", "block");
+        Map<String, List<String>> rawTags = new HashMap<>();
+        try (var stream = Files.walk(root)) {
+            for (Path file : stream.filter(p -> p.toString().endsWith(".json")).toList()) {
+                JsonObject obj = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+                JsonArray values = obj.getAsJsonArray("values");
+                List<String> entries = new ArrayList<>();
+                for (JsonElement value : values) entries.add(entryId(value));
+                rawTags.put(tagIdFromPath(root, file), entries);
+            }
+        }
+        Map<String, List<Holder<Block>>> resolved = new HashMap<>();
+        for (String id : rawTags.keySet()) resolveBlockTag(id, rawTags, resolved, new LinkedHashSet<>());
+        Map<TagKey<Block>, List<Holder<Block>>> pending = new HashMap<>();
+        for (Map.Entry<String, List<Holder<Block>>> e : resolved.entrySet())
+            pending.put(TagKey.create(Registries.BLOCK, Identifier.parse(e.getKey())), e.getValue());
+        BuiltInRegistries.BLOCK.prepareTagReload(new TagLoader.LoadResult<>(Registries.BLOCK, pending)).apply();
     }
 
     private static String declaringClass(Class<?> start, String name, Class<?>... params) {
@@ -84,9 +150,10 @@ public final class BlockUpdateShapeParity {
     }
 
     @SuppressWarnings({"deprecation", "unchecked"})
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
+        bindVanillaBlockTags();  // load REAL block tags so connectsTo / isSameFence match the game
         final StringBuilder out = new StringBuilder(1 << 24);
 
         final Class<?>[] usParams = new Class<?>[]{

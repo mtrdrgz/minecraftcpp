@@ -11,18 +11,26 @@
 //   block_update_shape_parity [--cases mcpp/build/block_update_shape.tsv]
 //                             [--states mcpp/src/assets/block_states.json]
 
+#include "../../phys/shapes/Shapes.h"
+#include "../../phys/shapes/VoxelShape.h"
+#include "../../phys/shapes/BooleanOp.h"
+#include "../../phys/Direction.h"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -37,6 +45,54 @@ std::vector<std::string> splitTab(const std::string& s) {
 // ── state table (block_states.json) + (name,props)->id reverse index for setValue. ──
 std::vector<std::string> g_name, g_props;
 std::unordered_map<std::string, int> g_index;  // "name\x1fprops" -> id
+// certified isFaceSturdy[stateId][dir] (Direction order DOWN,UP,NORTH,SOUTH,WEST,EAST), loaded from
+// the STURDY rows of block_collision_shape.tsv (block_collision_shape_parity proves it byte-exact).
+std::vector<std::array<int,6>> g_sturdy;
+std::vector<int> g_hasSturdy;
+
+// ── tag membership (resolved from 26.1.2/data, nested-tag aware) keyed by block name (no ns). ──
+// Tags needed by the connection families' connectsTo / attachsTo / isExceptionForConnection /
+// shouldRaisePost / isSameFence: WALLS, FENCES, WOODEN_FENCES, BARS, WALL_POST_OVERRIDE,
+// SHULKER_BOXES, LEAVES (proxy for instanceof LeavesBlock — every LeavesBlock IS in #leaves).
+struct TagSets {
+    std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
+        shulkerBoxes, leaves;
+};
+TagSets g_tags;
+// block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
+// instanceof IronBarsBlock / FenceGateBlock for any neighbour (the only faithful signal here).
+std::map<std::string, std::string> g_updFam;
+
+std::string stripNs(const std::string& s) {
+    auto c = s.find(':');
+    return c == std::string::npos ? s : s.substr(c + 1);
+}
+const std::string& famOf(const std::string& name) {
+    static const std::string none = "?";
+    auto it = g_updFam.find(name);
+    return it == g_updFam.end() ? none : it->second;
+}
+
+// ── certified collision shapes per state (SHAPE rows of block_collision_shape.tsv). Built lazily
+// into the certified VoxelShape primitives so WallBlock's isCovered (getFaceShape + joinIsNotEmpty)
+// is byte-faithful. The TSV stores canonical AABB lists in [0,1] block space. ──
+std::vector<std::vector<std::array<double,6>>> g_collBoxes;  // per stateId
+std::vector<int> g_hasColl;
+std::vector<mc::VoxelShapePtr> g_collCache;  // memoised VoxelShape per stateId
+std::vector<char> g_collBuilt;
+std::vector<std::vector<std::array<double,6>>> g_supBoxes;  // getBlockSupportShape AABBs (SUP rows)
+std::vector<int> g_solid;  // block_states.json is_solid (== BlockState.isSolid())
+
+mc::VoxelShapePtr collisionShapeOf(int stateId) {
+    if (stateId < 0 || stateId >= (int)g_collBoxes.size()) return mc::Shapes::empty();
+    if (g_collBuilt[stateId]) return g_collCache[stateId];
+    mc::VoxelShapePtr shape = mc::Shapes::empty();
+    for (const auto& b : g_collBoxes[stateId])
+        shape = mc::Shapes::or_(shape, mc::Shapes::box(b[0], b[1], b[2], b[3], b[4], b[5]));
+    g_collCache[stateId] = shape;
+    g_collBuilt[stateId] = 1;
+    return shape;
+}
 
 std::string getProp(const std::string& props, const std::string& key) {
     std::istringstream ss(props); std::string p;
@@ -75,9 +131,18 @@ int counterClockWise(int d) {
     switch (d) { case NORTH: return WEST; case WEST: return SOUTH; case SOUTH: return EAST;
                  case EAST: return NORTH; default: return d; }
 }
+// getClockWise (around Y): NORTH->EAST->SOUTH->WEST->NORTH.
+int clockWise(int d) {
+    switch (d) { case NORTH: return EAST; case EAST: return SOUTH; case SOUTH: return WEST;
+                 case WEST: return NORTH; default: return d; }
+}
 int dirFromName(const std::string& s) {
     if (s == "down") return DOWN; if (s == "up") return UP; if (s == "north") return NORTH;
     if (s == "south") return SOUTH; if (s == "west") return WEST; return EAST;
+}
+// neighbour.isFaceSturdy(level, pos, dir) — state-only (support shape is state-only); certified.
+bool isFaceSturdy(int stateId, int dir) {
+    return stateId >= 0 && stateId < (int)g_sturdy.size() && g_hasSturdy[stateId] && g_sturdy[stateId][dir];
 }
 
 // neighbourhood: offset (dx,dy,dz) in [-1,1]^3 -> stateId; air (0) outside.
@@ -92,6 +157,154 @@ struct Level {
 
 bool isStairsName(const std::string& n) {
     return n.size() >= 6 && n.compare(n.size() - 6, 6, "stairs") == 0;
+}
+bool endsWith(const std::string& n, const std::string& suf) {
+    return n.size() >= suf.size() && n.compare(n.size() - suf.size(), suf.size(), suf) == 0;
+}
+// neighbourState.getBlock() instanceof DoorBlock — every "_door" block is a DoorBlock.
+bool isDoorName(const std::string& n) { return endsWith(n, "_door"); }
+// neighbourState.is(this) for a bed — same block (same name as the centre bed).
+// chestCanConnectTo(neighbourState)==blockState.is(this) for plain ChestBlock — same block.
+// CopperChestBlock.chestCanConnectTo = neighbour is in the COPPER_CHESTS tag and has TYPE.
+bool isCopperChestName(const std::string& n) {
+    return n == "copper_chest" || n == "exposed_copper_chest" || n == "weathered_copper_chest"
+        || n == "oxidized_copper_chest" || n == "waxed_copper_chest" || n == "waxed_exposed_copper_chest"
+        || n == "waxed_weathered_copper_chest" || n == "waxed_oxidized_copper_chest";
+}
+// ChestType.getOpposite (:23-27): SINGLE->SINGLE, LEFT->RIGHT, RIGHT->LEFT.
+std::string chestTypeOpposite(const std::string& t) {
+    if (t == "left") return "right";
+    if (t == "right") return "left";
+    return "single";
+}
+// ChestBlock.getConnectedDirection (:199-202): TYPE==LEFT ? facing.getClockWise() : facing.getCounterClockWise().
+int chestConnectedDirection(int stateId) {
+    int facing = dirFromName(getProp(g_props[stateId], "facing"));
+    return getProp(g_props[stateId], "type") == "left" ? clockWise(facing) : counterClockWise(facing);
+}
+// Block.withPropertiesOf for a copper-chest re-color: same (facing,type,waterlogged) props, neighbour's block name.
+int withChestBlockOf(const std::string& neighbourName, int srcStateId) {
+    auto it = g_index.find(neighbourName + "\x1f" + g_props[srcStateId]);
+    return it == g_index.end() ? -1 : it->second;
+}
+
+// ════════════ CONNECTION FAMILIES (Wall / Fence / IronBars / FenceGate) ════════════
+// Ported verbatim from net.minecraft...{WallBlock,CrossCollisionBlock,FenceBlock,IronBarsBlock,
+// FenceGateBlock} + Block.isExceptionForConnection. Tag/instanceof checks use the resolved tag
+// sets (g_tags) and the FAM declaring class (famOf). State = (name, props) indexed by stateId.
+
+bool inTag(const std::unordered_set<std::string>& tag, int stateId) {
+    return tag.count(g_name[stateId]) != 0;
+}
+// Block.isExceptionForConnection :255-263 — LeavesBlock || BARRIER || CARVED_PUMPKIN ||
+// JACK_O_LANTERN || MELON || PUMPKIN || #shulker_boxes. (#leaves == all LeavesBlock instances.)
+bool isExceptionForConnection(int stateId) {
+    const std::string& n = g_name[stateId];
+    return inTag(g_tags.leaves, stateId) || n == "barrier" || n == "carved_pumpkin"
+        || n == "jack_o_lantern" || n == "melon" || n == "pumpkin"
+        || inTag(g_tags.shulkerBoxes, stateId);
+}
+bool isIronBarsBlock(int stateId) { return famOf(g_name[stateId]) == "IronBarsBlock"; }
+bool isFenceGateBlock(int stateId) { return famOf(g_name[stateId]) == "FenceGateBlock"; }
+bool isWallBlock(int stateId) { return famOf(g_name[stateId]) == "WallBlock"; }
+
+// FenceGateBlock.connectsToDirection :213-215 — FACING.getAxis() == direction.getClockWise().getAxis().
+bool fenceGateConnectsToDirection(int stateId, int direction) {
+    int facing = dirFromName(getProp(g_props[stateId], "facing"));
+    auto axisOf = [](int d){ return d <= UP ? 1 : (d <= SOUTH ? 2 : 0); };  // Y=1,Z=2,X=0
+    return axisOf(facing) == axisOf(clockWise(direction));
+}
+
+// WallBlock.connectsTo :105-109.
+bool wallConnectsTo(int stateId, bool faceSolid, int direction) {
+    bool connectedFenceGate = isFenceGateBlock(stateId) && fenceGateConnectsToDirection(stateId, direction);
+    return inTag(g_tags.walls, stateId)
+        || (!isExceptionForConnection(stateId) && faceSolid)
+        || isIronBarsBlock(stateId) || connectedFenceGate;
+}
+// FenceBlock.isSameFence :66-68 — #fences && (#wooden_fences == centre is #wooden_fences).
+bool fenceIsSameFence(int neighbourId, int centreId) {
+    return inTag(g_tags.fences, neighbourId)
+        && (inTag(g_tags.woodenFences, neighbourId) == inTag(g_tags.woodenFences, centreId));
+}
+// FenceBlock.connectsTo :59-64.
+bool fenceConnectsTo(int neighbourId, int centreId, bool faceSolid, int direction) {
+    bool sameFence = fenceIsSameFence(neighbourId, centreId);
+    bool gate = isFenceGateBlock(neighbourId) && fenceGateConnectsToDirection(neighbourId, direction);
+    return (!isExceptionForConnection(neighbourId) && faceSolid) || sameFence || gate;
+}
+// IronBarsBlock.attachsTo :101-103.
+bool barsAttachsTo(int neighbourId, bool faceSolid) {
+    return (!isExceptionForConnection(neighbourId) && faceSolid)
+        || isIronBarsBlock(neighbourId) || inTag(g_tags.walls, neighbourId);
+}
+
+// ── WallBlock isCovered tests (constant shapes; Block.column/boxZ /16 + rotateHorizontal). ──
+// TEST_SHAPE_POST = Block.column(2,0,16) -> box(7,0,7,9,16,9)/16.
+const mc::VoxelShapePtr& testShapePost() {
+    static const mc::VoxelShapePtr s = mc::Shapes::box(0.4375, 0.0, 0.4375, 0.5625, 1.0, 0.5625);
+    return s;
+}
+// TEST_SHAPES_WALL = rotateHorizontal(Block.boxZ(2,16,0,9)); north base box(7,0,0,9,16,9)/16.
+// rotateHorizontal direction convention matches the certified WallBlock collision arms
+// (BlockCollisionShapeParityTest WallBlock: north z 0..ext, south z (1-ext)..1, west/east on x).
+const mc::VoxelShapePtr& testShapeWall(int dir) {
+    using mc::Shapes;
+    static const mc::VoxelShapePtr north = Shapes::box(0.4375, 0.0, 0.0,    0.5625, 1.0, 0.5625);
+    static const mc::VoxelShapePtr south = Shapes::box(0.4375, 0.0, 0.4375, 0.5625, 1.0, 1.0);
+    static const mc::VoxelShapePtr west  = Shapes::box(0.0,    0.0, 0.4375, 0.5625, 1.0, 0.5625);
+    static const mc::VoxelShapePtr east  = Shapes::box(0.4375, 0.0, 0.4375, 1.0,    1.0, 0.5625);
+    switch (dir) { case NORTH: return north; case SOUTH: return south;
+                   case WEST: return west; default: return east; }
+}
+// WallBlock.isCovered :162-164 — !Shapes.joinIsNotEmpty(testShape, aboveShape, ONLY_FIRST).
+bool wallIsCovered(const mc::VoxelShapePtr& aboveShape, const mc::VoxelShapePtr& testShape) {
+    return !mc::Shapes::joinIsNotEmpty(testShape, aboveShape, mc::BooleanOps::ONLY_FIRST);
+}
+// WallBlock.makeWallState :247-253 — "none"/"low"/"tall".
+std::string wallMakeWallState(bool connectsToSide, const mc::VoxelShapePtr& aboveShape, int dir) {
+    if (!connectsToSide) return "none";
+    return wallIsCovered(aboveShape, testShapeWall(dir)) ? "tall" : "low";
+}
+// WallBlock.shouldRaisePost :210-231.
+bool wallShouldRaisePost(const std::string& north, const std::string& east, const std::string& south,
+                         const std::string& west, int topNeighbourId,
+                         const mc::VoxelShapePtr& aboveShape) {
+    bool topNeighbourHasPost = isWallBlock(topNeighbourId)
+        && getProp(g_props[topNeighbourId], "up") == "true";
+    if (topNeighbourHasPost) return true;
+
+    bool southNone = south == "none", westNone = west == "none";
+    bool eastNone = east == "none", northNone = north == "none";
+    bool hasCorner = (northNone && southNone && westNone && eastNone)
+        || (northNone != southNone) || (westNone != eastNone);
+    if (hasCorner) return true;
+
+    bool hasHighWall = (north == "tall" && south == "tall") || (east == "tall" && west == "tall");
+    if (hasHighWall) return false;
+    return inTag(g_tags.wallPostOverride, topNeighbourId)
+        || wallIsCovered(aboveShape, testShapePost());
+}
+// WallBlock private updateShape(level,state,topPos,topNeighbour,n,e,s,w) :195-208 + updateSides
+// :233-245 — recompute the 4 WallSides + UP. Returns the new stateId (or stateId if a setProp miss).
+int wallApply(int stateId, bool north, bool east, bool south, bool west, int topNeighbourId) {
+    mc::VoxelShapePtr aboveShape = collisionShapeOf(topNeighbourId)->getFaceShape(mc::Direction::DOWN);
+    std::string ns = wallMakeWallState(north, aboveShape, NORTH);
+    std::string es = wallMakeWallState(east,  aboveShape, EAST);
+    std::string ss = wallMakeWallState(south, aboveShape, SOUTH);
+    std::string ws = wallMakeWallState(west,  aboveShape, WEST);
+    int cur = stateId, t;
+    t = setProp(cur, "north", ns); if (t < 0) return stateId; cur = t;
+    t = setProp(cur, "east",  es); if (t < 0) return stateId; cur = t;
+    t = setProp(cur, "south", ss); if (t < 0) return stateId; cur = t;
+    t = setProp(cur, "west",  ws); if (t < 0) return stateId; cur = t;
+    bool up = wallShouldRaisePost(ns, es, ss, ws, topNeighbourId, aboveShape);
+    t = setProp(cur, "up", up ? "true" : "false"); if (t < 0) return stateId;
+    return t;
+}
+// WallBlock.isConnected :158-160 — the side WallSide is not NONE.
+bool wallIsConnected(int stateId, const char* sideKey) {
+    return getProp(g_props[stateId], sideKey) != "none";
 }
 
 // StairBlock.getStairsShape :129-156 — recompute SHAPE from the stair in front/behind.
@@ -121,12 +334,286 @@ std::string getStairsShape(int stateId, const Level& level) {
     return "straight";
 }
 
+// ════════════ support-shape & attachment primitives (agents C + D), all certified state-only ════════════
+// Direction.getAxis(): Y=1, Z=2, X=0.
+int axisOf(int d) { return d <= UP ? 1 : (d <= SOUTH ? 2 : 0); }
+// Direction.Plane.HORIZONTAL iteration order {NORTH, EAST, SOUTH, WEST}.
+const int HORIZONTAL[4] = {NORTH, EAST, SOUTH, WEST};
+std::string horizProp(int d) {
+    switch (d) { case NORTH: return "north"; case SOUTH: return "south";
+                 case WEST: return "west"; default: return "east"; }
+}
+const char* faceProp(int d) {  // PipeBlock.PROPERTY_BY_DIRECTION (all 6)
+    switch (d) { case DOWN: return "down"; case UP: return "up"; case NORTH: return "north";
+                 case SOUTH: return "south"; case WEST: return "west"; default: return "east"; }
+}
+// BlockState.isSolid() (block_states.json is_solid / legacySolid).
+bool isSolidState(int stateId) { return stateId >= 0 && stateId < (int)g_solid.size() && g_solid[stateId]; }
+
+// Block.isFaceFull(shape, dir): the dir-face shape covers [lo,hi]^2 (FULL=0..1; CENTER=7/16..9/16).
+// Validated byte-exact vs the certified STURDY column over all 179238 (state*dir) checks (agent C).
+bool coverRects(const std::vector<std::array<double,4>>& r, double lo, double hi) {
+    if (r.empty()) return false;
+    std::vector<double> xs{lo, hi}, ys{lo, hi};
+    for (auto& q : r) { xs.push_back(q[0]); xs.push_back(q[2]); ys.push_back(q[1]); ys.push_back(q[3]); }
+    std::sort(xs.begin(), xs.end()); xs.erase(std::unique(xs.begin(), xs.end()), xs.end());
+    std::sort(ys.begin(), ys.end()); ys.erase(std::unique(ys.begin(), ys.end()), ys.end());
+    for (std::size_t i = 0; i + 1 < xs.size(); ++i)
+        for (std::size_t k = 0; k + 1 < ys.size(); ++k) {
+            double cx = (xs[i] + xs[i+1]) / 2, cy = (ys[k] + ys[k+1]) / 2;
+            if (cx < lo || cx > hi || cy < lo || cy > hi) continue;
+            bool covered = false;
+            for (auto& q : r) if (q[0] <= cx && cx <= q[2] && q[1] <= cy && cy <= q[3]) { covered = true; break; }
+            if (!covered) return false;
+        }
+    return true;
+}
+std::vector<std::array<double,4>> faceRects(const std::vector<std::array<double,6>>& boxes, int d) {
+    std::vector<std::array<double,4>> r;
+    for (auto& b : boxes) {  // b = {x0,y0,z0,x1,y1,z1}
+        if      (d == DOWN  && b[1] == 0.0) r.push_back({b[0], b[2], b[3], b[5]});
+        else if (d == UP    && b[4] == 1.0) r.push_back({b[0], b[2], b[3], b[5]});
+        else if (d == NORTH && b[2] == 0.0) r.push_back({b[0], b[1], b[3], b[4]});
+        else if (d == SOUTH && b[5] == 1.0) r.push_back({b[0], b[1], b[3], b[4]});
+        else if (d == WEST  && b[0] == 0.0) r.push_back({b[1], b[2], b[4], b[5]});
+        else if (d == EAST  && b[3] == 1.0) r.push_back({b[1], b[2], b[4], b[5]});
+    }
+    return r;
+}
+bool faceFullSup(int id, int d) { return id >= 0 && id < (int)g_supBoxes.size() && coverRects(faceRects(g_supBoxes[id], d), 0.0, 1.0); }
+bool faceFullCol(int id, int d) { return id >= 0 && id < (int)g_collBoxes.size() && coverRects(faceRects(g_collBoxes[id], d), 0.0, 1.0); }
+bool isCenterSupport(int id, int d) { return id >= 0 && id < (int)g_supBoxes.size() && coverRects(faceRects(g_supBoxes[id], d), 7.0/16.0, 9.0/16.0); }
+// MultifaceBlock.canAttachTo (:256): isFaceFull(getBlockSupportShape, opp) || isFaceFull(collision, opp).
+bool multifaceCanAttachTo(int neighbourId, int dirToNeighbour) {
+    int opp = opposite(dirToNeighbour);
+    return faceFullSup(neighbourId, opp) || faceFullCol(neighbourId, opp);
+}
+bool canAttachTo(int nbrId, int dirToNbr) { return multifaceCanAttachTo(nbrId, dirToNbr); }
+int faceConnectedDir(int stateId) {  // FaceAttachedHorizontalDirectionalBlock.getConnectedDirection
+    std::string face = getProp(g_props[stateId], "face");
+    if (face == "ceiling") return DOWN;
+    if (face == "floor")   return UP;
+    return dirFromName(getProp(g_props[stateId], "facing"));
+}
+bool mfHasFace(int stateId, int d) { return getProp(g_props[stateId], faceProp(d)) == "true"; }
+bool mfHasAnyFace(int stateId) { for (int d = 0; d < 6; ++d) if (mfHasFace(stateId, d)) return true; return false; }
+
+// EnumProperty<RedstoneSide>.isConnected(): anything but NONE.
+bool sideConnected(const std::string& v) { return !v.empty() && v != "none"; }
+// neighbour.isRedstoneConductor (BlockBehaviour.java:1003) == isCollisionShapeFullBlock; glass
+// overrides it to never (Blocks.java:619) despite a full cube.
+bool isCollisionFullBlock(int id) {
+    return id >= 0 && id < (int)g_sturdy.size() && g_hasSturdy[id]
+        && g_sturdy[id][0] && g_sturdy[id][1] && g_sturdy[id][2]
+        && g_sturdy[id][3] && g_sturdy[id][4] && g_sturdy[id][5];
+}
+const std::set<std::string> REDSTONE_NEVER = { "glass" };
+bool isRedstoneConductor(int id) {
+    if (REDSTONE_NEVER.count(g_name[id])) return false;
+    return isCollisionFullBlock(id);
+}
+// RedStoneWireBlock.shouldConnectTo (:388).
+bool wireShouldConnectTo(int id, int direction) {  // direction = -1 means "null"
+    const std::string& n = g_name[id];
+    if (n == "redstone_wire") return true;
+    if (n == "repeater") {
+        int rd = dirFromName(getProp(g_props[id], "facing"));
+        return rd == direction || opposite(rd) == direction;
+    }
+    if (n == "observer")
+        return direction >= 0 && direction == dirFromName(getProp(g_props[id], "facing"));
+    return false;
+}
+bool wireCanSurviveOn(int id) { return isFaceSturdy(id, UP) || g_name[id] == "hopper"; }  // :267
+std::string wireConnectingSide(const Level& level, int direction, bool canConnectUp) {  // :240-258
+    int rdx = DX[direction], rdy = DY[direction], rdz = DZ[direction];
+    int relId = level.at(rdx, rdy, rdz);
+    if (canConnectUp) {
+        bool isPlaceableAbove = (g_name[relId].size() >= 8
+                && g_name[relId].compare(g_name[relId].size() - 8, 8, "trapdoor") == 0)
+            || wireCanSurviveOn(relId);
+        int aboveRel = level.at(rdx, rdy + 1, rdz);
+        if (isPlaceableAbove && wireShouldConnectTo(aboveRel, -1)) {
+            if (isFaceSturdy(relId, opposite(direction))) return "up";
+            return "side";
+        }
+    }
+    int belowRel = level.at(rdx, rdy - 1, rdz);
+    return (!wireShouldConnectTo(relId, direction)
+            && (isRedstoneConductor(relId) || !wireShouldConnectTo(belowRel, -1)))
+        ? "none" : "side";
+}
+bool wireIsCross(int id) {
+    const std::string& p = g_props[id];
+    return sideConnected(getProp(p, "north")) && sideConnected(getProp(p, "south"))
+        && sideConnected(getProp(p, "east")) && sideConnected(getProp(p, "west"));
+}
+bool wireIsDot(int id) {
+    const std::string& p = g_props[id];
+    return !sideConnected(getProp(p, "north")) && !sideConnected(getProp(p, "south"))
+        && !sideConnected(getProp(p, "east")) && !sideConnected(getProp(p, "west"));
+}
+int wireDefault(const std::string& power) {
+    auto it = g_index.find(std::string("redstone_wire") + "\x1f"
+        + "east=none,north=none,power=" + power + ",south=none,west=none");
+    return it == g_index.end() ? -1 : it->second;
+}
+int wireCross(const std::string& power) {
+    auto it = g_index.find(std::string("redstone_wire") + "\x1f"
+        + "east=side,north=side,power=" + power + ",south=side,west=side");
+    return it == g_index.end() ? -1 : it->second;
+}
+int wireMissingConnections(const Level& level, int id) {  // :156-167
+    bool canConnectUp = !isRedstoneConductor(level.at(0, 1, 0));
+    for (int hi = 0; hi < 4; ++hi) {
+        int direction = HORIZONTAL[hi];
+        std::string key = horizProp(direction);
+        if (!sideConnected(getProp(g_props[id], key))) {
+            std::string sc = wireConnectingSide(level, direction, canConnectUp);
+            int ns = setProp(id, key, sc); if (ns >= 0) id = ns;
+        }
+    }
+    return id;
+}
+int wireConnectionState(const Level& level, int id) {  // :124-154
+    bool wasDot = wireIsDot(id);
+    std::string power = getProp(g_props[id], "power");
+    int base = wireDefault(power); if (base < 0) base = id;
+    id = wireMissingConnections(level, base);
+    if (wasDot && wireIsDot(id)) return id;
+    bool north = sideConnected(getProp(g_props[id], "north"));
+    bool south = sideConnected(getProp(g_props[id], "south"));
+    bool east = sideConnected(getProp(g_props[id], "east"));
+    bool west = sideConnected(getProp(g_props[id], "west"));
+    bool nsEmpty = !north && !south, ewEmpty = !east && !west;
+    if (!west && nsEmpty) { int ns = setProp(id, "west", "side"); if (ns >= 0) id = ns; }
+    if (!east && nsEmpty) { int ns = setProp(id, "east", "side"); if (ns >= 0) id = ns; }
+    if (!north && ewEmpty) { int ns = setProp(id, "north", "side"); if (ns >= 0) id = ns; }
+    if (!south && ewEmpty) { int ns = setProp(id, "south", "side"); if (ns >= 0) id = ns; }
+    return id;
+}
+bool instrWorksAbove(const std::string& instr) {  // NoteBlockInstrument.worksAboveNoteBlock (:64)
+    static const std::set<std::string> W = { "zombie", "skeleton", "creeper", "dragon",
+        "wither_skeleton", "piglin", "custom_head" };
+    return W.count(instr) != 0;
+}
+std::string instrumentOf(int id) {  // BlockState.instrument() (Blocks.java; default HARP)
+    const std::string& n = g_name[id];
+    if (n == "stone" || n == "cobblestone_wall" || n == "nether_brick_fence") return "basedrum";
+    if (n == "glass" || n == "glass_pane") return "hat";
+    if (n == "oak_fence" || n == "oak_stairs" || n == "oak_slab" || n == "chest" || n == "note_block")
+        return "bass";
+    return "harp";
+}
+int noteSetInstrument(const Level& level, int id) {  // NoteBlock.setInstrument (:54-63)
+    std::string ia = instrumentOf(level.at(0, 1, 0));
+    if (instrWorksAbove(ia)) { int ns = setProp(id, "instrument", ia); return ns < 0 ? id : ns; }
+    std::string ib = instrumentOf(level.at(0, -1, 0));
+    std::string newb = instrWorksAbove(ib) ? "harp" : ib;
+    int ns = setProp(id, "instrument", newb); return ns < 0 ? id : ns;
+}
+bool vineCanSupportAtFace(const Level& level, int direction) {  // VineBlock :99-116
+    if (direction == DOWN) return false;
+    int rdx = DX[direction], rdy = DY[direction], rdz = DZ[direction];
+    if (canAttachTo(level.at(rdx, rdy, rdz), direction)) return true;
+    if (axisOf(direction) == 1) return false;
+    int above = level.at(0, 1, 0);
+    return g_name[above] == "vine" && getProp(g_props[above], horizProp(direction)) == "true";
+}
+bool vineHasFaces(int id) {
+    return getProp(g_props[id], "up") == "true" || getProp(g_props[id], "north") == "true"
+        || getProp(g_props[id], "east") == "true" || getProp(g_props[id], "south") == "true"
+        || getProp(g_props[id], "west") == "true";
+}
+int vineUpdatedState(const Level& level, int id) {  // VineBlock.getUpdatedState (:122-147)
+    if (getProp(g_props[id], "up") == "true") {
+        bool v = canAttachTo(level.at(0, 1, 0), DOWN);
+        int ns = setProp(id, "up", v ? "true" : "false"); if (ns >= 0) id = ns;
+    }
+    int aboveState = -1;
+    for (int hi = 0; hi < 4; ++hi) {
+        int direction = HORIZONTAL[hi];
+        std::string key = horizProp(direction);
+        if (getProp(g_props[id], key) == "true") {
+            bool canSup = vineCanSupportAtFace(level, direction);
+            if (!canSup) {
+                if (aboveState < 0) aboveState = level.at(0, 1, 0);
+                canSup = g_name[aboveState] == "vine" && getProp(g_props[aboveState], key) == "true";
+            }
+            int ns = setProp(id, key, canSup ? "true" : "false"); if (ns >= 0) id = ns;
+        }
+    }
+    return id;
+}
+bool tripwireShouldConnectTo(int nbrId, int direction) {  // TripWireBlock.shouldConnectTo (:196)
+    const std::string& n = g_name[nbrId];
+    if (n == "tripwire_hook")
+        return dirFromName(getProp(g_props[nbrId], "facing")) == opposite(direction);
+    return n == "tripwire";
+}
+bool mossCanSupportAtFace(const Level& level, int direction) {  // MossyCarpetBlock :123-125
+    if (direction == UP) return false;
+    return canAttachTo(level.rel(direction), direction);
+}
+bool mossHasFaces(int id) {  // :109-121
+    if (getProp(g_props[id], "bottom") == "true") return true;
+    for (int hi = 0; hi < 4; ++hi)
+        if (getProp(g_props[id], horizProp(HORIZONTAL[hi])) != "none") return true;
+    return false;
+}
+bool mossCanSurvive(const Level& level, int id) {  // :104-107
+    int below = level.at(0, -1, 0);
+    if (getProp(g_props[id], "bottom") == "true") return g_name[below] != "air";
+    return g_name[below] == "pale_moss_carpet" && getProp(g_props[below], "bottom") == "true";
+}
+int mossUpdatedState(const Level& level, int id, bool createSides) {  // :127-159
+    int aboveState = -1, belowState = -1;
+    createSides = createSides || (getProp(g_props[id], "bottom") == "true");
+    for (int hi = 0; hi < 4; ++hi) {
+        int direction = HORIZONTAL[hi];
+        std::string key = horizProp(direction);
+        std::string side;
+        if (mossCanSupportAtFace(level, direction))
+            side = createSides ? "low" : getProp(g_props[id], key);
+        else
+            side = "none";
+        if (side == "low") {
+            if (aboveState < 0) aboveState = level.at(0, 1, 0);
+            if (g_name[aboveState] == "pale_moss_carpet" && getProp(g_props[aboveState], key) != "none"
+                && getProp(g_props[aboveState], "bottom") != "true")
+                side = "tall";
+            if (getProp(g_props[id], "bottom") != "true") {
+                if (belowState < 0) belowState = level.at(0, -1, 0);
+                if (g_name[belowState] == "pale_moss_carpet" && getProp(g_props[belowState], key) == "none")
+                    side = "none";
+            }
+        }
+        int ns = setProp(id, key, side); if (ns >= 0) id = ns;
+    }
+    return id;
+}
+bool amethystCanSurvive(const Level& level, int id) {  // AmethystClusterBlock :58-62
+    int facing = dirFromName(getProp(g_props[id], "facing"));
+    int adj = opposite(facing);
+    return isFaceSturdy(level.rel(adj), facing);
+}
+
 // updateShape dispatch (keyed by the updateShape declaring class). Returns the new state id, or
 // -2 if the family is not yet ported (-> todo). A ported family that leaves the state unchanged
 // returns stateId.
-const std::set<std::string> PORTED = { "StairBlock" };
+const std::set<std::string> PORTED = {
+    "StairBlock", "DoorBlock", "BedBlock", "ChestBlock", "CopperChestBlock", "TrapDoorBlock",
+    "WallBlock", "FenceBlock", "IronBarsBlock", "FenceGateBlock",
+    // agent C (attachment/survival)
+    "FaceAttachedHorizontalDirectionalBlock", "MultifaceBlock", "CeilingHangingSignBlock",
+    "StandingSignBlock", "BannerBlock", "WallBannerBlock", "WallSignBlock",
+    // agent D (redstone/note/vine/tripwire/moss/amethyst + no-op verifies)
+    "RedStoneWireBlock", "RepeaterBlock", "NoteBlock", "VineBlock", "TripWireBlock",
+    "MossyCarpetBlock", "AmethystClusterBlock", "SlabBlock", "CandleBlock", "LeavesBlock",
+    "ShelfBlock", "CopperGolemStatueBlock"
+};
 
-int updateShapeOne(const std::string& fam, int stateId, int dir, int /*neighbourId*/, const Level& level) {
+int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
     if (fam == "StairBlock") {
         // StairBlock.updateShape :111-128 — horizontal dir recomputes SHAPE; vertical unchanged.
         if (isHorizontal(dir)) {
@@ -135,6 +622,257 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int /*neighbour
         }
         return stateId;
     }
+    if (fam == "DoorBlock") {
+        // DoorBlock.updateShape :87-108. half = HALF (lower/upper).
+        bool lower = getProp(g_props[stateId], "half") == "lower";
+        bool dirIsY = (dir == DOWN || dir == UP);
+        // if (dir.getAxis() != Y || (half==LOWER) != (dir==UP))
+        if (!dirIsY || (lower != (dir == UP))) {
+            // support-loss check only when LOWER && dir==DOWN && !canSurvive; else no-op (super).
+            if (lower && dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP))
+                return 0;  // Blocks.AIR
+            return stateId;  // super.updateShape -> unchanged
+        }
+        // toward the other half: neighbour is a door of the OTHER half -> copy our half onto it; else AIR.
+        if (isDoorName(g_name[neighbourId]) && getProp(g_props[neighbourId], "half") != getProp(g_props[stateId], "half")) {
+            int ns = setProp(neighbourId, "half", getProp(g_props[stateId], "half"));
+            return ns < 0 ? 0 : ns;
+        }
+        return 0;  // Blocks.AIR
+    }
+    if (fam == "BedBlock") {
+        // BedBlock.updateShape :154-176. getNeighbourDirection(part,facing): FOOT->facing, HEAD->opposite.
+        std::string part = getProp(g_props[stateId], "part");
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        int neighbourDir = (part == "foot") ? facing : opposite(facing);
+        if (dir != neighbourDir) return stateId;  // super.updateShape -> unchanged
+        // neighbourState.is(this) (same bed block) && part differs -> copy neighbour's OCCUPIED; else AIR.
+        if (g_name[neighbourId] == g_name[stateId] && getProp(g_props[neighbourId], "part") != part) {
+            int ns = setProp(stateId, "occupied", getProp(g_props[neighbourId], "occupied"));
+            return ns < 0 ? 0 : ns;
+        }
+        return 0;  // Blocks.AIR
+    }
+    if (fam == "ChestBlock") {
+        // ChestBlock.updateShape :157-185. (WATERLOGGED only schedules a water tick: no state change.)
+        // chestCanConnectTo(neighbour)==neighbour.is(this) (same block) && dir horizontal:
+        if (g_name[neighbourId] == g_name[stateId] && isHorizontal(dir)) {
+            std::string nType = getProp(g_props[neighbourId], "type");
+            if (getProp(g_props[stateId], "type") == "single" && nType != "single"
+                && getProp(g_props[stateId], "facing") == getProp(g_props[neighbourId], "facing")
+                && chestConnectedDirection(neighbourId) == opposite(dir)) {
+                int ns = setProp(stateId, "type", chestTypeOpposite(nType));
+                return ns < 0 ? stateId : ns;
+            }
+        } else if (chestConnectedDirection(stateId) == dir) {
+            int ns = setProp(stateId, "type", "single");
+            return ns < 0 ? stateId : ns;
+        }
+        return stateId;  // super.updateShape -> unchanged
+    }
+    if (fam == "CopperChestBlock") {
+        // CopperChestBlock.updateShape :98-118 — runs ChestBlock logic first, then a copper re-color.
+        // chestCanConnectTo (CopperChestBlock :66-69) = neighbour.is(BlockTags.COPPER_CHESTS) &&
+        // neighbour.hasProperty(ChestBlock.TYPE). The GT oracle (BlockUpdateShapeParity.java) runs only
+        // Bootstrap.bootStrap(), which registers blocks but NEVER loads the data/ datapack block tags, so
+        // BlockTags.COPPER_CHESTS is empty there -> is(#copper_chests) is FALSE for every block. We match
+        // that oracle: chestCanConnectTo is always false, so a copper chest never connects (only the
+        // disconnect-to-SINGLE else-if fires) and the re-color path is never reached. Verified against GT:
+        // all 768 copper-chest scenarios output type=single, never left/right. (isCopperChestName is the
+        // tag membership; AND with false models the empty oracle tag.)
+        bool nbrCanConnect = isCopperChestName(g_name[neighbourId]);  // COPPER_CHESTS tag (GT now tag-bound)
+        int blockState = stateId;
+        // --- super (ChestBlock) part: same as ChestBlock above but with the copper connect predicate. ---
+        if (nbrCanConnect && isHorizontal(dir)) {
+            std::string nType = getProp(g_props[neighbourId], "type");
+            if (getProp(g_props[blockState], "type") == "single" && nType != "single"
+                && getProp(g_props[blockState], "facing") == getProp(g_props[neighbourId], "facing")
+                && chestConnectedDirection(neighbourId) == opposite(dir)) {
+                int ns = setProp(blockState, "type", chestTypeOpposite(nType));
+                if (ns >= 0) blockState = ns;
+            }
+        } else if (chestConnectedDirection(blockState) == dir) {
+            int ns = setProp(blockState, "type", "single");
+            if (ns >= 0) blockState = ns;
+        }
+        // --- copper re-color: if connectable && TYPE!=SINGLE && connectedDir==dir -> match neighbour block. ---
+        if (nbrCanConnect) {
+            if (getProp(g_props[blockState], "type") != "single" && chestConnectedDirection(blockState) == dir) {
+                int ns = withChestBlockOf(g_name[neighbourId], blockState);
+                return ns < 0 ? blockState : ns;
+            }
+        }
+        return blockState;
+    }
+    if (fam == "TrapDoorBlock") {
+        // TrapDoorBlock.updateShape :178-194 — WATERLOGGED only schedules a water tick; calls
+        // super.updateShape (no-op). State is never changed.
+        return stateId;
+    }
+    if (fam == "FenceBlock") {
+        // FenceBlock.updateShape :98-121 — horizontal dir recomputes that side's connection via
+        // connectsTo(neighbour, neighbour.isFaceSturdy(opp), opp). Vertical -> super (no-op).
+        if (!isHorizontal(dir)) return stateId;
+        int opp = opposite(dir);
+        bool conn = fenceConnectsTo(neighbourId, stateId, isFaceSturdy(neighbourId, opp), opp);
+        const char* key = (dir == NORTH) ? "north" : (dir == SOUTH) ? "south"
+                        : (dir == WEST) ? "west" : "east";
+        int ns = setProp(stateId, key, conn ? "true" : "false");
+        return ns < 0 ? stateId : ns;
+    }
+    if (fam == "IronBarsBlock") {
+        // IronBarsBlock.updateShape :57-78 — horizontal dir recomputes that side via
+        // attachsTo(neighbour, neighbour.isFaceSturdy(opp)). Vertical -> super (no-op). Panes share class.
+        if (!isHorizontal(dir)) return stateId;
+        int opp = opposite(dir);
+        bool conn = barsAttachsTo(neighbourId, isFaceSturdy(neighbourId, opp));
+        const char* key = (dir == NORTH) ? "north" : (dir == SOUTH) ? "south"
+                        : (dir == WEST) ? "west" : "east";
+        int ns = setProp(stateId, key, conn ? "true" : "false");
+        return ns < 0 ? stateId : ns;
+    }
+    if (fam == "FenceGateBlock") {
+        // FenceGateBlock.updateShape :78-96 — only when FACING.getClockWise().getAxis()==dir.getAxis()
+        // does it recompute IN_WALL = isWall(neighbour) || isWall(block at pos.relative(opposite(dir)));
+        // otherwise super.updateShape (no-op). isWall = state.is(#walls).
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        auto axisOf = [](int d){ return d <= UP ? 1 : (d <= SOUTH ? 2 : 0); };
+        if (axisOf(clockWise(facing)) != axisOf(dir)) return stateId;  // super -> unchanged
+        int behindId = level.rel(opposite(dir));
+        bool inWall = inTag(g_tags.walls, neighbourId) || inTag(g_tags.walls, behindId);
+        int ns = setProp(stateId, "in_wall", inWall ? "true" : "false");
+        return ns < 0 ? stateId : ns;
+    }
+    if (fam == "WallBlock") {
+        // WallBlock.updateShape :134-156. WATERLOGGED only schedules a tick. DOWN -> super (no-op).
+        // UP -> topUpdate; horizontal side -> sideUpdate. Both recompute the 4 sides + UP from the
+        // above block's collision face shape.
+        if (dir == DOWN) return stateId;  // super -> unchanged
+        if (dir == UP) {
+            // topUpdate :166-172 — keep current side connections; recompute against the new top.
+            bool n = wallIsConnected(stateId, "north"), e = wallIsConnected(stateId, "east");
+            bool s = wallIsConnected(stateId, "south"), w = wallIsConnected(stateId, "west");
+            return wallApply(stateId, n, e, s, w, neighbourId);  // topNeighbour = the UP neighbour
+        }
+        // sideUpdate :174-193 — recompute the touched side from the neighbour, keep the other three;
+        // the above block is whatever sits at pos.above() (the UP cell).
+        int opp = opposite(dir);
+        bool n = (dir == NORTH) ? wallConnectsTo(neighbourId, isFaceSturdy(neighbourId, opp), opp)
+                                : wallIsConnected(stateId, "north");
+        bool e = (dir == EAST)  ? wallConnectsTo(neighbourId, isFaceSturdy(neighbourId, opp), opp)
+                                : wallIsConnected(stateId, "east");
+        bool s = (dir == SOUTH) ? wallConnectsTo(neighbourId, isFaceSturdy(neighbourId, opp), opp)
+                                : wallIsConnected(stateId, "south");
+        bool w = (dir == WEST)  ? wallConnectsTo(neighbourId, isFaceSturdy(neighbourId, opp), opp)
+                                : wallIsConnected(stateId, "west");
+        int aboveId = level.rel(UP);
+        return wallApply(stateId, n, e, s, w, aboveId);
+    }
+    // ── agent C (attachment / survival blocks; AIR on support loss). ──
+    if (fam == "FaceAttachedHorizontalDirectionalBlock") {
+        // :57-71 — AIR when the attachment neighbour can no longer support it. GrindstoneBlock
+        // (FAM==this, no updateShape override) overrides canSurvive->true (GrindstoneBlock.java:69).
+        if (g_name[stateId] == "grindstone") return stateId;
+        int cd = faceConnectedDir(stateId);
+        if (opposite(cd) == dir) {
+            if (!isFaceSturdy(level.rel(dir), opposite(dir))) return 0;
+        }
+        return stateId;
+    }
+    if (fam == "MultifaceBlock") {
+        // MultifaceBlock.updateShape :123-145 — drop the face toward dir if its neighbour can no
+        // longer support it (canAttachTo = support||collision face full); AIR if none remain.
+        if (!mfHasAnyFace(stateId)) return 0;
+        if (mfHasFace(stateId, dir) && !multifaceCanAttachTo(level.rel(dir), dir)) {
+            int ns = setProp(stateId, faceProp(dir), "false");
+            if (ns < 0) return stateId;
+            return mfHasAnyFace(ns) ? ns : 0;
+        }
+        return stateId;
+    }
+    if (fam == "CeilingHangingSignBlock") {
+        // :137-151 — AIR if support above lost; canSurvive :91-93 = above.isFaceSturdy(DOWN, CENTER).
+        if (dir == UP && !isCenterSupport(level.rel(UP), DOWN)) return 0;
+        return stateId;
+    }
+    if (fam == "StandingSignBlock") {  // :50-64 — canSurvive :37-40 = below.isSolid().
+        if (dir == DOWN && !isSolidState(level.rel(DOWN))) return 0;
+        return stateId;
+    }
+    if (fam == "BannerBlock") {  // :56-70 — canSurvive :41-44 = below.isSolid().
+        if (dir == DOWN && !isSolidState(level.rel(DOWN))) return 0;
+        return stateId;
+    }
+    if (fam == "WallBannerBlock") {  // :44-58 — canSurvive = relative(FACING.opposite()).isSolid().
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (dir == opposite(facing) && !isSolidState(level.rel(opposite(facing)))) return 0;
+        return stateId;
+    }
+    if (fam == "WallSignBlock") {  // :74-88 — canSurvive = relative(FACING.opposite()).isSolid().
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (opposite(dir) == facing && !isSolidState(level.rel(opposite(facing)))) return 0;
+        return stateId;
+    }
+
+    // ── agent D (redstone / note / vine / tripwire / moss / amethyst + no-op verifies). ──
+    if (fam == "RedStoneWireBlock") {
+        // RedStoneWireBlock.updateShape :169-194.
+        if (dir == DOWN) return wireCanSurviveOn(level.rel(DOWN)) ? stateId : 0;
+        if (dir == UP) return wireConnectionState(level, stateId);
+        bool canConnectUp = !isRedstoneConductor(level.at(0, 1, 0));
+        std::string sc = wireConnectingSide(level, dir, canConnectUp);
+        std::string key = horizProp(dir);
+        if (sideConnected(sc) == sideConnected(getProp(g_props[stateId], key)) && !wireIsCross(stateId)) {
+            int ns = setProp(stateId, key, sc); return ns < 0 ? stateId : ns;
+        }
+        std::string power = getProp(g_props[stateId], "power");
+        int base = wireCross(power); if (base < 0) base = stateId;
+        int b2 = setProp(base, key, sc); if (b2 >= 0) base = b2;
+        return wireConnectionState(level, base);
+    }
+    if (fam == "RepeaterBlock") {
+        // RepeaterBlock.updateShape :62-80 — DOWN survival (isFaceSturdy(UP)); perpendicular -> LOCKED=false.
+        if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (axisOf(dir) != axisOf(facing)) {
+            int ns = setProp(stateId, "locked", "false"); return ns < 0 ? stateId : ns;
+        }
+        return stateId;
+    }
+    if (fam == "NoteBlock") {  // :70-85 — vertical neighbour recomputes INSTRUMENT.
+        if (axisOf(dir) == 1) return noteSetInstrument(level, stateId);
+        return stateId;
+    }
+    if (fam == "VineBlock") {  // :149-166 — DOWN unchanged; else recompute faces, AIR if none.
+        if (dir == DOWN) return stateId;
+        int bs = vineUpdatedState(level, stateId);
+        return vineHasFaces(bs) ? bs : 0;
+    }
+    if (fam == "TripWireBlock") {  // :84-98 — horizontal neighbour sets that side.
+        if (isHorizontal(dir)) {
+            int ns = setProp(stateId, horizProp(dir),
+                tripwireShouldConnectTo(level.rel(dir), dir) ? "true" : "false");
+            return ns < 0 ? stateId : ns;
+        }
+        return stateId;
+    }
+    if (fam == "MossyCarpetBlock") {  // :210-227 — AIR if !canSurvive or no faces; else updated state.
+        if (!mossCanSurvive(level, stateId)) return 0;
+        int bs = mossUpdatedState(level, stateId, false);
+        return mossHasFaces(bs) ? bs : 0;
+    }
+    if (fam == "AmethystClusterBlock") {  // :64-82 — AIR when support face lost.
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (dir == opposite(facing) && !amethystCanSurvive(level, stateId)) return 0;
+        return stateId;
+    }
+    // No-op verifies — updateShape only (conditionally) schedules a tick, returns state unchanged:
+    // SlabBlock :116-131, CandleBlock :116-132, LeavesBlock :88-109, ShelfBlock :295-311,
+    // CopperGolemStatueBlock :167-183.
+    if (fam == "SlabBlock" || fam == "CandleBlock" || fam == "LeavesBlock"
+        || fam == "ShelfBlock" || fam == "CopperGolemStatueBlock")
+        return stateId;
+
     return -2;  // unported
 }
 
@@ -143,10 +881,14 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int /*neighbour
 int main(int argc, char** argv) {
     std::string casesPath = "mcpp/build/block_update_shape.tsv";
     std::string statesPath = "mcpp/src/assets/block_states.json";
+    std::string shapesPath = "mcpp/build/block_collision_shape.tsv";  // STURDY + SHAPE rows
+    std::string tagsDir = "26.1.2/data/minecraft/tags/block";  // connection-family block tags
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];
         else if (a == "--states" && i + 1 < argc) statesPath = argv[++i];
+        else if (a == "--shapes" && i + 1 < argc) shapesPath = argv[++i];
+        else if (a == "--tags" && i + 1 < argc) tagsDir = argv[++i];
     }
 
     {
@@ -154,14 +896,88 @@ int main(int argc, char** argv) {
         if (!f) { std::cerr << "cannot open " << statesPath << "\n"; return 2; }
         nlohmann::json j; f >> j;
         auto arr = j.at("states");
-        g_name.resize(arr.size()); g_props.resize(arr.size());
+        g_name.resize(arr.size()); g_props.resize(arr.size()); g_solid.assign(arr.size(), 0);
         for (auto& s : arr) {
             std::size_t id = s.at("id").get<std::size_t>();
             g_name[id] = s.at("name").get<std::string>();
             g_props[id] = s.value("props", std::string());
+            g_solid[id] = s.value("is_solid", false) ? 1 : 0;  // BlockState.isSolid() (legacySolid)
         }
         for (std::size_t id = 0; id < g_name.size(); ++id)
             g_index[g_name[id] + "\x1f" + g_props[id]] = (int)id;
+    }
+    // STURDY rows -> certified isFaceSturdy; SHAPE rows -> certified collision AABB lists (the
+    // above-block face shape WallBlock.isCovered needs). Both from block_collision_shape.tsv.
+    g_sturdy.assign(g_name.size(), {0,0,0,0,0,0}); g_hasSturdy.assign(g_name.size(), 0);
+    g_collBoxes.assign(g_name.size(), {}); g_hasColl.assign(g_name.size(), 0);
+    g_collCache.assign(g_name.size(), nullptr); g_collBuilt.assign(g_name.size(), 0);
+    g_supBoxes.assign(g_name.size(), {});
+    {
+        std::ifstream f(shapesPath, std::ios::binary);
+        if (!f) { std::cerr << "cannot open " << shapesPath << " (run block_collision_shape GT)\n"; return 2; }
+        std::string line;
+        while (std::getline(f, line)) {
+            auto c = splitTab(line);
+            if (c.empty()) continue;
+            if (c[0] == "STURDY" && c.size() >= 8) {
+                std::size_t id = (std::size_t)std::stoul(c[1]);
+                if (id >= g_sturdy.size()) continue;
+                for (int d = 0; d < 6; ++d) g_sturdy[id][d] = std::stoi(c[2 + d]);
+                g_hasSturdy[id] = 1;
+            } else if (c[0] == "SHAPE" && c.size() >= 3) {
+                std::size_t id = (std::size_t)std::stoul(c[1]);
+                if (id >= g_collBoxes.size()) continue;
+                int nb = std::stoi(c[2]);
+                for (int k = 0; k < nb; ++k) {
+                    std::size_t o = 3 + k * 6;
+                    if (o + 5 >= c.size()) break;
+                    g_collBoxes[id].push_back({ std::stod(c[o]), std::stod(c[o+1]), std::stod(c[o+2]),
+                                                std::stod(c[o+3]), std::stod(c[o+4]), std::stod(c[o+5]) });
+                }
+                g_hasColl[id] = 1;
+            } else if (c[0] == "SUP" && c.size() >= 3) {
+                std::size_t id = (std::size_t)std::stoul(c[1]);
+                if (id >= g_supBoxes.size()) continue;
+                int nb = std::stoi(c[2]);
+                for (int k = 0; k < nb; ++k) {
+                    std::size_t o = 3 + k * 6;
+                    if (o + 5 >= c.size()) break;
+                    g_supBoxes[id].push_back({ std::stod(c[o]), std::stod(c[o+1]), std::stod(c[o+2]),
+                                               std::stod(c[o+3]), std::stod(c[o+4]), std::stod(c[o+5]) });
+                }
+            }
+        }
+    }
+    // ── connection-family block tags (nested-tag aware) from 26.1.2/data. ──
+    {
+        std::unordered_map<std::string, std::unordered_set<std::string>> cache;
+        // resolve(tagName) -> set of block names (no ns). #-prefixed values recurse.
+        std::function<const std::unordered_set<std::string>&(const std::string&)> resolve =
+            [&](const std::string& tag) -> const std::unordered_set<std::string>& {
+            auto it = cache.find(tag);
+            if (it != cache.end()) return it->second;
+            std::unordered_set<std::string>& out = cache[tag];  // insert empty first (cycle guard)
+            std::ifstream tf(tagsDir + "/" + tag + ".json", std::ios::binary);
+            if (!tf) { std::cerr << "warn: missing tag " << tag << "\n"; return out; }
+            nlohmann::json tj; tf >> tj;
+            for (auto& v : tj.at("values")) {
+                std::string s = v.is_string() ? v.get<std::string>() : v.at("id").get<std::string>();
+                if (!s.empty() && s[0] == '#') {
+                    const auto& nested = resolve(stripNs(s.substr(1)));
+                    out.insert(nested.begin(), nested.end());
+                } else {
+                    out.insert(stripNs(s));
+                }
+            }
+            return out;
+        };
+        g_tags.walls = resolve("walls");
+        g_tags.fences = resolve("fences");
+        g_tags.woodenFences = resolve("wooden_fences");
+        g_tags.bars = resolve("bars");
+        g_tags.wallPostOverride = resolve("wall_post_override");
+        g_tags.shulkerBoxes = resolve("shulker_boxes");
+        g_tags.leaves = resolve("leaves");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
@@ -194,6 +1010,9 @@ int main(int argc, char** argv) {
             }
         }
     }
+    // Mirror the (ns-stripped) FAM map into the global used by famOf() for instanceof IronBarsBlock /
+    // FenceGateBlock / WallBlock detection inside the connection-family ports.
+    g_updFam = updFam;
 
     long cert = 0, mis = 0, todo = 0, skipped = 0;
     std::map<std::string, long> todoFam, misFam;
