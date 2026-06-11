@@ -6369,3 +6369,37 @@ if(WIN32)
     target_link_libraries(pkt_tag_query_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_tag_query_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: StrongholdPieces.SmoothStoneSelector BlockSelector (isEdge nextFloat ladder -> cracked/mossy/infested/stone bricks) =====
+add_executable(smooth_stone_selector_parity
+    world/level/levelgen/structure/structures/SmoothStoneSelectorParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(smooth_stone_selector_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(smooth_stone_selector_parity PRIVATE bcrypt)
+endif()
+set_target_properties(smooth_stone_selector_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: FlyTowardsPositionParticle.tick (overrides base; age>=lifetime remove gate + (1-t)^4 quartic dip + double+double*float pos) =====
+add_executable(fly_towards_position_parity client/particle/FlyTowardsPositionParticleParityTest.cpp)
+target_include_directories(fly_towards_position_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(fly_towards_position_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: SculkBlock.getDecayPenalty (distSqr double + (float)sqrt + Mth.square + saturating (int)(float) narrow + max(1,..)) =====
+add_executable(sculk_decay_penalty_parity world/level/block/SculkDecayPenaltyParityTest.cpp)
+target_include_directories(sculk_decay_penalty_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(sculk_decay_penalty_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundDeleteChatPacket (MessageSignature.Packed: VarInt(id+1); if id==-1 then 256 raw signature bytes) =====
+add_executable(pkt_delete_chat_cb_parity
+    network/protocol/game/PktDeleteChatParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_delete_chat_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_delete_chat_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_delete_chat_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_delete_chat_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
