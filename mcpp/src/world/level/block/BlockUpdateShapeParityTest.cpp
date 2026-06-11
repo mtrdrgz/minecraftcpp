@@ -659,7 +659,8 @@ const std::set<std::string> PORTED = {
     // straggler wave 7
     "CocoaBlock", "CoralPlantBlock", "CoralFanBlock", "WallHangingSignBlock",
     // straggler wave 8
-    "BambooStalkBlock", "BigDripleafBlock", "MangrovePropaguleBlock", "SmallDripleafBlock"
+    "BambooStalkBlock", "BigDripleafBlock", "MangrovePropaguleBlock", "SmallDripleafBlock",
+    "BaseRailBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -931,7 +932,10 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         || fam == "DriedGhastBlock" || fam == "LiquidBlock"
         // wave 4 no-ops (schedule a self/water tick, super returns state unchanged):
         || fam == "CactusBlock" || fam == "FallingBlock" || fam == "SugarCaneBlock"
-        || fam == "DecoratedPotBlock" || fam == "CreakingHeartBlock")
+        || fam == "DecoratedPotBlock" || fam == "CreakingHeartBlock"
+        // BaseRailBlock.updateShape — waterlogged tick + super -> no-op (powered/detector/activator rails;
+        // the rail SHAPE recompute lives in RailBlock, a separate FAM).
+        || fam == "BaseRailBlock")
         return stateId;
     // HugeMushroomBlock.updateShape — neighbour.is(this) ? clear PROPERTY_BY_DIRECTION[dir] : super.
     if (fam == "HugeMushroomBlock") {
