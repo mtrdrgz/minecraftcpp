@@ -58,7 +58,7 @@ struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
         shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf,
         supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow, supportsBamboo,
-        soulFireBase, supportsChorusPlant, supportsFrogspawn, cannotSupportSeagrass;
+        soulFireBase, supportsChorusPlant, supportsFrogspawn, cannotSupportSeagrass, supportsCrops;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -669,7 +669,7 @@ const std::set<std::string> PORTED = {
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
     "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock",
     "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock", "ChorusPlantBlock", "BellBlock",
-    "FireBlock", "FrogspawnBlock", "SeagrassBlock"
+    "FireBlock", "FrogspawnBlock", "SeagrassBlock", "PitcherCropBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1146,6 +1146,28 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
+    // PitcherCropBlock.updateShape — isDouble(age>=3) ? super(DoublePlant other-half) : (canSurvive ?
+    // state : AIR). canSurvive: LOWER = mayPlaceOn(below)=below.is(#crops); UPPER = below is-this+LOWER.
+    if (fam == "PitcherCropBlock") {
+        std::string half = getProp(g_props[stateId], "half");
+        bool isLower = (half == "lower");
+        int age = std::stoi(getProp(g_props[stateId], "age"));
+        if (age >= 3) {  // DoublePlantBlock.updateShape
+            bool axisY = (dir == DOWN || dir == UP);
+            bool nbrIsThis = (g_name[neighbourId] == g_name[stateId]);
+            bool c1 = !axisY, c2 = (isLower) != (dir == UP);
+            bool c3 = nbrIsThis && (getProp(g_props[neighbourId], "half") != half);
+            if (c1 || c2 || c3) {
+                if (isLower && dir == DOWN && !inTag(g_tags.supportsCrops, level.rel(DOWN))) return 0;
+                return stateId;
+            }
+            return 0;
+        }
+        // single (age<3): canSurvive ? keep : AIR.
+        bool surv = isLower ? inTag(g_tags.supportsCrops, level.rel(DOWN))
+                            : (g_name[level.rel(DOWN)] == g_name[stateId] && getProp(g_props[level.rel(DOWN)], "half") == "lower");
+        return surv ? stateId : 0;
+    }
     // FrogspawnBlock.updateShape — !canSurvive -> AIR. canSurvive = mayPlaceOn(below) = (fluidAt(below) is
     // water || below.is(#supports_frogspawn)) && fluidAt(centre) empty (frogspawn centre is never water).
     if (fam == "FrogspawnBlock") {
@@ -1492,6 +1514,7 @@ int main(int argc, char** argv) {
         g_tags.supportsChorusPlant = resolve("supports_chorus_plant");
         g_tags.supportsFrogspawn = resolve("supports_frogspawn");
         g_tags.cannotSupportSeagrass = resolve("cannot_support_seagrass");
+        g_tags.supportsCrops = resolve("supports_crops");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
