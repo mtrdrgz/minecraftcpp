@@ -646,7 +646,11 @@ const std::set<std::string> PORTED = {
     "ScaffoldingBlock", "LightBlock", "DriedGhastBlock", "LiquidBlock",
     "CandleCakeBlock", "BaseCoralPlantTypeBlock", "FlowerPotBlock", "LanternBlock",
     // straggler wave 3
-    "CarpetBlock", "TripWireHookBlock", "WaterloggedTransparentBlock", "ComparatorBlock"
+    "CarpetBlock", "TripWireHookBlock", "WaterloggedTransparentBlock", "ComparatorBlock",
+    // straggler wave 4
+    "CactusBlock", "FallingBlock", "SugarCaneBlock", "DecoratedPotBlock",
+    "CreakingHeartBlock", "CakeBlock", "WallTorchBlock", "RedstoneWallTorchBlock", "SnowLayerBlock"
+    // (SmallDripleafBlock -> DoublePlant other-half logic; ConcretePowderBlock touchesLiquid -> deferred)
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -915,7 +919,10 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
     // LightningRodBlock, ChainBlock, SculkSensorBlock, BeehiveBlock (fire-emergency side effect only).
     if (fam == "LightningRodBlock" || fam == "ChainBlock" || fam == "SculkSensorBlock"
         || fam == "BeehiveBlock" || fam == "ScaffoldingBlock" || fam == "LightBlock"
-        || fam == "DriedGhastBlock" || fam == "LiquidBlock")
+        || fam == "DriedGhastBlock" || fam == "LiquidBlock"
+        // wave 4 no-ops (schedule a self/water tick, super returns state unchanged):
+        || fam == "CactusBlock" || fam == "FallingBlock" || fam == "SugarCaneBlock"
+        || fam == "DecoratedPotBlock" || fam == "CreakingHeartBlock")
         return stateId;
     // HugeMushroomBlock.updateShape — neighbour.is(this) ? clear PROPERTY_BY_DIRECTION[dir] : super.
     if (fam == "HugeMushroomBlock") {
@@ -988,6 +995,48 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
     // below.isFaceSturdy(UP, SupportType.RIGID).
     if (fam == "ComparatorBlock") {
         if (dir == DOWN && !isRigidSupport(level.rel(DOWN), UP)) return 0;
+        return stateId;
+    }
+
+    // ── straggler wave 4 (canSurvive + concrete solidify). ──
+    // CakeBlock.updateShape — DOWN && !canSurvive(below.isSolid()) -> AIR.
+    if (fam == "CakeBlock") {
+        if (dir == DOWN && !isSolidState(level.rel(DOWN))) return 0;
+        return stateId;
+    }
+    // WallTorchBlock / RedstoneWallTorchBlock.updateShape — opposite(dir)==FACING && !canSurvive -> AIR.
+    // canSurvive (WallTorchBlock.java:56-59) = relative(FACING.opposite()).isFaceSturdy(FACING).
+    if (fam == "WallTorchBlock" || fam == "RedstoneWallTorchBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (opposite(dir) == facing && !isFaceSturdy(level.rel(opposite(facing)), facing)) return 0;
+        return stateId;
+    }
+    // SnowLayerBlock.updateShape — !canSurvive -> AIR. canSurvive (SnowLayerBlock :?) ignoring the
+    // CANNOT_SUPPORT/SUPPORT_OVERRIDE tags (no probe-pool block is in either) =
+    // isFaceFull(below.getCollisionShape, UP) || (below.is(this) && below.LAYERS==8).
+    if (fam == "SnowLayerBlock") {
+        int below = level.rel(DOWN);
+        bool surv = faceFullCol(below, UP)
+            || (g_name[below] == "snow" && getProp(g_props[below], "layers") == "8");
+        return surv ? stateId : 0;
+    }
+    // ConcretePowderBlock.updateShape — touchesLiquid(level,pos) -> concrete; else super.
+    // touchesLiquid (:?): exists dir where (dir!=DOWN || canSolidify(self)) && canSolidify(neighbour)
+    // && !neighbour.isFaceSturdy(opposite(dir)). canSolidify (:73) = fluid is water.
+    if (fam == "ConcretePowderBlock") {
+        auto canSolidify = [&](int id){ return g_name[id] == "water" || getProp(g_props[id], "waterlogged") == "true"; };
+        bool touches = false;
+        for (int d = 0; d < 6 && !touches; ++d) {
+            if (d == DOWN && !canSolidify(stateId)) continue;
+            int nb = level.rel(d);
+            if (canSolidify(nb) && !isFaceSturdy(nb, opposite(d))) touches = true;
+        }
+        if (touches) {
+            std::string n = g_name[stateId];
+            if (endsWith(n, "_powder")) n = n.substr(0, n.size() - 7);  // white_concrete_powder -> white_concrete
+            auto it = g_index.find(n + "\x1f");
+            if (it != g_index.end()) return it->second;
+        }
         return stateId;
     }
 
