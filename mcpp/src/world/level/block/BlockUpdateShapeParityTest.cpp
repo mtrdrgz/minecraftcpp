@@ -56,7 +56,7 @@ std::vector<int> g_hasSturdy;
 // SHULKER_BOXES, LEAVES (proxy for instanceof LeavesBlock — every LeavesBlock IS in #leaves).
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
-        shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns;
+        shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -656,7 +656,9 @@ const std::set<std::string> PORTED = {
     // straggler wave 6
     "SeaPickleBlock", "AttachedStemBlock", "PistonHeadBlock",
     // straggler wave 7
-    "CocoaBlock", "CoralPlantBlock", "CoralFanBlock", "WallHangingSignBlock"
+    "CocoaBlock", "CoralPlantBlock", "CoralFanBlock", "WallHangingSignBlock",
+    // straggler wave 8
+    "BambooStalkBlock", "BigDripleafBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1121,6 +1123,32 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
+    // BambooStalkBlock.updateShape — UP neighbour is taller bamboo -> cycle(AGE) (0<->1); canSurvive
+    // only schedules a tick (no returned-state change).
+    if (fam == "BambooStalkBlock") {
+        if (dir == UP && g_name[neighbourId] == "bamboo"
+            && std::stoi(getProp(g_props[neighbourId], "age")) > std::stoi(getProp(g_props[stateId], "age"))) {
+            int ns = setProp(stateId, "age", getProp(g_props[stateId], "age") == "0" ? "1" : "0");
+            return ns < 0 ? stateId : ns;
+        }
+        return stateId;
+    }
+    // BigDripleafBlock.updateShape — DOWN && !canSurvive -> AIR; UP neighbour is this -> BIG_DRIPLEAF_STEM
+    // withPropertiesOf(state). canSurvive = below is(this)||is(stem)||is(#supports_big_dripleaf).
+    if (fam == "BigDripleafBlock") {
+        if (dir == DOWN) {
+            int below = level.rel(DOWN);
+            bool surv = g_name[below] == g_name[stateId] || g_name[below] == "big_dripleaf_stem"
+                || inTag(g_tags.supportsBigDripleaf, below);
+            if (!surv) return 0;
+        }
+        if (dir == UP && g_name[neighbourId] == g_name[stateId]) {  // -> stem, copy facing+waterlogged
+            auto it = g_index.find(std::string("big_dripleaf_stem") + "\x1f" + "facing="
+                + getProp(g_props[stateId], "facing") + ",waterlogged=" + getProp(g_props[stateId], "waterlogged"));
+            if (it != g_index.end()) return it->second;
+        }
+        return stateId;
+    }
     // WallHangingSignBlock.updateShape — dir.axis == FACING.clockWise().axis && !canSurvive -> AIR.
     // But WallHangingSignBlock does NOT override canSurvive (the two-sides predicate at :102-106 is
     // canPlace, used at PLACEMENT only); the inherited default canSurvive == true, so the AIR branch
@@ -1235,6 +1263,7 @@ int main(int argc, char** argv) {
         g_tags.supportsVegetation = resolve("supports_vegetation");
         g_tags.supportsCocoa = resolve("supports_cocoa");
         g_tags.wallHangingSigns = resolve("wall_hanging_signs");
+        g_tags.supportsBigDripleaf = resolve("supports_big_dripleaf");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
