@@ -663,7 +663,10 @@ const std::set<std::string> PORTED = {
     "BaseRailBlock",
     // straggler wave 9
     "EnderChestBlock", "SculkShriekerBlock", "ObserverBlock", "BrushableBlock", "FarmlandBlock",
-    "CoralBlock", "ChorusFlowerBlock", "BigDripleafStemBlock", "LadderBlock", "BaseTorchBlock", "SnowyBlock"
+    "CoralBlock", "ChorusFlowerBlock", "BigDripleafStemBlock", "LadderBlock", "BaseTorchBlock", "SnowyBlock",
+    // straggler wave 10
+    "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
+    "DirtPathBlock", "HangingMossBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -944,7 +947,10 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         // CoralBlock (scanForWater->tick) — all return super/state unchanged.
         || fam == "EnderChestBlock" || fam == "SculkShriekerBlock" || fam == "ObserverBlock"
         || fam == "BrushableBlock" || fam == "FarmlandBlock" || fam == "CoralBlock"
-        || fam == "ChorusFlowerBlock" || fam == "BigDripleafStemBlock")
+        || fam == "ChorusFlowerBlock" || fam == "BigDripleafStemBlock"
+        // wave 10 no-ops (water/self tick, super/state unchanged):
+        || fam == "BarrierBlock" || fam == "BubbleColumnBlock" || fam == "ConduitBlock"
+        || fam == "HeavyCoreBlock" || fam == "MangroveRootsBlock" || fam == "DirtPathBlock")
         return stateId;
     // HugeMushroomBlock.updateShape — neighbour.is(this) ? clear PROPERTY_BY_DIRECTION[dir] : super.
     if (fam == "HugeMushroomBlock") {
@@ -1136,6 +1142,11 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
     if (fam == "CoralPlantBlock" || fam == "CoralFanBlock") {
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
+    }
+    // HangingMossBlock.updateShape — TIP = (below is not this moss); canStayAtPosition only schedules.
+    if (fam == "HangingMossBlock") {
+        int ns = setProp(stateId, "tip", g_name[level.rel(DOWN)] != g_name[stateId] ? "true" : "false");
+        return ns < 0 ? stateId : ns;
     }
     // LadderBlock.updateShape — opposite(dir)==FACING && !canSurvive -> AIR. canSurvive = canAttachTo(
     // relative(FACING.opposite())) = behind.isFaceSturdy(FACING).
