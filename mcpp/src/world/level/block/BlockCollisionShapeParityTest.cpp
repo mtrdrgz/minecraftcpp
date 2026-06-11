@@ -575,6 +575,233 @@ mc::VoxelShapePtr buildFamilyShape(const std::string& fam, const std::string& na
     }
     if (fam == "BambooStalkBlock")  // column(3,0,16).move(getOffset(ZERO)) = (-0.25,0,-0.25)
         return Shapes::box(0.40625, 0.0, 0.40625, 0.59375, 1.0, 0.59375)->move(-0.25, 0.0, -0.25);
+
+    // ── agent 1 (sculk / shulker / mossy carpet). Verified box-for-box vs GT TSV. ──
+    // SculkSensorBlock + CalibratedSculkSensorBlock: SHAPE = column(16,0,8); getShape (coll==getShape).
+    if (fam == "SculkSensorBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.5, 1.0);
+    // SculkShriekerBlock.getCollisionShape :78-81 = SHAPE_COLLISION = column(16,0,8).
+    if (fam == "SculkShriekerBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.5, 1.0);
+    // ShulkerBoxBlock.getShape :151-156 — with empty block-getter (no block entity) -> full cube.
+    if (fam == "ShulkerBoxBlock") return Shapes::block();
+    // MossyCarpetBlock.getCollisionShape :93-96 = BASE ? shapes(default)=tall.get(DOWN) : empty.
+    // BASE comes from prop "bottom"; collision ignores the wall props (visual getShape only).
+    if (fam == "MossyCarpetBlock") {
+        if (getProp(props, "bottom") == "true") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.0625, 1.0);
+        return Shapes::empty();
+    }
+
+    // ── agent 3 (candle / amethyst / dripleaf / wall-hanging-sign / pitcher-crop). Verified vs GT TSV. ──
+    // CandleBlock.getShape :139-142 (coll==getShape) — SHAPES[candles-1] (:62-67).
+    if (fam == "CandleBlock") {
+        int candles = std::stoi(getProp(props, "candles"));
+        if (candles == 1) return Shapes::box(0.4375, 0.0, 0.4375, 0.5625, 0.375, 0.5625);
+        else if (candles == 2) return Shapes::box(0.3125, 0.0, 0.375, 0.6875, 0.375, 0.5625);
+        else if (candles == 3) return Shapes::box(0.3125, 0.0, 0.375, 0.625, 0.375, 0.6875);
+        else if (candles == 4) return Shapes::box(0.3125, 0.0, 0.3125, 0.6875, 0.375, 0.625);
+        return nullptr;
+    }
+    // CandleCakeBlock.getShape :64-67 — SHAPE :38 = or(cake-base column(14,0,8), candle column(2,8,14)).
+    if (fam == "CandleCakeBlock")
+        return Shapes::or_(Shapes::box(0.0625, 0.0, 0.0625, 0.9375, 0.5, 0.9375),
+                           Shapes::box(0.4375, 0.5, 0.4375, 0.5625, 0.875, 0.5625));
+    // AmethystClusterBlock.getShape :52-55 (coll==getShape) — rotateAll(boxZ(width,16-height,16)) by FACING;
+    // ctor h/w per variant (Blocks.java): cluster(7,10) large(5,10) medium(4,10) small(3,8).
+    if (fam == "AmethystClusterBlock") {
+        std::string facing = getProp(props, "facing");
+        if (name == "amethyst_cluster") {
+            if (facing == "north") return Shapes::box(0.1875, 0.1875, 0.5625, 0.8125, 0.8125, 1.0);
+            else if (facing == "east") return Shapes::box(0.0, 0.1875, 0.1875, 0.4375, 0.8125, 0.8125);
+            else if (facing == "south") return Shapes::box(0.1875, 0.1875, 0.0, 0.8125, 0.8125, 0.4375);
+            else if (facing == "west") return Shapes::box(0.5625, 0.1875, 0.1875, 1.0, 0.8125, 0.8125);
+            else if (facing == "up") return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 0.4375, 0.8125);
+            else if (facing == "down") return Shapes::box(0.1875, 0.5625, 0.1875, 0.8125, 1.0, 0.8125);
+        } else if (name == "large_amethyst_bud") {
+            if (facing == "north") return Shapes::box(0.1875, 0.1875, 0.6875, 0.8125, 0.8125, 1.0);
+            else if (facing == "east") return Shapes::box(0.0, 0.1875, 0.1875, 0.3125, 0.8125, 0.8125);
+            else if (facing == "south") return Shapes::box(0.1875, 0.1875, 0.0, 0.8125, 0.8125, 0.3125);
+            else if (facing == "west") return Shapes::box(0.6875, 0.1875, 0.1875, 1.0, 0.8125, 0.8125);
+            else if (facing == "up") return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 0.3125, 0.8125);
+            else if (facing == "down") return Shapes::box(0.1875, 0.6875, 0.1875, 0.8125, 1.0, 0.8125);
+        } else if (name == "medium_amethyst_bud") {
+            if (facing == "north") return Shapes::box(0.1875, 0.1875, 0.75, 0.8125, 0.8125, 1.0);
+            else if (facing == "east") return Shapes::box(0.0, 0.1875, 0.1875, 0.25, 0.8125, 0.8125);
+            else if (facing == "south") return Shapes::box(0.1875, 0.1875, 0.0, 0.8125, 0.8125, 0.25);
+            else if (facing == "west") return Shapes::box(0.75, 0.1875, 0.1875, 1.0, 0.8125, 0.8125);
+            else if (facing == "up") return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 0.25, 0.8125);
+            else if (facing == "down") return Shapes::box(0.1875, 0.75, 0.1875, 0.8125, 1.0, 0.8125);
+        } else if (name == "small_amethyst_bud") {
+            if (facing == "north") return Shapes::box(0.25, 0.25, 0.8125, 0.75, 0.75, 1.0);
+            else if (facing == "east") return Shapes::box(0.0, 0.25, 0.25, 0.1875, 0.75, 0.75);
+            else if (facing == "south") return Shapes::box(0.25, 0.25, 0.0, 0.75, 0.75, 0.1875);
+            else if (facing == "west") return Shapes::box(0.8125, 0.25, 0.25, 1.0, 0.75, 0.75);
+            else if (facing == "up") return Shapes::box(0.25, 0.0, 0.25, 0.75, 0.1875, 0.75);
+            else if (facing == "down") return Shapes::box(0.25, 0.8125, 0.25, 0.75, 1.0, 0.75);
+        }
+        return nullptr;
+    }
+    // BigDripleafBlock.getCollisionShape :261-264 — SHAPE_LEAF.get(TILT) (:59-70), facing-independent.
+    if (fam == "BigDripleafBlock") {
+        std::string tilt = getProp(props, "tilt");
+        if (tilt == "none" || tilt == "unstable") return Shapes::box(0.0, 0.6875, 0.0, 1.0, 0.9375, 1.0);
+        else if (tilt == "partial") return Shapes::box(0.0, 0.6875, 0.0, 1.0, 0.8125, 1.0);
+        else if (tilt == "full") return Shapes::empty();
+        return nullptr;
+    }
+    // WallHangingSignBlock.getCollisionShape :97-100 — SHAPES_PLANK.get(FACING.axis) (:44).
+    if (fam == "WallHangingSignBlock") {
+        std::string facing = getProp(props, "facing");
+        if (facing == "north" || facing == "south") return Shapes::box(0.0, 0.875, 0.375, 1.0, 1.0, 0.625);
+        else if (facing == "east" || facing == "west") return Shapes::box(0.375, 0.875, 0.0, 0.625, 1.0, 1.0);
+        return nullptr;
+    }
+    // PitcherCropBlock.getCollisionShape :76-83 — UPPER->empty; LOWER age0->SHAPE_BULB else SHAPE_CROP.
+    if (fam == "PitcherCropBlock") {
+        std::string half = getProp(props, "half");
+        if (half == "upper") return Shapes::empty();
+        int age = std::stoi(getProp(props, "age"));
+        if (age == 0) return Shapes::box(0.3125, -0.0625, 0.3125, 0.6875, 0.1875, 0.6875);
+        return Shapes::box(0.1875, -0.0625, 0.1875, 0.8125, 0.3125, 0.8125);
+    }
+
+    // ── agent 2 (skulls / shelf / copper-golem statue). getShape == collisionShape (hasCollision). ──
+    // SkullBlock.getShape :41-44 — SHAPE=column(8,0,8); SHAPE_PIGLIN=column(10,0,8) (piglin_head).
+    if (fam == "SkullBlock") {
+        if (name == "piglin_head") return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 0.5, 0.8125);
+        return Shapes::box(0.25, 0.0, 0.25, 0.75, 0.5, 0.75);
+    }
+    // WallSkullBlock.getShape :35-38 — rotateHorizontal(boxZ(8,8,16)); north base box(4,4,8,12,12,16).
+    if (fam == "WallSkullBlock") {
+        std::string f = getProp(props, "facing");
+        if (f == "north") return Shapes::box(0.25, 0.25, 0.5, 0.75, 0.75, 1.0);
+        if (f == "south") return Shapes::box(0.25, 0.25, 0.0, 0.75, 0.75, 0.5);
+        if (f == "east")  return Shapes::box(0.0, 0.25, 0.25, 0.5, 0.75, 0.75);
+        if (f == "west")  return Shapes::box(0.5, 0.25, 0.25, 1.0, 0.75, 0.75);
+        return nullptr;
+    }
+    // PiglinWallSkullBlock.getShape :27-30 — rotateHorizontal(boxZ(10,8,8,16)); north box(3,4,8,13,12,16).
+    if (fam == "PiglinWallSkullBlock") {
+        std::string f = getProp(props, "facing");
+        if (f == "north") return Shapes::box(0.1875, 0.25, 0.5, 0.8125, 0.75, 1.0);
+        if (f == "south") return Shapes::box(0.1875, 0.25, 0.0, 0.8125, 0.75, 0.5);
+        if (f == "east")  return Shapes::box(0.0, 0.25, 0.1875, 0.5, 0.75, 0.8125);
+        if (f == "west")  return Shapes::box(0.5, 0.25, 0.1875, 1.0, 0.75, 0.8125);
+        return nullptr;
+    }
+    // ShelfBlock.getShape :76-79 — rotateHorizontal(or(box(0,12,11,16,16,13),box(0,0,13,16,16,16),box(0,0,11,16,4,13))).
+    if (fam == "ShelfBlock") {
+        std::string f = getProp(props, "facing");
+        if (f == "north")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.0, 0.75, 0.6875, 1.0, 1.0, 0.8125),
+                Shapes::box(0.0, 0.0, 0.8125, 1.0, 1.0, 1.0)), Shapes::box(0.0, 0.0, 0.6875, 1.0, 0.25, 0.8125));
+        if (f == "south")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.0, 0.75, 0.1875, 1.0, 1.0, 0.3125),
+                Shapes::box(0.0, 0.0, 0.0, 1.0, 1.0, 0.1875)), Shapes::box(0.0, 0.0, 0.1875, 1.0, 0.25, 0.3125));
+        if (f == "east")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.1875, 0.75, 0.0, 0.3125, 1.0, 1.0),
+                Shapes::box(0.0, 0.0, 0.0, 0.1875, 1.0, 1.0)), Shapes::box(0.1875, 0.0, 0.0, 0.3125, 0.25, 1.0));
+        if (f == "west")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.6875, 0.75, 0.0, 0.8125, 1.0, 1.0),
+                Shapes::box(0.8125, 0.0, 0.0, 1.0, 1.0, 1.0)), Shapes::box(0.6875, 0.0, 0.0, 0.8125, 0.25, 1.0));
+        return nullptr;
+    }
+    // CopperGolemStatueBlock.getShape :92-95 — single SHAPE=column(10,0,14), facing/pose-independent.
+    if (fam == "CopperGolemStatueBlock") return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 0.875, 0.8125);
+
+    // ── stragglers (constant / simple-prop getShape == collisionShape unless noted). ──
+    // DiodeBlock.getShape :39-40 — SHAPE=column(16,0,2) (repeater + comparator).
+    if (fam == "DiodeBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.125, 1.0);
+    // DaylightDetectorBlock.getShape :45-46 — SHAPE=column(16,0,6).
+    if (fam == "DaylightDetectorBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.375, 1.0);
+    // DriedGhastBlock.getShape :80-81 — SHAPE=column(10,10,0,10).
+    if (fam == "DriedGhastBlock") return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 0.625, 0.8125);
+    // LightBlock.getShape :66-67 — isHoldingItem(LIGHT)?block:empty; empty CollisionContext -> empty.
+    if (fam == "LightBlock") return Shapes::empty();
+    // LiquidBlock.getCollisionShape :81-89 — empty CollisionContext: level!=0 / no colliding mob -> empty.
+    if (fam == "LiquidBlock") return Shapes::empty();
+    // MovingPistonBlock.getCollisionShape :106-108 — null block entity (empty getter) -> empty.
+    if (fam == "MovingPistonBlock") return Shapes::empty();
+    // CactusBlock.getCollisionShape :85-86 — SHAPE_COLLISION=column(14,0,15) (getShape uses 16; collision 15).
+    if (fam == "CactusBlock") return Shapes::box(0.0625, 0.0, 0.0625, 0.9375, 0.9375, 0.9375);
+    // FarmlandBlock.getShape :83-84 — SHAPE=column(16,0,15).
+    if (fam == "FarmlandBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.9375, 1.0);
+    // SnifferEggBlock.getShape :52-53 — SHAPE=column(14,12,0,16) (hatch-independent).
+    if (fam == "SnifferEggBlock") return Shapes::box(0.0625, 0.0, 0.125, 0.9375, 1.0, 0.875);
+    // AzaleaBlock.getShape :33-34 — SHAPE=or(column(16,8,16), column(4,0,8)).
+    if (fam == "AzaleaBlock")
+        return Shapes::or_(Shapes::box(0.0, 0.5, 0.0, 1.0, 1.0, 1.0), Shapes::box(0.375, 0.0, 0.375, 0.625, 0.5, 0.625));
+    // EndPortalFrameBlock.getShape :50-51 — HAS_EYE ? SHAPE_FULL : SHAPE_EMPTY (:30-31).
+    if (fam == "EndPortalFrameBlock") {
+        mc::VoxelShapePtr base = Shapes::box(0.0, 0.0, 0.0, 1.0, 0.8125, 1.0);  // column(16,0,13)
+        if (getProp(props, "eye") == "true")
+            return Shapes::or_(base, Shapes::box(0.25, 0.8125, 0.25, 0.75, 1.0, 0.75));  // +column(8,13,16)
+        return base;
+    }
+    // CocoaBlock.getShape :68-69 — SHAPES.get(age).get(facing) = rotateHorizontal(column(4+2a,7-2a,12)
+    // .move(0,0,(a-5)/16)) (:33). Per-state canonical boxes (a∈0..2 × 4 facings) from GT.
+    if (fam == "CocoaBlock") {
+        int a = std::stoi(getProp(props, "age"));
+        std::string f = getProp(props, "facing");
+        if (a == 0) {
+            if (f == "north") return Shapes::box(0.375, 0.4375, 0.0625, 0.625, 0.75, 0.3125);
+            if (f == "south") return Shapes::box(0.375, 0.4375, 0.6875, 0.625, 0.75, 0.9375);
+            if (f == "west")  return Shapes::box(0.0625, 0.4375, 0.375, 0.3125, 0.75, 0.625);
+            if (f == "east")  return Shapes::box(0.6875, 0.4375, 0.375, 0.9375, 0.75, 0.625);
+        } else if (a == 1) {
+            if (f == "north") return Shapes::box(0.3125, 0.3125, 0.0625, 0.6875, 0.75, 0.4375);
+            if (f == "south") return Shapes::box(0.3125, 0.3125, 0.5625, 0.6875, 0.75, 0.9375);
+            if (f == "west")  return Shapes::box(0.0625, 0.3125, 0.3125, 0.4375, 0.75, 0.6875);
+            if (f == "east")  return Shapes::box(0.5625, 0.3125, 0.3125, 0.9375, 0.75, 0.6875);
+        } else {  // age 2
+            if (f == "north") return Shapes::box(0.25, 0.1875, 0.0625, 0.75, 0.75, 0.5625);
+            if (f == "south") return Shapes::box(0.25, 0.1875, 0.4375, 0.75, 0.75, 0.9375);
+            if (f == "west")  return Shapes::box(0.0625, 0.1875, 0.25, 0.5625, 0.75, 0.75);
+            if (f == "east")  return Shapes::box(0.4375, 0.1875, 0.25, 0.9375, 0.75, 0.75);
+        }
+        return nullptr;
+    }
+    // PistonBaseBlock.getShape :70-71 — EXTENDED ? SHAPES.get(facing) : block(); SHAPES=rotateAll(boxZ(16,4,16)).
+    if (fam == "PistonBaseBlock") {
+        if (getProp(props, "extended") != "true") return Shapes::block();
+        std::string f = getProp(props, "facing");
+        if (f == "north") return Shapes::box(0.0, 0.0, 0.25, 1.0, 1.0, 1.0);
+        if (f == "east")  return Shapes::box(0.0, 0.0, 0.0, 0.75, 1.0, 1.0);
+        if (f == "south") return Shapes::box(0.0, 0.0, 0.0, 1.0, 1.0, 0.75);
+        if (f == "west")  return Shapes::box(0.25, 0.0, 0.0, 1.0, 1.0, 1.0);
+        if (f == "up")    return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.75, 1.0);
+        return Shapes::box(0.0, 0.25, 0.0, 1.0, 1.0, 1.0);  // down
+    }
+    // PistonHeadBlock.getShape :60-61 — (SHORT?SHAPES_SHORT:SHAPES).get(facing) = rotateAll(or(
+    // platform boxZ(16,0,4), arm boxZ(4,4,SHORT?16:20))) (:40-42). plate + arm per facing; arm far/near
+    // end = short?1.0:1.25 / short?0.0:-0.25. or_ canonicalizes to the GT box set (TYPE-independent).
+    if (fam == "PistonHeadBlock") {
+        std::string f = getProp(props, "facing");
+        bool sh = getProp(props, "short") == "true";
+        double far = sh ? 1.0 : 1.25, near = sh ? 0.0 : -0.25;
+        if (f == "north") return Shapes::or_(Shapes::box(0.0, 0.0, 0.0, 1.0, 1.0, 0.25), Shapes::box(0.375, 0.375, 0.25, 0.625, 0.625, far));
+        if (f == "south") return Shapes::or_(Shapes::box(0.0, 0.0, 0.75, 1.0, 1.0, 1.0), Shapes::box(0.375, 0.375, near, 0.625, 0.625, 0.75));
+        if (f == "west")  return Shapes::or_(Shapes::box(0.0, 0.0, 0.0, 0.25, 1.0, 1.0), Shapes::box(0.25, 0.375, 0.375, far, 0.625, 0.625));
+        if (f == "east")  return Shapes::or_(Shapes::box(0.75, 0.0, 0.0, 1.0, 1.0, 1.0), Shapes::box(near, 0.375, 0.375, 0.75, 0.625, 0.625));
+        if (f == "up")    return Shapes::or_(Shapes::box(0.0, 0.75, 0.0, 1.0, 1.0, 1.0), Shapes::box(0.375, near, 0.375, 0.625, 1.0, 0.625));
+        return Shapes::or_(Shapes::box(0.0, 0.0, 0.0, 1.0, 0.25, 1.0), Shapes::box(0.375, 0.25, 0.375, 0.625, far, 0.625));  // down
+    }
+
+    // ── final single/double-state constants. ──
+    // HeavyCoreBlock.getShape :72 — SHAPE=column(8,0,8).
+    if (fam == "HeavyCoreBlock") return Shapes::box(0.25, 0.0, 0.25, 0.75, 0.5, 0.75);
+    // DirtPathBlock.getShape :73 — SHAPE=column(16,0,15).
+    if (fam == "DirtPathBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.9375, 1.0);
+    // DragonEggBlock.getShape :34 — SHAPE=column(14,0,16).
+    if (fam == "DragonEggBlock") return Shapes::box(0.0625, 0.0, 0.0625, 0.9375, 1.0, 0.9375);
+    // HoneyBlock.getCollisionShape :47 — SHAPE=column(14,0,15).
+    if (fam == "HoneyBlock") return Shapes::box(0.0625, 0.0, 0.0625, 0.9375, 0.9375, 0.9375);
+    // LilyPadBlock.getShape :44 — SHAPE=column(14,0,1.5).
+    if (fam == "LilyPadBlock") return Shapes::box(0.0625, 0.0, 0.0625, 0.9375, 0.09375, 0.9375);
+    // MudBlock.getCollisionShape :27-28 — SHAPE=column(16,0,14) (block-support/visual are full, collision sunken).
+    if (fam == "MudBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.875, 1.0);
+    // SoulSandBlock.getCollisionShape :27-28 — SHAPE=column(16,0,14) (block-support/visual are full, collision sunken).
+    if (fam == "SoulSandBlock") return Shapes::box(0.0, 0.0, 0.0, 1.0, 0.875, 1.0);
+    // PowderSnowBlock.getCollisionShape :116-131 — empty CollisionContext (no entity) -> Shapes.empty().
+    if (fam == "PowderSnowBlock") return Shapes::empty();
     return nullptr;
 }
 }  // namespace
@@ -646,6 +873,20 @@ int main(int argc, char** argv) {
         std::string collFam = fi == fam.end() ? "?" : fi->second.first;
         std::string shapeFam = fi == fam.end() ? "?" : fi->second.second;
         const Shape& want = expected[id];
+        int hasColl;
+        { auto hcit = blocksMotion.find(name[id]);
+          hasColl = (hcit != blocksMotion.end() ? hcit->second : isSolid[id]); }
+        // BlockBehaviour.getCollisionShape (:334): a block that does NOT override getCollisionShape
+        // (collFam == "BlockBehaviour") yields  hasCollision ? state.getShape() : Shapes.empty().
+        // Hence when hasCollision is false the collision shape is EMPTY regardless of any custom
+        // getShape — signs/banners/torches/fire/coral/multiface/vines/tripwire/dripleaf-stems/...
+        // This is the real default semantics, not a per-family guess (RULE #0).
+        if (collFam == "BlockBehaviour" && hasColl == 0) {
+            if (want == EMPTY) ++cert;
+            else { ++mis; if (shown++ < 16) std::cerr << "mismatch(noColl) id=" << id << " "
+                << name[id] << " wantBoxes=" << want.size() << "\n"; }
+            continue;
+        }
         // Fully-default family whose shape is the cube-or-empty default: collision =
         // hasCollision ? Shapes.block() : Shapes.empty() (BlockBehaviour.getCollisionShape :334,
         // default getShape = full cube). Blocks that set a CUSTOM shape field via the constructor
