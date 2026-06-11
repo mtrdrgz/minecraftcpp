@@ -25,6 +25,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -263,133 +264,186 @@ struct Placer {
     }
 };
 
+// Per-structure addPieces arguments, read off the CONFIG row (which the GT emits from
+// the REAL JigsawStructure fields — see JigsawPlacementParity.java:415-426).
+struct Cfg {
+    std::string startPool;
+    int maxDepth = 0;
+    BlockPos startPos{0, 0, 0};   // already height-projected by the GT's startHeight.sample
+    bool project = false;         // projectStartToHeightmap present
+    int maxDist = 0;              // MaxDistance.horizontal()==vertical() for both structures
+    bool expansion = false;       // useExpansionHack
+    int padBottom = 0, padTop = 0;
+    bool startJigsaw = false;     // unsupported (both structures absent); asserted below
+};
+struct Row { std::string loc; int rot; int bb[6]; int gld; int nj; };
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string loaderTsv = "mcpp/build/structure_template_loader.tsv";
-    std::string poolDir = "26.1.2/data/minecraft/worldgen/template_pool/pillager_outpost";
     std::string oracleTsv = "mcpp/build/jigsaw_placement.tsv";
+    std::string poolBase = "26.1.2/data/minecraft/worldgen/template_pool";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
-        if (a == "--loader" && i + 1 < argc) loaderTsv = argv[++i];
-        else if (a == "--pooldir" && i + 1 < argc) poolDir = argv[++i];
+        if (a == "--pooldir" && i + 1 < argc) poolBase = argv[++i];
         else if (a == "--cases" && i + 1 < argc) oracleTsv = argv[++i];
     }
+    namespace fs = std::filesystem;
 
-    // 1) templates (size + jigsaw blocks) from base64 .nbt.
-    std::map<std::string, stl::LoadedTemplate> templates;
-    {
-        std::ifstream f(loaderTsv, std::ios::binary);
-        std::string line;
-        while (std::getline(f, line)) {
-            if (line.rfind("TEMPLATE\t", 0) != 0) continue;
-            auto c = splitTabs(line);          // TEMPLATE short b64 sx sy sz n
-            if (c.size() < 3) continue;
-            auto bytes = b64decode(c[2]);
-            auto root = mc::nbt::NbtReader::readGzip(bytes);
-            if (!root) { std::fprintf(stderr, "readGzip failed for %s\n", c[1].c_str()); return 2; }
-            templates["minecraft:pillager_outpost/" + c[1]] = stl::loadStructureTemplate(*root);
-        }
-    }
-    pools::SizeResolver sizeOf = [&](const std::string& loc) -> Vec3i {
-        auto it = templates.find(loc);
-        if (it == templates.end()) throw std::runtime_error("no template " + loc);
-        return it->second.size;
-    };
-
-    // 2) pools (the 4 pillager_outpost + the empty pool).
-    std::map<std::string, pools::StructureTemplatePool> poolsMap;
-    for (const char* nm : {"base_plates", "feature_plates", "towers", "features"}) {
-        std::string js = readFile(poolDir + "/" + nm + ".json");
-        poolsMap["minecraft:pillager_outpost/" + std::string(nm)] = pools::loadPool(nlohmann::json::parse(js));
-    }
-    poolsMap["minecraft:empty"] = pools::StructureTemplatePool{};   // size 0, fallback "" -> treated as empty
-
-    // 3) oracle: per seed, the ordered piece list.
-    struct Row { std::string loc; int rot; int bb[6]; int gld; int nj; };
-    std::map<int64_t, std::vector<Row>> expected;
+    // ── single pass over the oracle: CONFIG / NBT / PIECE / COUNT, all tagged by structure ──
+    std::vector<std::string> structOrder;                                    // encounter order
+    std::map<std::string, Cfg> cfgs;
+    std::map<std::string, std::map<std::string, stl::LoadedTemplate>> templatesByStruct;
+    std::map<std::string, std::map<int64_t, std::vector<Row>>> expectedByStruct;
     {
         std::ifstream f(oracleTsv, std::ios::binary);
+        if (!f) { std::fprintf(stderr, "cannot open %s\n", oracleTsv.c_str()); return 2; }
         std::string line;
         while (std::getline(f, line)) {
-            if (line.rfind("PIECE\t", 0) != 0) continue;
-            auto c = splitTabs(line);          // PIECE seed idx loc rot pX pY pZ bbMin3 bbMax3 gld nj (16 cols)
-            if (c.size() < 16) continue;
-            Row r; r.loc = c[3]; r.rot = std::stoi(c[4]);
-            for (int k = 0; k < 6; ++k) r.bb[k] = std::stoi(c[8 + k]);
-            r.gld = std::stoi(c[14]); r.nj = std::stoi(c[15]);
-            expected[std::stoll(c[1])].push_back(r);
+            auto c = splitTabs(line);
+            if (c.empty()) continue;
+            if (c[0] == "CONFIG") {
+                // CONFIG name startPool maxDepth posX posY posZ project maxDist expansion padB padT startJigsaw
+                if (c.size() < 13) continue;
+                Cfg cfg;
+                cfg.startPool = c[2];
+                cfg.maxDepth = std::stoi(c[3]);
+                cfg.startPos = {std::stoi(c[4]), std::stoi(c[5]), std::stoi(c[6])};
+                cfg.project = std::stoi(c[7]) != 0;
+                cfg.maxDist = std::stoi(c[8]);
+                cfg.expansion = std::stoi(c[9]) != 0;
+                cfg.padBottom = std::stoi(c[10]); cfg.padTop = std::stoi(c[11]);
+                cfg.startJigsaw = std::stoi(c[12]) != 0;
+                if (cfgs.find(c[1]) == cfgs.end()) structOrder.push_back(c[1]);
+                cfgs[c[1]] = cfg;
+            } else if (c[0] == "NBT") {
+                // NBT name location base64(gzip .nbt)
+                if (c.size() < 4) continue;
+                auto bytes = b64decode(c[3]);
+                auto root = mc::nbt::NbtReader::readGzip(bytes);
+                if (!root) { std::fprintf(stderr, "readGzip failed for %s\n", c[2].c_str()); return 2; }
+                templatesByStruct[c[1]][c[2]] = stl::loadStructureTemplate(*root);
+            } else if (c[0] == "PIECE") {
+                // PIECE name seed idx loc rot pX pY pZ bbMin3 bbMax3 gld nj (17 cols)
+                if (c.size() < 17) continue;
+                Row r; r.loc = c[4]; r.rot = std::stoi(c[5]);
+                for (int k = 0; k < 6; ++k) r.bb[k] = std::stoi(c[9 + k]);
+                r.gld = std::stoi(c[15]); r.nj = std::stoi(c[16]);
+                expectedByStruct[c[1]][std::stoll(c[2])].push_back(r);
+            } else if (c[0] == "COUNT") {
+                // COUNT name seed numPieces — seed 0-count seeds so they are still tested.
+                if (c.size() < 4) continue;
+                int64_t seed = std::stoll(c[2]);
+                expectedByStruct[c[1]].try_emplace(seed);   // empty vector if not already present
+            }
         }
     }
 
     long checks = 0, mismatches = 0, seedsBad = 0;
-    for (auto& [seed, exp] : expected) {
-        ++checks;
-        // ENTRY (addPieces lines 63-159).
-        auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
-            std::make_shared<mc::levelgen::LegacyRandomSource>(0));
-        random->setLargeFeatureSeed(seed, 0, 0);
-        Rotation centerRotation = static_cast<Rotation>(random->nextInt(4));
-        pools::StructureTemplatePool& base = poolsMap.at("minecraft:pillager_outpost/base_plates");
-        int idx = base.getRandomTemplateIndex(*random);
-        const pools::StructurePoolElement& centerElement = base.templates[(std::size_t)idx];
+    for (const std::string& sname : structOrder) {
+        const Cfg& cfg = cfgs.at(sname);
+        if (cfg.startJigsaw) { std::fprintf(stderr, "%s: startJigsaw unsupported — skipping\n", sname.c_str()); continue; }
+        auto& templates = templatesByStruct[sname];
+        auto& expected = expectedByStruct[sname];
 
-        std::vector<Placed> pieces;
-        bool bad = false;
-        try {
-            if (centerElement.isEmpty()) { if (!exp.empty()) { ++seedsBad; } continue; }
-            BoundingBox box = centerElement.getBoundingBox(sizeOf, BlockPos{0, 0, 0}, centerRotation);
-            Placed center;
-            center.element = &centerElement; center.loc = centerElement.locationString();
-            center.position = {0, 0, 0}; center.groundLevelDelta = 1; center.rotation = centerRotation; center.box = box;
-            int centerX = (box.maxX + box.minX) / 2;
-            int centerZ = (box.maxZ + box.minZ) / 2;
-            int bottomY = 0 + 64;
-            int oldAbsoluteGroundY = box.minY + 1;
-            center.move(0, bottomY - oldAbsoluteGroundY, 0);
-            pieces.push_back(center);
-            int maxDepth = 7;
-            if (maxDepth > 0) {
-                int centerY = bottomY + 0;
-                BoundingBox cbox = pieces[0].box;
-                phys::AABB region((double)(centerX - 80), (double)std::max(centerY - 80, -64 + 0), (double)(centerZ - 80),
-                                  (double)(centerX + 80 + 1), (double)std::min(centerY + 80 + 1, 319 + 1 - 0), (double)(centerZ + 80 + 1));
-                shp::VoxelShapePtr shape = shp::Shapes::join(shp::Shapes::create(region),
-                                                             shp::Shapes::create(aabbOf(cbox)),
-                                                             shp::BooleanOps::ONLY_FIRST);
-                Placer placer;
-                placer.poolsMap = &poolsMap; placer.templates = &templates; placer.sizeOf = sizeOf;
-                placer.maxDepth = maxDepth; placer.doExpansionHack = true; placer.pieces = &pieces; placer.random = random;
-                auto rootFree = std::make_shared<Free>(); rootFree->v = shape;
-                placer.tryPlacingChildren(0, rootFree, 0);
-                while (auto st = placer.placing.nextOrEnd())
-                    placer.tryPlacingChildren(st->pieceIdx, st->free, st->depth);
-            }
-        } catch (const std::exception& e) { std::fprintf(stderr, "seed %lld threw: %s\n", (long long)seed, e.what()); bad = true; }
+        pools::SizeResolver sizeOf = [&templates](const std::string& loc) -> Vec3i {
+            auto it = templates.find(loc);
+            if (it == templates.end()) throw std::runtime_error("no template " + loc);
+            return it->second.size;
+        };
 
-        // compare.
-        if (bad || pieces.size() != exp.size()) {
-            ++seedsBad;
-            if (seedsBad <= 8) std::fprintf(stderr, "seed=%lld got=%zu want=%zu\n", (long long)seed, pieces.size(), exp.size());
-            continue;
+        // pools: every .json under template_pool/<struct> (recursive — nested dirs like
+        // trail_ruins/tower/ , trail_ruins/buildings/), keyed minecraft:<relpath-no-.json>;
+        // plus the universal empty pool.
+        std::map<std::string, pools::StructureTemplatePool> poolsMap;
+        fs::path base = fs::path(poolBase);
+        fs::path structDir = base / sname;
+        for (auto& ent : fs::recursive_directory_iterator(structDir)) {
+            if (!ent.is_regular_file() || ent.path().extension() != ".json") continue;
+            std::string rel = fs::relative(ent.path(), base).generic_string();   // <struct>/.../x.json
+            std::string key = "minecraft:" + rel.substr(0, rel.size() - 5);       // strip ".json"
+            poolsMap[key] = pools::loadPool(nlohmann::json::parse(readFile(ent.path().string())));
         }
-        for (std::size_t k = 0; k < pieces.size(); ++k) {
-            const Placed& p = pieces[k]; const Row& r = exp[k];
-            bool ok = p.loc == r.loc && (int)p.rotation == r.rot && p.groundLevelDelta == r.gld &&
-                      p.numJunctions == r.nj &&
-                      p.box.minX == r.bb[0] && p.box.minY == r.bb[1] && p.box.minZ == r.bb[2] &&
-                      p.box.maxX == r.bb[3] && p.box.maxY == r.bb[4] && p.box.maxZ == r.bb[5];
-            if (!ok) {
-                ++mismatches;
-                if (mismatches <= 12)
-                    std::fprintf(stderr, "seed=%lld piece=%zu got(%s r%d gld%d nj%d [%d,%d,%d..%d,%d,%d]) want(%s r%d gld%d nj%d [%d,%d,%d..%d,%d,%d])\n",
-                        (long long)seed, k, p.loc.c_str(), (int)p.rotation, p.groundLevelDelta, p.numJunctions,
-                        p.box.minX, p.box.minY, p.box.minZ, p.box.maxX, p.box.maxY, p.box.maxZ,
-                        r.loc.c_str(), r.rot, r.gld, r.nj, r.bb[0], r.bb[1], r.bb[2], r.bb[3], r.bb[4], r.bb[5]);
+        poolsMap["minecraft:empty"] = pools::StructureTemplatePool{};
+
+        long sChecks = 0, sBad = 0, sMis = 0;
+        for (auto& [seed, exp] : expected) {
+            ++checks; ++sChecks;
+            // ── ENTRY (JigsawPlacement.addPieces, lines 63-159) ──
+            auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+            random->setLargeFeatureSeed(seed, 0, 0);
+            Rotation centerRotation = static_cast<Rotation>(random->nextInt(4));
+            auto poolIt = poolsMap.find(cfg.startPool);
+            if (poolIt == poolsMap.end()) { ++seedsBad; ++sBad; continue; }
+            pools::StructureTemplatePool& centerPool = poolIt->second;
+            int idx = centerPool.getRandomTemplateIndex(*random);
+            const pools::StructurePoolElement& centerElement = centerPool.templates[(std::size_t)idx];
+
+            std::vector<Placed> pieces;
+            bool bad = false;
+            try {
+                // startJigsaw absent -> anchoredPosition==position==startPos, localAnchor==0.
+                if (centerElement.isEmpty()) { if (!exp.empty()) { ++seedsBad; ++sBad; } continue; }
+                BlockPos adjustedPosition = cfg.startPos;
+                BoundingBox box = centerElement.getBoundingBox(sizeOf, adjustedPosition, centerRotation);
+                Placed center;
+                center.element = &centerElement; center.loc = centerElement.locationString();
+                center.position = adjustedPosition; center.groundLevelDelta = 1;
+                center.rotation = centerRotation; center.box = box;
+                int centerX = (box.maxX + box.minX) / 2;
+                int centerZ = (box.maxZ + box.minZ) / 2;
+                int bottomY = cfg.project ? cfg.startPos.y + 64 : adjustedPosition.y;   // getFirstFreeHeight stub == 64
+                int oldAbsoluteGroundY = box.minY + 1;
+                center.move(0, bottomY - oldAbsoluteGroundY, 0);
+                pieces.push_back(center);
+                if (cfg.maxDepth > 0) {
+                    int centerY = bottomY + 0;   // localAnchor.y == 0
+                    BoundingBox cbox = pieces[0].box;
+                    // heightAccessor: overworld minY=-64, maxY(incl)=319 -> maxY+1=320.
+                    int loY = std::max(centerY - cfg.maxDist, -64 + cfg.padBottom);
+                    int hiY = std::min(centerY + cfg.maxDist + 1, 320 - cfg.padTop);
+                    phys::AABB region((double)(centerX - cfg.maxDist), (double)loY, (double)(centerZ - cfg.maxDist),
+                                      (double)(centerX + cfg.maxDist + 1), (double)hiY, (double)(centerZ + cfg.maxDist + 1));
+                    shp::VoxelShapePtr shape = shp::Shapes::join(shp::Shapes::create(region),
+                                                                 shp::Shapes::create(aabbOf(cbox)),
+                                                                 shp::BooleanOps::ONLY_FIRST);
+                    Placer placer;
+                    placer.poolsMap = &poolsMap; placer.templates = &templates; placer.sizeOf = sizeOf;
+                    placer.maxDepth = cfg.maxDepth; placer.doExpansionHack = cfg.expansion;
+                    placer.pieces = &pieces; placer.random = random;
+                    auto rootFree = std::make_shared<Free>(); rootFree->v = shape;
+                    placer.tryPlacingChildren(0, rootFree, 0);
+                    while (auto st = placer.placing.nextOrEnd())
+                        placer.tryPlacingChildren(st->pieceIdx, st->free, st->depth);
+                }
+            } catch (const std::exception& e) { std::fprintf(stderr, "%s seed %lld threw: %s\n", sname.c_str(), (long long)seed, e.what()); bad = true; }
+
+            if (bad || pieces.size() != exp.size()) {
+                ++seedsBad; ++sBad;
+                if (sBad <= 8) std::fprintf(stderr, "%s seed=%lld got=%zu want=%zu\n", sname.c_str(), (long long)seed, pieces.size(), exp.size());
+                continue;
+            }
+            for (std::size_t k = 0; k < pieces.size(); ++k) {
+                const Placed& p = pieces[k]; const Row& r = exp[k];
+                bool ok = p.loc == r.loc && (int)p.rotation == r.rot && p.groundLevelDelta == r.gld &&
+                          p.numJunctions == r.nj &&
+                          p.box.minX == r.bb[0] && p.box.minY == r.bb[1] && p.box.minZ == r.bb[2] &&
+                          p.box.maxX == r.bb[3] && p.box.maxY == r.bb[4] && p.box.maxZ == r.bb[5];
+                if (!ok) {
+                    ++mismatches; ++sMis;
+                    if (sMis <= 12)
+                        std::fprintf(stderr, "%s seed=%lld piece=%zu got(%s r%d gld%d nj%d [%d,%d,%d..%d,%d,%d]) want(%s r%d gld%d nj%d [%d,%d,%d..%d,%d,%d])\n",
+                            sname.c_str(), (long long)seed, k, p.loc.c_str(), (int)p.rotation, p.groundLevelDelta, p.numJunctions,
+                            p.box.minX, p.box.minY, p.box.minZ, p.box.maxX, p.box.maxY, p.box.maxZ,
+                            r.loc.c_str(), r.rot, r.gld, r.nj, r.bb[0], r.bb[1], r.bb[2], r.bb[3], r.bb[4], r.bb[5]);
+                }
             }
         }
+        std::printf("  %s: seeds=%ld seedsBad=%ld pieceMismatches=%ld\n", sname.c_str(), sChecks, sBad, sMis);
     }
 
-    std::printf("JigsawPlacement seeds=%ld seedsBad=%ld pieceMismatches=%ld\n", checks, seedsBad, mismatches);
+    std::printf("JigsawPlacement structures=%zu seeds=%ld seedsBad=%ld pieceMismatches=%ld\n",
+                structOrder.size(), checks, seedsBad, mismatches);
     return (seedsBad > 0 || mismatches > 0) ? 1 : 0;
 }

@@ -297,6 +297,33 @@ public final class JigsawPlacementParity {
         return element.toString();
     }
 
+    // Ship every template referenced anywhere in the structure's template_pool subtree as
+    // base64 of the raw gzip .nbt (from client.jar), so the C++ gate parses identical bytes.
+    private static void emitNbt(final java.io.PrintStream out, final String name, final String prefix, final ZipFile jar) throws Exception {
+        java.nio.file.Path dir = java.nio.file.Path.of("26.1.2", "data", "minecraft", "worldgen", "template_pool", prefix);
+        java.util.LinkedHashSet<String> locs = new java.util.LinkedHashSet<>();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"location\"\\s*:\\s*\"([^\"]+)\"");
+        java.util.List<java.nio.file.Path> files;
+        try (java.util.stream.Stream<java.nio.file.Path> w = java.nio.file.Files.walk(dir)) {
+            files = w.filter(x -> x.toString().endsWith(".json")).sorted().toList();
+        }
+        for (java.nio.file.Path f : files) {
+            java.util.regex.Matcher m = p.matcher(java.nio.file.Files.readString(f));
+            while (m.find()) locs.add(m.group(1));
+        }
+        for (String loc : locs) {
+            int colon = loc.indexOf(':');
+            String ns = colon < 0 ? "minecraft" : loc.substring(0, colon);
+            String path = colon < 0 ? loc : loc.substring(colon + 1);
+            String entry = "data/" + ns + "/structure/" + path + ".nbt";
+            java.util.zip.ZipEntry ze = jar.getEntry(entry);
+            if (ze == null) { System.err.println("missing " + entry); continue; }
+            byte[] bytes;
+            try (java.io.InputStream in = jar.getInputStream(ze)) { bytes = in.readAllBytes(); }
+            out.println("NBT\t" + name + "\t" + loc + "\t" + java.util.Base64.getEncoder().encodeToString(bytes));
+        }
+    }
+
     @SuppressWarnings({"deprecation", "unchecked"})
     public static void main(final String[] args) throws Exception {
         final java.io.PrintStream out = System.out;
@@ -328,34 +355,7 @@ public final class JigsawPlacementParity {
         HolderGetter<Block> blockLookup = BuiltInRegistries.BLOCK;
         StructureTemplateManager templateManager = makeJarManager(jar, blockLookup);
 
-        // ---- the REAL pillager_outpost JigsawStructure, loaded from the registry ----
-        // Every addPieces argument is read off this instance reflectively so the call is
-        // exactly what JigsawStructure.findGenerationPoint would make (RULE #0).
-        JigsawStructure structure = (JigsawStructure) holders.lookupOrThrow(Registries.STRUCTURE)
-            .getOrThrow(net.minecraft.world.level.levelgen.structure.BuiltinStructures.PILLAGER_OUTPOST)
-            .value();
-
-        Holder<StructureTemplatePool> startPool = getField(JigsawStructure.class, structure, "startPool");
-        Optional<Identifier> startJigsawName = getField(JigsawStructure.class, structure, "startJigsawName");
-        int maxDepth = getField(JigsawStructure.class, structure, "maxDepth");
-        HeightProvider startHeight = getField(JigsawStructure.class, structure, "startHeight");
-        boolean useExpansionHack = getField(JigsawStructure.class, structure, "useExpansionHack");
-        Optional<Heightmap.Types> projectStartToHeightmap = getField(JigsawStructure.class, structure, "projectStartToHeightmap");
-        JigsawStructure.MaxDistance maxDistanceFromCenter = getField(JigsawStructure.class, structure, "maxDistanceFromCenter");
-        List<PoolAliasBinding> poolAliases = getField(JigsawStructure.class, structure, "poolAliases");
-        DimensionPadding dimensionPadding = getField(JigsawStructure.class, structure, "dimensionPadding");
-        LiquidSettings liquidSettings = getField(JigsawStructure.class, structure, "liquidSettings");
-
-        // Re-resolve the start pool through the registryAccess used by addPieces so the
-        // Holder identity matches the pools registry it will look up (poolAliasLookup +
-        // pools.getOptional path). The structure's startPool holder is from `holders`; the
-        // value is identical, but use the registryAccess copy for a clean self-contained run.
-        Holder<StructureTemplatePool> startPoolResolved = startPool.unwrapKey()
-            .<Holder<StructureTemplatePool>>map(key -> poolRegistry.get(key)
-                .map(h -> (Holder<StructureTemplatePool>) h)
-                .orElse(startPool))
-            .orElse(startPool);
-
+        // ---- shared (structure-independent) setup ----
         // Battery: 0..199, plus large/negative edge seeds.
         java.util.List<Long> seedList = new java.util.ArrayList<>();
         for (long s = 0; s < 200; s++) seedList.add(s);
@@ -374,56 +374,80 @@ public final class JigsawPlacementParity {
             DimensionPadding.class, LiquidSettings.class);
         addPieces.setAccessible(true);
 
-        for (final long seed : seedList) {
-            RandomState randomState = RandomState.create(holders, NoiseGeneratorSettings.OVERWORLD, seed);
+        // ---- structures to dump (name, registry key, template_pool prefix) ----
+        // Each runs the REAL addPieces; rows are tagged by structure name. NBT rows ship every
+        // template in the structure's pool subtree; CONFIG carries the per-structure addPieces args.
+        record SD(String name, ResourceKey<Structure> key, String prefix) {}
+        java.util.List<SD> structs = java.util.List.of(
+            new SD("pillager_outpost", net.minecraft.world.level.levelgen.structure.BuiltinStructures.PILLAGER_OUTPOST, "pillager_outpost"),
+            new SD("trail_ruins", net.minecraft.world.level.levelgen.structure.BuiltinStructures.TRAIL_RUINS, "trail_ruins")
+        );
 
-            // GenerationContext: the 9-arg public ctor builds the WorldgenRandom via
-            // makeRandom(seed, chunkPos) = setLargeFeatureSeed(seed, 0, 0) — exactly as the
-            // server does for structure generation. validBiome is `h -> true` (unused by
-            // addPieces). The WorldGenLevel arg is the heightAccessor here; addPieces never
-            // dereferences a WorldGenLevel.
-            Structure.GenerationContext context = new Structure.GenerationContext(
-                registryAccess, stubGenerator, biomeSource, randomState, templateManager,
-                seed, chunkPos, heightAccessor, h -> true);
+        for (SD sd : structs) {
+            JigsawStructure structure = (JigsawStructure) holders.lookupOrThrow(Registries.STRUCTURE)
+                .getOrThrow(sd.key()).value();
+            Holder<StructureTemplatePool> startPool = getField(JigsawStructure.class, structure, "startPool");
+            Optional<Identifier> startJigsawName = getField(JigsawStructure.class, structure, "startJigsawName");
+            int maxDepth = getField(JigsawStructure.class, structure, "maxDepth");
+            HeightProvider startHeight = getField(JigsawStructure.class, structure, "startHeight");
+            boolean useExpansionHack = getField(JigsawStructure.class, structure, "useExpansionHack");
+            Optional<Heightmap.Types> projectStartToHeightmap = getField(JigsawStructure.class, structure, "projectStartToHeightmap");
+            JigsawStructure.MaxDistance maxDistanceFromCenter = getField(JigsawStructure.class, structure, "maxDistanceFromCenter");
+            List<PoolAliasBinding> poolAliases = getField(JigsawStructure.class, structure, "poolAliases");
+            DimensionPadding dimensionPadding = getField(JigsawStructure.class, structure, "dimensionPadding");
+            LiquidSettings liquidSettings = getField(JigsawStructure.class, structure, "liquidSettings");
+            Holder<StructureTemplatePool> startPoolResolved = startPool.unwrapKey()
+                .<Holder<StructureTemplatePool>>map(key -> poolRegistry.get(key)
+                    .map(h -> (Holder<StructureTemplatePool>) h)
+                    .orElse(startPool))
+                .orElse(startPool);
 
-            // startPos exactly as JigsawStructure.findGenerationPoint computes it:
-            //   height = startHeight.sample(context.random(), new WorldGenerationContext(gen, heightAccessor))
-            //   startPos = new BlockPos(chunkPos.getMinBlockX(), height, chunkPos.getMinBlockZ())
-            int height = startHeight.sample(context.random(), new WorldGenerationContext(stubGenerator, heightAccessor));
-            BlockPos startPos = new BlockPos(chunkPos.getMinBlockX(), height, chunkPos.getMinBlockZ());
-            PoolAliasLookup poolAliasLookup = PoolAliasLookup.create(poolAliases, startPos, context.seed());
+            emitNbt(out, sd.name(), sd.prefix(), jar);
+            boolean cfgEmitted = false;
 
-            Optional<Structure.GenerationStub> stub = (Optional<Structure.GenerationStub>) addPieces.invoke(
-                null, context, startPoolResolved, startJigsawName, maxDepth, startPos,
-                useExpansionHack, projectStartToHeightmap, maxDistanceFromCenter,
-                poolAliasLookup, dimensionPadding, liquidSettings);
-
-            if (stub.isEmpty()) {
-                out.println("COUNT\t" + seed + "\t0");
-                continue;
-            }
-
-            StructurePiecesBuilder builder = stub.get().getPiecesBuilder();
-            List<StructurePiece> pieces = builder.build().pieces();
-            int pieceIndex = 0;
-            for (StructurePiece piece : pieces) {
-                if (!(piece instanceof PoolElementStructurePiece poolPiece)) {
-                    continue;
+            for (final long seed : seedList) {
+                RandomState randomState = RandomState.create(holders, NoiseGeneratorSettings.OVERWORLD, seed);
+                Structure.GenerationContext context = new Structure.GenerationContext(
+                    registryAccess, stubGenerator, biomeSource, randomState, templateManager,
+                    seed, chunkPos, heightAccessor, h -> true);
+                int height = startHeight.sample(context.random(), new WorldGenerationContext(stubGenerator, heightAccessor));
+                BlockPos startPos = new BlockPos(chunkPos.getMinBlockX(), height, chunkPos.getMinBlockZ());
+                if (!cfgEmitted) {
+                    out.println("CONFIG\t" + sd.name()
+                        + "\t" + startPool.unwrapKey().map(k -> k.identifier().toString()).orElse("?")
+                        + "\t" + maxDepth
+                        + "\t" + startPos.getX() + "\t" + startPos.getY() + "\t" + startPos.getZ()
+                        + "\t" + (projectStartToHeightmap.isPresent() ? 1 : 0)
+                        + "\t" + maxDistanceFromCenter.horizontal()
+                        + "\t" + (useExpansionHack ? 1 : 0)
+                        + "\t" + dimensionPadding.bottom() + "\t" + dimensionPadding.top()
+                        + "\t" + (startJigsawName.isPresent() ? 1 : 0));
+                    cfgEmitted = true;
                 }
-                BoundingBox bb = poolPiece.getBoundingBox();
-                BlockPos pos = poolPiece.getPosition();
-                String loc = elementLocation(poolPiece.getElement());
-                int numJunctions = poolPiece.getJunctions().size();
-                out.println("PIECE\t" + seed + "\t" + pieceIndex + "\t" + loc
-                    + "\t" + poolPiece.getRotation().ordinal()
-                    + "\t" + pos.getX() + "\t" + pos.getY() + "\t" + pos.getZ()
-                    + "\t" + bb.minX() + "\t" + bb.minY() + "\t" + bb.minZ()
-                    + "\t" + bb.maxX() + "\t" + bb.maxY() + "\t" + bb.maxZ()
-                    + "\t" + poolPiece.getGroundLevelDelta()
-                    + "\t" + numJunctions);
-                pieceIndex++;
+                PoolAliasLookup poolAliasLookup = PoolAliasLookup.create(poolAliases, startPos, context.seed());
+                Optional<Structure.GenerationStub> stub = (Optional<Structure.GenerationStub>) addPieces.invoke(
+                    null, context, startPoolResolved, startJigsawName, maxDepth, startPos,
+                    useExpansionHack, projectStartToHeightmap, maxDistanceFromCenter,
+                    poolAliasLookup, dimensionPadding, liquidSettings);
+                if (stub.isEmpty()) { out.println("COUNT\t" + sd.name() + "\t" + seed + "\t0"); continue; }
+                StructurePiecesBuilder builder = stub.get().getPiecesBuilder();
+                List<StructurePiece> pieces = builder.build().pieces();
+                int pieceIndex = 0;
+                for (StructurePiece piece : pieces) {
+                    if (!(piece instanceof PoolElementStructurePiece poolPiece)) continue;
+                    BoundingBox bb = poolPiece.getBoundingBox();
+                    BlockPos pos = poolPiece.getPosition();
+                    out.println("PIECE\t" + sd.name() + "\t" + seed + "\t" + pieceIndex + "\t" + elementLocation(poolPiece.getElement())
+                        + "\t" + poolPiece.getRotation().ordinal()
+                        + "\t" + pos.getX() + "\t" + pos.getY() + "\t" + pos.getZ()
+                        + "\t" + bb.minX() + "\t" + bb.minY() + "\t" + bb.minZ()
+                        + "\t" + bb.maxX() + "\t" + bb.maxY() + "\t" + bb.maxZ()
+                        + "\t" + poolPiece.getGroundLevelDelta()
+                        + "\t" + poolPiece.getJunctions().size());
+                    pieceIndex++;
+                }
+                out.println("COUNT\t" + sd.name() + "\t" + seed + "\t" + pieceIndex);
             }
-            out.println("COUNT\t" + seed + "\t" + pieceIndex);
         }
 
         out.flush();
