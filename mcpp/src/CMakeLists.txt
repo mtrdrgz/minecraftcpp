@@ -4203,18 +4203,20 @@ set_target_properties(pkt_signedit_sb_parity PROPERTIES
 # longs (FriendlyByteBuf.java:498-501). Packet.codec -> StreamCodec.ofMember: body only,
 # no id/length prefix, so the whole wire payload is exactly 16 bytes = MSB(BE)++LSB(BE).
 # Reuses the certified PacketBuffer (FriendlyByteBuf port). GT: tools/PktTeleportToEntitySbParity.java.
-add_executable(pkt_spectate_entity_sb_parity
+# (renamed from a mislabeled pkt_spectate_entity_sb_parity — this target's source is the
+#  TeleportToEntity test; the real SpectateEntity gate is added below.)
+add_executable(pkt_teleport_to_entity_sb_parity
     network/protocol/game/PktTeleportToEntitySbParityTest.cpp
     network/PacketBuffer.cpp
     nbt/NbtIo.cpp
     nbt/Tag.cpp
 )
-target_include_directories(pkt_spectate_entity_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE miniz)
+target_include_directories(pkt_teleport_to_entity_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_teleport_to_entity_sb_parity PRIVATE miniz)
 if(WIN32)
-    target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE bcrypt)
+    target_link_libraries(pkt_teleport_to_entity_sb_parity PRIVATE bcrypt)
 endif()
-set_target_properties(pkt_spectate_entity_sb_parity PROPERTIES
+set_target_properties(pkt_teleport_to_entity_sb_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
@@ -5696,3 +5698,32 @@ if(WIN32)
     target_link_libraries(pkt_ticking_step_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_ticking_step_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: StructureTemplate.calculateConnectedPosition/calculateRelativePosition (jigsaw align) =====
+add_executable(structure_connected_position_parity world/level/levelgen/structure/templatesystem/StructureConnectedPositionParityTest.cpp)
+target_include_directories(structure_connected_position_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(structure_connected_position_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: com.mojang.math.GivensParameters (half-angle Givens rotation; Matrix3f aroundX/Y/Z) =====
+add_executable(givens_parameters_parity render/model/GivensParametersParityTest.cpp)
+target_include_directories(givens_parameters_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(givens_parameters_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity/ai: RandomPos.generateRandomDirection(WithinRadians) (Mth.atan2 LUT + float/double jitter) =====
+add_executable(random_pos_parity world/entity/ai/util/RandomPosParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(random_pos_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(random_pos_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundSpectateEntityPacket (single VarInt entityId; was UNGATED — name was mislabeled) =====
+add_executable(pkt_spectate_entity_sb_parity
+    network/protocol/game/PktSpectateEntitySbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_spectate_entity_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_spectate_entity_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
