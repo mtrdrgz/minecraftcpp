@@ -191,4 +191,18 @@ std::optional<BlockHitResult> AABB::clip(const std::vector<AABB>& aabbs,
                           static_cast<Direction>(direction), pos, false);
 }
 
+// Java: collidedAlongVector(Vec3 vector, List<AABB> aabbs) — AABB.java:397-413.
+bool AABB::collidedAlongVector(const glm::dvec3& vector, const std::vector<AABB>& aabbs) const noexcept {
+    const glm::dvec3 from = getCenter();
+    const glm::dvec3 to(from.x + vector.x, from.y + vector.y, from.z + vector.z);
+    for (const AABB& shapePart : aabbs) {
+        const AABB inflated = shapePart.inflate(getXsize() * 0.5 - EPSILON,
+                                                getYsize() * 0.5 - EPSILON,
+                                                getZsize() * 0.5 - EPSILON);
+        if (inflated.contains(to) || inflated.contains(from)) return true;
+        if (inflated.clip(from, to).has_value()) return true;
+    }
+    return false;
+}
+
 } // namespace mc

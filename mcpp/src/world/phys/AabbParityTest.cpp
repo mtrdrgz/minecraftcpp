@@ -4,6 +4,7 @@
 //   aabb_parity [--cases mcpp/build/aabb_cases.tsv]
 #include "AABB.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -128,6 +129,33 @@ int main(int argc, char** argv) {
         if (c.expect.count("INTERSECTS") && (box.intersects(box2) ? "1" : "0") != c.expect["INTERSECTS"][0]) { std::cerr << "INTERSECTS-MISMATCH " << name << "\n"; ++failures; }
         if (c.expect.count("CONTAINS") && (box.contains(from) ? "1" : "0") != c.expect["CONTAINS"][0]) { std::cerr << "CONTAINS-MISMATCH " << name << "\n"; ++failures; }
         if (c.expect.count("HASNAN") && (box.hasNaN() ? "1" : "0") != c.expect["HASNAN"][0]) { std::cerr << "HASNAN-MISMATCH " << name << "\n"; ++failures; }
+
+        // --- remaining surface (completes AABB): setters / move overloads / static
+        //     factories / Builder / collidedAlongVector. ---
+        auto chkBox = [&](const char* kind, const AABB& a) {
+            chk(kind, {a.minCorner.x, a.minCorner.y, a.minCorner.z, a.maxCorner.x, a.maxCorner.y, a.maxCorner.z});
+        };
+        chkBox("SMINX", box.setMinX(7.5)); chkBox("SMINY", box.setMinY(7.5)); chkBox("SMINZ", box.setMinZ(7.5));
+        chkBox("SMAXX", box.setMaxX(7.5)); chkBox("SMAXY", box.setMaxY(7.5)); chkBox("SMAXZ", box.setMaxZ(7.5));
+        chkBox("MOVEBP", box.move(mc::BlockPos{2, -3, 5}));
+        chkBox("MOVEVF", box.move(glm::vec3((float)from.x, (float)from.y, (float)from.z)));
+        chkBox("UNITCUBE", AABB::unitCubeFromLowerCorner(from));
+        // Java (int)Math.floor(x): NaN->0, +/-inf saturate — use the exact narrowing cast.
+        auto fi = [](double x) { return mc::jintCast(std::floor(x)); };
+        chkBox("ENCAPS", AABB::encapsulatingFullBlocks(
+            mc::BlockPos{fi(box.minCorner.x), fi(box.minCorner.y), fi(box.minCorner.z)},
+            mc::BlockPos{fi(box.maxCorner.x), fi(box.maxCorner.y), fi(box.maxCorner.z)}));
+        chkBox("OFBOX", AABB::ofBox(fi(box.minCorner.x), fi(box.minCorner.y), fi(box.minCorner.z),
+                                    fi(box.maxCorner.x), fi(box.maxCorner.y), fi(box.maxCorner.z)));
+        AABB::Builder bld;
+        bld.include(glm::vec3((float)from.x, (float)from.y, (float)from.z));
+        bld.include(glm::vec3((float)to.x, (float)to.y, (float)to.z));
+        glm::dvec3 cc = box.getCenter();
+        bld.include(glm::vec3((float)cc.x, (float)cc.y, (float)cc.z));
+        chkBox("BUILDER", bld.build());
+        if (c.expect.count("COLLIDE") && (box.collidedAlongVector(to - from, {box2}) ? "1" : "0") != c.expect["COLLIDE"][0]) { std::cerr << "COLLIDE-MISMATCH " << name << "\n"; ++failures; }
+        chkBox("OFSIZE", AABB::ofSize(from, 2.0, 3.0, 4.0));
+        chkBox("CTORBP", AABB(mc::BlockPos{2, -3, 5}));
     }
 
     std::cout << "AabbParity cases=" << n << " failures=" << failures << "\n";

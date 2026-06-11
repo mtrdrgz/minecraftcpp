@@ -9,11 +9,15 @@
 //   EXP  <name> <6 hex>   expandTowards(to-from)
 //   CON  <name> <6 hex>   contract(to-from)
 //   DST  <name> <1 hex>   distanceToSqr(from)
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3f;
 
 public class AabbParity {
     static final StringBuilder OUT = new StringBuilder();
@@ -105,6 +109,35 @@ public class AabbParity {
         OUT.append("INTERSECTS\t").append(name).append('\t').append(box.intersects(box2) ? 1 : 0).append('\n');
         OUT.append("CONTAINS\t").append(name).append('\t').append(box.contains(from) ? 1 : 0).append('\n');
         OUT.append("HASNAN\t").append(name).append('\t').append(box.hasNaN() ? 1 : 0).append('\n');
+
+        // --- remaining surface (this completes AABB): setters, move overloads, static
+        // factories, Builder, collidedAlongVector. Inputs derived from box/from/to. ---
+        box6("SMINX", name, box.setMinX(7.5)); box6("SMINY", name, box.setMinY(7.5)); box6("SMINZ", name, box.setMinZ(7.5));
+        box6("SMAXX", name, box.setMaxX(7.5)); box6("SMAXY", name, box.setMaxY(7.5)); box6("SMAXZ", name, box.setMaxZ(7.5));
+        box6("MOVEBP", name, box.move(new BlockPos(2, -3, 5)));
+        box6("MOVEVF", name, box.move(new Vector3f((float) from.x, (float) from.y, (float) from.z)));
+        box6("UNITCUBE", name, AABB.unitCubeFromLowerCorner(from));
+        box6("ENCAPS", name, AABB.encapsulatingFullBlocks(
+            new BlockPos((int) Math.floor(box.minX), (int) Math.floor(box.minY), (int) Math.floor(box.minZ)),
+            new BlockPos((int) Math.floor(box.maxX), (int) Math.floor(box.maxY), (int) Math.floor(box.maxZ))));
+        BoundingBox bb = new BoundingBox((int) Math.floor(box.minX), (int) Math.floor(box.minY), (int) Math.floor(box.minZ),
+            (int) Math.floor(box.maxX), (int) Math.floor(box.maxY), (int) Math.floor(box.maxZ));
+        box6("OFBOX", name, AABB.of(bb));
+        AABB.Builder bld = new AABB.Builder();
+        bld.include(new Vector3f((float) from.x, (float) from.y, (float) from.z));
+        bld.include(new Vector3f((float) to.x, (float) to.y, (float) to.z));
+        bld.include(new Vector3f((float) box.getCenter().x, (float) box.getCenter().y, (float) box.getCenter().z));
+        box6("BUILDER", name, bld.build());
+        OUT.append("COLLIDE\t").append(name).append('\t')
+           .append(box.collidedAlongVector(to.subtract(from), List.of(box2)) ? 1 : 0).append('\n');
+        box6("OFSIZE", name, AABB.ofSize(from, 2.0, 3.0, 4.0));
+        box6("CTORBP", name, new AABB(new BlockPos(2, -3, 5)));
+    }
+
+    static void box6(String kind, String name, AABB a) {
+        OUT.append(kind).append('\t').append(name).append('\t');
+        hex(a.minX); hex(a.minY); hex(a.minZ); hex(a.maxX); hex(a.maxY); hex(a.maxZ);
+        OUT.append('\n');
     }
 
     static void hex(double d) {

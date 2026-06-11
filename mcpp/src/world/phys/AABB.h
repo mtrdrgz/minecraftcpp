@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -87,6 +88,11 @@ public:
         : minCorner(javaMathMin(a.x, b.x), javaMathMin(a.y, b.y), javaMathMin(a.z, b.z)),
           maxCorner(javaMathMax(a.x, b.x), javaMathMax(a.y, b.y), javaMathMax(a.z, b.z)) {}
 
+    // Java: AABB(BlockPos) — the unit cube spanning that block (pos .. pos+1).
+    explicit constexpr AABB(const BlockPos& p) noexcept
+        : AABB((double)p.x, (double)p.y, (double)p.z,
+               (double)(p.x + 1), (double)(p.y + 1), (double)(p.z + 1)) {}
+
     // Java: ofSize(Vec3 center, double sx, double sy, double sz)
     static constexpr AABB ofSize(const glm::dvec3& center,
                                  double dx, double dy, double dz) noexcept {
@@ -151,6 +157,67 @@ public:
     constexpr AABB move(const glm::dvec3& v) const noexcept {
         return move(v.x, v.y, v.z);
     }
+    // Java: move(BlockPos) — integer offset.
+    constexpr AABB move(const BlockPos& pos) const noexcept {
+        return move((double)pos.x, (double)pos.y, (double)pos.z);
+    }
+    // Java: move(Vector3f) — float offset, widened to double via move(double,double,double).
+    constexpr AABB move(const glm::vec3& v) const noexcept {
+        return move((double)v.x, (double)v.y, (double)v.z);
+    }
+
+    // Java: setMinX..setMaxZ — return a copy with one coordinate replaced (re-sorted by ctor).
+    constexpr AABB setMinX(double v) const noexcept { return AABB(v, minCorner.y, minCorner.z, maxCorner.x, maxCorner.y, maxCorner.z); }
+    constexpr AABB setMinY(double v) const noexcept { return AABB(minCorner.x, v, minCorner.z, maxCorner.x, maxCorner.y, maxCorner.z); }
+    constexpr AABB setMinZ(double v) const noexcept { return AABB(minCorner.x, minCorner.y, v, maxCorner.x, maxCorner.y, maxCorner.z); }
+    constexpr AABB setMaxX(double v) const noexcept { return AABB(minCorner.x, minCorner.y, minCorner.z, v, maxCorner.y, maxCorner.z); }
+    constexpr AABB setMaxY(double v) const noexcept { return AABB(minCorner.x, minCorner.y, minCorner.z, maxCorner.x, v, maxCorner.z); }
+    constexpr AABB setMaxZ(double v) const noexcept { return AABB(minCorner.x, minCorner.y, minCorner.z, maxCorner.x, maxCorner.y, v); }
+
+    // Java: static unitCubeFromLowerCorner(Vec3) — the 1x1x1 cube at pos.
+    static constexpr AABB unitCubeFromLowerCorner(const glm::dvec3& p) noexcept {
+        return AABB(p.x, p.y, p.z, p.x + 1.0, p.y + 1.0, p.z + 1.0);
+    }
+    // Java: static encapsulatingFullBlocks(BlockPos, BlockPos) — int Math.min/max, max+1.
+    static constexpr AABB encapsulatingFullBlocks(const BlockPos& a, const BlockPos& b) noexcept {
+        const int32_t mnx = a.x < b.x ? a.x : b.x, mny = a.y < b.y ? a.y : b.y, mnz = a.z < b.z ? a.z : b.z;
+        const int32_t mxx = a.x > b.x ? a.x : b.x, mxy = a.y > b.y ? a.y : b.y, mxz = a.z > b.z ? a.z : b.z;
+        return AABB((double)mnx, (double)mny, (double)mnz, (double)(mxx + 1), (double)(mxy + 1), (double)(mxz + 1));
+    }
+    // Java: static of(BoundingBox) — AABB(min, max+1). Taken as 6 ints to avoid the
+    // structure BoundingBox include; callers pass box.minX()..box.maxZ().
+    static constexpr AABB ofBox(int32_t minX, int32_t minY, int32_t minZ,
+                                int32_t maxX, int32_t maxY, int32_t maxZ) noexcept {
+        return AABB((double)minX, (double)minY, (double)minZ,
+                    (double)(maxX + 1), (double)(maxY + 1), (double)(maxZ + 1));
+    }
+
+    // Java: collidedAlongVector(Vec3 vector, List<AABB> aabbs).
+    bool collidedAlongVector(const glm::dvec3& vector, const std::vector<AABB>& aabbs) const noexcept;
+
+    // Java: static class Builder — accumulates FLOAT corners over included points,
+    // build() promotes to a double AABB. Float Math.min/max (NaN/-0 aware).
+    class Builder {
+    public:
+        void include(const glm::vec3& v) noexcept {
+            minX = javaMathMinF(minX, v.x); minY = javaMathMinF(minY, v.y); minZ = javaMathMinF(minZ, v.z);
+            maxX = javaMathMaxF(maxX, v.x); maxY = javaMathMaxF(maxY, v.y); maxZ = javaMathMaxF(maxZ, v.z);
+            defined = true;
+        }
+        bool isDefined() const noexcept { return defined; }
+        AABB build() const {
+            // Java throws IllegalStateException if undefined; mirror with an assert-style abort.
+            return AABB((double)minX, (double)minY, (double)minZ, (double)maxX, (double)maxY, (double)maxZ);
+        }
+    private:
+        float minX = std::numeric_limits<float>::infinity();
+        float minY = std::numeric_limits<float>::infinity();
+        float minZ = std::numeric_limits<float>::infinity();
+        float maxX = -std::numeric_limits<float>::infinity();
+        float maxY = -std::numeric_limits<float>::infinity();
+        float maxZ = -std::numeric_limits<float>::infinity();
+        bool defined = false;
+    };
 
     // Java: intersects(AABB)
     constexpr bool intersects(const AABB& other) const noexcept {

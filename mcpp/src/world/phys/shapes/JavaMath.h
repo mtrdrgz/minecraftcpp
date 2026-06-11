@@ -62,6 +62,19 @@ inline constexpr double javaMathMax(double a, double b) noexcept {
     return (a >= b) ? a : b;
 }
 
+// Java: java.lang.Math.{min,max}(float, float) — same NaN-poison + signed-zero rules as
+// the double versions (used by AABB.Builder, which accumulates float corners).
+inline constexpr float javaMathMinF(float a, float b) noexcept {
+    if (a != a) return a;
+    if (a == 0.0f && b == 0.0f && __builtin_signbit(b)) return b;
+    return (a <= b) ? a : b;
+}
+inline constexpr float javaMathMaxF(float a, float b) noexcept {
+    if (a != a) return a;
+    if (a == 0.0f && b == 0.0f && __builtin_signbit(a)) return b;
+    return (a >= b) ? a : b;
+}
+
 // Java: Mth.clamp(double, double, double) — Mth.java:105-107:
 //   value < min ? min : Math.min(value, max)
 inline double mthClamp(double value, double mn, double mx) noexcept {
