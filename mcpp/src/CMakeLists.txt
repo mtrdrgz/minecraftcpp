@@ -5580,3 +5580,32 @@ if(WIN32)
     target_link_libraries(pkt_forget_level_chunk_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_forget_level_chunk_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: OceanMonumentPiece room geometry (getRoomIndex + per-room makeBoundingBox) =====
+add_executable(ocean_monument_room_parity world/level/levelgen/structure/structures/OceanMonumentRoomParityTest.cpp)
+target_include_directories(ocean_monument_room_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(ocean_monument_room_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: EyeOfEnder.updateDeltaMovement (homing velocity, double physics, NaN propagation) =====
+add_executable(eye_of_ender_movement_parity world/entity/projectile/EyeOfEnderMovementParityTest.cpp)
+target_include_directories(eye_of_ender_movement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(eye_of_ender_movement_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: ModelPart transform math (rotateBy/storePose/loadPose/offsetPos/Rotation/Scale on JOML) =====
+add_executable(model_part_parity client/model/geom/ModelPartParityTest.cpp)
+target_include_directories(model_part_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(model_part_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundResourcePackPacket (writeUUID MSB/LSB + writeEnum ordinal VarInt) =====
+add_executable(pkt_resource_pack_sb_parity
+    network/protocol/common/PktResourcePackSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_resource_pack_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_resource_pack_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_resource_pack_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_resource_pack_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
