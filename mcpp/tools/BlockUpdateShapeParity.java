@@ -127,6 +127,7 @@ public final class BlockUpdateShapeParity {
             switch (method.getName()) {
                 case "getBlockState": return map.getOrDefault(((BlockPos) args[0]).immutable(), air);
                 case "getFluidState": return map.getOrDefault(((BlockPos) args[0]).immutable(), air).getFluidState();
+                case "isEmptyBlock": return map.getOrDefault(((BlockPos) args[0]).immutable(), air).isAir();
                 case "getBlockEntity": return null;
                 case "getRandom": return rng;
                 case "isClientSide": return false;
@@ -136,6 +137,10 @@ public final class BlockUpdateShapeParity {
                 case "toString": return "ProxyLevel";
                 default: break;
             }
+            // NOTE: default interface methods that route purely through getBlockState (isEmptyBlock)
+            // are special-cased above. A blanket InvocationHandler.invokeDefault is NOT used because
+            // many default methods touch unimplemented level state (getBlockEntity/getHeight/world
+            // border) and would throw, collapsing scenario coverage. Add explicit cases as needed.
             Class<?> rt = method.getReturnType();
             if (rt == boolean.class) return false;
             if (rt == int.class) return 0;

@@ -644,7 +644,9 @@ const std::set<std::string> PORTED = {
     "CampfireBlock", "BaseCoralWallFanBlock", "CoralWallFanBlock", "BasePressurePlateBlock",
     // straggler wave 2 (no-ops)
     "ScaffoldingBlock", "LightBlock", "DriedGhastBlock", "LiquidBlock",
-    "CandleCakeBlock", "BaseCoralPlantTypeBlock", "FlowerPotBlock", "LanternBlock"
+    "CandleCakeBlock", "BaseCoralPlantTypeBlock", "FlowerPotBlock", "LanternBlock",
+    // straggler wave 3
+    "CarpetBlock", "TripWireHookBlock", "WaterloggedTransparentBlock", "ComparatorBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -865,8 +867,9 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         return wireConnectionState(level, base);
     }
     if (fam == "RepeaterBlock") {
-        // RepeaterBlock.updateShape :62-80 — DOWN survival (isFaceSturdy(UP)); perpendicular -> LOCKED=false.
-        if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
+        // RepeaterBlock.updateShape :62-80 — DOWN survival (DiodeBlock.canSurviveOn = isFaceSturdy(UP,
+        // RIGID)); perpendicular -> LOCKED=false.
+        if (dir == DOWN && !isRigidSupport(level.rel(DOWN), UP)) return 0;
         int facing = dirFromName(getProp(g_props[stateId], "facing"));
         if (axisOf(dir) != axisOf(facing)) {
             int ns = setProp(stateId, "locked", "false"); return ns < 0 ? stateId : ns;
@@ -968,6 +971,23 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         int cd = getProp(g_props[stateId], "hanging") == "true" ? DOWN : UP;
         int d = opposite(cd);
         if (dir == d && !isCenterSupport(level.rel(d), cd)) return 0;
+        return stateId;
+    }
+    // CarpetBlock.updateShape — !canSurvive(below not air) -> AIR (any direction).
+    if (fam == "CarpetBlock")
+        return g_name[level.rel(DOWN)] == "air" ? 0 : stateId;
+    // TripWireHookBlock.updateShape — opposite(dir)==FACING && !canSurvive(behind isFaceSturdy(FACING)) -> AIR.
+    if (fam == "TripWireHookBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (opposite(dir) == facing && !isFaceSturdy(level.rel(opposite(facing)), facing)) return 0;
+        return stateId;
+    }
+    // WaterloggedTransparentBlock.updateShape — waterlogged tick only -> no-op.
+    if (fam == "WaterloggedTransparentBlock") return stateId;
+    // ComparatorBlock.updateShape — DOWN && !canSurviveOn(below) -> AIR; canSurviveOn (DiodeBlock) =
+    // below.isFaceSturdy(UP, SupportType.RIGID).
+    if (fam == "ComparatorBlock") {
+        if (dir == DOWN && !isRigidSupport(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
 
