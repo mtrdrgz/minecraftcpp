@@ -47,10 +47,19 @@ constexpr int32_t mthClamp(int32_t value, int32_t mn, int32_t mx) noexcept {
 
 // Java: java.lang.Math.min(double, double) — exact JDK semantics: NaN-poisoning
 // on the first operand and min(+0.0, -0.0) == -0.0. (std::fmin differs on NaN.)
-inline double javaMathMin(double a, double b) noexcept {
+// constexpr via __builtin_signbit (Clang-constexpr) so corner-sorting ctors stay constexpr.
+inline constexpr double javaMathMin(double a, double b) noexcept {
     if (a != a) return a; // a is NaN
-    if (a == 0.0 && b == 0.0 && std::signbit(b)) return b;
+    if (a == 0.0 && b == 0.0 && __builtin_signbit(b)) return b; // min(+0.0,-0.0) == -0.0
     return (a <= b) ? a : b;
+}
+
+// Java: java.lang.Math.max(double, double) — exact JDK semantics: NaN-poisoning
+// on the first operand and max(-0.0, +0.0) == +0.0. (std::fmax differs on NaN.)
+inline constexpr double javaMathMax(double a, double b) noexcept {
+    if (a != a) return a; // a is NaN
+    if (a == 0.0 && b == 0.0 && __builtin_signbit(a)) return b; // max(-0.0,+0.0) == +0.0
+    return (a >= b) ? a : b;
 }
 
 // Java: Mth.clamp(double, double, double) — Mth.java:105-107:

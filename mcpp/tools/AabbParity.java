@@ -33,6 +33,15 @@ public class AabbParity {
         c("exact_face_start", 0,0,0, 1,1,1, 0,0.5,0.5, 2,0.5,0.5);
         c("big_coords",    1e6,1e6,1e6, 1e6+1,1e6+1,1e6+1, 1e6-1,1e6+0.5,1e6+0.5, 1e6+2,1e6+0.5,1e6+0.5);
 
+        // Ctor min/max EDGE semantics (Java AABB(...) uses Math.min/Math.max, NOT a `<`
+        // ternary): signed zero (min(+0,-0)==-0, max(-0,+0)==+0) + NaN poisoning + infinities.
+        // The C++ ternary diverged here; these cases gate the java.lang.Math-exact fix.
+        c("signed_zero_x",  0.0,0,0,   -0.0,1,1,    0.5,0.5,0.5, 0.5,2,0.5);
+        c("signed_zero_all",0.0,0.0,0.0, -0.0,-0.0,-0.0, -1,-1,-1, 2,2,2);
+        c("nan_minx",       Double.NaN,0,0, 1,1,1,   -1,0.5,0.5, 2,0.5,0.5);
+        c("nan_maxy",       0,1,0, 1,Double.NaN,1,   -1,0.5,0.5, 2,0.5,0.5);
+        c("inf_box",        Double.NEGATIVE_INFINITY,0,0, Double.POSITIVE_INFINITY,1,1, -1,0.5,0.5, 2,0.5,0.5);
+
         // seeded pseudo-random battery (inputs are EMITTED, so the C++ side
         // needs no RNG — it replays the exact bit-identical inputs)
         Random r = new Random(123456789L);
@@ -95,6 +104,7 @@ public class AabbParity {
         OUT.append("MINMAX\t").append(name).append('\t'); hex(mm.minX); hex(mm.minY); hex(mm.minZ); hex(mm.maxX); hex(mm.maxY); hex(mm.maxZ); OUT.append('\n');
         OUT.append("INTERSECTS\t").append(name).append('\t').append(box.intersects(box2) ? 1 : 0).append('\n');
         OUT.append("CONTAINS\t").append(name).append('\t').append(box.contains(from) ? 1 : 0).append('\n');
+        OUT.append("HASNAN\t").append(name).append('\t').append(box.hasNaN() ? 1 : 0).append('\n');
     }
 
     static void hex(double d) {

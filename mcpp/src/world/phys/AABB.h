@@ -6,6 +6,7 @@
 #include "core/Math.h"               // mc::BlockPos
 #include "world/phys/BlockHitResult.h"
 #include "world/phys/Direction.h"
+#include "world/phys/shapes/JavaMath.h"  // mc::javaMathMin / javaMathMax (exact java.lang.Math)
 
 // ---------------------------------------------------------------------------
 // Port of net/minecraft/world/phys/AABB.java (Minecraft Java Edition 26.1.2)
@@ -73,23 +74,18 @@ public:
     glm::dvec3 maxCorner;
 
     // 6-double ctor; sorts the corners so min<=max on every axis.
+    // Java AABB(double...) uses Math.min/Math.max (NOT a `<` ternary) — they differ
+    // on NaN (poisoned) and signed zero (min(+0,-0)==-0), so route through the exact
+    // java.lang.Math ports to stay bit-identical on those edges.
     constexpr AABB(double x0, double y0, double z0,
                    double x1, double y1, double z1) noexcept
-        : minCorner(x0 < x1 ? x0 : x1,
-                    y0 < y1 ? y0 : y1,
-                    z0 < z1 ? z0 : z1),
-          maxCorner(x0 > x1 ? x0 : x1,
-                    y0 > y1 ? y0 : y1,
-                    z0 > z1 ? z0 : z1) {}
+        : minCorner(javaMathMin(x0, x1), javaMathMin(y0, y1), javaMathMin(z0, z1)),
+          maxCorner(javaMathMax(x0, x1), javaMathMax(y0, y1), javaMathMax(z0, z1)) {}
 
-    // begin/end Vec3 ctor; also sorts.
+    // begin/end Vec3 ctor; also sorts (Java AABB(Vec3,Vec3) -> AABB(double...)).
     constexpr AABB(const glm::dvec3& a, const glm::dvec3& b) noexcept
-        : minCorner(a.x < b.x ? a.x : b.x,
-                    a.y < b.y ? a.y : b.y,
-                    a.z < b.z ? a.z : b.z),
-          maxCorner(a.x > b.x ? a.x : b.x,
-                    a.y > b.y ? a.y : b.y,
-                    a.z > b.z ? a.z : b.z) {}
+        : minCorner(javaMathMin(a.x, b.x), javaMathMin(a.y, b.y), javaMathMin(a.z, b.z)),
+          maxCorner(javaMathMax(a.x, b.x), javaMathMax(a.y, b.y), javaMathMax(a.z, b.z)) {}
 
     // Java: ofSize(Vec3 center, double sx, double sy, double sz)
     static constexpr AABB ofSize(const glm::dvec3& center,
@@ -126,24 +122,24 @@ public:
     // Java: contract(double xa, double ya, double za) — opposite of expandTowards.
     AABB contract(double dx, double dy, double dz) const noexcept;
 
-    // Java: intersect(AABB)
+    // Java: intersect(AABB) — minX=Math.max(this,other), maxX=Math.min(this,other).
     constexpr AABB intersect(const AABB& other) const noexcept {
-        return AABB(minCorner.x > other.minCorner.x ? minCorner.x : other.minCorner.x,
-                    minCorner.y > other.minCorner.y ? minCorner.y : other.minCorner.y,
-                    minCorner.z > other.minCorner.z ? minCorner.z : other.minCorner.z,
-                    maxCorner.x < other.maxCorner.x ? maxCorner.x : other.maxCorner.x,
-                    maxCorner.y < other.maxCorner.y ? maxCorner.y : other.maxCorner.y,
-                    maxCorner.z < other.maxCorner.z ? maxCorner.z : other.maxCorner.z);
+        return AABB(javaMathMax(minCorner.x, other.minCorner.x),
+                    javaMathMax(minCorner.y, other.minCorner.y),
+                    javaMathMax(minCorner.z, other.minCorner.z),
+                    javaMathMin(maxCorner.x, other.maxCorner.x),
+                    javaMathMin(maxCorner.y, other.maxCorner.y),
+                    javaMathMin(maxCorner.z, other.maxCorner.z));
     }
 
-    // Java: minmax(AABB) — union (encapsulating box).
+    // Java: minmax(AABB) — union: minX=Math.min(this,other), maxX=Math.max(this,other).
     constexpr AABB minmax(const AABB& other) const noexcept {
-        return AABB(minCorner.x < other.minCorner.x ? minCorner.x : other.minCorner.x,
-                    minCorner.y < other.minCorner.y ? minCorner.y : other.minCorner.y,
-                    minCorner.z < other.minCorner.z ? minCorner.z : other.minCorner.z,
-                    maxCorner.x > other.maxCorner.x ? maxCorner.x : other.maxCorner.x,
-                    maxCorner.y > other.maxCorner.y ? maxCorner.y : other.maxCorner.y,
-                    maxCorner.z > other.maxCorner.z ? maxCorner.z : other.maxCorner.z);
+        return AABB(javaMathMin(minCorner.x, other.minCorner.x),
+                    javaMathMin(minCorner.y, other.minCorner.y),
+                    javaMathMin(minCorner.z, other.minCorner.z),
+                    javaMathMax(maxCorner.x, other.maxCorner.x),
+                    javaMathMax(maxCorner.y, other.maxCorner.y),
+                    javaMathMax(maxCorner.z, other.maxCorner.z));
     }
 
     // Java: move(double, double, double)

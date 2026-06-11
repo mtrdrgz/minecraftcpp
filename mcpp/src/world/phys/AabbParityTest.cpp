@@ -22,12 +22,17 @@ double fromBits(const std::string& hexTok) {
     std::memcpy(&d, &bits, 8);
     return d;
 }
-std::string toBits(double d) {
-    uint64_t bits;
-    std::memcpy(&bits, &d, 8);
-    char buf[20];
-    snprintf(buf, sizeof buf, "%016llx", (unsigned long long)bits);
-    return buf;
+bool isNanBits(uint64_t b) {
+    return (b & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL
+        && (b & 0x000fffffffffffffULL) != 0ULL;
+}
+// Bit-exact for all finite/inf values; any-qNaN == any-qNaN (the NaN *payload* is not
+// part of AABB's contract and can differ between the JVM and the C++ FPU).
+bool bitsEq(double got, const std::string& expHex) {
+    uint64_t gb;
+    std::memcpy(&gb, &got, 8);
+    uint64_t eb = std::stoull(expHex, nullptr, 16);
+    return gb == eb || (isNanBits(gb) && isNanBits(eb));
 }
 std::vector<std::string> tokens(const std::string& s) {
     std::istringstream ss(s);
@@ -81,7 +86,7 @@ int main(int argc, char** argv) {
             std::cerr << "CLIP-HIT-MISMATCH " << name << " got=" << hit.has_value() << " want=" << expHit << "\n";
             ++failures;
         } else if (hit) {
-            if (toBits(hit->x) != ce[1] || toBits(hit->y) != ce[2] || toBits(hit->z) != ce[3]) {
+            if (!bitsEq(hit->x, ce[1]) || !bitsEq(hit->y, ce[2]) || !bitsEq(hit->z, ce[3])) {
                 std::cerr << "CLIP-POINT-MISMATCH " << name << "\n";
                 ++failures;
             }
@@ -94,12 +99,12 @@ int main(int argc, char** argv) {
         double expV[6] = { exp.minCorner.x, exp.minCorner.y, exp.minCorner.z, exp.maxCorner.x, exp.maxCorner.y, exp.maxCorner.z };
         double conV[6] = { con.minCorner.x, con.minCorner.y, con.minCorner.z, con.maxCorner.x, con.maxCorner.y, con.maxCorner.z };
         for (int i = 0; i < 6; ++i) {
-            if (toBits(expV[i]) != c.expect["EXP"][i]) { std::cerr << "EXP-MISMATCH " << name << " [" << i << "]\n"; ++failures; break; }
+            if (!bitsEq(expV[i], c.expect["EXP"][i])) { std::cerr << "EXP-MISMATCH " << name << " [" << i << "]\n"; ++failures; break; }
         }
         for (int i = 0; i < 6; ++i) {
-            if (toBits(conV[i]) != c.expect["CON"][i]) { std::cerr << "CON-MISMATCH " << name << " [" << i << "]\n"; ++failures; break; }
+            if (!bitsEq(conV[i], c.expect["CON"][i])) { std::cerr << "CON-MISMATCH " << name << " [" << i << "]\n"; ++failures; break; }
         }
-        if (toBits(box.distanceToSqr(from)) != c.expect["DST"][0]) {
+        if (!bitsEq(box.distanceToSqr(from), c.expect["DST"][0])) {
             std::cerr << "DST-MISMATCH " << name << "\n";
             ++failures;
         }
@@ -109,7 +114,7 @@ int main(int argc, char** argv) {
             auto it = c.expect.find(kind);
             if (it == c.expect.end()) return;
             for (size_t i = 0; i < got.size(); ++i)
-                if (toBits(got[i]) != it->second[i]) { std::cerr << kind << "-MISMATCH " << name << " [" << i << "]\n"; ++failures; return; }
+                if (!bitsEq(got[i], it->second[i])) { std::cerr << kind << "-MISMATCH " << name << " [" << i << "]\n"; ++failures; return; }
         };
         glm::dvec3 ctr = box.getCenter();      chk("CENTER", {ctr.x, ctr.y, ctr.z});
         glm::dvec3 bctr = box.getBottomCenter(); chk("BOTCENTER", {bctr.x, bctr.y, bctr.z});
@@ -122,6 +127,7 @@ int main(int argc, char** argv) {
         AABB mm = box.minmax(box2);     chk("MINMAX", {mm.minCorner.x, mm.minCorner.y, mm.minCorner.z, mm.maxCorner.x, mm.maxCorner.y, mm.maxCorner.z});
         if (c.expect.count("INTERSECTS") && (box.intersects(box2) ? "1" : "0") != c.expect["INTERSECTS"][0]) { std::cerr << "INTERSECTS-MISMATCH " << name << "\n"; ++failures; }
         if (c.expect.count("CONTAINS") && (box.contains(from) ? "1" : "0") != c.expect["CONTAINS"][0]) { std::cerr << "CONTAINS-MISMATCH " << name << "\n"; ++failures; }
+        if (c.expect.count("HASNAN") && (box.hasNaN() ? "1" : "0") != c.expect["HASNAN"][0]) { std::cerr << "HASNAN-MISMATCH " << name << "\n"; ++failures; }
     }
 
     std::cout << "AabbParity cases=" << n << " failures=" << failures << "\n";
