@@ -6612,3 +6612,32 @@ if(WIN32)
     target_link_libraries(pkt_select_known_packs_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_select_known_packs_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: NetherBridgePiece.generateChildForward/Left/Right child-anchor mapping (parent box+orientation+offset -> child foot+facing; distinct from gated createPiece box constants) =====
+add_executable(nether_fortress_child_offset_parity world/level/levelgen/structure/structures/NetherFortressChildOffsetParityTest.cpp)
+target_include_directories(nether_fortress_child_offset_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(nether_fortress_child_offset_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: DragonBreathParticle.tick (onGround latch + +0.002 creep + move + y==yo speedup + double*float friction) + getQuadSize =====
+add_executable(dragon_breath_particle_parity client/particle/DragonBreathParticleParityTest.cpp)
+target_include_directories(dragon_breath_particle_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(dragon_breath_particle_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== inventory: AnvilMenu.calculateIncreasedRepairCost = (int)Math.min(baseCost*2L+1L, INT_MAX) (64-bit then narrow) =====
+add_executable(anvil_cost_parity world/inventory/AnvilMenuCostParityTest.cpp)
+target_include_directories(anvil_cost_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(anvil_cost_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundCustomClickActionPacket (Identifier writeUtf + Optional<Tag> via optionalTagCodec/lengthPrefixed + writeNbt) =====
+add_executable(pkt_custom_click_action_sb_parity
+    network/protocol/common/PktCustomClickActionSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_custom_click_action_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_custom_click_action_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_custom_click_action_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_custom_click_action_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
