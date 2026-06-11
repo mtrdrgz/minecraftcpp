@@ -6641,3 +6641,17 @@ if(WIN32)
     target_link_libraries(pkt_custom_click_action_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_custom_click_action_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== JIGSAW ASSEMBLY #18 foundation: StructureTemplate NBT load + JigsawBlockInfo discovery + getShuffledJigsawBlocks (FrontAndTop ORIENTATION rotate, joint default, Util.shuffle + stable selectionPriority sort) =====
+add_executable(structure_template_loader_parity
+    world/level/levelgen/structure/templatesystem/StructureTemplateLoaderParityTest.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(structure_template_loader_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_template_loader_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(structure_template_loader_parity PRIVATE bcrypt)
+endif()
+set_target_properties(structure_template_loader_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
