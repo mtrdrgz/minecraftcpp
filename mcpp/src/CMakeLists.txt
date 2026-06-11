@@ -6097,3 +6097,34 @@ if(WIN32)
     target_link_libraries(pkt_set_structure_block_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_set_structure_block_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: AxisAlignedLinearPosTest.test (RNG-driven predicate: nextFloat <= clampedLerp(inverseLerp(dist),minChance,maxChance)) =====
+add_executable(axis_aligned_linear_pos_predicate_parity
+    world/level/levelgen/structure/templatesystem/AxisAlignedLinearPosTestPredicateParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(axis_aligned_linear_pos_predicate_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(axis_aligned_linear_pos_predicate_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: Particle.LifetimeAlpha currentAlphaForAge (Mth.equal/inverseLerp/clampedLerp float) + isOpaque =====
+add_executable(lifetime_alpha_parity client/particle/LifetimeAlphaParityTest.cpp)
+target_include_directories(lifetime_alpha_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(lifetime_alpha_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: SelectableSlotContainer.getHitSlot (chiseled-bookshelf slot pick: face-relative coords + getSection float ladder) =====
+add_executable(selectable_slot_container_parity world/level/block/SelectableSlotContainerParityTest.cpp)
+target_include_directories(selectable_slot_container_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(selectable_slot_container_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundSelectKnownPacks (List<KnownPack>(64) = VarInt count + 3x writeUtf namespace/id/version) =====
+add_executable(pkt_select_known_packs_sb_parity
+    network/protocol/configuration/PktSelectKnownPacksSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_select_known_packs_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_select_known_packs_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_select_known_packs_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_select_known_packs_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
