@@ -13,6 +13,7 @@
 #include "NetworkRegistries.h"
 #include "../nbt/Tag.h"
 
+#include <bit>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -101,6 +102,19 @@ int main(int argc, char** argv) {
             buf.writeVarInt(cnt);                                            // ByteBufCodecs.list size
             for (int li = 0; li < cnt; ++li)
                 buf.writeNbt(mc::nbt::NbtTag::string_(fromHexBytes(parts[1 + li])));  // each Component plain-text NBT
+        } else if (kind == "customdata") {
+            // CustomData.STREAM_CODEC = ByteBufCodecs.COMPOUND_TAG -> writeNbt(compound) (unnamed root).
+            // valueData = "<type s/i/b/l/f>:<nameHex>:<valuePart>" — SINGLE entry (no HashMap-order ambiguity).
+            std::vector<std::string> parts;
+            { std::stringstream ps(valueData); std::string it; while (std::getline(ps, it, ':')) parts.push_back(it); }
+            std::string ty = parts[0], name = fromHexBytes(parts[1]), vp = parts.size() > 2 ? parts[2] : "";
+            mc::nbt::NbtCompound c;
+            if (ty == "s") c.put(name, mc::nbt::NbtTag::string_(fromHexBytes(vp)));
+            else if (ty == "i") c.put(name, mc::nbt::NbtTag::int_(std::stoi(vp)));
+            else if (ty == "b") c.put(name, mc::nbt::NbtTag::byte_(static_cast<int8_t>(std::stoi(vp))));
+            else if (ty == "l") c.put(name, mc::nbt::NbtTag::long_(std::stoll(vp)));
+            else if (ty == "f") c.put(name, mc::nbt::NbtTag::float_(std::bit_cast<float>(static_cast<uint32_t>(std::stoul(vp, nullptr, 16)))));
+            buf.writeNbt(mc::nbt::NbtTag::compound(c));
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";

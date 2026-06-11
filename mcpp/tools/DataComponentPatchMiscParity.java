@@ -44,6 +44,14 @@ public class DataComponentPatchMiscParity {
                 + "\t" + readable + "\t" + hex(bytes));
     }
 
+    static void emitCustomData(RegistryAccess access, Item base, net.minecraft.nbt.CompoundTag tag,
+                               String type, String name, String valuePart) {
+        ItemStack s = new ItemStack(base, 1);
+        s.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        String nameHex = hex(name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        emit(access, s, "minecraft:custom_data", "customdata", type + ":" + nameHex + ":" + valuePart);
+    }
+
     @SuppressWarnings({"unchecked", "deprecation"})
     public static void main(String[] args) throws Exception {
         net.minecraft.SharedConstants.tryDetectVersion();
@@ -114,6 +122,28 @@ public class DataComponentPatchMiscParity {
             StringBuilder vd = new StringBuilder(Integer.toString(lore.length));
             for (String tt : lore) vd.append(":").append(hex(tt.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             emit(access, s, "minecraft:lore", "lore", vd.toString());
+        }
+
+        // NBT-compound-valued: custom_data (CustomData.STREAM_CODEC = ByteBufCodecs.COMPOUND_TAG ->
+        // writeNbt(compound)). SINGLE-entry compounds only (multi-entry wire order depends on Java
+        // CompoundTag's HashMap iteration order). valueData = "<type>:<nameHex>:<valuePart>".
+        {
+            net.minecraft.nbt.CompoundTag cs = new net.minecraft.nbt.CompoundTag();
+            cs.putString("id", "minecraft:foo");
+            emitCustomData(access, base, cs, "s", "id",
+                    hex("minecraft:foo".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            net.minecraft.nbt.CompoundTag ci = new net.minecraft.nbt.CompoundTag();
+            ci.putInt("count", 42);
+            emitCustomData(access, base, ci, "i", "count", "42");
+            net.minecraft.nbt.CompoundTag cb = new net.minecraft.nbt.CompoundTag();
+            cb.putByte("flag", (byte) 1);
+            emitCustomData(access, base, cb, "b", "flag", "1");
+            net.minecraft.nbt.CompoundTag cl = new net.minecraft.nbt.CompoundTag();
+            cl.putLong("seed", 123456789012345L);
+            emitCustomData(access, base, cl, "l", "seed", "123456789012345");
+            net.minecraft.nbt.CompoundTag cf = new net.minecraft.nbt.CompoundTag();
+            cf.putFloat("scale", 1.5f);
+            emitCustomData(access, base, cf, "f", "scale", String.format("%08x", Float.floatToRawIntBits(1.5f)));
         }
 
         O.flush();
