@@ -1967,6 +1967,15 @@ set_target_properties(block_rotate_mirror_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# ===== BLOCK COLLISION SHAPES (#19 foundation): BlockState.getCollisionShape vs the real game =====
+add_executable(block_collision_shape_parity
+    world/level/block/BlockCollisionShapeParityTest.cpp)
+target_include_directories(block_collision_shape_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_collision_shape_parity PRIVATE nlohmann_json)
+set_target_properties(block_collision_shape_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== STRUCTURE placeInWorld (#19): StructureTemplate.placeInWorld vs the real game (capturing level) =====
 add_executable(structure_placeinworld_parity
     world/level/levelgen/structure/templatesystem/StructurePlaceInWorldParityTest.cpp
