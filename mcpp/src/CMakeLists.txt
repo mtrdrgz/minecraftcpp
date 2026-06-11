@@ -5727,3 +5727,32 @@ if(WIN32)
     target_link_libraries(pkt_spectate_entity_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_spectate_entity_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: StructurePiece.createBoundingBox/findCollisionPiece + BoundingBox.encapsulatingBoxes fold =====
+add_executable(structure_piece_collection_parity world/level/levelgen/structure/StructurePieceCollectionParityTest.cpp)
+target_include_directories(structure_piece_collection_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(structure_piece_collection_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render/perf: RunningTrimmedMean (frame-timing ring buffer, trimmed mean, long wrap) =====
+add_executable(running_trimmed_mean_parity render/RunningTrimmedMeanParityTest.cpp)
+target_include_directories(running_trimmed_mean_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(running_trimmed_mean_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity/projectile: Projectile.lerpRotation (float +/-180 wrap loop + 0.2F lerp) =====
+add_executable(projectile_lerp_rotation_parity world/entity/projectile/ProjectileLerpRotationParityTest.cpp)
+target_include_directories(projectile_lerp_rotation_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(projectile_lerp_rotation_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundGameTestHighlightPosPacket (two BlockPos = two BE longs) =====
+add_executable(pkt_game_test_highlight_pos_parity
+    network/protocol/game/PktGameTestHighlightPosParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_game_test_highlight_pos_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_game_test_highlight_pos_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_game_test_highlight_pos_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_game_test_highlight_pos_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
