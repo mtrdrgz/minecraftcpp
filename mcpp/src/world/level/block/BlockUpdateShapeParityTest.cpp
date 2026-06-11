@@ -57,7 +57,8 @@ std::vector<int> g_hasSturdy;
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
         shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf,
-        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow, supportsBamboo;
+        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow, supportsBamboo,
+        soulFireBase;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -666,7 +667,8 @@ const std::set<std::string> PORTED = {
     "CoralBlock", "ChorusFlowerBlock", "BigDripleafStemBlock", "LadderBlock", "BaseTorchBlock", "SnowyBlock",
     // straggler wave 10
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
-    "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock"
+    "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock",
+    "SporeBlossomBlock", "SoulFireBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1143,6 +1145,16 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
+    // SporeBlossomBlock.updateShape — UP && !canSurvive -> AIR. canSurvive = canSupportCenter(above, DOWN)
+    // && !isWaterAt(pos); the spore blossom centre is never water -> !isWaterAt == true.
+    if (fam == "SporeBlossomBlock") {
+        if (dir == UP && !isCenterSupport(level.rel(UP), DOWN)) return 0;
+        return stateId;
+    }
+    // SoulFireBlock.updateShape — canSurvive ? default : AIR (default == the single soul_fire state ==
+    // stateId). canSurvive = canSurviveOnBlock(below) = below.is(#soul_fire_base_blocks).
+    if (fam == "SoulFireBlock")
+        return inTag(g_tags.soulFireBase, level.rel(DOWN)) ? stateId : 0;
     // HangingRootsBlock.updateShape — UP && !canSurvive -> AIR. canSurvive = above.isFaceSturdy(DOWN).
     if (fam == "HangingRootsBlock") {
         if (dir == UP && !isFaceSturdy(level.rel(UP), DOWN)) return 0;
@@ -1355,6 +1367,7 @@ int main(int argc, char** argv) {
         g_tags.supportsSmallDripleaf = resolve("supports_small_dripleaf");
         g_tags.snow = resolve("snow");
         g_tags.supportsBamboo = resolve("supports_bamboo");
+        g_tags.soulFireBase = resolve("soul_fire_base_blocks");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
