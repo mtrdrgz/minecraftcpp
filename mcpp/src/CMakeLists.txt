@@ -6157,3 +6157,34 @@ set_target_properties(pkt_resource_pack_pop_cb_parity PROPERTIES RUNTIME_OUTPUT_
 add_executable(structure_pieces_builder_math_parity world/level/levelgen/structure/pieces/StructurePiecesBuilderMathParityTest.cpp)
 target_include_directories(structure_pieces_builder_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(structure_pieces_builder_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: ChunkGeneratorStructureState.generateRingPositions (stronghold concentric rings, RNG-driven) =====
+add_executable(concentric_rings_parity
+    world/level/levelgen/structure/placement/ConcentricRingsPositionsParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(concentric_rings_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(concentric_rings_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: GameRenderer bobHurt/bobView camera view-bob PoseStack transforms (Mth-table sin/cos + Axis quats) =====
+add_executable(gamerendererbob_parity client/renderer/GameRendererBobParityTest.cpp)
+target_include_directories(gamerendererbob_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(gamerendererbob_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: equine Variant/Markings byId (ByIdMap WRAP = Mth.positiveModulo == Math.floorMod, not C++ %) =====
+add_executable(equine_variants_parity world/entity/animal/equine/EquineVariantsParityTest.cpp)
+target_include_directories(equine_variants_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(equine_variants_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundCookieResponsePacket (writeIdentifier + writeNullable byteArray(5120)) =====
+add_executable(pkt_cookie_response_sb_parity
+    network/protocol/cookie/PktCookieResponseSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_cookie_response_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_cookie_response_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_cookie_response_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_cookie_response_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
