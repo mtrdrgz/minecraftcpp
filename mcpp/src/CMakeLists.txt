@@ -1978,6 +1978,15 @@ set_target_properties(block_collision_shape_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== updateFromNeighbourShapes (#19): per-block updateShape connection recompute =====
+add_executable(block_nbrshape_parity
+    world/level/block/BlockUpdateShapeParityTest.cpp)
+target_include_directories(block_nbrshape_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_nbrshape_parity PRIVATE glm nlohmann_json)
+set_target_properties(block_nbrshape_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== STRUCTURE placeInWorld (#19): StructureTemplate.placeInWorld vs the real game (capturing level) =====
 add_executable(structure_placeinworld_parity
     world/level/levelgen/structure/templatesystem/StructurePlaceInWorldParityTest.cpp
