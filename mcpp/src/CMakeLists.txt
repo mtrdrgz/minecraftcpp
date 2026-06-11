@@ -6276,3 +6276,34 @@ if(WIN32)
     target_link_libraries(pkt_teleport_entity_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_teleport_entity_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: ScatteredFeaturePiece ctor geometry (SwampHut/DesertPyramid: RNG getRandomHorizontalDirection + makeBoundingBox + setOrientation) =====
+add_executable(scattered_feature_box_parity
+    world/level/levelgen/structure/ScatteredFeatureBoxParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(scattered_feature_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(scattered_feature_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: org.joml.Matrix4f setOrtho/setOrthoLH/setOrthoSymmetric/setOrthoSymmetricLH (transcendental-free projection setters) =====
+add_executable(matrix4f_ortho_parity render/model/Matrix4fOrthoParityTest.cpp)
+target_include_directories(matrix4f_ortho_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(matrix4f_ortho_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: VillagerData getMinXpPerLevel/getMaxXpPerLevel/canLevelUp (NEXT_LEVEL_XP_THRESHOLDS short-circuit + max(1,level) clamp) =====
+add_executable(villager_data_parity world/entity/npc/villager/VillagerDataParityTest.cpp)
+target_include_directories(villager_data_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(villager_data_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundMoveEntityPacket.PosRot (VarInt id + 3x writeShort delta + 2 angle byte + bool) =====
+add_executable(pkt_move_entity_posrot_cb_parity
+    network/protocol/game/PktMoveEntityPosRotParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_move_entity_posrot_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_move_entity_posrot_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_move_entity_posrot_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_move_entity_posrot_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
