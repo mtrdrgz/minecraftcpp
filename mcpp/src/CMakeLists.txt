@@ -5838,3 +5838,32 @@ if(WIN32)
     target_link_libraries(pkt_set_game_rule_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_set_game_rule_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: WoodlandMansionPieces.MansionGrid isHouse + cleanEdges (floor-plan thickening) =====
+add_executable(woodland_mansion_edge_clean_parity world/level/levelgen/structure/structures/WoodlandMansionEdgeCleanParityTest.cpp)
+target_include_directories(woodland_mansion_edge_clean_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(woodland_mansion_edge_clean_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: com.mojang.math.SymmetricGroup3 transformation/inverse/permuteVector (follow-up to octahedral) =====
+add_executable(symmetric_group3_parity render/model/SymmetricGroup3ParityTest.cpp)
+target_include_directories(symmetric_group3_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(symmetric_group3_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== gameplay/enchant: EnchantmentHelper.getEnchantmentCost (enchanting-table per-slot level math) =====
+add_executable(enchantment_cost_parity world/item/enchantment/EnchantmentCostParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(enchantment_cost_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(enchantment_cost_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundInteractPacket (VarInt entityId + hand id + LpVec3 + bool) =====
+add_executable(pkt_interact_sb_parity
+    network/protocol/game/PktInteractSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_interact_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_interact_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_interact_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_interact_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
