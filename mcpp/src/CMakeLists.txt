@@ -5419,3 +5419,8 @@ set_target_properties(grid_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${
 add_executable(screen_rectangle_parity client/gui/ScreenRectangleParityTest.cpp)
 target_include_directories(screen_rectangle_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(screen_rectangle_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: AbstractWidget geometry/hit-test/state core (getRectangle/isMouseOver/narration) =====
+add_executable(widget_geometry_parity client/gui/WidgetGeometryParityTest.cpp)
+target_include_directories(widget_geometry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(widget_geometry_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
