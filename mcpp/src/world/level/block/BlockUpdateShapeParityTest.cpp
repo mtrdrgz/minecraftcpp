@@ -668,7 +668,7 @@ const std::set<std::string> PORTED = {
     // straggler wave 10
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
     "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock",
-    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock", "ChorusPlantBlock"
+    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock", "ChorusPlantBlock", "BellBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1170,6 +1170,32 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         }
         if (dir == growthDir)
             return isHeadOrBody(neighbourId) ? toBody() : stateId;
+        return stateId;
+    }
+    // BellBlock.updateShape :? — AIR if support lost (non-double-wall); DOUBLE_WALL<->SINGLE_WALL on the
+    // FACING axis. getConnectedDirection: floor->UP/ceiling->DOWN/wall->FACING.opposite(); connectedDirection
+    // = .opposite() = floor->DOWN/ceiling->UP/wall->FACING. canSurvive = (connectedDirection==UP) ?
+    // canSupportCenter(above,DOWN) : canAttach(connectedDirection)=isFaceSturdy(rel(cd), opposite(cd)).
+    if (fam == "BellBlock") {
+        std::string att = getProp(g_props[stateId], "attachment");
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        int cd = (att == "floor") ? DOWN : (att == "ceiling") ? UP : facing;
+        auto bellCanSurvive = [&]() {
+            return cd == UP ? isCenterSupport(level.rel(UP), DOWN)
+                            : isFaceSturdy(level.rel(cd), opposite(cd));
+        };
+        if (cd == dir && att != "double_wall" && !bellCanSurvive()) return 0;
+        if (axisOf(dir) == axisOf(facing)) {
+            if (att == "double_wall" && !isFaceSturdy(neighbourId, dir)) {
+                int s = setProp(stateId, "attachment", "single_wall");
+                if (s >= 0) { int s2 = setProp(s, "facing", faceProp(opposite(dir))); if (s2 >= 0) return s2; }
+                return stateId;
+            }
+            if (att == "single_wall" && opposite(cd) == dir && isFaceSturdy(neighbourId, facing)) {
+                int s = setProp(stateId, "attachment", "double_wall");
+                return s < 0 ? stateId : s;
+            }
+        }
         return stateId;
     }
     // ChorusPlantBlock.updateShape — !canSurvive ? super(unchanged) : setValue(PROPERTY_BY_DIRECTION[dir],
