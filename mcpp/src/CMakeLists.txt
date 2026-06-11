@@ -5667,3 +5667,32 @@ if(WIN32)
     target_link_libraries(pkt_player_command_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_player_command_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: OceanMonumentPieces.RoomDefinition graph (setConnection/updateOpenings/findSource) =====
+add_executable(ocean_monument_room_graph_parity world/level/levelgen/structure/structures/OceanMonumentRoomGraphParityTest.cpp)
+target_include_directories(ocean_monument_room_graph_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(ocean_monument_room_graph_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: ModelPart.Cube vertex builder + CubeDeformation (mirror/grow/tex-remap geometry) =====
+add_executable(cube_definition_parity client/model/geom/CubeDefinitionParityTest.cpp)
+target_include_directories(cube_definition_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cube_definition_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block/redstone: TargetBlock.getRedstoneStrength (Mth.frac long-floor + clamp/ceil) =====
+add_executable(target_block_redstone_parity world/level/block/TargetBlockRedstoneParityTest.cpp)
+target_include_directories(target_block_redstone_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(target_block_redstone_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundTickingStepPacket (single VarInt tickSteps) =====
+add_executable(pkt_ticking_step_parity
+    network/protocol/game/PktTickingStepParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_ticking_step_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_ticking_step_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_ticking_step_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_ticking_step_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
