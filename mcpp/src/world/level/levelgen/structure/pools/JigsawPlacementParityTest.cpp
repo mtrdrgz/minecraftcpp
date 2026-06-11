@@ -124,6 +124,26 @@ struct Placer {
     }
     std::vector<stl::JigsawBlockInfo> shuffledJigsaws(const pools::StructurePoolElement& e,
                                                       const BlockPos& pos, Rotation rot) {
+        // FeaturePoolElement.getShuffledJigsawBlocks (:57-70): exactly ONE synthetic
+        // "bottom" jigsaw at `pos`, orientation FrontAndTop(front=DOWN, top=SOUTH) —
+        // the rotation is IGNORED (no transform) and NO random draw is consumed —
+        // pointing into the empty pool (name="minecraft:bottom", pool/target=empty,
+        // joint=ROLLABLE). It has no template, so templateOf() must NOT be called.
+        if (e.type == pools::ElementType::FEATURE) {
+            stl::JigsawBlockInfo fj;
+            fj.info.pos = pos;
+            fj.info.blockName = "minecraft:jigsaw";
+            fj.info.orientation = stl::FrontAndTop{mc::Direction::DOWN, mc::Direction::SOUTH};
+            fj.info.hasOrientation = true;
+            fj.jointType = stl::JointType::ROLLABLE;
+            fj.name = "minecraft:bottom";
+            fj.pool = "minecraft:empty";
+            fj.target = "minecraft:empty";
+            fj.placementPriority = 0;
+            fj.selectionPriority = 0;
+            return {fj};
+        }
+        if (e.type == pools::ElementType::EMPTY) return {};   // EmptyPoolElement: no jigsaws
         return stl::getShuffledJigsawBlocks(templateOf(e), pos, rot, *random);
     }
 
@@ -352,12 +372,17 @@ int main(int argc, char** argv) {
             return it->second.size;
         };
 
-        // pools: every .json under template_pool/<struct> (recursive — nested dirs like
-        // trail_ruins/tower/ , trail_ruins/buildings/), keyed minecraft:<relpath-no-.json>;
-        // plus the universal empty pool.
+        // pools: every .json under template_pool/<dir> (recursive — nested dirs like
+        // trail_ruins/tower/, trail_ruins/buildings/, village/plains/...), keyed
+        // minecraft:<relpath-no-.json>; plus the universal empty pool. The pool subtree
+        // root is the FIRST path segment of the start-pool id (after "minecraft:") — e.g.
+        // village_plains -> "village", so the tag name and pool dir may differ.
         std::map<std::string, pools::StructureTemplatePool> poolsMap;
         fs::path base = fs::path(poolBase);
-        fs::path structDir = base / sname;
+        std::string sp = cfg.startPool;
+        if (sp.rfind("minecraft:", 0) == 0) sp = sp.substr(10);
+        std::string poolSubdir = sp.substr(0, sp.find('/'));
+        fs::path structDir = base / poolSubdir;
         for (auto& ent : fs::recursive_directory_iterator(structDir)) {
             if (!ent.is_regular_file() || ent.path().extension() != ".json") continue;
             std::string rel = fs::relative(ent.path(), base).generic_string();   // <struct>/.../x.json

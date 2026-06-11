@@ -240,7 +240,7 @@ struct StructurePoolElement {
                 s += ']';
                 return s;
             }
-            case ElementType::FEATURE: return "Feature";
+            case ElementType::FEATURE: return "feature[" + location + "]";
             case ElementType::EMPTY:
             default:                   return "Empty";
         }
@@ -350,6 +350,11 @@ inline StructurePoolElement parseElement(const nlohmann::json& j) {
         e.type = ElementType::FEATURE;
         // projectionCodec(): "projection" field.
         e.projection = projectionByName(j.at("projection").get<std::string>()).value_or(Projection::RIGID);
+        // "feature": PlacedFeature reference id — carried (normalized) so the element
+        // gets a stable identity in locationString() (mirrors the GT's elementLocation).
+        std::string fid = j.at("feature").get<std::string>();
+        if (fid.find(':') == std::string::npos) fid = "minecraft:" + fid;
+        e.location = fid;
         return e;
     }
 

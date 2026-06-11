@@ -82,12 +82,14 @@ import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.heightproviders.HeightProvider;
+import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
 import net.minecraft.world.level.levelgen.structure.pools.DimensionPadding;
+import net.minecraft.world.level.levelgen.structure.pools.FeaturePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.JigsawPlacement;
 import net.minecraft.world.level.levelgen.structure.pools.ListPoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
@@ -294,6 +296,18 @@ public final class JigsawPlacementParity {
             }
             return sb.append(']').toString();
         }
+        if (element instanceof FeaturePoolElement) {
+            // FeaturePoolElement has no template location — identify it by its
+            // PlacedFeature reference id (stable across runs), matching the C++
+            // StructurePoolElement.locationString(): "feature[<id>]".
+            try {
+                Holder<PlacedFeature> pf = getField(FeaturePoolElement.class, element, "feature");
+                String id = pf.unwrapKey().map(k -> k.identifier().toString()).orElse(pf.toString());
+                return "feature[" + id + "]";
+            } catch (Exception e) {
+                return element.toString();
+            }
+        }
         return element.toString();
     }
 
@@ -380,7 +394,10 @@ public final class JigsawPlacementParity {
         record SD(String name, ResourceKey<Structure> key, String prefix) {}
         java.util.List<SD> structs = java.util.List.of(
             new SD("pillager_outpost", net.minecraft.world.level.levelgen.structure.BuiltinStructures.PILLAGER_OUTPOST, "pillager_outpost"),
-            new SD("trail_ruins", net.minecraft.world.level.levelgen.structure.BuiltinStructures.TRAIL_RUINS, "trail_ruins")
+            new SD("trail_ruins", net.minecraft.world.level.levelgen.structure.BuiltinStructures.TRAIL_RUINS, "trail_ruins"),
+            // village_plains exercises feature_pool_element + legacy_single_pool_element +
+            // empty_pool_element; its pools live under template_pool/village (prefix "village").
+            new SD("village_plains", net.minecraft.world.level.levelgen.structure.BuiltinStructures.VILLAGE_PLAINS, "village")
         );
 
         for (SD sd : structs) {
