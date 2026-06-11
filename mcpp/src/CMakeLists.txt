@@ -5424,3 +5424,8 @@ set_target_properties(screen_rectangle_parity PROPERTIES RUNTIME_OUTPUT_DIRECTOR
 add_executable(widget_geometry_parity client/gui/WidgetGeometryParityTest.cpp)
 target_include_directories(widget_geometry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(widget_geometry_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: AbstractScrollArea scroll/scrollbar math (scrollerHeight/scrollBarY/clamp) =====
+add_executable(scroll_area_parity client/gui/ScrollAreaParityTest.cpp)
+target_include_directories(scroll_area_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(scroll_area_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
