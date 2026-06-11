@@ -133,6 +133,28 @@ int main(int argc, char** argv) {
             for (size_t k = 1; k < g2.size(); ++k) buf.writeString(fromHexBytes(g2[k]));
             auto g3 = toks(groups[3]); buf.writeVarInt(std::stoi(g3[0]));   // colors
             for (size_t k = 1; k < g3.size(); ++k) buf.writeInt(std::stoi(g3[k]));
+        } else if (kind == "attrmods") {
+            // ItemAttributeModifiers.STREAM_CODEC = Entry.STREAM_CODEC.apply(list()). Each Entry =
+            // composite(Attribute.STREAM_CODEC=holderRegistry(ATTRIBUTE)->VarInt(getId),
+            // AttributeModifier.STREAM_CODEC=composite(Identifier=writeUtf, DOUBLE=writeDouble,
+            // Operation=VarInt(id)), EquipmentSlotGroup=VarInt(id), Display=VarInt(typeId)[Default=0]).
+            // valueData = "<count>|attrName:modIdHex:amountBits16:opId:slotId|...".
+            std::vector<std::string> ents;
+            { std::stringstream es(valueData); std::string it; while (std::getline(es, it, '|')) ents.push_back(it); }
+            int cnt = std::stoi(ents[0]);
+            buf.writeVarInt(cnt);
+            for (int e = 1; e <= cnt; ++e) {
+                // ','-split (attrName contains a ':'): attrName, modIdHex, amountBits16, opId, slotId
+                std::vector<std::string> t;
+                { std::stringstream ts(ents[e]); std::string it; while (std::getline(ts, it, ',')) t.push_back(it); }
+                auto aid = reg.id("minecraft:attribute", t[0]);
+                buf.writeVarInt(aid ? *aid : -1);                                          // attribute holderRegistry
+                buf.writeString(fromHexBytes(t[1]));                                        // modifier id
+                buf.writeDouble(std::bit_cast<double>(std::stoull(t[2], nullptr, 16)));     // amount
+                buf.writeVarInt(std::stoi(t[3]));                                           // operation id
+                buf.writeVarInt(std::stoi(t[4]));                                           // slot id
+                buf.writeVarInt(0);                                                         // Display.Default (no data)
+            }
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";

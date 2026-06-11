@@ -17,6 +17,9 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -50,6 +53,31 @@ public class DataComponentPatchMiscParity {
         s.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
         String nameHex = hex(name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         emit(access, s, "minecraft:custom_data", "customdata", type + ":" + nameHex + ":" + valuePart);
+    }
+
+    @SuppressWarnings("unchecked")
+    static void emitAttrMods(RegistryAccess access, Object[][] specs) {
+        net.minecraft.world.item.component.ItemAttributeModifiers mods =
+                net.minecraft.world.item.component.ItemAttributeModifiers.EMPTY;
+        StringBuilder vd = new StringBuilder(Integer.toString(specs.length));
+        for (Object[] sp : specs) {
+            net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attr =
+                    (net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute>) sp[0];
+            String modId = (String) sp[1];
+            double amount = (Double) sp[2];
+            AttributeModifier.Operation op = (AttributeModifier.Operation) sp[3];
+            EquipmentSlotGroup slot = (EquipmentSlotGroup) sp[4];
+            mods = mods.withModifierAdded(attr,
+                    new AttributeModifier(net.minecraft.resources.Identifier.parse(modId), amount, op), slot);
+            String attrName = BuiltInRegistries.ATTRIBUTE.getKey(attr.value()).toString();
+            vd.append("|").append(attrName)
+              .append(",").append(hex(net.minecraft.resources.Identifier.parse(modId).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+              .append(",").append(String.format("%016x", Double.doubleToRawLongBits(amount)))
+              .append(",").append(op.ordinal()).append(",").append(slot.ordinal());
+        }
+        ItemStack s = new ItemStack(Items.STICK, 1);
+        s.set(DataComponents.ATTRIBUTE_MODIFIERS, mods);
+        emit(access, s, "minecraft:attribute_modifiers", "attrmods", vd.toString());
     }
 
     static void emitCMD(RegistryAccess access, Item base, java.util.List<Float> floats,
@@ -169,6 +197,17 @@ public class DataComponentPatchMiscParity {
                 java.util.List.of(), java.util.List.of());
         emitCMD(access, base, java.util.List.of(0.5f), java.util.List.of(),
                 java.util.List.of("model"), java.util.List.of(16711680, -1));
+
+        // attribute_modifiers: list of {Holder<Attribute>, AttributeModifier(id,amount,Operation), slot,
+        // Default display}. On a STICK (no default modifiers) so any value is a non-default patch.
+        emitAttrMods(access, new Object[][]{
+            { Attributes.ATTACK_DAMAGE, "minecraft:base_attack", 7.0,
+              AttributeModifier.Operation.ADD_VALUE, EquipmentSlotGroup.MAINHAND } });
+        emitAttrMods(access, new Object[][]{
+            { Attributes.MAX_HEALTH, "minecraft:hp_boost", 4.0,
+              AttributeModifier.Operation.ADD_MULTIPLIED_BASE, EquipmentSlotGroup.ARMOR },
+            { Attributes.MOVEMENT_SPEED, "minecraft:speed_pen", -0.05,
+              AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL, EquipmentSlotGroup.LEGS } });
 
         O.flush();
     }
