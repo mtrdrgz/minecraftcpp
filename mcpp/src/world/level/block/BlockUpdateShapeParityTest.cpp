@@ -56,7 +56,7 @@ std::vector<int> g_hasSturdy;
 // SHULKER_BOXES, LEAVES (proxy for instanceof LeavesBlock — every LeavesBlock IS in #leaves).
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
-        shulkerBoxes, leaves;
+        shulkerBoxes, leaves, supportsVegetation;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -650,7 +650,9 @@ const std::set<std::string> PORTED = {
     // straggler wave 4
     "CactusBlock", "FallingBlock", "SugarCaneBlock", "DecoratedPotBlock",
     "CreakingHeartBlock", "CakeBlock", "WallTorchBlock", "RedstoneWallTorchBlock", "SnowLayerBlock",
-    "ConcretePowderBlock"  // (SmallDripleafBlock -> DoublePlant other-half logic, still deferred)
+    "ConcretePowderBlock",
+    // straggler wave 5 (#supports_vegetation plants)
+    "VegetationBlock", "DoublePlantBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1040,6 +1042,35 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         return stateId;
     }
 
+    // ── straggler wave 5 (plants on #supports_vegetation). ──
+    // VegetationBlock.updateShape — !canSurvive -> AIR (any direction). canSurvive (:?) =
+    // mayPlaceOn(below) = below.is(#supports_vegetation) for blocks using the DEFAULT mayPlaceOn
+    // (most grasses/flowers). Subclasses that override mayPlaceOn (nether plants, etc.) are excluded.
+    if (fam == "VegetationBlock") {
+        int below = level.rel(DOWN);
+        // LeafLitterBlock overrides canSurvive (:54-57) = below.isFaceSturdy(UP); default mayPlaceOn
+        // (VegetationBlock :?) = below.is(#supports_vegetation).
+        bool surv = (g_name[stateId] == "leaf_litter")
+            ? isFaceSturdy(below, UP) : inTag(g_tags.supportsVegetation, below);
+        return surv ? stateId : 0;
+    }
+    // DoublePlantBlock.updateShape :70-? — other-half sync. canSurvive: LOWER = mayPlaceOn(below) =
+    // below.is(#supports_vegetation); UPPER = below.is(this) && below.HALF==LOWER.
+    if (fam == "DoublePlantBlock") {
+        std::string half = getProp(g_props[stateId], "half");
+        bool isLower = (half == "lower");
+        bool axisY = (dir == DOWN || dir == UP);
+        bool nbrIsThis = (g_name[neighbourId] == g_name[stateId]);
+        bool c1 = !axisY;
+        bool c2 = (isLower) != (dir == UP);
+        bool c3 = nbrIsThis && (getProp(g_props[neighbourId], "half") != half);
+        if (c1 || c2 || c3) {
+            if (isLower && dir == DOWN && !inTag(g_tags.supportsVegetation, level.rel(DOWN))) return 0;
+            return stateId;  // super (no-op)
+        }
+        return 0;  // toward the other half but it's missing/mismatched -> AIR
+    }
+
     return -2;  // unported
 }
 
@@ -1145,6 +1176,7 @@ int main(int argc, char** argv) {
         g_tags.wallPostOverride = resolve("wall_post_override");
         g_tags.shulkerBoxes = resolve("shulker_boxes");
         g_tags.leaves = resolve("leaves");
+        g_tags.supportsVegetation = resolve("supports_vegetation");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
