@@ -6539,3 +6539,37 @@ if(WIN32)
     target_link_libraries(pkt_chat_session_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_chat_session_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: StrongholdPiece.randomSmallDoor (nextInt(5) -> SmallDoorType; 0/1/default OPENING fall-through) =====
+add_executable(stronghold_small_door_parity
+    world/level/levelgen/structure/structures/StrongholdSmallDoorParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(stronghold_small_door_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(stronghold_small_door_parity PRIVATE bcrypt)
+endif()
+set_target_properties(stronghold_small_door_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: EndCrystalRenderer.getY beam vertical-bob oscillator (Mth.sin table + float-widen-to-double) =====
+add_executable(end_crystal_beam_parity client/renderer/entity/EndCrystalBeamParityTest.cpp)
+target_include_directories(end_crystal_beam_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(end_crystal_beam_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: HappyGhast.HappyGhastLookControl.wrapDegrees90 (angle % 90f via fmodf + snap to [-45,45); NaN/Inf/signed-zero) =====
+add_executable(happy_ghast_wrap_degrees90_parity world/entity/animal/happyghast/HappyGhastWrapDegrees90ParityTest.cpp)
+target_include_directories(happy_ghast_wrap_degrees90_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(happy_ghast_wrap_degrees90_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundSectionBlocksUpdatePacket (writeLong(SectionPos.asLong) + VarInt count + VarLong((stateId<<12)|posInSection)); target drops "update" (UAC) =====
+add_executable(pkt_section_blocks_cb_parity
+    network/protocol/game/PktSectionBlocksUpdateParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_section_blocks_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_section_blocks_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_section_blocks_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_section_blocks_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
