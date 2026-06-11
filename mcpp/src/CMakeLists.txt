@@ -1967,6 +1967,19 @@ set_target_properties(block_rotate_mirror_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# ===== STRUCTURE placeInWorld (#19): StructureTemplate.placeInWorld vs the real game (capturing level) =====
+add_executable(structure_placeinworld_parity
+    world/level/levelgen/structure/templatesystem/StructurePlaceInWorldParityTest.cpp
+    nbt/NbtIo.cpp nbt/Tag.cpp)
+target_include_directories(structure_placeinworld_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_placeinworld_parity PRIVATE glm nlohmann_json miniz)
+if(WIN32)
+    target_link_libraries(structure_placeinworld_parity PRIVATE bcrypt)
+endif()
+set_target_properties(structure_placeinworld_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== STRUCTURE PROCESSORS (#19): RuleProcessor RuleTest.test family vs the real game =====
 add_executable(structure_processor_parity
     world/level/levelgen/structure/templatesystem/StructureProcessorParityTest.cpp
