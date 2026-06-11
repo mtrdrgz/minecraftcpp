@@ -5899,3 +5899,32 @@ if(WIN32)
     target_link_libraries(pkt_attack_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_attack_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: StrongholdPieces.FillerCorridor.findPieceBox (descending depth-probe decision tree) =====
+add_executable(stronghold_piece_box_parity world/level/levelgen/structure/structures/StrongholdPieceBoxParityTest.cpp)
+target_include_directories(stronghold_piece_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(stronghold_piece_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: SkyRenderer.buildStars star-field geometry (org.joml rotateTowards/rotateZ; RNG-seeded 10842) =====
+add_executable(star_geometry_parity render/StarGeometryParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(star_geometry_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(star_geometry_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item: BowItem.getPowerForTime (int->float bow-draw power quadratic, one-sided clamp) =====
+add_executable(bow_item_power_parity world/item/BowItemPowerParityTest.cpp)
+target_include_directories(bow_item_power_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(bow_item_power_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundPlayerInfoRemovePacket (List<UUID> = VarInt count + msb/lsb longs) =====
+add_executable(pkt_player_info_remove_parity
+    network/protocol/game/PktPlayerInfoRemoveParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_player_info_remove_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_player_info_remove_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_player_info_remove_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_player_info_remove_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
