@@ -279,13 +279,18 @@ std::vector<FoliageAttachment> ForkingTrunkPlacer::placeTrunk(
 // ==========================================================================
 
 float FancyTrunkPlacer::treeShape(int height, int y) {
-    if (y < (int)(height * 0.3f)) return -1.0f;
+    // 1:1 with FancyTrunkPlacer.treeShape (certified by fancy_trunk_math_parity). Two prior
+    // divergences fixed: (1) the early-out is a FLOAT compare `(float)y < (float)height*0.3F`, NOT
+    // a truncated `(int)(height*0.3f)`; (2) Mth.sqrt(float) = (float)Math.sqrt((double)x), not the
+    // float-domain std::sqrt(float). Latent until now (large/fancy oaks weren't exercised by the
+    // certified forest chunks), but real for every biome that does grow them.
+    if ((float)y < (float)height * 0.3f) return -1.0f;
     float radius   = height / 2.0f;
-    float adjacent = radius - y;
-    if (adjacent == 0.0f) return radius * 0.5f;
-    if (std::abs(adjacent) >= radius) return 0.0f;
-    float dist = std::sqrt(radius * radius - adjacent * adjacent);
-    return dist * 0.5f;
+    float adjacent = radius - (float)y;
+    float distance = (float)std::sqrt((double)(radius * radius - adjacent * adjacent));
+    if (adjacent == 0.0f) distance = radius;
+    else if (std::fabs(adjacent) >= radius) return 0.0f;
+    return distance * 0.5f;
 }
 
 bool FancyTrunkPlacer::makeLimb(TreeWorld& world, RandomSource& rng,
