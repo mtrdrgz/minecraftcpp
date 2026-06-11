@@ -188,6 +188,90 @@ bool permuteFaceBools(const std::string& props, TransformDir xf, std::string& ou
     return true;
 }
 
+// BaseRailBlock.rotate(RailShape,Rotation) — BaseRailBlock.java:151-233. Shared by
+// RailBlock/PoweredRailBlock/DetectorRailBlock (each delegates to this inherited switch).
+std::string railRotateShape(const std::string& shape, Rotation rot) {
+    switch (rot) {
+        case Rotation::CLOCKWISE_90:
+            if (shape == "ascending_east")  return "ascending_south";
+            if (shape == "ascending_west")  return "ascending_north";
+            if (shape == "ascending_north") return "ascending_east";
+            if (shape == "ascending_south") return "ascending_west";
+            if (shape == "north_south")     return "east_west";
+            if (shape == "east_west")       return "north_south";
+            if (shape == "south_east")      return "south_west";
+            if (shape == "south_west")      return "north_west";
+            if (shape == "north_west")      return "north_east";
+            if (shape == "north_east")      return "south_east";
+            return shape;
+        case Rotation::CLOCKWISE_180:
+            if (shape == "ascending_east")  return "ascending_west";
+            if (shape == "ascending_west")  return "ascending_east";
+            if (shape == "ascending_north") return "ascending_south";
+            if (shape == "ascending_south") return "ascending_north";
+            if (shape == "south_east")      return "north_west";
+            if (shape == "south_west")      return "north_east";
+            if (shape == "north_west")      return "south_east";
+            if (shape == "north_east")      return "south_west";
+            return shape;
+        case Rotation::COUNTERCLOCKWISE_90:
+            if (shape == "ascending_east")  return "ascending_north";
+            if (shape == "ascending_west")  return "ascending_south";
+            if (shape == "ascending_north") return "ascending_west";
+            if (shape == "ascending_south") return "ascending_east";
+            if (shape == "north_south")     return "east_west";
+            if (shape == "east_west")       return "north_south";
+            if (shape == "south_east")      return "north_east";
+            if (shape == "south_west")      return "south_east";
+            if (shape == "north_west")      return "south_west";
+            if (shape == "north_east")      return "north_west";
+            return shape;
+        default:
+            return shape;  // NONE
+    }
+}
+// BaseRailBlock.mirror(RailShape,Mirror) — BaseRailBlock.java:235-281.
+std::string railMirrorShape(const std::string& shape, Mirror mir) {
+    switch (mir) {
+        case Mirror::LEFT_RIGHT:
+            if (shape == "ascending_north") return "ascending_south";
+            if (shape == "ascending_south") return "ascending_north";
+            if (shape == "south_east")      return "north_east";
+            if (shape == "south_west")      return "north_west";
+            if (shape == "north_west")      return "south_west";
+            if (shape == "north_east")      return "south_east";
+            return shape;
+        case Mirror::FRONT_BACK:
+            if (shape == "ascending_east")  return "ascending_west";
+            if (shape == "ascending_west")  return "ascending_east";
+            if (shape == "south_east")      return "south_west";
+            if (shape == "south_west")      return "south_east";
+            if (shape == "north_west")      return "north_east";
+            if (shape == "north_east")      return "north_west";
+            return shape;
+        default:
+            return shape;  // NONE
+    }
+}
+
+// JigsawBlock/CrafterBlock ORIENTATION = FrontAndTop ("front_top", e.g. "down_east").
+// rotate = ORIENTATION.rotate(rotation.rotation()) ; mirror = ORIENTATION.rotate(mirror.rotation())
+// = fromFrontAndTop(g.rotate(front), g.rotate(top)). VERIFIED over all 6 dirs that the
+// OctahedralGroup rotations equal the certified primitives (ROT_90_Y_NEG=rotationRotate(CW90),
+// ROT_180_FACE_XZ=CW180, ROT_90_Y_POS=CCW90, INVERT_Z=mirrorMirror(LEFT_RIGHT),
+// INVERT_X=mirrorMirror(FRONT_BACK)), so we reuse them on both front and top.
+template <typename TransformDir>
+bool transformOrientation(const std::string& props, TransformDir xf, std::string& out) {
+    std::string ori = getProp(props, "orientation");
+    if (ori.empty()) return false;
+    auto us = ori.find('_');
+    if (us == std::string::npos) return false;
+    Direction front = dirByName(ori.substr(0, us));
+    Direction top   = dirByName(ori.substr(us + 1));
+    std::string nv = std::string(dirName(xf(front))) + "_" + dirName(xf(top));
+    return replaceProp(props, "orientation", nv, out);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -258,8 +342,18 @@ int main(int argc, char** argv) {
         "BannerBlock", "SkullBlock", "WallBannerBlock", "WallSkullBlock", "BaseCoralWallFanBlock",
         "WallTorchBlock", "RedstoneWallTorchBlock", "AmethystClusterBlock", "CopperGolemStatueBlock",
         "RodBlock", "LadderBlock", "BellBlock", "GrindstoneBlock", "AttachedStemBlock", "AnvilBlock",
-        "HugeMushroomBlock" };
-    // AnvilBlock declares only rotate; its mirror is the inherited BlockBehaviour identity.
+        "HugeMushroomBlock",
+        // tail (agents A+B): FACING/ORIENTATION + axis + rails/pistons/tripwire
+        "ChestBlock", "EnderChestBlock", "BarrelBlock", "AbstractFurnaceBlock", "DispenserBlock",
+        "ObserverBlock", "HopperBlock", "BeehiveBlock", "CampfireBlock", "LecternBlock",
+        "StonecutterBlock", "SmallDripleafBlock", "DecoratedPotBlock", "VaultBlock", "CommandBlock",
+        "ShulkerBoxBlock", "CalibratedSculkSensorBlock", "EndPortalFrameBlock", "JigsawBlock",
+        "CrafterBlock", "CreakingHeartBlock",
+        "RailBlock", "PoweredRailBlock", "DetectorRailBlock", "PistonBaseBlock", "PistonHeadBlock",
+        "MovingPistonBlock", "InfestedRotatedPillarBlock", "NetherPortalBlock", "TripWireBlock",
+        "TripWireHookBlock" };
+    // AnvilBlock/CreakingHeartBlock/InfestedRotatedPillarBlock/NetherPortalBlock declare only rotate;
+    // their mirror is the inherited BlockBehaviour identity (already covered by "BlockBehaviour").
     const std::set<std::string> mirPorted = {
         "BlockBehaviour", "HorizontalDirectionalBlock", "RotatedPillarBlock",
         "WallBlock", "CrossCollisionBlock", "RedStoneWireBlock", "MossyCarpetBlock", "VineBlock",
@@ -269,19 +363,42 @@ int main(int argc, char** argv) {
         "BannerBlock", "SkullBlock", "WallBannerBlock", "WallSkullBlock", "BaseCoralWallFanBlock",
         "WallTorchBlock", "RedstoneWallTorchBlock", "AmethystClusterBlock", "CopperGolemStatueBlock",
         "RodBlock", "LadderBlock", "BellBlock", "GrindstoneBlock", "AttachedStemBlock",
-        "HugeMushroomBlock" };
+        "HugeMushroomBlock",
+        // tail (agents A+B): FACING/ORIENTATION + rails/pistons/tripwire (NOT the no-mirror ones)
+        "ChestBlock", "EnderChestBlock", "BarrelBlock", "AbstractFurnaceBlock", "DispenserBlock",
+        "ObserverBlock", "HopperBlock", "BeehiveBlock", "CampfireBlock", "LecternBlock",
+        "StonecutterBlock", "SmallDripleafBlock", "DecoratedPotBlock", "VaultBlock", "CommandBlock",
+        "ShulkerBoxBlock", "CalibratedSculkSensorBlock", "EndPortalFrameBlock", "JigsawBlock",
+        "CrafterBlock",
+        "RailBlock", "PoweredRailBlock", "DetectorRailBlock", "PistonBaseBlock", "PistonHeadBlock",
+        "MovingPistonBlock", "TripWireBlock", "TripWireHookBlock" };
 
     // rotate(stateId, rotation) for a ported declaring class -> new state id (or -1).
     auto doRotate = [&](uint32_t id, Rotation rot, const std::string& f) -> long {
         const StateInfo& s = states[id];
         if (f == "BlockBehaviour") return id;                       // default: unchanged
-        if (f == "HorizontalDirectionalBlock") {                    // setValue(FACING, rotation.rotate(FACING))
+        // setValue(FACING, rotation.rotate(FACING)) — HorizontalDirectionalBlock + every own-class
+        // declarer that uses the same FACING idiom (4-dir, 6-dir, FACING_HOPPER all handled, since
+        // rotationRotate leaves the Y axis fixed). Key is always "facing".
+        if (f == "HorizontalDirectionalBlock" ||
+            f == "ChestBlock" || f == "EnderChestBlock" || f == "BarrelBlock" ||
+            f == "AbstractFurnaceBlock" || f == "DispenserBlock" || f == "ObserverBlock" ||
+            f == "HopperBlock" || f == "BeehiveBlock" || f == "CampfireBlock" ||
+            f == "LecternBlock" || f == "StonecutterBlock" || f == "SmallDripleafBlock" ||
+            f == "DecoratedPotBlock" || f == "VaultBlock" || f == "CommandBlock" ||
+            f == "ShulkerBoxBlock" || f == "CalibratedSculkSensorBlock" || f == "EndPortalFrameBlock") {
             Direction nf = rotationRotate(rot, dirByName(getProp(s.props, "facing")));
             std::string np;
             if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
             return lookup(s.name, np);
         }
-        if (f == "RotatedPillarBlock") {                            // rotatePillar: 90deg -> swap X<->Z axis
+        // JigsawBlock/CrafterBlock — ORIENTATION (FrontAndTop) by rotation.rotation().
+        if (f == "JigsawBlock" || f == "CrafterBlock") {
+            std::string np;
+            if (!transformOrientation(s.props, [&](Direction d){ return rotationRotate(rot, d); }, np)) return -1;
+            return lookup(s.name, np);
+        }
+        if (f == "RotatedPillarBlock" || f == "CreakingHeartBlock") {  // rotatePillar: 90deg -> swap X<->Z axis
             if (rot == Rotation::CLOCKWISE_90 || rot == Rotation::COUNTERCLOCKWISE_90) {
                 std::string ax = getProp(s.props, "axis");
                 std::string na = ax == "x" ? "z" : (ax == "z" ? "x" : ax);
@@ -341,16 +458,60 @@ int main(int argc, char** argv) {
             if (!permuteFaceBools(s.props, [&](Direction d){ return rotationRotate(rot, d); }, np)) return -1;
             return lookup(s.name, np);
         }
+        // Rails: rotate RAIL_SHAPE via BaseRailBlock switch. RailBlock/PoweredRailBlock/DetectorRailBlock.
+        if (f == "RailBlock" || f == "PoweredRailBlock" || f == "DetectorRailBlock") {
+            std::string np;
+            if (!replaceProp(s.props, "shape", railRotateShape(getProp(s.props, "shape"), rot), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // Pistons + TripWireHook: setValue(FACING, rotation.rotate(FACING)) (6-dir for pistons).
+        if (f == "PistonBaseBlock" || f == "PistonHeadBlock" || f == "MovingPistonBlock" ||
+            f == "TripWireHookBlock") {
+            Direction nf = rotationRotate(rot, dirByName(getProp(s.props, "facing")));
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // InfestedRotatedPillarBlock / NetherPortalBlock: 90deg swaps horizontal AXIS x<->z; else unchanged.
+        if (f == "InfestedRotatedPillarBlock" || f == "NetherPortalBlock") {
+            if (rot == Rotation::CLOCKWISE_90 || rot == Rotation::COUNTERCLOCKWISE_90) {
+                std::string ax = getProp(s.props, "axis");
+                std::string na = ax == "x" ? "z" : (ax == "z" ? "x" : ax);
+                std::string np;
+                if (!replaceProp(s.props, "axis", na, np)) return -1;
+                return lookup(s.name, np);
+            }
+            return id;
+        }
+        // TripWireBlock: NSEW bool permute (same as CrossCollisionBlock).
+        if (f == "TripWireBlock") {
+            std::string np; if (!permuteNESW(s.props, rot, np)) return -1; return lookup(s.name, np);
+        }
         return -2;
     };
     // mirror(stateId, mirror) for a ported declaring class -> new state id (or -1).
     auto doMirror = [&](uint32_t id, Mirror mir, const std::string& f) -> long {
         const StateInfo& s = states[id];
         if (f == "BlockBehaviour") return id;                       // default + RotatedPillarBlock (no override)
-        if (f == "HorizontalDirectionalBlock") {                    // rotate(mirror.getRotation(FACING))
+        // mirror = state.rotate(mirror.getRotation(FACING)) — HorizontalDirectionalBlock + the same
+        // own-class FACING declarers as in doRotate (routes back to the FACING rotate logic).
+        if (f == "HorizontalDirectionalBlock" ||
+            f == "ChestBlock" || f == "EnderChestBlock" || f == "BarrelBlock" ||
+            f == "AbstractFurnaceBlock" || f == "DispenserBlock" || f == "ObserverBlock" ||
+            f == "HopperBlock" || f == "BeehiveBlock" || f == "CampfireBlock" ||
+            f == "LecternBlock" || f == "StonecutterBlock" || f == "SmallDripleafBlock" ||
+            f == "DecoratedPotBlock" || f == "VaultBlock" || f == "CommandBlock" ||
+            f == "ShulkerBoxBlock" || f == "CalibratedSculkSensorBlock" || f == "EndPortalFrameBlock") {
             Direction facing = dirByName(getProp(s.props, "facing"));
             Rotation r = mirrorGetRotation(mir, facing);
             return doRotate(id, r, "HorizontalDirectionalBlock");
+        }
+        // JigsawBlock/CrafterBlock — ORIENTATION (FrontAndTop) by mirror.rotation() (= mirrorMirror,
+        // NOT getRotation — mirror is applied as the inversion group on both front and top).
+        if (f == "JigsawBlock" || f == "CrafterBlock") {
+            std::string np;
+            if (!transformOrientation(s.props, [&](Direction d){ return mirrorMirror(mir, d); }, np)) return -1;
+            return lookup(s.name, np);
         }
         // --- StairBlock mirror depends on SHAPE. StairBlock.java:173-212 ---
         if (f == "StairBlock") {
@@ -451,6 +612,25 @@ int main(int argc, char** argv) {
             std::string np;
             if (!permuteFaceBools(s.props, [&](Direction d){ return mirrorMirror(mir, d); }, np)) return -1;
             return lookup(s.name, np);
+        }
+        // Rails: mirror RAIL_SHAPE via BaseRailBlock switch.
+        if (f == "RailBlock" || f == "PoweredRailBlock" || f == "DetectorRailBlock") {
+            std::string np;
+            if (!replaceProp(s.props, "shape", railMirrorShape(getProp(s.props, "shape"), mir), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // Pistons + TripWireHook: mirror = rotate(mirror.getRotation(FACING)).
+        if (f == "PistonBaseBlock" || f == "PistonHeadBlock" || f == "MovingPistonBlock" ||
+            f == "TripWireHookBlock") {
+            Direction facing = dirByName(getProp(s.props, "facing"));
+            Direction nf = rotationRotate(mirrorGetRotation(mir, facing), facing);
+            std::string np;
+            if (!replaceProp(s.props, "facing", dirName(nf), np)) return -1;
+            return lookup(s.name, np);
+        }
+        // TripWireBlock: NSEW mirror (LR swaps N<->S, FB swaps E<->W).
+        if (f == "TripWireBlock") {
+            std::string np; if (!mirrorNESW(s.props, mir, np)) return -1; return lookup(s.name, np);
         }
         return -2;
     };
