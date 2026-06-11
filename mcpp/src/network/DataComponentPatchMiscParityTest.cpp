@@ -155,6 +155,19 @@ int main(int argc, char** argv) {
                 buf.writeVarInt(std::stoi(t[4]));                                           // slot id
                 buf.writeVarInt(0);                                                         // Display.Default (no data)
             }
+        } else if (kind == "tooltipdisplay") {
+            // TooltipDisplay.STREAM_CODEC = composite(BOOL hideTooltip, DataComponentType.STREAM_CODEC
+            // .apply(collection)) -> writeBool + VarInt(size) + each VarInt(componentTypeId), insertion order.
+            // valueData = "<hide 0/1>|<count>|<compName>|..." ('|' since compName has ':').
+            std::vector<std::string> p2;
+            { std::stringstream ps(valueData); std::string it; while (std::getline(ps, it, '|')) p2.push_back(it); }
+            buf.writeBool(p2[0] == "1");
+            int count = std::stoi(p2[1]);
+            buf.writeVarInt(count);
+            for (int k = 0; k < count; ++k) {
+                auto cid = reg.id("minecraft:data_component_type", p2[2 + k]);
+                buf.writeVarInt(cid ? *cid : -1);
+            }
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";

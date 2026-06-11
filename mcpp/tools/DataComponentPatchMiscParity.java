@@ -55,6 +55,19 @@ public class DataComponentPatchMiscParity {
         emit(access, s, "minecraft:custom_data", "customdata", type + ":" + nameHex + ":" + valuePart);
     }
 
+    static void emitTooltipDisplay(RegistryAccess access, boolean hide,
+                                   net.minecraft.core.component.DataComponentType<?>[] hidden) {
+        java.util.SequencedSet<net.minecraft.core.component.DataComponentType<?>> set =
+                new it.unimi.dsi.fastutil.objects.ReferenceLinkedOpenHashSet<>();
+        for (net.minecraft.core.component.DataComponentType<?> c : hidden) set.add(c);
+        ItemStack s = new ItemStack(Items.STICK, 1);
+        s.set(DataComponents.TOOLTIP_DISPLAY, new net.minecraft.world.item.component.TooltipDisplay(hide, set));
+        StringBuilder vd = new StringBuilder().append(hide ? "1" : "0").append("|").append(hidden.length);
+        for (net.minecraft.core.component.DataComponentType<?> c : hidden)
+            vd.append("|").append(BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(c).toString());
+        emit(access, s, "minecraft:tooltip_display", "tooltipdisplay", vd.toString());
+    }
+
     @SuppressWarnings("unchecked")
     static void emitAttrMods(RegistryAccess access, Object[][] specs) {
         net.minecraft.world.item.component.ItemAttributeModifiers mods =
@@ -208,6 +221,13 @@ public class DataComponentPatchMiscParity {
               AttributeModifier.Operation.ADD_MULTIPLIED_BASE, EquipmentSlotGroup.ARMOR },
             { Attributes.MOVEMENT_SPEED, "minecraft:speed_pen", -0.05,
               AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL, EquipmentSlotGroup.LEGS } });
+
+        // tooltip_display: {boolean hideTooltip, SequencedSet<DataComponentType> hiddenComponents}.
+        emitTooltipDisplay(access, true, new net.minecraft.core.component.DataComponentType<?>[]{});
+        emitTooltipDisplay(access, false, new net.minecraft.core.component.DataComponentType<?>[]{
+            DataComponents.CUSTOM_NAME, DataComponents.LORE });
+        emitTooltipDisplay(access, true, new net.minecraft.core.component.DataComponentType<?>[]{
+            DataComponents.ATTRIBUTE_MODIFIERS, DataComponents.UNBREAKABLE, DataComponents.ENCHANTMENT_GLINT_OVERRIDE });
 
         O.flush();
     }
