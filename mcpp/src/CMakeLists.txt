@@ -6437,3 +6437,37 @@ if(WIN32)
     target_link_libraries(pkt_custom_report_details_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_custom_report_details_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: MineShaftRoom ctor RNG room geometry (3x nextInt(6) -> BoundingBox maxX/maxY/maxZ; distinct from corridor/crossing/stairs) =====
+add_executable(mine_shaft_room_box_parity
+    world/level/levelgen/structure/structures/MineShaftRoomBoxParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(mine_shaft_room_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(mine_shaft_room_box_parity PRIVATE bcrypt)
+endif()
+set_target_properties(mine_shaft_room_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: OverlayTexture.u/v/pack damage-flash coord packer (javaF2I saturating narrow + u|v<<16 uint wrap) =====
+add_executable(overlay_texture_parity render/OverlayTextureParityTest.cpp)
+target_include_directories(overlay_texture_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(overlay_texture_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item: Item.isBarVisible/getBarWidth/getBarColor durability bar (Mth.clamp(Math.round(13-dmg*13/max)) + hsvToRgb) =====
+add_executable(item_bar_display_parity world/item/ItemBarDisplayParityTest.cpp)
+target_include_directories(item_bar_display_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(item_bar_display_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundGameRuleValuesPacket (Map<ResourceKey,String> = VarInt count + writeUtf(id.toString) key + writeUtf value) =====
+add_executable(pkt_game_rule_values_cb_parity
+    network/protocol/game/PktGameRuleValuesParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_game_rule_values_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_game_rule_values_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_game_rule_values_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_game_rule_values_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
