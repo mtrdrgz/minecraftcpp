@@ -86,4 +86,25 @@ inline void gridArrange(int gridX, int gridY, int rowSpacing, int columnSpacing,
     }
 }
 
+// 1:1 port of FrameLayout.arrangeElements (FrameLayout.java) — overlapping children, each aligned
+// within the frame's resolved size (max of minWidth/Height and every child wrapper size). Reuses the
+// same AbstractChildWrapper alignment (setX truncates, setY rounds). row/col/span on GridChild are
+// ignored here.
+inline void frameArrange(int frameX, int frameY, int minWidth, int minHeight,
+                         std::vector<GridChild>& children) {
+    int resultWidth = minWidth, resultHeight = minHeight;
+    for (const GridChild& c : children) {
+        resultWidth = std::max(resultWidth, c.childW + c.padL + c.padR);    // wrapper getWidth()
+        resultHeight = std::max(resultHeight, c.childH + c.padT + c.padB);  // wrapper getHeight()
+    }
+    for (GridChild& c : children) {
+        float leastX = static_cast<float>(c.padL);
+        float mostX = static_cast<float>(resultWidth - c.childW - c.padR);
+        c.outX = static_cast<int>(mth::lerpF(c.alignX, leastX, mostX)) + frameX;
+        float leastY = static_cast<float>(c.padT);
+        float mostY = static_cast<float>(resultHeight - c.childH - c.padB);
+        c.outY = argb::javaRoundF(mth::lerpF(c.alignY, leastY, mostY)) + frameY;
+    }
+}
+
 }  // namespace mc::gui

@@ -11,6 +11,7 @@
 //   POS   <x> <y>   (one per child, in add order)
 //   END
 
+import net.minecraft.client.gui.layouts.FrameLayout;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.LayoutSettings;
 import net.minecraft.client.gui.layouts.SpacerElement;
@@ -42,6 +43,28 @@ public class GridLayoutParity {
         grid.arrangeElements();
         for (SpacerElement sp : spacers) O.println("POS\t" + sp.getX() + "\t" + sp.getY());
         O.println("END");
+    }
+
+    // FrameLayout: overlapping children aligned within the resolved frame size.
+    static void emitFrame(int fx, int fy, int minW, int minH, Ch[] specs) {
+        O.println("FRAME\t" + fx + "\t" + fy + "\t" + minW + "\t" + minH + "\t" + specs.length);
+        FrameLayout frame = new FrameLayout(fx, fy, minW, minH);
+        SpacerElement[] spacers = new SpacerElement[specs.length];
+        for (int i = 0; i < specs.length; i++) {
+            Ch c = specs[i];
+            SpacerElement sp = new SpacerElement(c.w(), c.h());
+            spacers[i] = sp;
+            LayoutSettings ls = LayoutSettings.defaults()
+                    .padding(c.padL(), c.padT(), c.padR(), c.padB())
+                    .align(c.ax(), c.ay());
+            frame.addChild(sp, ls);
+            O.println("FCH\t" + c.w() + "\t" + c.h() + "\t" + c.padL() + "\t" + c.padT() + "\t" + c.padR() + "\t" + c.padB()
+                    + "\t" + String.format("%08x", Float.floatToRawIntBits(c.ax()))
+                    + "\t" + String.format("%08x", Float.floatToRawIntBits(c.ay())));
+        }
+        frame.arrangeElements();
+        for (SpacerElement sp : spacers) O.println("FPOS\t" + sp.getX() + "\t" + sp.getY());
+        O.println("FEND");
     }
 
     public static void main(String[] args) {
@@ -77,5 +100,20 @@ public class GridLayoutParity {
             new Ch(0, 0, 1, 1, 21, 21, 0, 0, 0, 0, 0f, 0f),
             new Ch(0, 1, 1, 1, 10, 10, 0, 0, 0, 0, 0.5f, 0.5f),
             new Ch(1, 0, 1, 1, 10, 10, 0, 0, 0, 0, 0.5f, 0.5f)});
+
+        // --- FrameLayout (overlapping, aligned within resolved frame size) ---
+        // F1: two children, frame size = max(child sizes); centered + corner alignments.
+        emitFrame(10, 10, 0, 0, new Ch[]{
+            new Ch(0, 0, 1, 1, 40, 30, 0, 0, 0, 0, 0f, 0f),       // defines frame size
+            new Ch(0, 0, 1, 1, 10, 10, 0, 0, 0, 0, 0.5f, 0.5f),   // centered
+            new Ch(0, 0, 1, 1, 12, 8, 0, 0, 0, 0, 1.0f, 1.0f)});  // bottom-right
+        // F2: minWidth/minHeight larger than children; odd leftover (truncate vs round).
+        emitFrame(0, 0, 25, 25, new Ch[]{
+            new Ch(0, 0, 1, 1, 10, 10, 0, 0, 0, 0, 0.5f, 0.5f),
+            new Ch(0, 0, 1, 1, 6, 6, 0, 0, 0, 0, 0f, 1.0f)});
+        // F3: padding + alignment.
+        emitFrame(3, 4, 0, 0, new Ch[]{
+            new Ch(0, 0, 1, 1, 30, 30, 0, 0, 0, 0, 0f, 0f),
+            new Ch(0, 0, 1, 1, 8, 8, 2, 3, 4, 1, 0.5f, 0.5f)});
     }
 }

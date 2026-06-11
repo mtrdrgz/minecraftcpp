@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
     auto fail = [&](const std::string& w) { ++mism; if (shown++ < 30) std::cerr << "MISMATCH " << w << "\n"; };
 
     int gx = 0, gy = 0, rs = 0, cs = 0;
+    int fx = 0, fy = 0, fminW = 0, fminH = 0;
     std::vector<gui::GridChild> children;
     std::vector<std::pair<int, int>> expected;
 
@@ -48,7 +49,28 @@ int main(int argc, char** argv) {
         if (line.empty()) continue;
         auto p = split(line);
         const std::string& t = p[0];
-        if (t == "CASE") {
+        if (t == "FRAME") {
+            fx = std::stoi(p[1]); fy = std::stoi(p[2]); fminW = std::stoi(p[3]); fminH = std::stoi(p[4]);
+            children.clear(); expected.clear();
+        } else if (t == "FCH") {
+            gui::GridChild c;
+            c.childW = std::stoi(p[1]); c.childH = std::stoi(p[2]);
+            c.padL = std::stoi(p[3]); c.padT = std::stoi(p[4]); c.padR = std::stoi(p[5]); c.padB = std::stoi(p[6]);
+            c.alignX = bf(p[7]); c.alignY = bf(p[8]);
+            children.push_back(c);
+        } else if (t == "FPOS") {
+            expected.push_back({std::stoi(p[1]), std::stoi(p[2])});
+        } else if (t == "FEND") {
+            ++cases;
+            gui::frameArrange(fx, fy, fminW, fminH, children);
+            for (size_t i = 0; i < children.size() && i < expected.size(); ++i) {
+                ++checks;
+                if (children[i].outX != expected[i].first || children[i].outY != expected[i].second)
+                    fail("FRAME case " + std::to_string(cases) + " child " + std::to_string(i) +
+                         " got=(" + std::to_string(children[i].outX) + "," + std::to_string(children[i].outY) +
+                         ") exp=(" + std::to_string(expected[i].first) + "," + std::to_string(expected[i].second) + ")");
+            }
+        } else if (t == "CASE") {
             gx = std::stoi(p[1]); gy = std::stoi(p[2]); rs = std::stoi(p[3]); cs = std::stoi(p[4]);
             children.clear();
             expected.clear();
