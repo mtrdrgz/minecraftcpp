@@ -673,17 +673,17 @@ net/minecraft/client/gui/font/providers/ProviderReferenceDefinition.java	unvisit
 net/minecraft/client/gui/font/providers/TrueTypeGlyphProviderDefinition.java	unvisited	
 net/minecraft/client/gui/font/providers/UnihexProvider.java	unvisited	
 net/minecraft/client/gui/font/providers/package-info.java	unvisited	
-net/minecraft/client/gui/layouts/AbstractLayout.java	partial	AbstractChildWrapper positioning (getWidth/getHeight=child+padding; setX=(int)trunc, setY=Math.round of lerp(align,padStart,avail-childSize-padEnd)) gated byte-exact via frame_layout_parity 763/0 (2026-06-11). Rest of AbstractLayout (width/height/getX/getY recursion, visitChildren) pending
+net/minecraft/client/gui/layouts/AbstractLayout.java	partial	AbstractChildWrapper positioning (getWidth/getHeight=child+padding; setX=(int)trunc, setY=Math.round of lerp) certified via grid+frame arrange; client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11). width/height/getX/getY recursion + visitChildren pending
 net/minecraft/client/gui/layouts/CommonLayouts.java	unvisited	
 net/minecraft/client/gui/layouts/EqualSpacingLayout.java	unvisited	
-net/minecraft/client/gui/layouts/FrameLayout.java	partial	arrangeElements (max-size frame + per-child setX/setY) + static alignInDimension/alignInRectangle/centerInRectangle gated byte-exact via frame_layout_parity 763/0 (2026-06-11). UNPORTED: ScreenRectangle overloads, Consumer-addChild, visitChildren, render
-net/minecraft/client/gui/layouts/GridLayout.java	unvisited	
+net/minecraft/client/gui/layouts/FrameLayout.java	partial	arrangeElements (max-size frame + per-child align) gated; client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11). UNPORTED: static alignInDimension/alignInRectangle/centerInRectangle, ScreenRectangle overloads, visitChildren
+net/minecraft/client/gui/layouts/GridLayout.java	partial	arrangeElements (Divisor span-sizing + column/row offset arrays + per-cell setX(int-trunc)/setY(Math.round)) + addChild/columnSpacing/rowSpacing gated; client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11). UNPORTED: RowHelper, ScreenRectangle overloads, visitChildren, Consumer-addChild
 net/minecraft/client/gui/layouts/HeaderAndFooterLayout.java	partial	C++ parity gate header_footer_layout_parity (byte-exact, full-suite reconcile 2026-06-11): HeaderFooterLayout checks=23 mismatches=0
 net/minecraft/client/gui/layouts/Layout.java	unvisited	
-net/minecraft/client/gui/layouts/LayoutElement.java	partial	positioning interface subset (getWidth/getHeight/getX/getY/setX/setY) modeled gated byte-exact via frame_layout_parity 763/0 (2026-06-11); visitWidgets/navigation/render not modeled
-net/minecraft/client/gui/layouts/LayoutSettings.java	ported	LayoutSettingsImpl padding/align builder gated byte-exact via frame_layout_parity 763/0 (2026-06-11) (padding{,(h,v),(l,t,r,b)}/paddingLeft..Bottom/Horizontal/Vertical/align/alignHorizontally/Vertically); trivial alignHorizontallyLeft/Center/Right + Top/Middle/Bottom default aliases = alignH/V(0/.5/1)
-net/minecraft/client/gui/layouts/LinearLayout.java	unvisited	
-net/minecraft/client/gui/layouts/SpacerElement.java	ported	sized LayoutElement (getWidth/getHeight/getX/getY/setX/setY) gated byte-exact via frame_layout_parity 763/0 (2026-06-11) via FrameLayout arrange; visitWidgets is a no-op (no widgets)
+net/minecraft/client/gui/layouts/LayoutElement.java	partial	positioning interface subset (getWidth/getHeight/getX/getY/setX/setY) modeled; client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11). visitWidgets/navigation/render not modeled
+net/minecraft/client/gui/layouts/LayoutSettings.java	partial	padding(L/T/R/B) + xAlignment/yAlignment fields modeled inline in GridChild and exercised by the gate; the C++ does not re-port the LayoutSettings builder chain (gate feeds resolved values). client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11)
+net/minecraft/client/gui/layouts/LinearLayout.java	partial	Orientation HORIZONTAL(row0/col=i+columnSpacing)/VERTICAL(row=i/col0+rowSpacing) ported in client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11); arrange delegates to certified GridLayout.arrangeElements (certified-by-composition, not directly gated)
+net/minecraft/client/gui/layouts/SpacerElement.java	ported	sized LayoutElement (width/height/x/y) used as the gate's child; client/gui/GridLayout.h; grid_layout_parity 11 cases/32 checks/0 (2026-06-11)
 net/minecraft/client/gui/layouts/package-info.java	unvisited	
 net/minecraft/client/gui/narration/NarratableEntry.java	unvisited	
 net/minecraft/client/gui/narration/NarratedElementType.java	unvisited	

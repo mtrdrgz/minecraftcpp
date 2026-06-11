@@ -119,26 +119,6 @@ inline int64_t javaMathRound(double a) noexcept {
     return jlongCast(a); // Java (long)a
 }
 
-// Java: java.lang.Math.round(float) -> int — the exact JDK bit-manipulation impl (the
-// float analog of javaMathRound(double); correctly returns 0 for 0.49999997f).
-inline int32_t javaMathRoundF(float a) noexcept {
-    constexpr int32_t SIGNIFICAND_WIDTH = 24;
-    constexpr int32_t EXP_BIT_MASK = 0x7F800000;
-    constexpr int32_t SIGNIF_BIT_MASK = 0x007FFFFF;
-    constexpr int32_t EXP_BIAS = 127;
-    int32_t bits;
-    static_assert(sizeof(float) == sizeof(int32_t));
-    __builtin_memcpy(&bits, &a, sizeof a); // Float.floatToRawIntBits
-    int32_t biasedExp = (bits & EXP_BIT_MASK) >> (SIGNIFICAND_WIDTH - 1);
-    int32_t shift = (SIGNIFICAND_WIDTH - 2 + EXP_BIAS) - biasedExp;
-    if ((shift & -32) == 0) { // shift >= 0 && shift < 32
-        int32_t r = (bits & SIGNIF_BIT_MASK) | (SIGNIF_BIT_MASK + 1);
-        if (bits < 0) r = -r;
-        return ((r >> shift) + 1) >> 1;
-    }
-    return jintCast((double)a); // Java (int)a
-}
-
 // Guava: com.google.common.math.DoubleMath.fuzzyEquals(a, b, tolerance):
 //   Math.copySign(a - b, 1.0) <= tolerance || (a == b) || (isNaN(a) && isNaN(b))
 inline bool doubleMathFuzzyEquals(double a, double b, double tolerance) noexcept {
