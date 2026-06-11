@@ -6243,3 +6243,36 @@ if(WIN32)
     target_link_libraries(pkt_recipe_book_remove_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_recipe_book_remove_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: ProcessorRule.test (composite RuleTest: RandomBlockStateMatchTest x2 + PosAlwaysTrueTest, 3-arm && short-circuit) =====
+add_executable(processorrule_parity
+    world/level/levelgen/structure/templatesystem/ProcessorRuleParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(processorrule_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(processorrule_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: Camera.getNearPlane + NearPlane corner/getPointOnPlane (reuses certified setRotation; double aspect divide) =====
+add_executable(camera_nearplane_math_parity client/CameraNearPlaneMathParityTest.cpp)
+target_include_directories(camera_nearplane_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(camera_nearplane_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: AbstractHorse generateMaxHealth/generateJumpStrength/generateSpeed/createOffspringAttribute (float-literal widen + RNG order) =====
+add_executable(horse_attr_parity
+    world/entity/animal/equine/AbstractHorseParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(horse_attr_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(horse_attr_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundTeleportEntityPacket (VarInt id + PositionMoveRotation 6 double+2 float + relatives plain writeInt bitmask + bool) =====
+add_executable(pkt_teleport_entity_parity
+    network/protocol/game/PktTeleportEntityParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_teleport_entity_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_teleport_entity_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_teleport_entity_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_teleport_entity_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
