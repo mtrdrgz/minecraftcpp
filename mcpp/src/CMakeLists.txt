@@ -5867,3 +5867,35 @@ if(WIN32)
     target_link_libraries(pkt_interact_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_interact_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: OceanMonumentPieces.MonumentRoomFitter fits/create-claim + 7-fitter probe order =====
+add_executable(ocean_monument_room_fitter_parity world/level/levelgen/structure/structures/OceanMonumentRoomFitterParityTest.cpp)
+target_include_directories(ocean_monument_room_fitter_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(ocean_monument_room_fitter_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: EndFlashState (End sky-flash RNG schedule + Mth.sin table intensity ramp) =====
+add_executable(end_flash_state_parity client/renderer/EndFlashStateParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(end_flash_state_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(end_flash_state_parity PRIVATE bcrypt)
+endif()
+set_target_properties(end_flash_state_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: WardenSpawnTracker (warden anger 3-int state machine: 12000 rollover, [0,4] clamp, 200 cooldown) =====
+add_executable(warden_spawn_tracker_parity world/entity/monster/warden/WardenSpawnTrackerParityTest.cpp)
+target_include_directories(warden_spawn_tracker_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(warden_spawn_tracker_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundAttackPacket (single VarInt entityId) =====
+add_executable(pkt_attack_parity
+    network/protocol/game/PktAttackParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_attack_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_attack_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_attack_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_attack_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
