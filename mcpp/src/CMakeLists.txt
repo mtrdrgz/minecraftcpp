@@ -6068,3 +6068,32 @@ if(WIN32)
     target_link_libraries(pkt_enabled_features_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_enabled_features_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: OceanRuinPieces cluster scatter/box geometry (allPositions 8-offset + parent/fit BoundingBox.intersects) =====
+add_executable(ocean_ruin_cluster_parity world/level/levelgen/structure/structures/OceanRuinClusterParityTest.cpp)
+target_include_directories(ocean_ruin_cluster_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(ocean_ruin_cluster_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: com.mojang.math.Axis.of(Vector3f) arbitrary-axis quaternion (Quaternionf.rotationAxis + invsqrt renormalize) =====
+add_executable(math_axis_arbitrary_parity render/model/MathAxisArbitraryParityTest.cpp)
+target_include_directories(math_axis_arbitrary_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(math_axis_arbitrary_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: ExperienceOrb.getExperienceValue threshold ladder + splitIntoOrbs decomposition (pure signed-int) =====
+add_executable(experience_orb_value_parity world/entity/ExperienceOrbValueParityTest.cpp)
+target_include_directories(experience_orb_value_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(experience_orb_value_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundSetStructureBlockPacket (BlockPos+4 enums+2 utf+6 byte+float+VarLong+flags byte) =====
+add_executable(pkt_set_structure_block_sb_parity
+    network/protocol/game/PktSetStructureBlockSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_structure_block_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_structure_block_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_structure_block_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_structure_block_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
