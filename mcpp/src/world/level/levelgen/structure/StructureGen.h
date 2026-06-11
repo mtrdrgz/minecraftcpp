@@ -20,14 +20,12 @@ struct StructureWorld {
     std::function<int(int, int)>                 heightAt;
 };
 
-// Places at most one "spaced" structure whose grid cell resolves to `active`
-// (desert pyramid / swamp hut / igloo / ruined portal / stronghold room), then
-// makes a best-effort pass at underground monster-room dungeons. Deterministic in
-// worldSeed. The piece shapes are hand-built approximations — not yet the faithful
-// template/jigsaw ports — but the spacing/biome gating mirrors the structure_set
-// JSON, and writes span loaded neighbours via `world`.
+// Generates vanilla data-driven jigsaw structures whose structure_set grid resolves
+// to `active`. Unsupported structure families deliberately no-op rather than
+// placing hand-built approximations.
 void generateStructures(ChunkPos active, uint64_t worldSeed,
                         const StructureWorld& world,
-                        const std::function<std::string(int, int, int)>& biomeGetter);
+                        const std::function<std::string(int, int, int)>& biomeGetter,
+                        const std::string& dataMinecraftDir = {});
 
 } // namespace mc::levelgen::structure

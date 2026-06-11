@@ -9,8 +9,9 @@
 
 namespace mc {
 
-void Minecraft::startLocalGameFast(uint64_t seed) {
-    MC_LOG_INFO("Starting local singleplayer world asynchronously, seed={}", seed);
+void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::optional<int> spawnY) {
+    MC_LOG_INFO("Starting local singleplayer world asynchronously, seed={}, spawn=({}, {}, {})",
+                seed, spawnX, spawnY ? std::to_string(*spawnY) : std::string("surface"), spawnZ);
 
     if (m_connection) {
         m_connection->disconnect();
@@ -49,9 +50,9 @@ void Minecraft::startLocalGameFast(uint64_t seed) {
     PlayerState& state = m_localPlayer.state();
     state.entityId = 0;
     state.gameMode = 1;
-    state.x = 0.5;
-    state.z = 0.5;
-    state.y = (double)m_localGenerator->getBaseHeight(0, 0) + 4.0;
+    state.x = (double)spawnX + 0.5;
+    state.z = (double)spawnZ + 0.5;
+    state.y = spawnY ? (double)*spawnY : (double)m_localGenerator->getBaseHeight(spawnX, spawnZ) + 4.0;
     state.yaw = 0.0f;
     state.pitch = 10.0f;
     state.onGround = false;

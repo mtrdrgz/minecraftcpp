@@ -484,17 +484,18 @@ void Minecraft::runStructures(ChunkPos active) {
         return c->heightmap(((x % 16) + 16) % 16, ((z % 16) + 16) % 16);
     };
     auto biomeGetter = [this](int x, int y, int z) {
-        return m_localGenerator->getBiome(x, y, z);
+        return m_localGenerator->getNoiseBiome(x >> 2, y >> 2, z >> 2);
     };
     try {
-        levelgen::structure::generateStructures(active, m_worldSeed, world, biomeGetter);
+        levelgen::structure::generateStructures(active, m_worldSeed, world, biomeGetter, m_dataMinecraftDir);
     } catch (const std::exception& e) {
         MC_LOG_WARN("runStructures failed at ({},{}): {}", active.x, active.z, e.what());
     }
 }
 
-void Minecraft::startLocalGame(uint64_t seed) {
-    MC_LOG_INFO("Starting local singleplayer prototype world, seed={}", seed);
+void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optional<int> spawnY) {
+    MC_LOG_INFO("Starting local singleplayer prototype world, seed={}, spawn=({}, {}, {})",
+                seed, spawnX, spawnY ? std::to_string(*spawnY) : std::string("surface"), spawnZ);
 
     if (m_connection) {
         m_connection->disconnect();
@@ -515,13 +516,17 @@ void Minecraft::startLocalGame(uint64_t seed) {
     levelgen::feature::resetEngineDecoration();
     levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
     // Generate terrain for a 5x5 so the inner 3x3 can be decorated with all
-    // neighbours present (deferred decoration → no trees clipped at chunk borders).
-    constexpr int RADIUS = 2;
+    // neighbours present. Explicit underground spawns are used for structure demos,
+    // so preload a wider 11x11 area to catch large jigsaw pieces around the start.
+    const int RADIUS = spawnY ? 5 : 2;
+    const ChunkPos spawnChunk = worldToChunk(spawnX, spawnZ);
 
     {
         PROFILE_SCOPE("startup_terrain_generation");
-        for (int cz = -RADIUS; cz <= RADIUS; ++cz) {
-            for (int cx = -RADIUS; cx <= RADIUS; ++cx) {
+        for (int dz = -RADIUS; dz <= RADIUS; ++dz) {
+            for (int dx = -RADIUS; dx <= RADIUS; ++dx) {
+                const int cx = spawnChunk.x + dx;
+                const int cz = spawnChunk.z + dz;
                 LevelChunk* chunk = getOrCreateChunk({cx, cz});
                 PROFILE_SCOPE_CHUNK("startup_fillFromNoise", cx, cz);
                 std::vector<BlockPos> genMarks;   // noise+carver postprocess marks
@@ -544,9 +549,9 @@ void Minecraft::startLocalGame(uint64_t seed) {
     {
         PROFILE_SCOPE("startup_decoration_and_structures");
         constexpr int DECORATE_RADIUS = 1;  // Only 3x3 on startup, not full 5x5
-        for (int cz = -DECORATE_RADIUS; cz <= DECORATE_RADIUS; ++cz) {
-            for (int cx = -DECORATE_RADIUS; cx <= DECORATE_RADIUS; ++cx) {
-                tryDecorate({cx, cz});
+        for (int dz = -DECORATE_RADIUS; dz <= DECORATE_RADIUS; ++dz) {
+            for (int dx = -DECORATE_RADIUS; dx <= DECORATE_RADIUS; ++dx) {
+                tryDecorate({spawnChunk.x + dx, spawnChunk.z + dz});
             }
         }
     }
@@ -555,9 +560,9 @@ void Minecraft::startLocalGame(uint64_t seed) {
     PlayerState& state = m_localPlayer.state();
     state.entityId = 0;
     state.gameMode = 1;
-    state.x = 0.5;
-    state.z = 0.5;
-    state.y = (double)m_localGenerator->getBaseHeight(0, 0) + 4.0;
+    state.x = (double)spawnX + 0.5;
+    state.z = (double)spawnZ + 0.5;
+    state.y = spawnY ? (double)*spawnY : (double)m_localGenerator->getBaseHeight(spawnX, spawnZ) + 4.0;
     state.yaw = 0.0f;
     state.pitch = 10.0f;
     state.onGround = false;

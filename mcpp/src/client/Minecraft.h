@@ -19,6 +19,7 @@
 #include <atomic>
 #include <thread>
 #include <future>
+#include <optional>
 
 
 namespace mc {
@@ -47,8 +48,10 @@ public:
 
     void connectToServer(std::string_view host, uint16_t port,
                          std::string_view username);
-    void startLocalGame(uint64_t seed = 0);
-    void startLocalGameFast(uint64_t seed = 0);
+    void startLocalGame(uint64_t seed = 0, int spawnX = 0, int spawnZ = 0,
+                        std::optional<int> spawnY = std::nullopt);
+    void startLocalGameFast(uint64_t seed = 0, int spawnX = 0, int spawnZ = 0,
+                            std::optional<int> spawnY = std::nullopt);
     void disconnect();
 
     void tick();

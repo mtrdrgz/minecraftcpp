@@ -11,10 +11,12 @@
 #include <string>
 #include <chrono>
 #include <vector>
+#include <optional>
 
 static void parseCommandLine(int argc, wchar_t** argv,
                               std::string& host, uint16_t& port, std::string& user, std::string& backend,
-                              bool& quickPlaySingleplayer) {
+                              bool& quickPlaySingleplayer, uint64_t& singleplayerSeed,
+                              int& spawnX, int& spawnZ, std::optional<int>& spawnY) {
     for (int i = 1; i < argc; ++i) {
         std::wstring arg = argv[i];
         if (arg == L"--backend" && i + 1 < argc) {
@@ -22,6 +24,19 @@ static void parseCommandLine(int argc, wchar_t** argv,
             backend = std::string(b.begin(), b.end());
         } else if (arg == L"--quickPlaySingleplayer" || arg == L"--singleplayer") {
             quickPlaySingleplayer = true;
+        } else if (arg == L"--seed" && i + 1 < argc) {
+            std::wstring s = argv[++i];
+            try { singleplayerSeed = (uint64_t)std::stoll(s); } catch(...) {}
+        } else if (arg == L"--spawn" && i + 2 < argc) {
+            std::wstring x = argv[++i];
+            std::wstring z = argv[++i];
+            try {
+                spawnX = std::stoi(x);
+                spawnZ = std::stoi(z);
+            } catch(...) {}
+        } else if (arg == L"--spawnY" && i + 1 < argc) {
+            std::wstring y = argv[++i];
+            try { spawnY = std::stoi(y); } catch(...) {}
         } else if (arg.find(L"--") != 0) {
             std::string s(arg.begin(), arg.end());
             if (host.empty()) host = s;
@@ -63,11 +78,16 @@ int main() {
     std::string user = "mcpp_player";
     std::string backendStr = "opengl";
     bool quickPlaySingleplayer = false;
+    uint64_t singleplayerSeed = 0;
+    int spawnX = 0;
+    int spawnZ = 0;
+    std::optional<int> spawnY;
     
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv) {
-        parseCommandLine(argc, argv, host, port, user, backendStr, quickPlaySingleplayer);
+        parseCommandLine(argc, argv, host, port, user, backendStr, quickPlaySingleplayer,
+                         singleplayerSeed, spawnX, spawnZ, spawnY);
         LocalFree(argv);
     }
     
@@ -86,7 +106,7 @@ int main() {
     mc::render::LevelRenderer levelRenderer(device.get(), &mc, &window);
 
     if (quickPlaySingleplayer) {
-        mc.startLocalGame(0);
+        mc.startLocalGame(singleplayerSeed, spawnX, spawnZ, spawnY);
     } else if (!host.empty()) {
         mc.connectToServer(host, port, user);
     }

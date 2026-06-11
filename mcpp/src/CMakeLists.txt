@@ -52,6 +52,7 @@ set(MC_SOURCES
     world/level/levelgen/feature/TreeGen.cpp
     world/level/levelgen/feature/OreGen.cpp
     world/level/levelgen/structure/StructureGen.cpp
+    world/level/levelgen/structure/placement/StructurePlacement.cpp
     # World — Item
     world/item/Item.cpp
     world/item/Items.cpp
@@ -68,6 +69,9 @@ set(MC_SOURCES
     world/entity/ai/RandomStrollGoal.cpp
     # World — Physics
     world/phys/AABB.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp
     # Network
     network/PacketBuffer.cpp
     network/Connection.cpp
