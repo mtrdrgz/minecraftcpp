@@ -5444,3 +5444,8 @@ set_target_properties(header_footer_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRE
 add_executable(slider_button_parity client/gui/SliderButtonParityTest.cpp)
 target_include_directories(slider_button_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(slider_button_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: EditBox font-independent edit core (UTF-16 cursor/word/selection/insert/delete) =====
+add_executable(edit_box_parity client/gui/EditBoxParityTest.cpp)
+target_include_directories(edit_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(edit_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
