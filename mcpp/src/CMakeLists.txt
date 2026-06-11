@@ -5522,3 +5522,32 @@ if(WIN32)
     target_link_libraries(pkt_recipe_book_settings_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_recipe_book_settings_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: StructurePiece orientation/offset geometry (getWorldX/Y/Z, makeBoundingBox, isCloseToChunk) =====
+add_executable(structure_piece_math_parity world/level/levelgen/structure/StructurePieceMathParityTest.cpp)
+target_include_directories(structure_piece_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(structure_piece_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== util: SequencedPriorityIterator (highest-priority-first FIFO chunk-task scheduler) =====
+add_executable(sequenced_priority_iterator_parity util/SequencedPriorityIteratorParityTest.cpp)
+target_include_directories(sequenced_priority_iterator_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(sequenced_priority_iterator_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: AgeableMob.getSpeedUpSecondsWhenFeeding ((int)(t/20*0.1F) int-div/float trap) =====
+add_executable(ageable_mob_parity world/entity/AgeableMobParityTest.cpp)
+target_include_directories(ageable_mob_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(ageable_mob_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundTickingStatePacket (writeFloat tickRate + writeBoolean isFrozen) =====
+add_executable(pkt_ticking_state_parity
+    network/protocol/game/PktTickingStateParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_ticking_state_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_ticking_state_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_ticking_state_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_ticking_state_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
