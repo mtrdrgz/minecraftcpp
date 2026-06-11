@@ -57,7 +57,7 @@ std::vector<int> g_hasSturdy;
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
         shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf,
-        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow;
+        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow, supportsBamboo;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -666,7 +666,7 @@ const std::set<std::string> PORTED = {
     "CoralBlock", "ChorusFlowerBlock", "BigDripleafStemBlock", "LadderBlock", "BaseTorchBlock", "SnowyBlock",
     // straggler wave 10
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
-    "DirtPathBlock", "HangingMossBlock"
+    "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1143,6 +1143,21 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
+    // HangingRootsBlock.updateShape — UP && !canSurvive -> AIR. canSurvive = above.isFaceSturdy(DOWN).
+    if (fam == "HangingRootsBlock") {
+        if (dir == UP && !isFaceSturdy(level.rel(UP), DOWN)) return 0;
+        return stateId;
+    }
+    // BambooSaplingBlock.updateShape — !canSurvive(below.is(#supports_bamboo)) -> AIR; else UP neighbour
+    // is bamboo -> grow into BAMBOO default; else super.
+    if (fam == "BambooSaplingBlock") {
+        if (!inTag(g_tags.supportsBamboo, level.rel(DOWN))) return 0;
+        if (dir == UP && g_name[neighbourId] == "bamboo") {
+            auto it = g_index.find(std::string("bamboo") + "\x1f" + "age=0,leaves=none,stage=0");
+            if (it != g_index.end()) return it->second;
+        }
+        return stateId;
+    }
     // HangingMossBlock.updateShape — TIP = (below is not this moss); canStayAtPosition only schedules.
     if (fam == "HangingMossBlock") {
         int ns = setProp(stateId, "tip", g_name[level.rel(DOWN)] != g_name[stateId] ? "true" : "false");
@@ -1339,6 +1354,7 @@ int main(int argc, char** argv) {
         g_tags.supportsMangrovePropagule = resolve("supports_mangrove_propagule");
         g_tags.supportsSmallDripleaf = resolve("supports_small_dripleaf");
         g_tags.snow = resolve("snow");
+        g_tags.supportsBamboo = resolve("supports_bamboo");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
