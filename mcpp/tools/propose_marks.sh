@@ -7,7 +7,7 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 LEDGER=mcpp/docs/PORT_COVERAGE.tsv
 MAP=mcpp/build/target_source.map
-RES=mcpp/build/gate_results.txt
+RES="${1:-mcpp/build/gate_results.txt}"
 
 # unvisited path set (for O(1) membership)
 declare -A UNV

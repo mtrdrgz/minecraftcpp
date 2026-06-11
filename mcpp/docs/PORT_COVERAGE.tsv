@@ -2894,7 +2894,7 @@ net/minecraft/network/protocol/game/ClientboundBossEventPacket.java	unvisited
 net/minecraft/network/protocol/game/ClientboundBundleDelimiterPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundBundlePacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundChangeDifficultyPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
-net/minecraft/network/protocol/game/ClientboundChunkBatchFinishedPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundChunkBatchFinishedPacket.java	ported	C++ parity gate pkt_chunk_batch_finished_parity (byte-exact, full-suite reconcile 2026-06-11): PktChunkBatchFinishedParity cases=32 mismatches=0
 net/minecraft/network/protocol/game/ClientboundChunkBatchStartPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundChunksBiomesPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundClearTitlesPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
@@ -2917,10 +2917,10 @@ net/minecraft/network/protocol/game/ClientboundDisguisedChatPacket.java	unvisite
 net/minecraft/network/protocol/game/ClientboundEntityEventPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundEntityPositionSyncPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundExplodePacket.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundForgetLevelChunkPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundForgetLevelChunkPacket.java	ported	C++ parity gate pkt_forget_level_chunk_parity (byte-exact, full-suite reconcile 2026-06-11): PktForgetLevelChunkParity cases=1024 mismatches=0
 net/minecraft/network/protocol/game/ClientboundGameEventPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundGameRuleValuesPacket.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundGameTestHighlightPosPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundGameTestHighlightPosPacket.java	ported	C++ parity gate pkt_game_test_highlight_pos_parity (byte-exact, full-suite reconcile 2026-06-11): PktGameTestHighlightPosParity cases=42 mismatches=0
 net/minecraft/network/protocol/game/ClientboundHurtAnimationPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundLevelChunkPacketData.java	unvisited	
@@ -2935,7 +2935,7 @@ net/minecraft/network/protocol/game/ClientboundMapItemDataPacket.java	unvisited
 net/minecraft/network/protocol/game/ClientboundMerchantOffersPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundMountScreenOpenPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ClientboundMoveEntityPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
-net/minecraft/network/protocol/game/ClientboundMoveMinecartPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundMoveMinecartPacket.java	ported	C++ parity gate pkt_move_minecart_parity (byte-exact, full-suite reconcile 2026-06-11): PktMoveMinecartParity cases=26 mismatches=0
 net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ClientboundOpenBookPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundOpenScreenPacket.java	unvisited	
@@ -2946,7 +2946,7 @@ net/minecraft/network/protocol/game/ClientboundPlayerChatPacket.java	unvisited
 net/minecraft/network/protocol/game/ClientboundPlayerCombatEndPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundPlayerCombatEnterPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundPlayerCombatKillPacket.java	ported	C++ *ParityTest.cpp packet gate (plain-text Component via writeNbt(NbtTag)); commit b6afc2ce
-net/minecraft/network/protocol/game/ClientboundPlayerInfoRemovePacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundPlayerInfoRemovePacket.java	ported	C++ parity gate pkt_player_info_remove_parity (byte-exact, full-suite reconcile 2026-06-11): PktPlayerInfoRemoveParity cases=296 mismatches=0
 net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundPlayerPositionPacket.java	unvisited	
@@ -2962,7 +2962,7 @@ net/minecraft/network/protocol/game/ClientboundRespawnPacket.java	unvisited
 net/minecraft/network/protocol/game/ClientboundRotateHeadPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ClientboundSectionBlocksUpdatePacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundSelectAdvancementsTabPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
-net/minecraft/network/protocol/game/ClientboundServerDataPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundServerDataPacket.java	ported	C++ parity gate pkt_server_data_parity (byte-exact, full-suite reconcile 2026-06-11): PktServerData cases=60 mismatches=0
 net/minecraft/network/protocol/game/ClientboundSetActionBarTextPacket.java	ported	C++ *ParityTest.cpp packet gate (plain-text Component via writeNbt(NbtTag)); commit b6afc2ce
 net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ClientboundSetBorderLerpSizePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
@@ -3000,10 +3000,10 @@ net/minecraft/network/protocol/game/ClientboundSystemChatPacket.java	ported	C++ 
 net/minecraft/network/protocol/game/ClientboundTabListPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundTagQueryPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundTakeItemEntityPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
-net/minecraft/network/protocol/game/ClientboundTeleportEntityPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundTeleportEntityPacket.java	ported	C++ parity gate pkt_teleport_entity_parity (byte-exact, full-suite reconcile 2026-06-11): PktTeleportEntityParity cases=93 mismatches=0
 net/minecraft/network/protocol/game/ClientboundTestInstanceBlockStatus.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundTickingStatePacket.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundTickingStepPacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundTickingStatePacket.java	ported	C++ parity gate pkt_ticking_state_parity (byte-exact, full-suite reconcile 2026-06-11): PktTickingStateParity cases=72 mismatches=0
+net/minecraft/network/protocol/game/ClientboundTickingStepPacket.java	ported	C++ parity gate pkt_ticking_step_parity (byte-exact, full-suite reconcile 2026-06-11): PktTickingStepParity cases=30 mismatches=0
 net/minecraft/network/protocol/game/ClientboundTrackedWaypointPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundUpdateAdvancementsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundUpdateAttributesPacket.java	unvisited	
@@ -3016,7 +3016,7 @@ net/minecraft/network/protocol/game/GameProtocols.java	unvisited
 net/minecraft/network/protocol/game/ServerGamePacketListener.java	unvisited	
 net/minecraft/network/protocol/game/ServerPacketListener.java	unvisited	
 net/minecraft/network/protocol/game/ServerboundAcceptTeleportationPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
-net/minecraft/network/protocol/game/ServerboundAttackPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundAttackPacket.java	ported	C++ parity gate pkt_attack_parity (byte-exact, full-suite reconcile 2026-06-11): PktAttackParity cases=28 mismatches=0
 net/minecraft/network/protocol/game/ServerboundBlockEntityTagQueryPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundChangeDifficultyPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundChangeGameModePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
@@ -3028,16 +3028,16 @@ net/minecraft/network/protocol/game/ServerboundChatSessionUpdatePacket.java	unvi
 net/minecraft/network/protocol/game/ServerboundChunkBatchReceivedPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundClientCommandPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/network/protocol/game/ServerboundClientTickEndPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
-net/minecraft/network/protocol/game/ServerboundCommandSuggestionPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundCommandSuggestionPacket.java	ported	C++ parity gate pkt_command_suggestion_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktCommandSuggestionSbParity cases=27 mismatches=0
 net/minecraft/network/protocol/game/ServerboundConfigurationAcknowledgedPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundContainerButtonClickPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundContainerClickPacket.java	unvisited	
 net/minecraft/network/protocol/game/ServerboundContainerClosePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/game/ServerboundContainerSlotStateChangedPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundDebugSubscriptionRequestPacket.java	unvisited	
-net/minecraft/network/protocol/game/ServerboundEditBookPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundEditBookPacket.java	ported	C++ parity gate pkt_edit_book_parity (byte-exact, full-suite reconcile 2026-06-11): PktEditBookParity cases=14 mismatches=0
 net/minecraft/network/protocol/game/ServerboundEntityTagQueryPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
-net/minecraft/network/protocol/game/ServerboundInteractPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundInteractPacket.java	ported	C++ parity gate pkt_interact_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktInteractSbParity cases=1022 mismatches=0
 net/minecraft/network/protocol/game/ServerboundJigsawGeneratePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundLockDifficultyPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
@@ -3045,14 +3045,14 @@ net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java	ported	C++
 net/minecraft/network/protocol/game/ServerboundPaddleBoatPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundPickItemFromBlockPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundPickItemFromEntityPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
-net/minecraft/network/protocol/game/ServerboundPlaceRecipePacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundPlaceRecipePacket.java	ported	C++ parity gate pkt_place_recipe_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktPlaceRecipeSbParity cases=18 mismatches=0
 net/minecraft/network/protocol/game/ServerboundPlayerAbilitiesPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundPlayerActionPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundPlayerCommandPacket.java	unvisited	
 net/minecraft/network/protocol/game/ServerboundPlayerInputPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ServerboundPlayerLoadedPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
-net/minecraft/network/protocol/game/ServerboundRecipeBookChangeSettingsPacket.java	unvisited	
-net/minecraft/network/protocol/game/ServerboundRecipeBookSeenRecipePacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundRecipeBookChangeSettingsPacket.java	ported	C++ parity gate pkt_recipe_book_settings_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktRecipeBookSettingsSbParity cases=36 mismatches=0
+net/minecraft/network/protocol/game/ServerboundRecipeBookSeenRecipePacket.java	ported	C++ parity gate pkt_recipe_book_seen_recipe_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktRecipeBookSeenRecipeSbParity cases=28 mismatches=0
 net/minecraft/network/protocol/game/ServerboundRenameItemPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundSeenAdvancementsPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundSelectBundleItemPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
@@ -3062,12 +3062,12 @@ net/minecraft/network/protocol/game/ServerboundSetCarriedItemPacket.java	ported	
 net/minecraft/network/protocol/game/ServerboundSetCommandBlockPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundSetCommandMinecartPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundSetCreativeModeSlotPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
-net/minecraft/network/protocol/game/ServerboundSetGameRulePacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundSetGameRulePacket.java	ported	C++ parity gate pkt_set_game_rule_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSetGameRuleSbParity cases=14 mismatches=0
 net/minecraft/network/protocol/game/ServerboundSetJigsawBlockPacket.java	ported	C++ parity gate pkt_set_jigsaw_block_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSetJigsawBlockSbParity cases=10 mismatches=0
 net/minecraft/network/protocol/game/ServerboundSetStructureBlockPacket.java	ported	C++ parity gate pkt_set_structure_block_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSetStructureBlockSbParity cases=10 mismatches=0
-net/minecraft/network/protocol/game/ServerboundSetTestBlockPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundSetTestBlockPacket.java	ported	C++ parity gate pkt_set_test_block_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSetTestBlockSbParity cases=15 mismatches=0
 net/minecraft/network/protocol/game/ServerboundSignUpdatePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
-net/minecraft/network/protocol/game/ServerboundSpectateEntityPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundSpectateEntityPacket.java	ported	C++ parity gate pkt_spectate_entity_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSpectateEntitySbParity cases=30 mismatches=0
 net/minecraft/network/protocol/game/ServerboundSwingPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundTestInstanceBlockActionPacket.java	unvisited	
@@ -3136,7 +3136,7 @@ net/minecraft/resources/DelegatingOps.java	unvisited
 net/minecraft/resources/DependantName.java	unvisited	
 net/minecraft/resources/FileToIdConverter.java	unvisited	
 net/minecraft/resources/HolderSetCodec.java	unvisited	
-net/minecraft/resources/Identifier.java	unvisited	
+net/minecraft/resources/Identifier.java	partial	C++ parity gate rl_chars_parity (byte-exact, full-suite reconcile 2026-06-11): ResourceLocationChars cases=194 mismatches=0
 net/minecraft/resources/NetworkRegistryLoadTask.java	unvisited	
 net/minecraft/resources/RegistryDataLoader.java	unvisited	
 net/minecraft/resources/RegistryFileCodec.java	unvisited	
@@ -3640,7 +3640,7 @@ net/minecraft/util/ExceptionCollector.java	unvisited
 net/minecraft/util/ExtraCodecs.java	unvisited	
 net/minecraft/util/FastBufferedInputStream.java	unvisited	
 net/minecraft/util/FileSystemUtil.java	unvisited	
-net/minecraft/util/FileUtil.java	unvisited	
+net/minecraft/util/FileUtil.java	ported	C++ parity gate file_util_parity (byte-exact, full-suite reconcile 2026-06-11): FileUtil checks=512 mismatches=0
 net/minecraft/util/FileZipper.java	unvisited	
 net/minecraft/util/FormattedCharSequence.java	unvisited	
 net/minecraft/util/FormattedCharSink.java	unvisited	
@@ -5033,7 +5033,7 @@ net/minecraft/world/entity/npc/wanderingtrader/package-info.java	unvisited
 net/minecraft/world/entity/package-info.java	unvisited	
 net/minecraft/world/entity/player/Abilities.java	unvisited	
 net/minecraft/world/entity/player/ChatVisiblity.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
-net/minecraft/world/entity/player/Input.java	unvisited	
+net/minecraft/world/entity/player/Input.java	partial	C++ parity gate pkt_player_input_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktPlayerInputSbParity cases=140 mismatches=0
 net/minecraft/world/entity/player/Inventory.java	unvisited	
 net/minecraft/world/entity/player/Player.java	unvisited	
 net/minecraft/world/entity/player/PlayerEquipment.java	unvisited	
@@ -6535,7 +6535,7 @@ net/minecraft/world/level/levelgen/structure/templatesystem/CappedProcessor.java
 net/minecraft/world/level/levelgen/structure/templatesystem/GravityProcessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/JigsawReplacementProcessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/LavaSubmergedBlockProcessor.java	unvisited	
-net/minecraft/world/level/levelgen/structure/templatesystem/LinearPosTest.java	unvisited	
+net/minecraft/world/level/levelgen/structure/templatesystem/LinearPosTest.java	partial	C++ parity gate linear_pos_test_math_parity (byte-exact, full-suite reconcile 2026-06-11): LinearPosTestMath checks=2304 mismatches=0
 net/minecraft/world/level/levelgen/structure/templatesystem/LiquidSettings.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/NopProcessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/PosAlwaysTrueTest.java	unvisited	
