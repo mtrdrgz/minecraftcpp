@@ -6655,3 +6655,27 @@ if(WIN32)
     target_link_libraries(structure_template_loader_parity PRIVATE bcrypt)
 endif()
 set_target_properties(structure_template_loader_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== JIGSAW ASSEMBLY #18: StructureTemplatePool + StructurePoolElement hierarchy + template_pool JSON loader (weight-expansion, Util.shuffle, getMaxSize Y-span, element getBoundingBox) =====
+add_executable(structure_template_pool_parity
+    world/level/levelgen/structure/pools/StructureTemplatePoolParityTest.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(structure_template_pool_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_template_pool_parity PRIVATE miniz nlohmann_json)
+if(WIN32)
+    target_link_libraries(structure_template_pool_parity PRIVATE bcrypt)
+endif()
+set_target_properties(structure_template_pool_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== JIGSAW ASSEMBLY #18: JigsawBlock.canAttach (front opposite + top match if ALIGNED + target==name) + Rotation.getShuffled (Util.shuffle of 4) =====
+add_executable(jigsaw_attach_parity
+    world/level/block/JigsawAttachParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(jigsaw_attach_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(jigsaw_attach_parity PRIVATE bcrypt)
+endif()
+set_target_properties(jigsaw_attach_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
