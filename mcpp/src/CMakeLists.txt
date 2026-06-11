@@ -6307,3 +6307,34 @@ if(WIN32)
     target_link_libraries(pkt_move_entity_posrot_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_move_entity_posrot_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: JungleTemplePiece.MossStoneSelector BlockSelector (nextFloat()<0.4F -> cobblestone/mossy maze) =====
+add_executable(jungle_temple_stone_selector_parity
+    world/level/levelgen/structure/structures/JungleTempleStoneSelectorParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(jungle_temple_stone_selector_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(jungle_temple_stone_selector_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: ColorMapColorUtil.get + GrassColor/FoliageColor sampler (colormap bilinear-free index lookup + default guard) =====
+add_executable(colormapcolorutil_parity world/level/ColorMapColorUtilParityTest.cpp)
+target_include_directories(colormapcolorutil_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(colormapcolorutil_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item: MerchantOffer getModifiedCostCount/updateDemand/isOutOfStock/needsRestock (int wrap + Mth.floor float + clamp) =====
+add_executable(merchant_offer_parity world/item/trading/MerchantOfferParityTest.cpp)
+target_include_directories(merchant_offer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(merchant_offer_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundPlayerPositionPacket (VarInt id + PositionMoveRotation 6 double+2 float + relatives plain writeInt bitmask) =====
+add_executable(pkt_player_position_cb_parity
+    network/protocol/game/PktPlayerPositionParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_player_position_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_player_position_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_player_position_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_player_position_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
