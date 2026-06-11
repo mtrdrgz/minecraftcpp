@@ -5785,3 +5785,27 @@ if(WIN32)
     target_link_libraries(pkt_recipe_book_seen_recipe_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_recipe_book_seen_recipe_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: Octree (LevelRenderer section-render octree: root BB / axis-sort / child octant / isClose) =====
+add_executable(octree_parity render/OctreeParityTest.cpp)
+target_include_directories(octree_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(octree_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== gameplay/maps: MapItemSavedData center/pixel-delta/clamp/rotation math =====
+add_executable(map_item_saved_data_math_parity world/level/saveddata/maps/MapItemSavedDataMathParityTest.cpp)
+target_include_directories(map_item_saved_data_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(map_item_saved_data_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundEditBookPacket (slot VarInt + list<String> + Optional<String>) =====
+add_executable(pkt_edit_book_parity
+    network/protocol/game/PktEditBookParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_edit_book_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_edit_book_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_edit_book_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_edit_book_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
