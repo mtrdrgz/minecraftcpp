@@ -6338,3 +6338,34 @@ if(WIN32)
     target_link_libraries(pkt_player_position_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_player_position_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: MineShaftCorridor.findCorridorSize RNG corridor geometry (nextInt(3)+2 length *5, dir switch BoundingBox + move; distinct from gated findStairs) =====
+add_executable(mine_shaft_corridor_parity
+    world/level/levelgen/structure/structures/MineShaftCorridorParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(mine_shaft_corridor_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mine_shaft_corridor_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: WeatherEffectRenderer column orientation tables[32x32] + renderInstances billboard geometry (Mth.length double-widen) =====
+add_executable(weather_effect_parity client/renderer/WeatherEffectParityTest.cpp)
+target_include_directories(weather_effect_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(weather_effect_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item: PotionContents getColorOptional/getColorOr/getColor (weighted sRGB average + ARGB.color; int-wrap accumulate) =====
+add_executable(potion_color_parity world/item/alchemy/PotionContentsParityTest.cpp)
+target_include_directories(potion_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(potion_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundTagQueryPacket (VarInt transactionId + writeNbt nullable CompoundTag, NbtIo network framing) =====
+add_executable(pkt_tag_query_cb_parity
+    network/protocol/game/PktTagQueryParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_tag_query_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_tag_query_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_tag_query_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_tag_query_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
