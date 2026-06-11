@@ -157,6 +157,22 @@ int main(int argc, char** argv) {
                 ++mism;
                 std::cerr << "VALIDID mismatch id=" << id << " java=" << want << " cpp=" << got << "\n";
             }
+        } else if (tag == "ABIL") {
+            // ABIL <gtId> <startFlying> <mayfly> <instabuild> <invulnerable> <flying> <mayBuild>
+            ++cases;
+            GameType v = gt::gameTypeById(std::stoi(p[1]));
+            gt::Abilities a;
+            a.flying = std::stoi(p[2]) != 0;
+            gt::gameTypeUpdatePlayerAbilities(v, a);
+            bool ok = (a.mayfly == (std::stoi(p[3]) != 0)) && (a.instabuild == (std::stoi(p[4]) != 0)) &&
+                      (a.invulnerable == (std::stoi(p[5]) != 0)) && (a.flying == (std::stoi(p[6]) != 0)) &&
+                      (a.mayBuild == (std::stoi(p[7]) != 0));
+            if (!ok) {
+                ++mism;
+                std::cerr << "ABIL mismatch gt=" << p[1] << " sf=" << p[2] << " got mayfly=" << a.mayfly
+                          << " insta=" << a.instabuild << " invuln=" << a.invulnerable << " fly=" << a.flying
+                          << " build=" << a.mayBuild << "\n";
+            }
         }
         // unknown tags ignored
     }

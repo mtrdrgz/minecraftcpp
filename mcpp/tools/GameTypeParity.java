@@ -99,5 +99,19 @@ public class GameTypeParity {
         for (int id : vids) {
             O.println("VALIDID" + "\t" + id + "\t" + b(GameType.isValidId(id)));
         }
+
+        // updatePlayerAbilities: gamemode -> player-ability flags. Start `flying` false AND true
+        // to verify CREATIVE leaves it unchanged while SPECTATOR forces it true.
+        //   ABIL <gtId> <startFlying> <mayfly> <instabuild> <invulnerable> <flying> <mayBuild>
+        for (GameType v : vals) {
+            for (boolean sf : new boolean[]{ false, true }) {
+                net.minecraft.world.entity.player.Abilities ab = new net.minecraft.world.entity.player.Abilities();
+                ab.flying = sf;
+                v.updatePlayerAbilities(ab);
+                O.println("ABIL" + "\t" + v.getId() + "\t" + b(sf)
+                        + "\t" + b(ab.mayfly) + "\t" + b(ab.instabuild) + "\t" + b(ab.invulnerable)
+                        + "\t" + b(ab.flying) + "\t" + b(ab.mayBuild));
+            }
+        }
     }
 }

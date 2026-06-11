@@ -162,4 +162,36 @@ inline constexpr bool gameTypeIsValidId(int32_t id) {
     return false;
 }
 
+// The player-ability flags GameType.updatePlayerAbilities mutates (net.minecraft.world.entity.
+// player.Abilities). Only the booleans the mapping touches; flyingSpeed/walkingSpeed are untouched.
+struct Abilities {
+    bool mayfly = false;
+    bool instabuild = false;
+    bool invulnerable = false;
+    bool flying = false;
+    bool mayBuild = true;
+};
+
+// 1:1 port of GameType.updatePlayerAbilities (GameType.java:62-80): CREATIVE leaves `flying`
+// UNCHANGED (only mayfly/instabuild/invulnerable set); SPECTATOR forces flying=true; SURVIVAL/
+// ADVENTURE clear all four; mayBuild = !isBlockPlacingRestricted() always.
+inline constexpr void gameTypeUpdatePlayerAbilities(GameType v, Abilities& a) {
+    if (v == GameType::CREATIVE) {
+        a.mayfly = true;
+        a.instabuild = true;
+        a.invulnerable = true;
+    } else if (v == GameType::SPECTATOR) {
+        a.mayfly = true;
+        a.instabuild = false;
+        a.invulnerable = true;
+        a.flying = true;
+    } else {
+        a.mayfly = false;
+        a.instabuild = false;
+        a.invulnerable = false;
+        a.flying = false;
+    }
+    a.mayBuild = !gameTypeIsBlockPlacingRestricted(v);
+}
+
 } // namespace mc::world::level
