@@ -22,7 +22,7 @@ com/mojang/blaze3d/buffers/GpuBuffer.java	unvisited
 com/mojang/blaze3d/buffers/GpuBufferSlice.java	unvisited	
 com/mojang/blaze3d/buffers/GpuFence.java	unvisited	
 com/mojang/blaze3d/buffers/Std140Builder.java	unvisited	
-com/mojang/blaze3d/buffers/Std140SizeCalculator.java	unvisited	
+com/mojang/blaze3d/buffers/Std140SizeCalculator.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); std140_size_calculator_parity 92/0
 com/mojang/blaze3d/buffers/package-info.java	unvisited	
 com/mojang/blaze3d/font/GlyphBitmap.java	unvisited	
 com/mojang/blaze3d/font/GlyphInfo.java	unvisited	
@@ -77,7 +77,7 @@ com/mojang/blaze3d/platform/FramerateLimitTracker.java	unvisited
 com/mojang/blaze3d/platform/GLX.java	unvisited	
 com/mojang/blaze3d/platform/IconSet.java	unvisited	
 com/mojang/blaze3d/platform/InputConstants.java	unvisited	
-com/mojang/blaze3d/platform/Lighting.java	unvisited	
+com/mojang/blaze3d/platform/Lighting.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); lighting_parity 19/0
 com/mojang/blaze3d/platform/MacosUtil.java	unvisited	
 com/mojang/blaze3d/platform/MessageBox.java	unvisited	
 com/mojang/blaze3d/platform/Monitor.java	unvisited	
@@ -90,7 +90,7 @@ com/mojang/blaze3d/platform/TextInputManager.java	unvisited
 com/mojang/blaze3d/platform/TextureUtil.java	unvisited	
 com/mojang/blaze3d/platform/Transparency.java	unvisited	
 com/mojang/blaze3d/platform/VideoMode.java	unvisited	
-com/mojang/blaze3d/platform/Window.java	unvisited	
+com/mojang/blaze3d/platform/Window.java	partial	getGuiScale certified: window_gui_scale_parity 1440/0 (byte-exact, 2026-06-11); rest of Window unported
 com/mojang/blaze3d/platform/WindowEventHandler.java	unvisited	
 com/mojang/blaze3d/platform/cursor/CursorType.java	unvisited	
 com/mojang/blaze3d/platform/cursor/CursorTypes.java	unvisited	
@@ -135,27 +135,27 @@ com/mojang/blaze3d/vertex/ByteBufferBuilder.java	unvisited
 com/mojang/blaze3d/vertex/CompactVectorArray.java	unvisited	
 com/mojang/blaze3d/vertex/DefaultVertexFormat.java	unvisited	
 com/mojang/blaze3d/vertex/MeshData.java	unvisited	
-com/mojang/blaze3d/vertex/PoseStack.java	unvisited	
+com/mojang/blaze3d/vertex/PoseStack.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); pose_stack_parity 620/0
 com/mojang/blaze3d/vertex/QuadInstance.java	unvisited	
 com/mojang/blaze3d/vertex/SheetedDecalTextureGenerator.java	unvisited	
 com/mojang/blaze3d/vertex/Tesselator.java	unvisited	
 com/mojang/blaze3d/vertex/TlsfAllocator.java	unvisited	
 com/mojang/blaze3d/vertex/UberGpuBuffer.java	unvisited	
 com/mojang/blaze3d/vertex/VertexConsumer.java	unvisited	
-com/mojang/blaze3d/vertex/VertexFormat.java	unvisited	
+com/mojang/blaze3d/vertex/VertexFormat.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); vertex_format_parity 1771/0
 com/mojang/blaze3d/vertex/VertexFormatElement.java	unvisited	
 com/mojang/blaze3d/vertex/VertexMultiConsumer.java	unvisited	
 com/mojang/blaze3d/vertex/VertexSorting.java	unvisited	
 com/mojang/blaze3d/vertex/package-info.java	unvisited	
-com/mojang/math/Axis.java	unvisited	
+com/mojang/math/Axis.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); math_axis_parity 468/0 + math_axis_arbitrary_parity 2028/0
 com/mojang/math/Constants.java	unvisited	
 com/mojang/math/Divisor.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
-com/mojang/math/GivensParameters.java	unvisited	
-com/mojang/math/MatrixUtil.java	unvisited	
-com/mojang/math/OctahedralGroup.java	unvisited	
+com/mojang/math/GivensParameters.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); givens_parameters_parity 1214/0
+com/mojang/math/MatrixUtil.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); matrix_util_parity 2478/0
+com/mojang/math/OctahedralGroup.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); octahedral_parity 2695/0
 com/mojang/math/Quadrant.java	unvisited	
-com/mojang/math/SymmetricGroup3.java	unvisited	
-com/mojang/math/Transformation.java	unvisited	
+com/mojang/math/SymmetricGroup3.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); symmetric_group3_parity 150/0
+com/mojang/math/Transformation.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); transformation_parity 221/0
 com/mojang/math/package-info.java	unvisited	
 com/mojang/realmsclient/RealmsAvailability.java	unvisited	
 com/mojang/realmsclient/RealmsMainScreen.java	unvisited	
@@ -1091,7 +1091,7 @@ net/minecraft/client/model/geom/builders/MaterialDefinition.java	unvisited
 net/minecraft/client/model/geom/builders/MeshDefinition.java	unvisited	
 net/minecraft/client/model/geom/builders/MeshTransformer.java	unvisited	
 net/minecraft/client/model/geom/builders/PartDefinition.java	unvisited	
-net/minecraft/client/model/geom/builders/UVPair.java	unvisited	
+net/minecraft/client/model/geom/builders/UVPair.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); uvpair_parity 648/0
 net/minecraft/client/model/geom/builders/package-info.java	unvisited	
 net/minecraft/client/model/geom/package-info.java	unvisited	
 net/minecraft/client/model/monster/blaze/BlazeModel.java	unvisited	
@@ -1370,7 +1370,7 @@ net/minecraft/client/quickplay/QuickPlay.java	unvisited
 net/minecraft/client/quickplay/QuickPlayLog.java	unvisited	
 net/minecraft/client/quickplay/package-info.java	unvisited	
 net/minecraft/client/renderer/BiomeColors.java	unvisited	
-net/minecraft/client/renderer/CloudRenderer.java	unvisited	
+net/minecraft/client/renderer/CloudRenderer.java	partial	cloud cell geometry math certified: cloud_cell_math_parity 23917/0 (byte-exact, 2026-06-11); render orchestration unported
 net/minecraft/client/renderer/CubeMap.java	unvisited	
 net/minecraft/client/renderer/DynamicUniformStorage.java	unvisited	
 net/minecraft/client/renderer/DynamicUniforms.java	unvisited	
@@ -1381,15 +1381,15 @@ net/minecraft/client/renderer/GlobalSettingsUniform.java	unvisited
 net/minecraft/client/renderer/GpuWarnlistManager.java	unvisited	
 net/minecraft/client/renderer/ItemInHandRenderer.java	unvisited	
 net/minecraft/client/renderer/LevelEventHandler.java	unvisited	
-net/minecraft/client/renderer/LevelRenderer.java	unvisited	
+net/minecraft/client/renderer/LevelRenderer.java	partial	getLightCoords certified: level_render_light_parity 424/0 (byte-exact, 2026-06-11); rest of LevelRenderer unported
 net/minecraft/client/renderer/LevelTargetBundle.java	unvisited	
-net/minecraft/client/renderer/Lightmap.java	unvisited	
+net/minecraft/client/renderer/Lightmap.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); light_texture_parity 528/0
 net/minecraft/client/renderer/LightmapRenderStateExtractor.java	unvisited	
 net/minecraft/client/renderer/MapRenderer.java	unvisited	
 net/minecraft/client/renderer/MappableRingBuffer.java	unvisited	
 net/minecraft/client/renderer/MultiBufferSource.java	unvisited	
 net/minecraft/client/renderer/MultiblockChestResources.java	unvisited	
-net/minecraft/client/renderer/Octree.java	unvisited	
+net/minecraft/client/renderer/Octree.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); octree_parity 34209/0
 net/minecraft/client/renderer/OrderedSubmitNodeCollector.java	unvisited	
 net/minecraft/client/renderer/OutlineBufferSource.java	unvisited	
 net/minecraft/client/renderer/Panorama.java	unvisited	
@@ -1402,7 +1402,7 @@ net/minecraft/client/renderer/ProjectionMatrixBuffer.java	unvisited
 net/minecraft/client/renderer/Rect2i.java	unvisited	
 net/minecraft/client/renderer/RenderBuffers.java	unvisited	
 net/minecraft/client/renderer/RenderPipelines.java	unvisited	
-net/minecraft/client/renderer/RunningTrimmedMean.java	unvisited	
+net/minecraft/client/renderer/RunningTrimmedMean.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); running_trimmed_mean_parity 945/0
 net/minecraft/client/renderer/ScreenEffectRenderer.java	unvisited	
 net/minecraft/client/renderer/SectionBufferBuilderPack.java	unvisited	
 net/minecraft/client/renderer/SectionBufferBuilderPool.java	unvisited	
@@ -1411,7 +1411,7 @@ net/minecraft/client/renderer/ShaderDefines.java	unvisited
 net/minecraft/client/renderer/ShaderManager.java	unvisited	
 net/minecraft/client/renderer/ShapeRenderer.java	unvisited	
 net/minecraft/client/renderer/Sheets.java	unvisited	
-net/minecraft/client/renderer/SkyRenderer.java	unvisited	
+net/minecraft/client/renderer/SkyRenderer.java	partial	buildStars geometry certified: star_geometry_parity 9360/0 (byte-exact, 2026-06-11); rest of SkyRenderer unported
 net/minecraft/client/renderer/SpriteCoordinateExpander.java	unvisited	
 net/minecraft/client/renderer/SpriteMapper.java	unvisited	
 net/minecraft/client/renderer/SubmitNodeCollection.java	unvisited	
@@ -1423,7 +1423,7 @@ net/minecraft/client/renderer/ViewArea.java	unvisited
 net/minecraft/client/renderer/WeatherEffectRenderer.java	unvisited	
 net/minecraft/client/renderer/WorldBorderRenderer.java	unvisited	
 net/minecraft/client/renderer/block/BlockAndTintGetter.java	unvisited	
-net/minecraft/client/renderer/block/BlockModelLighter.java	unvisited	
+net/minecraft/client/renderer/block/BlockModelLighter.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); block_model_lighter_{ao 48,flat 384,shape 36,tables 258}/0
 net/minecraft/client/renderer/block/BlockModelRenderState.java	unvisited	
 net/minecraft/client/renderer/block/BlockModelResolver.java	unvisited	
 net/minecraft/client/renderer/block/BlockModelSet.java	unvisited	
@@ -1546,7 +1546,7 @@ net/minecraft/client/renderer/chunk/TranslucencyPointOfView.java	unvisited
 net/minecraft/client/renderer/chunk/VisGraph.java	unvisited	
 net/minecraft/client/renderer/chunk/VisibilitySet.java	unvisited	
 net/minecraft/client/renderer/chunk/package-info.java	unvisited	
-net/minecraft/client/renderer/culling/Frustum.java	unvisited	
+net/minecraft/client/renderer/culling/Frustum.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); frustum_parity 549/0
 net/minecraft/client/renderer/culling/package-info.java	unvisited	
 net/minecraft/client/renderer/debug/BeeDebugRenderer.java	unvisited	
 net/minecraft/client/renderer/debug/BrainDebugRenderer.java	unvisited	
@@ -2012,7 +2012,7 @@ net/minecraft/client/renderer/state/level/CameraRenderState.java	unvisited
 net/minecraft/client/renderer/state/level/LevelRenderState.java	unvisited	
 net/minecraft/client/renderer/state/level/ParticleGroupRenderState.java	unvisited	
 net/minecraft/client/renderer/state/level/ParticlesRenderState.java	unvisited	
-net/minecraft/client/renderer/state/level/QuadParticleRenderState.java	unvisited	
+net/minecraft/client/renderer/state/level/QuadParticleRenderState.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); quad_particle_parity 8400/0
 net/minecraft/client/renderer/state/level/SkyRenderState.java	unvisited	
 net/minecraft/client/renderer/state/level/WeatherRenderState.java	unvisited	
 net/minecraft/client/renderer/state/level/WorldBorderRenderState.java	unvisited	
@@ -2022,19 +2022,19 @@ net/minecraft/client/renderer/texture/AbstractTexture.java	unvisited
 net/minecraft/client/renderer/texture/CubeMapTexture.java	unvisited	
 net/minecraft/client/renderer/texture/Dumpable.java	unvisited	
 net/minecraft/client/renderer/texture/DynamicTexture.java	unvisited	
-net/minecraft/client/renderer/texture/MipmapGenerator.java	unvisited	
+net/minecraft/client/renderer/texture/MipmapGenerator.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); mipmap_generator_parity 546/0
 net/minecraft/client/renderer/texture/MipmapStrategy.java	unvisited	
 net/minecraft/client/renderer/texture/MissingTextureAtlasSprite.java	unvisited	
-net/minecraft/client/renderer/texture/OverlayTexture.java	unvisited	
+net/minecraft/client/renderer/texture/OverlayTexture.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); overlay_texture_parity 240/0
 net/minecraft/client/renderer/texture/ReloadableTexture.java	unvisited	
 net/minecraft/client/renderer/texture/SimpleTexture.java	unvisited	
 net/minecraft/client/renderer/texture/SkinTextureDownloader.java	unvisited	
 net/minecraft/client/renderer/texture/SpriteContents.java	unvisited	
 net/minecraft/client/renderer/texture/SpriteLoader.java	unvisited	
-net/minecraft/client/renderer/texture/Stitcher.java	unvisited	
+net/minecraft/client/renderer/texture/Stitcher.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); stitcher_parity 78/0
 net/minecraft/client/renderer/texture/StitcherException.java	unvisited	
 net/minecraft/client/renderer/texture/TextureAtlas.java	unvisited	
-net/minecraft/client/renderer/texture/TextureAtlasSprite.java	unvisited	
+net/minecraft/client/renderer/texture/TextureAtlasSprite.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); texture_atlas_sprite_parity 154720/0
 net/minecraft/client/renderer/texture/TextureContents.java	unvisited	
 net/minecraft/client/renderer/texture/TextureManager.java	unvisited	
 net/minecraft/client/renderer/texture/TickableTexture.java	unvisited	
@@ -2094,19 +2094,19 @@ net/minecraft/client/resources/model/ModelDiscovery.java	unvisited
 net/minecraft/client/resources/model/ModelGroupCollector.java	unvisited	
 net/minecraft/client/resources/model/ModelManager.java	unvisited	
 net/minecraft/client/resources/model/ResolvableModel.java	unvisited	
-net/minecraft/client/resources/model/ResolvedModel.java	unvisited	
+net/minecraft/client/resources/model/ResolvedModel.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); resolved_model_parity 17/0
 net/minecraft/client/resources/model/SimpleModelWrapper.java	unvisited	
 net/minecraft/client/resources/model/UnbakedModel.java	unvisited	
 net/minecraft/client/resources/model/cuboid/CuboidFace.java	unvisited	
-net/minecraft/client/resources/model/cuboid/CuboidModel.java	unvisited	
+net/minecraft/client/resources/model/cuboid/CuboidModel.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); cuboid_model_json_parity 6 cases/35 checks/0
 net/minecraft/client/resources/model/cuboid/CuboidModelElement.java	unvisited	
-net/minecraft/client/resources/model/cuboid/CuboidRotation.java	unvisited	
-net/minecraft/client/resources/model/cuboid/FaceBakery.java	unvisited	
+net/minecraft/client/resources/model/cuboid/CuboidRotation.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); cuboid_rotation_parity 46/0
+net/minecraft/client/resources/model/cuboid/FaceBakery.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); face_bakery_parity 883/0 + face_bakery_bakequad_parity 1008/0
 net/minecraft/client/resources/model/cuboid/ItemModelGenerator.java	unvisited	
-net/minecraft/client/resources/model/cuboid/ItemTransform.java	unvisited	
-net/minecraft/client/resources/model/cuboid/ItemTransforms.java	unvisited	
+net/minecraft/client/resources/model/cuboid/ItemTransform.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); item_transforms_parity 54/0
+net/minecraft/client/resources/model/cuboid/ItemTransforms.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); item_transforms_parity 54/0
 net/minecraft/client/resources/model/cuboid/MissingCuboidModel.java	unvisited	
-net/minecraft/client/resources/model/cuboid/UnbakedCuboidGeometry.java	unvisited	
+net/minecraft/client/resources/model/cuboid/UnbakedCuboidGeometry.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); model_element_bake_parity 79 quads/0
 net/minecraft/client/resources/model/cuboid/package-info.java	unvisited	
 net/minecraft/client/resources/model/geometry/BakedQuad.java	unvisited	
 net/minecraft/client/resources/model/geometry/QuadCollection.java	unvisited	
@@ -2118,7 +2118,7 @@ net/minecraft/client/resources/model/sprite/Material.java	unvisited
 net/minecraft/client/resources/model/sprite/MaterialBaker.java	unvisited	
 net/minecraft/client/resources/model/sprite/SpriteGetter.java	unvisited	
 net/minecraft/client/resources/model/sprite/SpriteId.java	unvisited	
-net/minecraft/client/resources/model/sprite/TextureSlots.java	unvisited	
+net/minecraft/client/resources/model/sprite/TextureSlots.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); texture_slots_parity 27/0
 net/minecraft/client/resources/model/sprite/package-info.java	unvisited	
 net/minecraft/client/resources/package-info.java	unvisited	
 net/minecraft/client/resources/server/DownloadedPackSource.java	unvisited	
