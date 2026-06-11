@@ -668,7 +668,8 @@ const std::set<std::string> PORTED = {
     // straggler wave 10
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
     "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock",
-    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock", "ChorusPlantBlock", "BellBlock"
+    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock", "ChorusPlantBlock", "BellBlock",
+    "FireBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1197,6 +1198,35 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
             }
         }
         return stateId;
+    }
+    // FireBlock.updateShape :102 — canSurvive ? getStateWithAge(AGE) : AIR. canSurvive = isFaceSturdy(
+    // below,UP) || isValidFireLocation(any 6-neighbour canBurn). getState: below neither flammable nor
+    // sturdy -> clinging fire (up/n/s/w/e = canBurn(neighbour)); else plain fire. canBurn = getIgniteOdds>0
+    // = block in the flammability table && !waterlogged. Among the probe pool the only flammable blocks
+    // are oak_fence/oak_stairs/oak_slab (full FireBlock.bootStrap igniteOdds table = a follow-up for
+    // non-probe neighbours).
+    if (fam == "FireBlock") {
+        auto canBurn = [&](int id) {
+            const std::string& n = g_name[id];
+            bool flammable = (n == "oak_fence" || n == "oak_stairs" || n == "oak_slab");
+            return flammable && getProp(g_props[id], "waterlogged") != "true";
+        };
+        int below = level.rel(DOWN);
+        bool belowSturdy = isFaceSturdy(below, UP);
+        bool valid = belowSturdy;
+        for (int d = 0; d < 6 && !valid; ++d) if (canBurn(level.rel(d))) valid = true;
+        if (!valid) return 0;  // !canSurvive -> AIR
+        std::string up = "false", north = "false", south = "false", west = "false", east = "false";
+        if (!canBurn(below) && !belowSturdy) {  // clinging fire
+            up = canBurn(level.rel(UP)) ? "true" : "false";
+            north = canBurn(level.rel(NORTH)) ? "true" : "false";
+            south = canBurn(level.rel(SOUTH)) ? "true" : "false";
+            west = canBurn(level.rel(WEST)) ? "true" : "false";
+            east = canBurn(level.rel(EAST)) ? "true" : "false";
+        }
+        auto it = g_index.find("fire\x1f" + std::string("age=") + getProp(g_props[stateId], "age")
+            + ",east=" + east + ",north=" + north + ",south=" + south + ",up=" + up + ",west=" + west);
+        return it == g_index.end() ? stateId : it->second;
     }
     // ChorusPlantBlock.updateShape — !canSurvive ? super(unchanged) : setValue(PROPERTY_BY_DIRECTION[dir],
     // neighbour.is(this)||is(chorus_flower)||(DOWN && neighbour.is(#supports_chorus_plant))).
