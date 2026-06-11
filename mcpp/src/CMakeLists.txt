@@ -5809,3 +5809,32 @@ if(WIN32)
     target_link_libraries(pkt_edit_book_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_edit_book_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: IglooPiece.makePosition (offset + below(depth) from baked OFFSETS table) =====
+add_executable(igloo_piece_position_parity world/level/levelgen/structure/structures/IglooPiecePositionParityTest.cpp)
+target_include_directories(igloo_piece_position_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(igloo_piece_position_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: Std140SizeCalculator (std140 UBO byte-size alignment math; Mth.roundToward) =====
+add_executable(std140_size_calculator_parity render/Std140SizeCalculatorParityTest.cpp)
+target_include_directories(std140_size_calculator_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(std140_size_calculator_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== gameplay/portal: PortalShape.getRelativePosition (nether-portal relative-pos clamp/inverseLerp) =====
+add_executable(portal_shape_parity world/level/portal/PortalShapeParityTest.cpp)
+target_include_directories(portal_shape_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(portal_shape_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundSetGameRulePacket (list of (Identifier string, value string)) =====
+add_executable(pkt_set_game_rule_sb_parity
+    network/protocol/game/PktSetGameRuleSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_game_rule_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_game_rule_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_game_rule_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_game_rule_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
