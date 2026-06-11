@@ -6044,3 +6044,27 @@ if(WIN32)
     target_link_libraries(pkt_set_test_block_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_set_test_block_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: Lighting directional-diffuse setup (6 normalized consts + Matrix4f dirs + std140 UBO_SIZE=32) =====
+add_executable(lighting_parity render/LightingParityTest.cpp)
+target_include_directories(lighting_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(lighting_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: Axolotl.Variant byId(ZERO oob)/getCommonSpawnVariant/getRareSpawnVariant (nextInt(1) advances RNG) =====
+add_executable(axolotl_variant_parity world/entity/animal/axolotl/AxolotlVariantParityTest.cpp world/level/levelgen/RandomSource.cpp)
+target_include_directories(axolotl_variant_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(axolotl_variant_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundUpdateEnabledFeaturesPacket (Set<Identifier> = VarInt count + writeUtf each) =====
+add_executable(pkt_enabled_features_parity
+    network/protocol/configuration/PktUpdateEnabledFeaturesParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_enabled_features_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_enabled_features_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_enabled_features_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_enabled_features_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
