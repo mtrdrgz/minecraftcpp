@@ -649,8 +649,8 @@ const std::set<std::string> PORTED = {
     "CarpetBlock", "TripWireHookBlock", "WaterloggedTransparentBlock", "ComparatorBlock",
     // straggler wave 4
     "CactusBlock", "FallingBlock", "SugarCaneBlock", "DecoratedPotBlock",
-    "CreakingHeartBlock", "CakeBlock", "WallTorchBlock", "RedstoneWallTorchBlock", "SnowLayerBlock"
-    // (SmallDripleafBlock -> DoublePlant other-half logic; ConcretePowderBlock touchesLiquid -> deferred)
+    "CreakingHeartBlock", "CakeBlock", "WallTorchBlock", "RedstoneWallTorchBlock", "SnowLayerBlock",
+    "ConcretePowderBlock"  // (SmallDripleafBlock -> DoublePlant other-half logic, still deferred)
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {

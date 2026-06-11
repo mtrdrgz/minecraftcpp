@@ -45,6 +45,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluid;
 
 public final class BlockUpdateShapeParity {
 
@@ -111,6 +112,45 @@ public final class BlockUpdateShapeParity {
         BuiltInRegistries.BLOCK.prepareTagReload(new TagLoader.LoadResult<>(Registries.BLOCK, pending)).apply();
     }
 
+    // FLUID tags (FluidTags.WATER etc.) — needed by ConcretePowderBlock.canSolidify (fluid.is(WATER))
+    // and any block that branches its RETURNED state on a fluid tag. Bootstrap leaves these empty too.
+    static void resolveFluidTag(String id, Map<String, List<String>> rawTags,
+            Map<String, List<Holder<Fluid>>> resolved, LinkedHashSet<String> resolving) {
+        if (resolved.containsKey(id)) return;
+        if (!resolving.add(id)) throw new IllegalStateException("cyclic fluid tag: " + id);
+        LinkedHashSet<Holder<Fluid>> values = new LinkedHashSet<>();
+        for (String entry : rawTags.getOrDefault(id, List.of())) {
+            if (entry.startsWith("#")) {
+                String nested = entry.substring(1);
+                resolveFluidTag(nested, rawTags, resolved, resolving);
+                values.addAll(resolved.getOrDefault(nested, List.of()));
+            } else {
+                values.add(BuiltInRegistries.FLUID.get(ResourceKey.create(Registries.FLUID, Identifier.parse(entry)))
+                    .orElseThrow(() -> new IllegalStateException("unknown fluid in tag " + id + ": " + entry)));
+            }
+        }
+        resolving.remove(id);
+        resolved.put(id, List.copyOf(values));
+    }
+    static void bindVanillaFluidTags() throws Exception {
+        Path root = Path.of("26.1.2", "data", "minecraft", "tags", "fluid");
+        Map<String, List<String>> rawTags = new HashMap<>();
+        try (var stream = Files.walk(root)) {
+            for (Path file : stream.filter(p -> p.toString().endsWith(".json")).toList()) {
+                JsonObject obj = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+                List<String> entries = new ArrayList<>();
+                for (JsonElement value : obj.getAsJsonArray("values")) entries.add(entryId(value));
+                rawTags.put(tagIdFromPath(root, file), entries);
+            }
+        }
+        Map<String, List<Holder<Fluid>>> resolved = new HashMap<>();
+        for (String id : rawTags.keySet()) resolveFluidTag(id, rawTags, resolved, new LinkedHashSet<>());
+        Map<TagKey<Fluid>, List<Holder<Fluid>>> pending = new HashMap<>();
+        for (Map.Entry<String, List<Holder<Fluid>>> e : resolved.entrySet())
+            pending.put(TagKey.create(Registries.FLUID, Identifier.parse(e.getKey())), e.getValue());
+        BuiltInRegistries.FLUID.prepareTagReload(new TagLoader.LoadResult<>(Registries.FLUID, pending)).apply();
+    }
+
     private static String declaringClass(Class<?> start, String name, Class<?>... params) {
         for (Class<?> c = start; c != null; c = c.getSuperclass()) {
             try { if (c.getDeclaredMethod(name, params) != null) return c.getSimpleName(); }
@@ -159,6 +199,7 @@ public final class BlockUpdateShapeParity {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         bindVanillaBlockTags();  // load REAL block tags so connectsTo / isSameFence match the game
+        bindVanillaFluidTags();  // load REAL fluid tags so canSolidify (fluid.is(WATER)) matches the game
         final StringBuilder out = new StringBuilder(1 << 24);
 
         final Class<?>[] usParams = new Class<?>[]{
