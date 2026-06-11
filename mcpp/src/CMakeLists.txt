@@ -6679,3 +6679,14 @@ if(WIN32)
     target_link_libraries(jigsaw_attach_parity PRIVATE bcrypt)
 endif()
 set_target_properties(jigsaw_attach_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== JIGSAW ASSEMBLY #18: JigsawPlacement.addPieces CENTER (start) piece entry (RNG setLargeFeatureSeed + Rotation.getRandom + getRandomTemplate + getBoundingBox + height projection/move) vs the oracle =====
+add_executable(jigsaw_center_piece_parity
+    world/level/levelgen/structure/pools/JigsawCenterPieceParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(jigsaw_center_piece_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(jigsaw_center_piece_parity PRIVATE nlohmann_json)
+if(WIN32)
+    target_link_libraries(jigsaw_center_piece_parity PRIVATE bcrypt)
+endif()
+set_target_properties(jigsaw_center_piece_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
