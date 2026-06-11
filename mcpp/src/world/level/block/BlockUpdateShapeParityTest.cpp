@@ -652,7 +652,9 @@ const std::set<std::string> PORTED = {
     "CreakingHeartBlock", "CakeBlock", "WallTorchBlock", "RedstoneWallTorchBlock", "SnowLayerBlock",
     "ConcretePowderBlock",
     // straggler wave 5 (#supports_vegetation plants)
-    "VegetationBlock", "DoublePlantBlock"
+    "VegetationBlock", "DoublePlantBlock",
+    // straggler wave 6
+    "SeaPickleBlock", "AttachedStemBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1069,6 +1071,25 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
             return stateId;  // super (no-op)
         }
         return 0;  // toward the other half but it's missing/mismatched -> AIR
+    }
+    // SeaPickleBlock.updateShape — !canSurvive -> AIR. canSurvive = mayPlaceOn(below) =
+    // !below.getCollisionShape.getFaceShape(UP).isEmpty() || below.isFaceSturdy(UP).
+    if (fam == "SeaPickleBlock") {
+        int below = level.rel(DOWN);
+        bool surv = !faceRects(g_collBoxes[below], UP).empty() || isFaceSturdy(below, UP);
+        return surv ? stateId : 0;
+    }
+    // AttachedStemBlock.updateShape — when the FACING neighbour is no longer the fruit, revert to the
+    // stem block at AGE 7. fruit/stem by name (attached_pumpkin_stem -> pumpkin / pumpkin_stem).
+    if (fam == "AttachedStemBlock") {
+        bool isPumpkin = (g_name[stateId] == "attached_pumpkin_stem");
+        std::string fruit = isPumpkin ? "pumpkin" : "melon";
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (g_name[neighbourId] != fruit && dir == facing) {
+            auto it = g_index.find(std::string(isPumpkin ? "pumpkin_stem" : "melon_stem") + "\x1f" + "age=7");
+            if (it != g_index.end()) return it->second;
+        }
+        return stateId;
     }
 
     return -2;  // unported
