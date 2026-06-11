@@ -91,6 +91,18 @@ public class DataComponentPatchMiscParity {
                     hex(rl.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         }
 
+        // Boolean-valued: enchantment_glint_override (ByteBufCodecs.BOOL -> writeBool).
+        for (boolean g : new boolean[]{ true, false }) {
+            ItemStack s = new ItemStack(base, 1);
+            s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, g);
+            emit(access, s, "minecraft:enchantment_glint_override", "bool", g ? "1" : "0");
+        }
+
+        // Unit-valued (network-synchronized): glider (Unit.STREAM_CODEC -> zero value bytes).
+        ItemStack gl = new ItemStack(base, 1);
+        gl.set(DataComponents.GLIDER, net.minecraft.util.Unit.INSTANCE);
+        emit(access, gl, "minecraft:glider", "unit", "-");
+
         O.flush();
     }
 }

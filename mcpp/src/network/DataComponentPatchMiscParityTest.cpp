@@ -90,6 +90,8 @@ int main(int argc, char** argv) {
             /* Unit.STREAM_CODEC writes nothing */
         } else if (kind == "identifier") {
             buf.writeString(fromHexBytes(valueData));                         // Identifier.STREAM_CODEC = STRING_UTF8
+        } else if (kind == "bool") {
+            buf.writeBool(valueData == "1");                                  // ByteBufCodecs.BOOL
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";
