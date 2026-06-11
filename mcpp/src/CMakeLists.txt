@@ -5404,3 +5404,8 @@ set_target_properties(block_model_lighter_ao_parity PROPERTIES RUNTIME_OUTPUT_DI
 add_executable(block_model_lighter_flat_parity render/block/BlockModelLighterFlatParityTest.cpp)
 target_include_directories(block_model_lighter_flat_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(block_model_lighter_flat_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: model display block (ItemTransform / ItemTransforms deserializers) =====
+add_executable(item_transforms_parity render/model/ItemTransformsParityTest.cpp)
+target_include_directories(item_transforms_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../vendor)
+set_target_properties(item_transforms_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

@@ -18,6 +18,8 @@
 #include "ModelElementBake.h"
 #include "TextureSlotsResolve.h"
 
+#include "../../world/level/levelgen/Mth.h"
+
 #include <nlohmann/json.hpp>
 
 #include <array>
@@ -263,6 +265,55 @@ inline ts::Data parseTextureMap(const json& texturesObject) {
 inline std::string normalizeIdentifier(const std::string& s) {
     if (s.find(':') == std::string::npos) return "minecraft:" + s;
     return s;
+}
+
+// ── ItemTransform / ItemTransforms (the model "display" block) ───────────────
+// ItemTransform.Deserializer (ItemTransform.java:46-82): rotation default [0,0,0]; translation
+// default [0,0,0] -> *0.0625 -> clamp [-5,5]; scale default [1,1,1] -> clamp [-4,4].
+struct ItemTransform {
+    float rot[3], trans[3], scale[3];
+};
+inline const ItemTransform IT_NO_TRANSFORM{{0, 0, 0}, {0, 0, 0}, {1, 1, 1}};
+
+inline void getVec3(const json& o, const char* key, const float def[3], float out[3]) {
+    if (!o.contains(key)) { out[0] = def[0]; out[1] = def[1]; out[2] = def[2]; return; }
+    const json& a = getAsArray(o, key);
+    if (a.size() != 3) throw std::runtime_error(std::string("Expected 3 ") + key + " values");
+    out[0] = convertToFloat(a[0], key);
+    out[1] = convertToFloat(a[1], key);
+    out[2] = convertToFloat(a[2], key);
+}
+inline ItemTransform parseItemTransform(const json& o) {
+    static const float dr[3] = {0, 0, 0}, dt[3] = {0, 0, 0}, ds[3] = {1, 1, 1};
+    ItemTransform t;
+    getVec3(o, "rotation", dr, t.rot);
+    getVec3(o, "translation", dt, t.trans);
+    for (int i = 0; i < 3; ++i) t.trans[i] = mc::levelgen::mth::clamp(t.trans[i] * 0.0625F, -5.0F, 5.0F);
+    getVec3(o, "scale", ds, t.scale);
+    for (int i = 0; i < 3; ++i) t.scale[i] = mc::levelgen::mth::clamp(t.scale[i], -4.0F, 4.0F);
+    return t;
+}
+
+// ItemTransforms.Deserializer (ItemTransforms.java:49-78): each ItemDisplayContext read by its
+// serialized name, default NO_TRANSFORM. Keyed by the 9 contexts the deserializer handles.
+struct ItemTransforms {
+    ItemTransform byName[9];  // see ITEM_TRANSFORM_NAMES order
+};
+inline const char* const ITEM_TRANSFORM_NAMES[9] = {
+    "thirdperson_righthand", "thirdperson_lefthand", "firstperson_righthand", "firstperson_lefthand",
+    "head", "gui", "ground", "fixed", "on_shelf"};
+inline ItemTransforms parseItemTransforms(const json& display) {
+    ItemTransforms t;
+    for (int i = 0; i < 9; ++i) {
+        const char* name = ITEM_TRANSFORM_NAMES[i];
+        t.byName[i] = display.contains(name) ? parseItemTransform(display.at(name)) : IT_NO_TRANSFORM;
+    }
+    // ItemTransforms.Deserializer:54-62 — an ABSENT *_lefthand inherits the matching *_righthand
+    // (the `== NO_TRANSFORM` singleton check = "key absent", NOT value-equality). Names order:
+    // 0=thirdperson_righthand 1=thirdperson_lefthand 2=firstperson_righthand 3=firstperson_lefthand.
+    if (!display.contains("thirdperson_lefthand")) t.byName[1] = t.byName[0];
+    if (!display.contains("firstperson_lefthand")) t.byName[3] = t.byName[2];
+    return t;
 }
 
 // CuboidModel.Deserializer.
