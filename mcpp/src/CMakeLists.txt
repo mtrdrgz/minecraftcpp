@@ -5409,3 +5409,8 @@ set_target_properties(block_model_lighter_flat_parity PROPERTIES RUNTIME_OUTPUT_
 add_executable(item_transforms_parity render/model/ItemTransformsParityTest.cpp)
 target_include_directories(item_transforms_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../vendor)
 set_target_properties(item_transforms_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: GridLayout.arrangeElements (the GUI layout foundation) =====
+add_executable(grid_layout_parity client/gui/GridLayoutParityTest.cpp)
+target_include_directories(grid_layout_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(grid_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
