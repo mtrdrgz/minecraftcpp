@@ -15,21 +15,37 @@
 //   PLACED <caseId> <wx> <wy> <wz> <stateId>
 //   COUNT <caseId> <numPlaced>
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipFile;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
+import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.tags.TagKey;
+import net.minecraft.tags.TagLoader;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -38,6 +54,7 @@ import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.ServerLevelAccessor;
 
@@ -46,6 +63,8 @@ public final class StructurePlaceInWorldParity {
     public static void main(String[] args) throws Exception {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
+        bindVanillaTags("block", Registries.BLOCK, BuiltInRegistries.BLOCK);  // connections need real tags
+        bindVanillaTags("fluid", Registries.FLUID, BuiltInRegistries.FLUID);
         final StringBuilder out = new StringBuilder(1 << 22);
 
         RegistryAccess registryAccess = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
@@ -101,6 +120,23 @@ public final class StructurePlaceInWorldParity {
                                .append(Block.BLOCK_STATE_REGISTRY.getId(e.getValue())).append('\n');
                         }
                         out.append("COUNT\t").append(caseId).append('\t').append(placed.size()).append('\n');
+
+                        // knownShape=FALSE: same placement, then the REAL Block.updateFromNeighbourShapes
+                        // pass over the placed blocks (recomputes fence/wall/stair/redstone connections
+                        // from placed neighbours). Emit PLACEDU rows (the post-update map) — the C++ replay
+                        // (certified transform + ported updateShape) reproduces this.
+                        StructurePlaceSettings settingsU = new StructurePlaceSettings()
+                            .setRotation(rot).setMirror(mir).setIgnoreEntities(true)
+                            .setFinalizeEntities(false).setKnownShape(false);
+                        Map<BlockPos, BlockState> placedU = new LinkedHashMap<>();
+                        ServerLevelAccessor levelU = makeCapturingLevel(placedU, registryAccess);
+                        template.placeInWorld(levelU, position, position, settingsU, RandomSource.create(0L), 2);
+                        for (var e : placedU.entrySet()) {
+                            out.append("PLACEDU\t").append(caseId).append('\t')
+                               .append(e.getKey().getX()).append('\t').append(e.getKey().getY()).append('\t')
+                               .append(e.getKey().getZ()).append('\t')
+                               .append(Block.BLOCK_STATE_REGISTRY.getId(e.getValue())).append('\n');
+                        }
                         caseId++;
                     }
                 }
@@ -108,6 +144,56 @@ public final class StructurePlaceInWorldParity {
         }
         jar.close();
         System.out.print(out);
+    }
+
+    // ── real datapack tags (block + fluid), nested-tag aware — connectsTo/isSameFence etc. need them.
+    static String tagIdFromPath(Path root, Path file) {
+        String rel = root.relativize(file).toString().replace('\\', '/');
+        return "minecraft:" + rel.substring(0, rel.length() - ".json".length());
+    }
+    static String entryId(JsonElement element) {
+        if (element.isJsonPrimitive()) return element.getAsString();
+        JsonObject obj = element.getAsJsonObject();
+        if (obj.has("id")) return obj.get("id").getAsString();
+        throw new IllegalArgumentException("unsupported tag entry: " + element);
+    }
+    static <T> void resolveTag(String id, Map<String, List<String>> rawTags,
+            Map<String, List<Holder<T>>> resolved, LinkedHashSet<String> resolving,
+            ResourceKey<? extends Registry<T>> regKey, Registry<T> registry) {
+        if (resolved.containsKey(id)) return;
+        if (!resolving.add(id)) throw new IllegalStateException("cyclic tag: " + id);
+        LinkedHashSet<Holder<T>> values = new LinkedHashSet<>();
+        for (String entry : rawTags.getOrDefault(id, List.of())) {
+            if (entry.startsWith("#")) {
+                String nested = entry.substring(1);
+                resolveTag(nested, rawTags, resolved, resolving, regKey, registry);
+                values.addAll(resolved.getOrDefault(nested, List.of()));
+            } else {
+                values.add(registry.get(ResourceKey.create(regKey, Identifier.parse(entry)))
+                    .orElseThrow(() -> new IllegalStateException("unknown entry in tag " + id + ": " + entry)));
+            }
+        }
+        resolving.remove(id);
+        resolved.put(id, List.copyOf(values));
+    }
+    static <T> void bindVanillaTags(String subdir, ResourceKey<? extends Registry<T>> regKey,
+            Registry<T> registry) throws Exception {
+        Path root = Path.of("26.1.2", "data", "minecraft", "tags", subdir);
+        Map<String, List<String>> rawTags = new HashMap<>();
+        try (var stream = Files.walk(root)) {
+            for (Path file : stream.filter(p -> p.toString().endsWith(".json")).toList()) {
+                JsonObject obj = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+                List<String> entries = new ArrayList<>();
+                for (JsonElement v : obj.getAsJsonArray("values")) entries.add(entryId(v));
+                rawTags.put(tagIdFromPath(root, file), entries);
+            }
+        }
+        Map<String, List<Holder<T>>> resolved = new HashMap<>();
+        for (String id : rawTags.keySet()) resolveTag(id, rawTags, resolved, new LinkedHashSet<>(), regKey, registry);
+        Map<TagKey<T>, List<Holder<T>>> pending = new HashMap<>();
+        for (var e : resolved.entrySet())
+            pending.put(TagKey.create(regKey, Identifier.parse(e.getKey())), e.getValue());
+        registry.prepareTagReload(new TagLoader.LoadResult<>(regKey, pending)).apply();
     }
 
     // A java.lang.reflect.Proxy ServerLevelAccessor: setBlock records (last-write-wins), reads
@@ -124,7 +210,14 @@ public final class StructurePlaceInWorldParity {
                     BlockState st = placed.get(mArgs[0]);
                     return st != null ? st : air;
                 }
-                case "getFluidState":   return Fluids.EMPTY.defaultFluidState();
+                case "isEmptyBlock": {  // default method routes through getBlockState; serve it explicitly
+                    BlockState st = placed.get(mArgs[0]);
+                    return (st == null || st.isAir());
+                }
+                case "getFluidState": {  // a placed waterlogged block exposes water for connectsTo/fire
+                    BlockState st = placed.get(mArgs[0]);
+                    return st != null ? st.getFluidState() : Fluids.EMPTY.defaultFluidState();
+                }
                 case "getBlockEntity":  return null;
                 case "registryAccess":  return registryAccess;
                 case "getMinY": case "getMinBuildHeight": return -64;

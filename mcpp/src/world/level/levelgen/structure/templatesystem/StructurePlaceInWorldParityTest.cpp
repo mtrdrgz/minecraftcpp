@@ -161,7 +161,8 @@ int main(int argc, char** argv) {
     std::unordered_map<std::string, Tmpl> templates;
     struct Case { std::string key; int rot, mir, px, py, pz; };
     std::map<int, Case> cases;
-    std::map<int, std::map<std::array<int,3>, long>> placed;
+    std::map<int, std::map<std::array<int,3>, long>> placed;    // PLACED  (knownShape=true: pure transform)
+    std::map<int, std::map<std::array<int,3>, long>> placedU;   // PLACEDU (knownShape=false: + updateShape pass)
     {
         std::ifstream f(casesPath, std::ios::binary);
         if (!f) { std::cerr << "cannot open " << casesPath << "\n"; return 2; }
@@ -176,11 +177,14 @@ int main(int argc, char** argv) {
                 cases[std::stoi(c[1])] = Case{ c[2], std::stoi(c[3]), std::stoi(c[4]), std::stoi(c[5]), std::stoi(c[6]), std::stoi(c[7]) };
             } else if (c[0] == "PLACED" && c.size() >= 6) {
                 placed[std::stoi(c[1])][{std::stoi(c[2]), std::stoi(c[3]), std::stoi(c[4])}] = std::stol(c[5]);
+            } else if (c[0] == "PLACEDU" && c.size() >= 6) {
+                placedU[std::stoi(c[1])][{std::stoi(c[2]), std::stoi(c[3]), std::stoi(c[4])}] = std::stol(c[5]);
             }
         }
     }
 
     long caseChecks = 0, caseBad = 0, totalCells = 0, cellMis = 0;
+    long ksFalseBad = 0, ksFalseCellMis = 0;  // C++ transform vs the knownShape=FALSE (full placement) GT
     int shown = 0;
     for (auto& [caseId, cs] : cases) {
         ++caseChecks;
@@ -222,9 +226,25 @@ int main(int argc, char** argv) {
                 std::cerr << "case " << caseId << " " << cs.key << " rot=" << cs.rot << " mir=" << cs.mir
                           << " got=" << got.size() << " want=" << want.size() << "\n";
         }
+        // knownShape=FALSE: the C++ transform output vs the REAL placeInWorld(knownShape=false) map
+        // (which ran Block.updateFromNeighbourShapes over the placed blocks). For self-consistent
+        // templates with the real tags bound, the update pass reproduces the saved connection states,
+        // so this equals `got` — proving structure placement needs no separate update pass here.
+        auto uit = placedU.find(caseId);
+        if (uit != placedU.end()) {
+            const auto& wantU = uit->second;
+            bool okU = (got.size() == wantU.size());
+            if (okU) for (auto& [pos, id] : wantU) { auto g = got.find(pos); if (g == got.end() || g->second != id) { okU = false; break; } }
+            if (!okU) {
+                ++ksFalseBad;
+                for (auto& [pos, id] : wantU) { auto g = got.find(pos); if (g == got.end() || g->second != id) ++ksFalseCellMis; }
+            }
+        }
     }
 
     std::cout << "StructurePlaceInWorld cases=" << caseChecks << " casesBad=" << caseBad
               << " cells=" << totalCells << " cellMismatches=" << cellMis << "\n";
-    return (caseBad > 0 || cellMis > 0) ? 1 : 0;
+    std::cout << "  knownShape=false (vs updateShape-applied GT): casesBad=" << ksFalseBad
+              << " cellMismatches=" << ksFalseCellMis << "\n";
+    return (caseBad > 0 || cellMis > 0 || ksFalseBad > 0 || ksFalseCellMis > 0) ? 1 : 0;
 }
