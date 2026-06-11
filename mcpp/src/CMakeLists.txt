@@ -5928,3 +5928,32 @@ if(WIN32)
     target_link_libraries(pkt_player_info_remove_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_player_info_remove_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: NetherFortressPieces 14 piece-type createPiece box constants + isOkBox (minY>10) =====
+add_executable(nether_fortress_piece_box_parity world/level/levelgen/structure/structures/NetherFortressPieceBoxParityTest.cpp)
+target_include_directories(nether_fortress_piece_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(nether_fortress_piece_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: ColorLerper (jeb_ sheep + music-note rainbow color cycling; ARGB.srgbLerp) =====
+add_executable(colorlerper_parity client/color/ColorLerperParityTest.cpp)
+target_include_directories(colorlerper_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(colorlerper_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: NoteBlock.getPitchFromNote ((float)Math.pow(2.0,(note-12)/12.0) double-precision) =====
+add_executable(note_block_pitch_parity world/level/block/NoteBlockPitchParityTest.cpp)
+target_include_directories(note_block_pitch_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(note_block_pitch_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundPlaceRecipePacket (containerId VarInt + recipeIndex VarInt + bool) =====
+add_executable(pkt_place_recipe_sb_parity
+    network/protocol/game/PktPlaceRecipeSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_place_recipe_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_place_recipe_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_place_recipe_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_place_recipe_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
