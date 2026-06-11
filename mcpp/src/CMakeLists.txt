@@ -5434,3 +5434,8 @@ set_target_properties(scroll_area_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${
 add_executable(selection_list_parity client/gui/SelectionListParityTest.cpp)
 target_include_directories(selection_list_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(selection_list_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: HeaderAndFooterLayout.arrangeElements (header/content/footer band orchestration) =====
+add_executable(header_footer_layout_parity client/gui/HeaderFooterLayoutParityTest.cpp)
+target_include_directories(header_footer_layout_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(header_footer_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
