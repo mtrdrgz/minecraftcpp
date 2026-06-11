@@ -1956,6 +1956,17 @@ set_target_properties(rotation_block_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# ===== WORLD-PLACEMENT KEYSTONE (#18/#19): BlockState.rotate(Rotation)/mirror(Mirror) over
+# every state vs the real game, certified family-by-family (declaring-class keyed). =====
+add_executable(block_rotate_mirror_parity
+    world/level/block/BlockRotateMirrorParityTest.cpp)
+target_include_directories(block_rotate_mirror_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(block_rotate_mirror_parity PRIVATE nlohmann_json)
+set_target_properties(block_rotate_mirror_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # net.minecraft.world.level.block.state.properties.RotationSegment
 # net.minecraft.world.level.block.state.properties.RotationSegment
 # RotationSegment 16-segment (4-bit binary angle) quantization parity vs the real
