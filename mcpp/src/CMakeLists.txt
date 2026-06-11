@@ -6152,3 +6152,8 @@ if(WIN32)
     target_link_libraries(pkt_resource_pack_pop_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_resource_pack_pop_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: StructurePiecesBuilder vertical-placement math (offsetPiecesVertically/moveBelowSeaLevel/moveInsideHeights) =====
+add_executable(structure_pieces_builder_math_parity world/level/levelgen/structure/pieces/StructurePiecesBuilderMathParityTest.cpp)
+target_include_directories(structure_pieces_builder_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(structure_pieces_builder_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
