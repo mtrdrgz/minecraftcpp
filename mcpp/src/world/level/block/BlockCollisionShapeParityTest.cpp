@@ -71,6 +71,340 @@ mc::VoxelShapePtr buildFamilyShape(const std::string& fam, const std::string& na
         if (type == "top") return Shapes::box(0, 0.5, 0, 1, 1, 1);
         return Shapes::box(0, 0, 0, 1, 0.5, 1);  // bottom
     }
+
+    // ── agent C (complex shape-table families). Transcribed 1:1 from the REAL net.minecraft
+    // getCollisionShape().toAabbs() (RULE #0; tools/CollisionShapeCppGen.java emitted these from
+    // the 26.1.2 classes). Each branch is the Shapes::or_ fold of the canonical AABB list;
+    // tools/CollisionShapeRoundTripCheck.java PROVED this or-fold re-discretizes through toAabbs()
+    // to the byte-identical vanilla box set on ALL states (0 failures: Stair 4640, Door 1344,
+    // Bed 256, Chest 240, Campfire 64, Bell 32, Grindstone/Anvil 12, Lectern 16, BrewingStand 8,
+    // Stonecutter 4, EnchantingTable 1). ──
+
+    // StairBlock.getShape :74-89 — HALF (top/bottom) x SHAPE (straight/inner/outer) x FACING
+    // composing SHAPE_BOTTOM/TOP_{OUTER,STRAIGHT,INNER} (:37-45). 40 distinct shapes.
+    if (fam == "StairBlock") {
+        std::string facing = getProp(props, "facing");
+        std::string half = getProp(props, "half");
+        std::string shape = getProp(props, "shape");
+        if (facing == "north" && half == "top" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 1, 0.5), Shapes::box(0, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "north" && half == "top" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "north" && half == "top" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 1, 0.5), Shapes::box(0, 0.5, 0.5, 0.5, 1, 1)), Shapes::box(0.5, 0, 0.5, 1, 1, 1));
+        else if (facing == "north" && half == "top" && shape == "outer_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 0.5), Shapes::box(0, 0.5, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "north" && half == "top" && shape == "outer_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.5, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "north" && half == "bottom" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "north" && half == "bottom" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "north" && half == "bottom" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "north" && half == "bottom" && shape == "outer_left")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 0.5));
+        else if (facing == "north" && half == "bottom" && shape == "outer_right")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "south" && half == "top" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0.5, 1, 1, 1), Shapes::box(0, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "south" && half == "top" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0.5, 1, 1, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 0.5)), Shapes::box(0.5, 0, 0, 1, 1, 0.5));
+        else if (facing == "south" && half == "top" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "south" && half == "top" && shape == "outer_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.5, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "south" && half == "top" && shape == "outer_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0.5, 0.5, 1, 1), Shapes::box(0, 0.5, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "south" && half == "bottom" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "south" && half == "bottom" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "south" && half == "bottom" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 1)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "south" && half == "bottom" && shape == "outer_left")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "south" && half == "bottom" && shape == "outer_right")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0.5, 0.5, 1, 1));
+        else if (facing == "west" && half == "top" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 1), Shapes::box(0.5, 0.5, 0, 1, 1, 1));
+        else if (facing == "west" && half == "top" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "west" && half == "top" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "west" && half == "top" && shape == "outer_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0.5, 0.5, 1, 1), Shapes::box(0, 0.5, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "west" && half == "top" && shape == "outer_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.5, 1, 0.5), Shapes::box(0, 0.5, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "west" && half == "bottom" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 1));
+        else if (facing == "west" && half == "bottom" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 1)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "west" && half == "bottom" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "west" && half == "bottom" && shape == "outer_left")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0.5, 0.5, 1, 1));
+        else if (facing == "west" && half == "bottom" && shape == "outer_right")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 0.5));
+        else if (facing == "east" && half == "top" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0.5, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0, 1, 1, 1));
+        else if (facing == "east" && half == "top" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 1, 0.5), Shapes::box(0, 0.5, 0.5, 0.5, 1, 1)), Shapes::box(0.5, 0, 0.5, 1, 1, 1));
+        else if (facing == "east" && half == "top" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0.5, 1, 1, 1), Shapes::box(0, 0.5, 0, 0.5, 1, 0.5)), Shapes::box(0.5, 0, 0, 1, 1, 0.5));
+        else if (facing == "east" && half == "top" && shape == "outer_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.5, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "east" && half == "top" && shape == "outer_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.5, 0, 0.5, 1, 1), Shapes::box(0.5, 0, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "east" && half == "bottom" && shape == "straight")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0.5, 0.5, 0, 1, 1, 1));
+        else if (facing == "east" && half == "bottom" && shape == "inner_left")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0, 1, 1, 0.5)), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        else if (facing == "east" && half == "bottom" && shape == "inner_right")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0, 0.5, 0.5, 1, 1, 1)), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "east" && half == "bottom" && shape == "outer_left")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0.5, 0.5, 0, 1, 1, 0.5));
+        else if (facing == "east" && half == "bottom" && shape == "outer_right")
+            return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.5, 1), Shapes::box(0.5, 0.5, 0.5, 1, 1, 1));
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // DoorBlock.getShape :78-85 — thin 3/16 box on the hinge edge; doorDirection from
+    // FACING + OPEN + HINGE (SHAPES = rotateHorizontal(boxZ(16,13,16)), :52). 32 shapes.
+    if (fam == "DoorBlock") {
+        std::string facing = getProp(props, "facing");
+        std::string half = getProp(props, "half");
+        std::string hinge = getProp(props, "hinge");
+        std::string open = getProp(props, "open");
+        if (facing == "north" && half == "upper" && hinge == "left" && open == "true")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "north" && half == "upper" && hinge == "left" && open == "false")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "north" && half == "upper" && hinge == "right" && open == "true")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "north" && half == "upper" && hinge == "right" && open == "false")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "north" && half == "lower" && hinge == "left" && open == "true")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "north" && half == "lower" && hinge == "left" && open == "false")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "north" && half == "lower" && hinge == "right" && open == "true")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "north" && half == "lower" && hinge == "right" && open == "false")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "south" && half == "upper" && hinge == "left" && open == "true")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "south" && half == "upper" && hinge == "left" && open == "false")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "south" && half == "upper" && hinge == "right" && open == "true")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "south" && half == "upper" && hinge == "right" && open == "false")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "south" && half == "lower" && hinge == "left" && open == "true")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "south" && half == "lower" && hinge == "left" && open == "false")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "south" && half == "lower" && hinge == "right" && open == "true")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "south" && half == "lower" && hinge == "right" && open == "false")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "west" && half == "upper" && hinge == "left" && open == "true")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "west" && half == "upper" && hinge == "left" && open == "false")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "west" && half == "upper" && hinge == "right" && open == "true")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "west" && half == "upper" && hinge == "right" && open == "false")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "west" && half == "lower" && hinge == "left" && open == "true")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "west" && half == "lower" && hinge == "left" && open == "false")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "west" && half == "lower" && hinge == "right" && open == "true")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "west" && half == "lower" && hinge == "right" && open == "false")
+            return Shapes::box(0.8125, 0, 0, 1, 1, 1);
+        else if (facing == "east" && half == "upper" && hinge == "left" && open == "true")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "east" && half == "upper" && hinge == "left" && open == "false")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "east" && half == "upper" && hinge == "right" && open == "true")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "east" && half == "upper" && hinge == "right" && open == "false")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "east" && half == "lower" && hinge == "left" && open == "true")
+            return Shapes::box(0, 0, 0, 1, 1, 0.1875);
+        else if (facing == "east" && half == "lower" && hinge == "left" && open == "false")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        else if (facing == "east" && half == "lower" && hinge == "right" && open == "true")
+            return Shapes::box(0, 0, 0.8125, 1, 1, 1);
+        else if (facing == "east" && half == "lower" && hinge == "right" && open == "false")
+            return Shapes::box(0, 0, 0, 0.1875, 1, 1);
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // BedBlock.getShape :207-209 — base column(16,3,9) + two 3x3x3 legs, rotateHorizontal
+    // keyed by getConnectedDirection(state).getOpposite() (:57-61). PART x FACING. 8 shapes.
+    if (fam == "BedBlock") {
+        std::string facing = getProp(props, "facing");
+        std::string part = getProp(props, "part");
+        if (facing == "north" && part == "head")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.1875, 0.5625, 0.1875), Shapes::box(0, 0.1875, 0.1875, 1, 0.5625, 1)), Shapes::box(0.1875, 0.1875, 0, 0.8125, 0.5625, 0.1875)), Shapes::box(0.8125, 0, 0, 1, 0.5625, 0.1875));
+        else if (facing == "north" && part == "foot")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0.8125, 0.1875, 0.5625, 1), Shapes::box(0, 0.1875, 0, 1, 0.5625, 0.8125)), Shapes::box(0.1875, 0.1875, 0.8125, 0.8125, 0.5625, 1)), Shapes::box(0.8125, 0, 0.8125, 1, 0.5625, 1));
+        else if (facing == "south" && part == "head")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0.8125, 0.1875, 0.5625, 1), Shapes::box(0, 0.1875, 0, 1, 0.5625, 0.8125)), Shapes::box(0.1875, 0.1875, 0.8125, 0.8125, 0.5625, 1)), Shapes::box(0.8125, 0, 0.8125, 1, 0.5625, 1));
+        else if (facing == "south" && part == "foot")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.1875, 0.5625, 0.1875), Shapes::box(0, 0.1875, 0.1875, 1, 0.5625, 1)), Shapes::box(0.1875, 0.1875, 0, 0.8125, 0.5625, 0.1875)), Shapes::box(0.8125, 0, 0, 1, 0.5625, 0.1875));
+        else if (facing == "west" && part == "head")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.1875, 0.5625, 0.1875), Shapes::box(0, 0, 0.8125, 0.1875, 0.5625, 1)), Shapes::box(0, 0.1875, 0.1875, 1, 0.5625, 0.8125)), Shapes::box(0.1875, 0.1875, 0, 1, 0.5625, 0.1875)), Shapes::box(0.1875, 0.1875, 0.8125, 1, 0.5625, 1));
+        else if (facing == "west" && part == "foot")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0.1875, 0, 0.8125, 0.5625, 1), Shapes::box(0.8125, 0, 0, 1, 0.5625, 0.1875)), Shapes::box(0.8125, 0, 0.8125, 1, 0.5625, 1)), Shapes::box(0.8125, 0.1875, 0.1875, 1, 0.5625, 0.8125));
+        else if (facing == "east" && part == "head")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0.1875, 0, 0.8125, 0.5625, 1), Shapes::box(0.8125, 0, 0, 1, 0.5625, 0.1875)), Shapes::box(0.8125, 0, 0.8125, 1, 0.5625, 1)), Shapes::box(0.8125, 0.1875, 0.1875, 1, 0.5625, 0.8125));
+        else if (facing == "east" && part == "foot")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0, 0, 0.1875, 0.5625, 0.1875), Shapes::box(0, 0, 0.8125, 0.1875, 0.5625, 1)), Shapes::box(0, 0.1875, 0.1875, 1, 0.5625, 0.8125)), Shapes::box(0.1875, 0.1875, 0, 1, 0.5625, 0.1875)), Shapes::box(0.1875, 0.1875, 0.8125, 1, 0.5625, 1));
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // BellBlock.getCollisionShape :167-168 -> getVoxelShape :155-163 — ATTACHMENT (floor/
+    // ceiling/single_wall/double_wall) x FACING; BELL_SHAPE + post/yoke per case (:49-55). 16.
+    if (fam == "BellBlock") {
+        std::string attachment = getProp(props, "attachment");
+        std::string facing = getProp(props, "facing");
+        if (attachment == "floor" && facing == "north")
+            return Shapes::box(0, 0, 0.25, 1, 1, 0.75);
+        else if (attachment == "floor" && facing == "south")
+            return Shapes::box(0, 0, 0.25, 1, 1, 0.75);
+        else if (attachment == "floor" && facing == "west")
+            return Shapes::box(0.25, 0, 0, 0.75, 1, 1);
+        else if (attachment == "floor" && facing == "east")
+            return Shapes::box(0.25, 0, 0, 0.75, 1, 1);
+        else if (attachment == "ceiling" && facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0.4375, 0.5625, 1, 0.5625));
+        else if (attachment == "ceiling" && facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0.4375, 0.5625, 1, 0.5625));
+        else if (attachment == "ceiling" && facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0.4375, 0.5625, 1, 0.5625));
+        else if (attachment == "ceiling" && facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0.4375, 0.5625, 1, 0.5625));
+        else if (attachment == "single_wall" && facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0, 0.5625, 0.9375, 0.8125));
+        else if (attachment == "single_wall" && facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0.1875, 0.5625, 0.9375, 1));
+        else if (attachment == "single_wall" && facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.8125, 0.4375, 0.8125, 0.9375, 0.5625), Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75)), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875));
+        else if (attachment == "single_wall" && facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.1875, 0.8125, 0.4375, 1, 0.9375, 0.5625), Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75)), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875));
+        else if (attachment == "double_wall" && facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0, 0.5625, 0.9375, 1));
+        else if (attachment == "double_wall" && facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875)), Shapes::box(0.4375, 0.8125, 0, 0.5625, 0.9375, 1));
+        else if (attachment == "double_wall" && facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.8125, 0.4375, 1, 0.9375, 0.5625), Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75)), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875));
+        else if (attachment == "double_wall" && facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::box(0, 0.8125, 0.4375, 1, 0.9375, 0.5625), Shapes::box(0.25, 0.25, 0.25, 0.75, 0.375, 0.75)), Shapes::box(0.3125, 0.375, 0.3125, 0.6875, 0.8125, 0.6875));
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // GrindstoneBlock.getCollisionShape :59-60 -> makeShapes :46-51 — pivot + two legs,
+    // rotateAttachFace keyed by FACE (floor/wall/ceiling) x FACING. 12 shapes.
+    if (fam == "GrindstoneBlock") {
+        std::string face = getProp(props, "face");
+        std::string facing = getProp(props, "facing");
+        if (face == "floor" && facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0, 0.375, 0.25, 0.8125, 0.625), Shapes::box(0.125, 0.4375, 0.3125, 0.25, 0.8125, 0.375)), Shapes::box(0.125, 0.4375, 0.625, 0.25, 0.8125, 0.6875)), Shapes::box(0.25, 0.25, 0.125, 0.75, 1, 0.875)), Shapes::box(0.75, 0, 0.375, 0.875, 0.8125, 0.625)), Shapes::box(0.75, 0.4375, 0.3125, 0.875, 0.8125, 0.375)), Shapes::box(0.75, 0.4375, 0.625, 0.875, 0.8125, 0.6875));
+        else if (face == "floor" && facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0, 0.375, 0.25, 0.8125, 0.625), Shapes::box(0.125, 0.4375, 0.3125, 0.25, 0.8125, 0.375)), Shapes::box(0.125, 0.4375, 0.625, 0.25, 0.8125, 0.6875)), Shapes::box(0.25, 0.25, 0.125, 0.75, 1, 0.875)), Shapes::box(0.75, 0, 0.375, 0.875, 0.8125, 0.625)), Shapes::box(0.75, 0.4375, 0.3125, 0.875, 0.8125, 0.375)), Shapes::box(0.75, 0.4375, 0.625, 0.875, 0.8125, 0.6875));
+        else if (face == "floor" && facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0.25, 0.25, 0.875, 1, 0.75), Shapes::box(0.3125, 0.4375, 0.125, 0.375, 0.8125, 0.25)), Shapes::box(0.3125, 0.4375, 0.75, 0.375, 0.8125, 0.875)), Shapes::box(0.375, 0, 0.125, 0.625, 0.8125, 0.25)), Shapes::box(0.375, 0, 0.75, 0.625, 0.8125, 0.875)), Shapes::box(0.625, 0.4375, 0.125, 0.6875, 0.8125, 0.25)), Shapes::box(0.625, 0.4375, 0.75, 0.6875, 0.8125, 0.875));
+        else if (face == "floor" && facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0.25, 0.25, 0.875, 1, 0.75), Shapes::box(0.3125, 0.4375, 0.125, 0.375, 0.8125, 0.25)), Shapes::box(0.3125, 0.4375, 0.75, 0.375, 0.8125, 0.875)), Shapes::box(0.375, 0, 0.125, 0.625, 0.8125, 0.25)), Shapes::box(0.375, 0, 0.75, 0.625, 0.8125, 0.875)), Shapes::box(0.625, 0.4375, 0.125, 0.6875, 0.8125, 0.25)), Shapes::box(0.625, 0.4375, 0.75, 0.6875, 0.8125, 0.875));
+        else if (face == "wall" && facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0.3125, 0.1875, 0.25, 0.6875, 0.5625), Shapes::box(0.125, 0.375, 0.5625, 0.25, 0.625, 1)), Shapes::box(0.25, 0.125, 0, 0.75, 0.875, 0.75)), Shapes::box(0.75, 0.3125, 0.1875, 0.875, 0.6875, 0.5625)), Shapes::box(0.75, 0.375, 0.5625, 0.875, 0.625, 1));
+        else if (face == "wall" && facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0.3125, 0.4375, 0.25, 0.6875, 0.8125), Shapes::box(0.125, 0.375, 0, 0.25, 0.625, 0.4375)), Shapes::box(0.25, 0.125, 0.25, 0.75, 0.875, 1)), Shapes::box(0.75, 0.3125, 0.4375, 0.875, 0.6875, 0.8125)), Shapes::box(0.75, 0.375, 0, 0.875, 0.625, 0.4375));
+        else if (face == "wall" && facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0.125, 0.25, 0.75, 0.875, 0.75), Shapes::box(0.1875, 0.3125, 0.125, 0.5625, 0.6875, 0.25)), Shapes::box(0.1875, 0.3125, 0.75, 0.5625, 0.6875, 0.875)), Shapes::box(0.5625, 0.375, 0.125, 1, 0.625, 0.25)), Shapes::box(0.5625, 0.375, 0.75, 1, 0.625, 0.875));
+        else if (face == "wall" && facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0.375, 0.125, 0.4375, 0.625, 0.25), Shapes::box(0, 0.375, 0.75, 0.4375, 0.625, 0.875)), Shapes::box(0.25, 0.125, 0.25, 1, 0.875, 0.75)), Shapes::box(0.4375, 0.3125, 0.125, 0.8125, 0.6875, 0.25)), Shapes::box(0.4375, 0.3125, 0.75, 0.8125, 0.6875, 0.875));
+        else if (face == "ceiling" && facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0.1875, 0.3125, 0.25, 0.5625, 0.6875), Shapes::box(0.125, 0.5625, 0.375, 0.25, 1, 0.625)), Shapes::box(0.25, 0, 0.125, 0.75, 0.75, 0.875)), Shapes::box(0.75, 0.1875, 0.3125, 0.875, 0.5625, 0.6875)), Shapes::box(0.75, 0.5625, 0.375, 0.875, 1, 0.625));
+        else if (face == "ceiling" && facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0.1875, 0.3125, 0.25, 0.5625, 0.6875), Shapes::box(0.125, 0.5625, 0.375, 0.25, 1, 0.625)), Shapes::box(0.25, 0, 0.125, 0.75, 0.75, 0.875)), Shapes::box(0.75, 0.1875, 0.3125, 0.875, 0.5625, 0.6875)), Shapes::box(0.75, 0.5625, 0.375, 0.875, 1, 0.625));
+        else if (face == "ceiling" && facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0, 0.25, 0.875, 0.75, 0.75), Shapes::box(0.3125, 0.1875, 0.125, 0.6875, 0.5625, 0.25)), Shapes::box(0.3125, 0.1875, 0.75, 0.6875, 0.5625, 0.875)), Shapes::box(0.375, 0.5625, 0.125, 0.625, 1, 0.25)), Shapes::box(0.375, 0.5625, 0.75, 0.625, 1, 0.875));
+        else if (face == "ceiling" && facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0, 0.25, 0.875, 0.75, 0.75), Shapes::box(0.3125, 0.1875, 0.125, 0.6875, 0.5625, 0.25)), Shapes::box(0.3125, 0.1875, 0.75, 0.6875, 0.5625, 0.875)), Shapes::box(0.375, 0.5625, 0.125, 0.625, 1, 0.25)), Shapes::box(0.375, 0.5625, 0.75, 0.625, 1, 0.875));
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // AnvilBlock.getShape :77-78 — base+waist+top columns, rotateHorizontalAxis keyed by
+    // FACING.getAxis() (:35-37). 4 shapes (X/Z axes each appear twice). 7 boxes each.
+    if (fam == "AnvilBlock") {
+        std::string facing = getProp(props, "facing");
+        if (facing == "north")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0, 0.125, 0.875, 0.25, 0.875), Shapes::box(0.1875, 0.625, 0, 0.375, 1, 1)), Shapes::box(0.25, 0.25, 0.1875, 0.75, 0.3125, 0.8125)), Shapes::box(0.375, 0.3125, 0.25, 0.625, 1, 0.75)), Shapes::box(0.375, 0.625, 0, 0.8125, 1, 0.25)), Shapes::box(0.375, 0.625, 0.75, 0.8125, 1, 1)), Shapes::box(0.625, 0.625, 0.25, 0.8125, 1, 0.75));
+        else if (facing == "south")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0.125, 0, 0.125, 0.875, 0.25, 0.875), Shapes::box(0.1875, 0.625, 0, 0.375, 1, 1)), Shapes::box(0.25, 0.25, 0.1875, 0.75, 0.3125, 0.8125)), Shapes::box(0.375, 0.3125, 0.25, 0.625, 1, 0.75)), Shapes::box(0.375, 0.625, 0, 0.8125, 1, 0.25)), Shapes::box(0.375, 0.625, 0.75, 0.8125, 1, 1)), Shapes::box(0.625, 0.625, 0.25, 0.8125, 1, 0.75));
+        else if (facing == "west")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0.625, 0.1875, 0.25, 1, 0.8125), Shapes::box(0.125, 0, 0.125, 0.875, 0.25, 0.875)), Shapes::box(0.1875, 0.25, 0.25, 0.8125, 0.3125, 0.75)), Shapes::box(0.25, 0.3125, 0.375, 0.75, 1, 0.625)), Shapes::box(0.25, 0.625, 0.1875, 1, 1, 0.375)), Shapes::box(0.25, 0.625, 0.625, 1, 1, 0.8125)), Shapes::box(0.75, 0.625, 0.375, 1, 1, 0.625));
+        else if (facing == "east")
+            return Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::or_(Shapes::box(0, 0.625, 0.1875, 0.25, 1, 0.8125), Shapes::box(0.125, 0, 0.125, 0.875, 0.25, 0.875)), Shapes::box(0.1875, 0.25, 0.25, 0.8125, 0.3125, 0.75)), Shapes::box(0.25, 0.3125, 0.375, 0.75, 1, 0.625)), Shapes::box(0.25, 0.625, 0.1875, 1, 1, 0.375)), Shapes::box(0.25, 0.625, 0.625, 1, 1, 0.8125)), Shapes::box(0.75, 0.625, 0.375, 1, 1, 0.625));
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // ChestBlock.getShape :191-197 — SINGLE=column(14,0,14); LEFT/RIGHT=HALF_SHAPES
+    // (boxZ(14,0,14,0,15)) keyed by getConnectedDirection(state) (:199-201). 12 shapes.
+    if (fam == "ChestBlock") {
+        std::string facing = getProp(props, "facing");
+        std::string type = getProp(props, "type");
+        if (facing == "north" && type == "single")
+            return Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.875, 0.9375);
+        else if (facing == "north" && type == "left")
+            return Shapes::box(0.0625, 0, 0.0625, 1, 0.875, 0.9375);
+        else if (facing == "north" && type == "right")
+            return Shapes::box(0, 0, 0.0625, 0.9375, 0.875, 0.9375);
+        else if (facing == "south" && type == "single")
+            return Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.875, 0.9375);
+        else if (facing == "south" && type == "left")
+            return Shapes::box(0, 0, 0.0625, 0.9375, 0.875, 0.9375);
+        else if (facing == "south" && type == "right")
+            return Shapes::box(0.0625, 0, 0.0625, 1, 0.875, 0.9375);
+        else if (facing == "west" && type == "single")
+            return Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.875, 0.9375);
+        else if (facing == "west" && type == "left")
+            return Shapes::box(0.0625, 0, 0, 0.9375, 0.875, 0.9375);
+        else if (facing == "west" && type == "right")
+            return Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.875, 1);
+        else if (facing == "east" && type == "single")
+            return Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.875, 0.9375);
+        else if (facing == "east" && type == "left")
+            return Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.875, 1);
+        else if (facing == "east" && type == "right")
+            return Shapes::box(0.0625, 0, 0, 0.9375, 0.875, 0.9375);
+        return nullptr;  // unreached: all states enumerated
+    }
+
+    // LecternBlock.getCollisionShape :96-99 returns SHAPE_COLLISION (facing-independent) =
+    // or(column(16,0,2), column(8,2,14)) (:49). (getShape is facing-dependent but the gate
+    // compares getCollisionShape.)
+    if (fam == "LecternBlock")
+        return Shapes::or_(Shapes::box(0, 0, 0, 1, 0.125, 1), Shapes::box(0.25, 0.125, 0.25, 0.75, 0.875, 0.75));
+    // StonecutterBlock.getShape :68-69 = SHAPE = column(16,0,9) (:31).
+    if (fam == "StonecutterBlock")
+        return Shapes::box(0, 0, 0, 1, 0.5625, 1);
+    // EnchantingTableBlock.getShape :58-59 = SHAPE = column(16,0,12) (:36).
+    if (fam == "EnchantingTableBlock")
+        return Shapes::box(0, 0, 0, 1, 0.75, 1);
+    // BrewingStandBlock.getShape :60-61 = SHAPE = or(column(2,2,14), column(14,0,2)) (:37).
+    if (fam == "BrewingStandBlock")
+        return Shapes::or_(Shapes::box(0.0625, 0, 0.0625, 0.9375, 0.125, 0.9375), Shapes::box(0.4375, 0.125, 0.4375, 0.5625, 0.875, 0.5625));
+    // CampfireBlock.getShape :162-163 = SHAPE = column(16,0,7) (:69) (no getCollisionShape
+    // override -> collision == this).
+    if (fam == "CampfireBlock")
+        return Shapes::box(0, 0, 0, 1, 0.4375, 1);
+
     // ── agent A (simple-box families). GT = getCollisionShape, so hasCollision=false families -> empty. ──
     if (fam == "ButtonBlock") return Shapes::empty();  // hasCollision=false -> empty
     if (fam == "BasePressurePlateBlock" || fam == "PressurePlateBlock" || fam == "WeightedPressurePlateBlock")
