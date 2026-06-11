@@ -56,7 +56,8 @@ std::vector<int> g_hasSturdy;
 // SHULKER_BOXES, LEAVES (proxy for instanceof LeavesBlock — every LeavesBlock IS in #leaves).
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
-        shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf;
+        shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf,
+        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -658,7 +659,7 @@ const std::set<std::string> PORTED = {
     // straggler wave 7
     "CocoaBlock", "CoralPlantBlock", "CoralFanBlock", "WallHangingSignBlock",
     // straggler wave 8
-    "BambooStalkBlock", "BigDripleafBlock"
+    "BambooStalkBlock", "BigDripleafBlock", "MangrovePropaguleBlock", "SmallDripleafBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1123,6 +1124,32 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
+    // MangrovePropaguleBlock.updateShape — UP && !canSurvive -> AIR. canSurvive (:?) = HANGING ?
+    // above.is(#supports_hanging_mangrove_propagule) : mayPlaceOn(below)=below.is(#supports_mangrove_propagule).
+    if (fam == "MangrovePropaguleBlock") {
+        if (dir == UP) {
+            bool hanging = getProp(g_props[stateId], "hanging") == "true";
+            bool surv = hanging ? inTag(g_tags.supportsHangingMangrove, level.rel(UP))
+                                : inTag(g_tags.supportsMangrovePropagule, level.rel(DOWN));
+            if (!surv) return 0;
+        }
+        return stateId;
+    }
+    // SmallDripleafBlock.updateShape — waterlogged tick + super(DoublePlantBlock.updateShape); same
+    // other-half logic, but LOWER canSurvive uses mayPlaceOn = below.is(#supports_small_dripleaf).
+    if (fam == "SmallDripleafBlock") {
+        std::string half = getProp(g_props[stateId], "half");
+        bool isLower = (half == "lower");
+        bool axisY = (dir == DOWN || dir == UP);
+        bool nbrIsThis = (g_name[neighbourId] == g_name[stateId]);
+        bool c1 = !axisY, c2 = (isLower) != (dir == UP);
+        bool c3 = nbrIsThis && (getProp(g_props[neighbourId], "half") != half);
+        if (c1 || c2 || c3) {
+            if (isLower && dir == DOWN && !inTag(g_tags.supportsSmallDripleaf, level.rel(DOWN))) return 0;
+            return stateId;
+        }
+        return 0;
+    }
     // BambooStalkBlock.updateShape — UP neighbour is taller bamboo -> cycle(AGE) (0<->1); canSurvive
     // only schedules a tick (no returned-state change).
     if (fam == "BambooStalkBlock") {
@@ -1264,6 +1291,9 @@ int main(int argc, char** argv) {
         g_tags.supportsCocoa = resolve("supports_cocoa");
         g_tags.wallHangingSigns = resolve("wall_hanging_signs");
         g_tags.supportsBigDripleaf = resolve("supports_big_dripleaf");
+        g_tags.supportsHangingMangrove = resolve("supports_hanging_mangrove_propagule");
+        g_tags.supportsMangrovePropagule = resolve("supports_mangrove_propagule");
+        g_tags.supportsSmallDripleaf = resolve("supports_small_dripleaf");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
