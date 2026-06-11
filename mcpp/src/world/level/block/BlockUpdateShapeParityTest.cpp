@@ -656,7 +656,7 @@ const std::set<std::string> PORTED = {
     // straggler wave 6
     "SeaPickleBlock", "AttachedStemBlock", "PistonHeadBlock",
     // straggler wave 7
-    "CocoaBlock", "CoralPlantBlock", "CoralFanBlock"  // (WallHangingSignBlock deferred — canSurvive bug)
+    "CocoaBlock", "CoralPlantBlock", "CoralFanBlock", "WallHangingSignBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1121,23 +1121,11 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
-    // WallHangingSignBlock.updateShape :? — dir.axis == FACING.clockWise().axis && !canSurvive -> AIR.
-    // canSurvive (:104-106) = canAttachTo(clockwise side) || canAttachTo(counterClockwise side);
-    // canAttachTo (:108-113) = attach.is(#wall_hanging_signs) ? sameAxis : attach.isFaceSturdy(face,FULL).
-    if (fam == "WallHangingSignBlock") {
-        int facing = dirFromName(getProp(g_props[stateId], "facing"));
-        int cw = clockWise(facing), ccw = counterClockWise(facing);
-        if (axisOf(dir) == axisOf(cw)) {
-            auto attach = [&](int sideDir, int attachFace) {
-                int as = level.rel(sideDir);
-                if (inTag(g_tags.wallHangingSigns, as))
-                    return axisOf(dirFromName(getProp(g_props[as], "facing"))) == axisOf(facing);
-                return isFaceSturdy(as, attachFace);
-            };
-            if (!(attach(cw, ccw) || attach(ccw, cw))) return 0;
-        }
-        return stateId;
-    }
+    // WallHangingSignBlock.updateShape — dir.axis == FACING.clockWise().axis && !canSurvive -> AIR.
+    // But WallHangingSignBlock does NOT override canSurvive (the two-sides predicate at :102-106 is
+    // canPlace, used at PLACEMENT only); the inherited default canSurvive == true, so the AIR branch
+    // never fires -> the updateShape is a NO-OP (waterlogged tick is a side effect).
+    if (fam == "WallHangingSignBlock") return stateId;
 
     return -2;  // unported
 }
