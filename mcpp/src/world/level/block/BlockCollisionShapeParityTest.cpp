@@ -13,6 +13,10 @@
 //   block_collision_shape_parity [--cases mcpp/build/block_collision_shape.tsv]
 //                                [--states mcpp/src/assets/block_states.json]
 
+#include "../../phys/shapes/Shapes.h"
+#include "../../phys/shapes/VoxelShape.h"
+#include "../../phys/AABB.h"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -22,6 +26,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -31,10 +36,42 @@ std::vector<std::string> splitTab(const std::string& s) {
     if (!o.empty() && !o.back().empty() && o.back().back() == '\r') o.back().pop_back();
     return o;
 }
+std::string getProp(const std::string& props, const std::string& key) {
+    std::istringstream ss(props); std::string p;
+    while (std::getline(ss, p, ',')) {
+        auto eq = p.find('=');
+        if (eq != std::string::npos && p.substr(0, eq) == key) return p.substr(eq + 1);
+    }
+    return "";
+}
 struct Box { double x1,y1,z1,x2,y2,z2; bool operator==(const Box&) const = default; };
 using Shape = std::vector<Box>;
 const Shape CUBE = { {0,0,0,1,1,1} };
 const Shape EMPTY = {};
+
+// canonical (sorted) Box list from a VoxelShape (matches the GT's sorted toAabbs()).
+Shape toBoxes(const mc::VoxelShapePtr& sh) {
+    Shape out;
+    for (const mc::AABB& a : sh->toAabbs())
+        out.push_back({ a.minCorner.x, a.minCorner.y, a.minCorner.z, a.maxCorner.x, a.maxCorner.y, a.maxCorner.z });
+    std::sort(out.begin(), out.end(), [](const Box& p, const Box& q){
+        return std::tie(p.x1,p.y1,p.z1,p.x2,p.y2,p.z2) < std::tie(q.x1,q.y1,q.z1,q.x2,q.y2,q.z2); });
+    return out;
+}
+
+// Per-family getShape (1:1 from each block class). Returns nullptr if the family is not yet ported.
+// The C++ Shapes/VoxelShape primitives are certified (voxel_shapes gates).
+mc::VoxelShapePtr buildFamilyShape(const std::string& fam, const std::string& props) {
+    using mc::Shapes;
+    // SlabBlock.getShape :59-65 — TOP/BOTTOM half-boxes, DOUBLE = full cube.
+    if (fam == "SlabBlock") {
+        std::string type = getProp(props, "type");
+        if (type == "double") return Shapes::block();
+        if (type == "top") return Shapes::box(0, 0.5, 0, 1, 1, 1);
+        return Shapes::box(0, 0, 0, 1, 0.5, 1);  // bottom
+    }
+    return nullptr;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -47,17 +84,18 @@ int main(int argc, char** argv) {
     }
 
     // block_states.json -> per-id (short name, is_solid).
-    std::vector<std::string> name;
+    std::vector<std::string> name, props;
     std::vector<int> isSolid;
     {
         std::ifstream f(statesPath, std::ios::binary);
         if (!f) { std::cerr << "cannot open " << statesPath << "\n"; return 2; }
         nlohmann::json j; f >> j;
         auto arr = j.at("states");
-        name.resize(arr.size()); isSolid.resize(arr.size(), 0);
+        name.resize(arr.size()); props.resize(arr.size()); isSolid.resize(arr.size(), 0);
         for (auto& s : arr) {
             std::size_t id = s.at("id").get<std::size_t>();
             name[id] = s.at("name").get<std::string>();
+            props[id] = s.value("props", std::string());
             isSolid[id] = s.value("is_solid", false) ? 1 : 0;
         }
     }
@@ -119,11 +157,25 @@ int main(int argc, char** argv) {
                     << " hasCollision=" << (hc != blocksMotion.end() ? hc->second : -1)
                     << " gotBoxes=" << got.size() << " wantBoxes=" << want.size() << "\n";
             }
+            continue;
+        }
+        // Per-family getShape (Shapes-composition) for the custom-shape families.
+        std::string fkey = (shapeFam == "BlockBehaviour" ? collFam : shapeFam);
+        if (mc::VoxelShapePtr sh = buildFamilyShape(fkey, props[id])) {
+            Shape got = toBoxes(sh);
+            // GT expected is already canonical-sorted; sort ours too (toBoxes sorts).
+            Shape wantSorted = expected[id];
+            std::sort(wantSorted.begin(), wantSorted.end(), [](const Box& p, const Box& q){
+                return std::tie(p.x1,p.y1,p.z1,p.x2,p.y2,p.z2) < std::tie(q.x1,q.y1,q.z1,q.x2,q.y2,q.z2); });
+            if (got == wantSorted) ++cert;
+            else {
+                ++mis;
+                if (shown++ < 16) std::cerr << "mismatch id=" << id << " " << name[id] << "[" << props[id]
+                    << "] fam=" << fkey << " gotBoxes=" << got.size() << " wantBoxes=" << wantSorted.size() << "\n";
+            }
         } else {
             ++todo;
-            // attribute the TODO to the getShape family (the one that determines the shape),
-            // or to "<default-custom-box>" for default-family blocks with a custom shape field.
-            todoFam[!defaultFamily ? (shapeFam == "BlockBehaviour" ? collFam : shapeFam) : "<default-custom-box>"]++;
+            todoFam[!defaultFamily ? fkey : "<default-custom-box>"]++;
         }
     }
 

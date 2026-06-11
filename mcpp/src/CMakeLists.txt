@@ -1969,9 +1969,11 @@ set_target_properties(block_rotate_mirror_parity PROPERTIES
 
 # ===== BLOCK COLLISION SHAPES (#19 foundation): BlockState.getCollisionShape vs the real game =====
 add_executable(block_collision_shape_parity
-    world/level/block/BlockCollisionShapeParityTest.cpp)
+    world/level/block/BlockCollisionShapeParityTest.cpp
+    world/phys/AABB.cpp world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp world/phys/shapes/DiscreteVoxelShape.cpp)
 target_include_directories(block_collision_shape_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(block_collision_shape_parity PRIVATE nlohmann_json)
+target_link_libraries(block_collision_shape_parity PRIVATE glm nlohmann_json)
 set_target_properties(block_collision_shape_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
