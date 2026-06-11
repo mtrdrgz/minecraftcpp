@@ -6471,3 +6471,42 @@ if(WIN32)
     target_link_libraries(pkt_game_rule_values_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_game_rule_values_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: MansionGrid full RNG ctor pipeline (recursiveCorridor/cleanEdges/identifyRooms Fisher-Yates/setupThirdFloor -> 5 SimpleGrids) =====
+add_executable(woodland_mansion_grid_layout_parity
+    world/level/levelgen/structure/structures/WoodlandMansionGridLayoutParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(woodland_mansion_grid_layout_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(woodland_mansion_grid_layout_parity PRIVATE bcrypt)
+endif()
+set_target_properties(woodland_mansion_grid_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: org.joml.Vector4f (add/sub/mul/div/negate/fma/lerp/dot/lengthSquared/distanceSquared/mul(Matrix4f 4 kernels); jfma=a*b+c) =====
+add_executable(vector4f_math_parity render/model/Vector4fMathParityTest.cpp)
+target_include_directories(vector4f_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vector4f_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item: CrossbowItem.getShootingPower/getShotPitch/getRandomShotPitch (index==0 no-draw + (index&1) high/low pitch nextFloat) =====
+add_executable(crossbow_item_parity
+    world/item/CrossbowItemParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(crossbow_item_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(crossbow_item_parity PRIVATE bcrypt)
+endif()
+set_target_properties(crossbow_item_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundChunksBiomesPacket (writeCollection<ChunkBiomeData> = VarInt + per entry writeChunkPos(pack) + writeByteArray) =====
+add_executable(pkt_chunks_biomes_cb_parity
+    network/protocol/game/PktChunksBiomesParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_chunks_biomes_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_chunks_biomes_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_chunks_biomes_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_chunks_biomes_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
