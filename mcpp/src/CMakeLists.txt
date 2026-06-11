@@ -5551,3 +5551,32 @@ if(WIN32)
     target_link_libraries(pkt_ticking_state_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_ticking_state_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: WoodlandMansionPieces.SimpleGrid (2D int grid, OOB sentinel, edgesTo) =====
+add_executable(woodland_mansion_grid_parity world/level/levelgen/structure/structures/WoodlandMansionGridParityTest.cpp)
+target_include_directories(woodland_mansion_grid_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(woodland_mansion_grid_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: RedStoneWireBlock.getColorForPower (float color expression + COLORS[16] table) =====
+add_executable(redstone_wire_color_parity world/level/block/RedstoneWireColorParityTest.cpp)
+target_include_directories(redstone_wire_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(redstone_wire_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== util/datafix: PackedBitStorage (legacy pre-1.16 cross-long bit-packed array) =====
+add_executable(packed_bit_storage_parity util/datafix/PackedBitStorageParityTest.cpp)
+target_include_directories(packed_bit_storage_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(packed_bit_storage_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundForgetLevelChunkPacket (writeChunkPos = writeLong(pos.pack()) z-hi/x-lo) =====
+add_executable(pkt_forget_level_chunk_parity
+    network/protocol/game/PktForgetLevelChunkParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_forget_level_chunk_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_forget_level_chunk_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_forget_level_chunk_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_forget_level_chunk_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
