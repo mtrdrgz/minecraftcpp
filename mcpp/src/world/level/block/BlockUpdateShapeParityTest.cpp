@@ -369,20 +369,48 @@ bool coverRects(const std::vector<std::array<double,4>>& r, double lo, double hi
     return true;
 }
 std::vector<std::array<double,4>> faceRects(const std::vector<std::array<double,6>>& boxes, int d) {
+    // VoxelShape.getFaceShape(d): the slice at the dir-extreme coordinate (findIndex at 0.9999999 /
+    // 1.0E-7), projected to the perpendicular plane. A box contributes if it CONTAINS that slice
+    // coordinate (not merely touches the [0,1] boundary) — fences/walls extend to y=1.5, so their
+    // post is in the UP slice even though its max y != 1.0.
+    const double hi = 0.9999999, lo = 1.0E-7;
     std::vector<std::array<double,4>> r;
     for (auto& b : boxes) {  // b = {x0,y0,z0,x1,y1,z1}
-        if      (d == DOWN  && b[1] == 0.0) r.push_back({b[0], b[2], b[3], b[5]});
-        else if (d == UP    && b[4] == 1.0) r.push_back({b[0], b[2], b[3], b[5]});
-        else if (d == NORTH && b[2] == 0.0) r.push_back({b[0], b[1], b[3], b[4]});
-        else if (d == SOUTH && b[5] == 1.0) r.push_back({b[0], b[1], b[3], b[4]});
-        else if (d == WEST  && b[0] == 0.0) r.push_back({b[1], b[2], b[4], b[5]});
-        else if (d == EAST  && b[3] == 1.0) r.push_back({b[1], b[2], b[4], b[5]});
+        if      (d == DOWN)  { if (b[1] <= lo && lo <= b[4]) r.push_back({b[0], b[2], b[3], b[5]}); }
+        else if (d == UP)    { if (b[1] <= hi && hi <= b[4]) r.push_back({b[0], b[2], b[3], b[5]}); }
+        else if (d == NORTH) { if (b[2] <= lo && lo <= b[5]) r.push_back({b[0], b[1], b[3], b[4]}); }
+        else if (d == SOUTH) { if (b[2] <= hi && hi <= b[5]) r.push_back({b[0], b[1], b[3], b[4]}); }
+        else if (d == WEST)  { if (b[0] <= lo && lo <= b[3]) r.push_back({b[1], b[2], b[4], b[5]}); }
+        else if (d == EAST)  { if (b[0] <= hi && hi <= b[3]) r.push_back({b[1], b[2], b[4], b[5]}); }
     }
     return r;
 }
 bool faceFullSup(int id, int d) { return id >= 0 && id < (int)g_supBoxes.size() && coverRects(faceRects(g_supBoxes[id], d), 0.0, 1.0); }
 bool faceFullCol(int id, int d) { return id >= 0 && id < (int)g_collBoxes.size() && coverRects(faceRects(g_collBoxes[id], d), 0.0, 1.0); }
 bool isCenterSupport(int id, int d) { return id >= 0 && id < (int)g_supBoxes.size() && coverRects(faceRects(g_supBoxes[id], d), 7.0/16.0, 9.0/16.0); }
+// SupportType.RIGID (SupportType.java:26-33): face covers the outer ring (block minus column(12,0,16)),
+// i.e. the 2px border frame x<2/16||x>14/16||z<2/16||z>14/16. canSupportRigidBlock = RIGID on UP.
+bool isRigidSupport(int id, int d) {
+    if (id < 0 || id >= (int)g_supBoxes.size()) return false;
+    auto r = faceRects(g_supBoxes[id], d);
+    if (r.empty()) return false;
+    const double a = 2.0 / 16.0, b = 14.0 / 16.0;
+    std::vector<double> xs{0.0, 1.0, a, b}, ys{0.0, 1.0, a, b};
+    for (auto& q : r) { xs.push_back(q[0]); xs.push_back(q[2]); ys.push_back(q[1]); ys.push_back(q[3]); }
+    std::sort(xs.begin(), xs.end()); xs.erase(std::unique(xs.begin(), xs.end()), xs.end());
+    std::sort(ys.begin(), ys.end()); ys.erase(std::unique(ys.begin(), ys.end()), ys.end());
+    for (std::size_t i = 0; i + 1 < xs.size(); ++i)
+        for (std::size_t k = 0; k + 1 < ys.size(); ++k) {
+            double cx = (xs[i] + xs[i+1]) / 2, cy = (ys[k] + ys[k+1]) / 2;
+            if (cx < 0 || cx > 1 || cy < 0 || cy > 1) continue;
+            bool inRing = (cx < a || cx > b || cy < a || cy > b);  // outer 2px border
+            if (!inRing) continue;
+            bool covered = false;
+            for (auto& q : r) if (q[0] <= cx && cx <= q[2] && q[1] <= cy && cy <= q[3]) { covered = true; break; }
+            if (!covered) return false;
+        }
+    return true;
+}
 // MultifaceBlock.canAttachTo (:256): isFaceFull(getBlockSupportShape, opp) || isFaceFull(collision, opp).
 bool multifaceCanAttachTo(int neighbourId, int dirToNeighbour) {
     int opp = opposite(dirToNeighbour);
@@ -610,7 +638,10 @@ const std::set<std::string> PORTED = {
     // agent D (redstone/note/vine/tripwire/moss/amethyst + no-op verifies)
     "RedStoneWireBlock", "RepeaterBlock", "NoteBlock", "VineBlock", "TripWireBlock",
     "MossyCarpetBlock", "AmethystClusterBlock", "SlabBlock", "CandleBlock", "LeavesBlock",
-    "ShelfBlock", "CopperGolemStatueBlock"
+    "ShelfBlock", "CopperGolemStatueBlock",
+    // straggler wave 1
+    "LightningRodBlock", "ChainBlock", "SculkSensorBlock", "BeehiveBlock", "HugeMushroomBlock",
+    "CampfireBlock", "BaseCoralWallFanBlock", "CoralWallFanBlock", "BasePressurePlateBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -872,6 +903,45 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
     if (fam == "SlabBlock" || fam == "CandleBlock" || fam == "LeavesBlock"
         || fam == "ShelfBlock" || fam == "CopperGolemStatueBlock")
         return stateId;
+
+    // ── straggler wave 1 (no-op + simple sturdy/center canSurvive, transcribed 1:1). ──
+    // Pure no-ops (waterlogged tick / side effect, super returns state unchanged):
+    // LightningRodBlock, ChainBlock, SculkSensorBlock, BeehiveBlock (fire-emergency side effect only).
+    if (fam == "LightningRodBlock" || fam == "ChainBlock" || fam == "SculkSensorBlock"
+        || fam == "BeehiveBlock")
+        return stateId;
+    // HugeMushroomBlock.updateShape — neighbour.is(this) ? clear PROPERTY_BY_DIRECTION[dir] : super.
+    if (fam == "HugeMushroomBlock") {
+        if (g_name[neighbourId] == g_name[stateId]) {
+            int ns = setProp(stateId, faceProp(dir), "false");
+            return ns < 0 ? stateId : ns;
+        }
+        return stateId;
+    }
+    // CampfireBlock.updateShape — DOWN -> SIGNAL_FIRE = isSmokeSource(below) (== is(HAY_BLOCK)); else super.
+    if (fam == "CampfireBlock") {
+        if (dir == DOWN) {
+            int ns = setProp(stateId, "signal_fire", g_name[neighbourId] == "hay_block" ? "true" : "false");
+            return ns < 0 ? stateId : ns;
+        }
+        return stateId;
+    }
+    // BaseCoralWallFanBlock / CoralWallFanBlock.updateShape — opposite(dir)==FACING && !canSurvive -> AIR.
+    // canSurvive = isFaceSturdy(relative(FACING.opposite()), FACING).
+    if (fam == "BaseCoralWallFanBlock" || fam == "CoralWallFanBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (opposite(dir) == facing && !isFaceSturdy(level.rel(opposite(facing)), facing)) return 0;
+        return stateId;
+    }
+    // BasePressurePlateBlock.updateShape — DOWN && !canSurvive -> AIR. canSurvive (:?) =
+    // canSupportRigidBlock(below) || canSupportCenter(below, UP); RIGID==FULL for the probe pool.
+    if (fam == "BasePressurePlateBlock") {
+        if (dir == DOWN) {
+            int below = level.rel(DOWN);  // canSupportRigidBlock(below) || canSupportCenter(below, UP)
+            if (!(isRigidSupport(below, UP) || isCenterSupport(below, UP))) return 0;
+        }
+        return stateId;
+    }
 
     return -2;  // unported
 }
