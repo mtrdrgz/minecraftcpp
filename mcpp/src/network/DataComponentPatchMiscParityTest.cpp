@@ -88,6 +88,8 @@ int main(int argc, char** argv) {
             buf.writeVarInt(std::stoi(valueData));                            // idMapper VarInt(id)
         } else if (kind == "unit") {
             /* Unit.STREAM_CODEC writes nothing */
+        } else if (kind == "identifier") {
+            buf.writeString(fromHexBytes(valueData));                         // Identifier.STREAM_CODEC = STRING_UTF8
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";

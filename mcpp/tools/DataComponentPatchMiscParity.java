@@ -79,6 +79,18 @@ public class DataComponentPatchMiscParity {
         u.set(DataComponents.UNBREAKABLE, net.minecraft.util.Unit.INSTANCE);
         emit(access, u, "minecraft:unbreakable", "unit", "-");
 
+        // Identifier-valued: item_model (Identifier.STREAM_CODEC = STRING_UTF8 -> writeUtf(toString)).
+        // NOTE: an item's DEFAULT item_model is its own id, so a same-id value collapses to an EMPTY
+        // patch (DataComponentPatch encodes only differences) -> use ids != base's default.
+        String[] ids = { "minecraft:stone", "mymod:custom/model_x", "minecraft:trident", "minecraft:bedrock" };
+        for (String id : ids) {
+            net.minecraft.resources.Identifier rl = net.minecraft.resources.Identifier.parse(id);
+            ItemStack s = new ItemStack(base, 1);
+            s.set(DataComponents.ITEM_MODEL, rl);
+            emit(access, s, "minecraft:item_model", "identifier",
+                    hex(rl.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        }
+
         O.flush();
     }
 }
