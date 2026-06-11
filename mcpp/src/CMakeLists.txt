@@ -6128,3 +6128,27 @@ if(WIN32)
     target_link_libraries(pkt_select_known_packs_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_select_known_packs_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: ItemInHandRenderer calculateMapTilt/applyItemArmTransform/applyItemArmAttackTransform (Mth-table cos/sin + Axis quats + PoseStack) =====
+add_executable(item_in_hand_transform_parity client/renderer/ItemInHandTransformParityTest.cpp)
+target_include_directories(item_in_hand_transform_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(item_in_hand_transform_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: DaylightDetectorBlock.updateSignalStrength (Mth.cos sky-angle LUT + Math.round(float) -> redstone power 0..15) =====
+add_executable(daylight_detector_power_parity world/level/block/DaylightDetectorPowerParityTest.cpp)
+target_include_directories(daylight_detector_power_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(daylight_detector_power_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundResourcePackPopPacket (Optional<UUID> = bool + 2 longs) =====
+add_executable(pkt_resource_pack_pop_cb_parity
+    network/protocol/common/PktResourcePackPopCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_resource_pack_pop_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_resource_pack_pop_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_resource_pack_pop_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_resource_pack_pop_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
