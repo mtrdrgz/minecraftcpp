@@ -157,6 +157,43 @@ public class IdentifierParity {
                 O.print('\n');
             }
         }
+
+        // ---- (D) string transforms (pure): withPath/withPrefix/withSuffix +
+        //          toLanguageKey family + toShortString + toDebugFileName ----
+        // All inputs + chosen prefixes/suffixes/newpath stay VALID (the throw-on-invalid
+        // path is already covered by section B's assertValidPath).
+        Identifier[] xf = {
+            Identifier.parse("minecraft:stone"),
+            Identifier.parse("ns:foo/bar"),
+            Identifier.parse("my-mod:thing.sub-1"),
+            Identifier.parse("realms:x"),
+            Identifier.parse("a:b"),
+            Identifier.parse("minecraft:item/with/slashes.and.dots"),
+            Identifier.parse("minecraft:"),         // empty path
+        };
+        for (Identifier id : xf) {
+            O.print("XFORM\t");
+            O.print(b64(id.toString())); O.print('\t');
+            O.print(b64(id.withPrefix("pre_").toString())); O.print('\t');
+            O.print(b64(id.withSuffix("_suf").toString())); O.print('\t');
+            O.print(b64(id.withPath("newpath").toString())); O.print('\t');
+            O.print(b64(id.toLanguageKey())); O.print('\t');
+            O.print(b64(id.toLanguageKey("block"))); O.print('\t');
+            O.print(b64(id.toLanguageKey("block", "desc"))); O.print('\t');
+            O.print(b64(id.toShortLanguageKey())); O.print('\t');
+            O.print(b64(id.toShortString())); O.print('\t');
+            O.print(b64(id.toDebugFileName()));
+            O.print('\n');
+        }
+
+        // ---- (E) isAllowedInIdentifier(char) over the full ASCII range ----
+        for (int c = 0; c < 128; c++) {
+            O.print("ALLOWED\t");
+            O.print(c);
+            O.print('\t');
+            O.print(Identifier.isAllowedInIdentifier((char) c) ? 1 : 0);
+            O.print('\n');
+        }
     }
 
     interface IdSupplier { Identifier get(); }

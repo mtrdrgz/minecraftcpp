@@ -35,16 +35,21 @@
 //  244   assertValidNamespace -> throws IdentifierException on invalid
 //  260   assertValidPath      -> throws IdentifierException on invalid
 //
-// UNPORTED (hard no-op / absent, by design — registry/Brigadier coupled):
+// ALSO PORTED (string transforms; pure): withPath(String) / withPath(fn) / withPrefix /
+//   withSuffix / toDebugFileName / toLanguageKey() / toLanguageKey(prefix) /
+//   toLanguageKey(prefix,suffix) / toShortLanguageKey / toShortString /
+//   isAllowedInIdentifier(char).  (gate: identifier_parity)
+//
+// UNPORTED (absent, by design — registry/Brigadier/fs coupled, NOT stubbed true):
 //   CODEC, STREAM_CODEC, read(String)->DataResult, read(StringReader),
-//   readNonEmpty(StringReader), readGreedy, isAllowedInIdentifier(char),
-//   resolveAgainst(Path). These are deliberately omitted, not stubbed true.
+//   readNonEmpty(StringReader), readGreedy(StringReader), resolveAgainst(Path).
 
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "IdentifierChars.h" // mc::resources::isValidPath / isValidNamespace (certified)
 
@@ -116,6 +121,52 @@ public:
             result = javaStringCompareTo(namespace_, o.namespace_);
         }
         return result;
+    }
+
+    // ---- String-transform surface (pure; used in model/texture/lang resolution) ----
+
+    // withPath(String) — Identifier.java:107-109. Validates the new path (THROWS on invalid).
+    Identifier withPath(const std::string& newPath) const {
+        return Identifier(namespace_, assertValidPath(namespace_, newPath));
+    }
+    // withPath(UnaryOperator<String>) — Identifier.java:111-113. Constrained to callables
+    // so a const char*/std::string argument unambiguously picks withPath(const std::string&).
+    template <typename Fn, typename = std::enable_if_t<std::is_invocable_r_v<std::string, Fn, std::string>>>
+    Identifier withPath(Fn modifier) const { return withPath(std::string(modifier(path_))); }
+    // withPrefix(prefix) = withPath(prefix + path). Identifier.java:115-117.
+    Identifier withPrefix(const std::string& prefix) const { return withPath(prefix + path_); }
+    // withSuffix(suffix) = withPath(path + suffix). Identifier.java:119-121.
+    Identifier withSuffix(const std::string& suffix) const { return withPath(path_ + suffix); }
+
+    // toDebugFileName() — Identifier.java:155-157. Replace '/' and ':' with '_'.
+    std::string toDebugFileName() const {
+        std::string s = toString();
+        for (char& c : s) if (c == '/' || c == ':') c = '_';
+        return s;
+    }
+    // toLanguageKey() — Identifier.java:159-161. "namespace.path".
+    std::string toLanguageKey() const { return namespace_ + "." + path_; }
+    // toShortLanguageKey() — Identifier.java:163-165.
+    std::string toShortLanguageKey() const {
+        return namespace_ == std::string(DEFAULT_NAMESPACE) ? path_ : toLanguageKey();
+    }
+    // toShortString() — Identifier.java:167-169.
+    std::string toShortString() const {
+        return namespace_ == std::string(DEFAULT_NAMESPACE) ? path_ : toString();
+    }
+    // toLanguageKey(prefix) — Identifier.java:171-173.
+    std::string toLanguageKey(const std::string& prefix) const {
+        return prefix + "." + toLanguageKey();
+    }
+    // toLanguageKey(prefix, suffix) — Identifier.java:175-177.
+    std::string toLanguageKey(const std::string& prefix, const std::string& suffix) const {
+        return prefix + "." + toLanguageKey() + "." + suffix;
+    }
+
+    // isAllowedInIdentifier(char) — Identifier.java:216-218. The Brigadier read-charset.
+    static constexpr bool isAllowedInIdentifier(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
+            || c == '_' || c == ':' || c == '/' || c == '.' || c == '-';
     }
 
     // ---- Throwing factories (mirror IdentifierException on invalid) ----

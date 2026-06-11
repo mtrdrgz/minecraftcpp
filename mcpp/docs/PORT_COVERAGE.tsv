@@ -3136,7 +3136,7 @@ net/minecraft/resources/DelegatingOps.java	unvisited
 net/minecraft/resources/DependantName.java	unvisited	
 net/minecraft/resources/FileToIdConverter.java	unvisited	
 net/minecraft/resources/HolderSetCodec.java	unvisited	
-net/minecraft/resources/Identifier.java	partial	C++ parity gate rl_chars_parity (byte-exact, full-suite reconcile 2026-06-11): ResourceLocationChars cases=194 mismatches=0
+net/minecraft/resources/Identifier.java	partial	string surface gated byte-exact (identifier_parity 405/0, 2026-06-11): parse/tryParse/bySeparator/fromNamespaceAndPath/withDefaultNamespace/tryBuild + getNamespace/getPath/toString/equals/hashCode/compareTo + char validators (rl_chars) + NOW withPath(String/fn)/withPrefix/withSuffix/toLanguageKey(){,p,p+s}/toShortLanguageKey/toShortString/toDebugFileName/isAllowedInIdentifier. UNPORTED (Brigadier/registry/fs coupled): CODEC/STREAM_CODEC, read(String)->DataResult, read/readNonEmpty/readGreedy(StringReader), resolveAgainst(Path).
 net/minecraft/resources/NetworkRegistryLoadTask.java	unvisited	
 net/minecraft/resources/RegistryDataLoader.java	unvisited	
 net/minecraft/resources/RegistryFileCodec.java	unvisited	

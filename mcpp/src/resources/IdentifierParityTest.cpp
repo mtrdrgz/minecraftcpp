@@ -201,6 +201,36 @@ int main(int argc, char** argv) {
             if (gotSign != wantSign)
                 mismatch("CMP [" + std::to_string(a) + " vs " + std::to_string(b) + "] sign got "
                          + std::to_string(gotSign) + " want " + std::to_string(wantSign));
+        } else if (tag == "XFORM") {
+            // XFORM input withPrefix withSuffix withPath toLangKey toLangKey(p) toLangKey(p,s) toShortLang toShortStr toDebugFile
+            if (fld.size() != 11) { mismatch("bad XFORM row: " + line); continue; }
+            std::string input = b64decode(fld[1]);
+            std::optional<Identifier> got = Identifier::tryParse(input);
+            if (!got.has_value()) { mismatch("XFORM input not parseable: " + input); continue; }
+            const Identifier& id = *got;
+            auto chkStr = [&](const char* what, const std::string& g, const std::string& wantB64) {
+                ++checks;
+                std::string want = b64decode(wantB64);
+                if (g != want) mismatch(std::string("XFORM [") + input + "] " + what + " got \"" + g + "\" want \"" + want + "\"");
+            };
+            chkStr("withPrefix", id.withPrefix("pre_").toString(), fld[2]);
+            chkStr("withSuffix", id.withSuffix("_suf").toString(), fld[3]);
+            chkStr("withPath", id.withPath(std::string("newpath")).toString(), fld[4]);
+            chkStr("toLanguageKey", id.toLanguageKey(), fld[5]);
+            chkStr("toLanguageKey(p)", id.toLanguageKey("block"), fld[6]);
+            chkStr("toLanguageKey(p,s)", id.toLanguageKey("block", "desc"), fld[7]);
+            chkStr("toShortLanguageKey", id.toShortLanguageKey(), fld[8]);
+            chkStr("toShortString", id.toShortString(), fld[9]);
+            chkStr("toDebugFileName", id.toDebugFileName(), fld[10]);
+        } else if (tag == "ALLOWED") {
+            // ALLOWED charCode 0|1
+            if (fld.size() != 3) { mismatch("bad ALLOWED row: " + line); continue; }
+            int code = std::stoi(fld[1]);
+            int want = std::stoi(fld[2]);
+            ++checks;
+            int gotAllowed = Identifier::isAllowedInIdentifier((char)code) ? 1 : 0;
+            if (gotAllowed != want)
+                mismatch("ALLOWED [" + std::to_string(code) + "] got " + std::to_string(gotAllowed) + " want " + std::to_string(want));
         } else {
             // Unknown tag — ignore (forward compatible).
             continue;
