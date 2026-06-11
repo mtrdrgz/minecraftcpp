@@ -5439,3 +5439,8 @@ set_target_properties(selection_list_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY 
 add_executable(header_footer_layout_parity client/gui/HeaderFooterLayoutParityTest.cpp)
 target_include_directories(header_footer_layout_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(header_footer_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: AbstractSliderButton value/mouse/handle/keyboard math =====
+add_executable(slider_button_parity client/gui/SliderButtonParityTest.cpp)
+target_include_directories(slider_button_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(slider_button_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
