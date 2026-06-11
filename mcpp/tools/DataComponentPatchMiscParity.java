@@ -103,6 +103,19 @@ public class DataComponentPatchMiscParity {
         gl.set(DataComponents.GLIDER, net.minecraft.util.Unit.INSTANCE);
         emit(access, gl, "minecraft:glider", "unit", "-");
 
+        // List<Component>-valued: lore (ItemLore.STREAM_CODEC = list(Component plain-text)).
+        // Non-empty so it doesn't collapse to the empty-lore default. valueData = count:hex:hex...
+        String[][] lores = { {"Legendary"}, {"Line one", "Line two"}, {"中文", "😀 emoji line"} };
+        for (String[] lore : lores) {
+            java.util.List<Component> lines = new java.util.ArrayList<>();
+            for (String tt : lore) lines.add(Component.literal(tt));
+            ItemStack s = new ItemStack(base, 1);
+            s.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(lines));
+            StringBuilder vd = new StringBuilder(Integer.toString(lore.length));
+            for (String tt : lore) vd.append(":").append(hex(tt.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            emit(access, s, "minecraft:lore", "lore", vd.toString());
+        }
+
         O.flush();
     }
 }

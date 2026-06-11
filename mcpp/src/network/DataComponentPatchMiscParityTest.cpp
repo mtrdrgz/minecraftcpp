@@ -92,6 +92,15 @@ int main(int argc, char** argv) {
             buf.writeString(fromHexBytes(valueData));                         // Identifier.STREAM_CODEC = STRING_UTF8
         } else if (kind == "bool") {
             buf.writeBool(valueData == "1");                                  // ByteBufCodecs.BOOL
+        } else if (kind == "lore") {
+            // ItemLore.STREAM_CODEC = ComponentSerialization.STREAM_CODEC.apply(list(256)).map(lines).
+            // valueData = "<count>:<lineHex1>:<lineHex2>:..." (each line's UTF-8 text).
+            std::vector<std::string> parts;
+            { std::stringstream ps(valueData); std::string it; while (std::getline(ps, it, ':')) parts.push_back(it); }
+            int cnt = parts.empty() ? 0 : std::stoi(parts[0]);
+            buf.writeVarInt(cnt);                                            // ByteBufCodecs.list size
+            for (int li = 0; li < cnt; ++li)
+                buf.writeNbt(mc::nbt::NbtTag::string_(fromHexBytes(parts[1 + li])));  // each Component plain-text NBT
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";
