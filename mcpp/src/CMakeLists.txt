@@ -6690,3 +6690,20 @@ if(WIN32)
     target_link_libraries(jigsaw_center_piece_parity PRIVATE bcrypt)
 endif()
 set_target_properties(jigsaw_center_piece_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== JIGSAW ASSEMBLY #18 CAPSTONE: full JigsawPlacement.addPieces (entry + Placer BFS) vs the oracle =====
+add_executable(jigsaw_placement_parity
+    world/level/levelgen/structure/pools/JigsawPlacementParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/phys/AABB.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/Shapes.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp)
+target_include_directories(jigsaw_placement_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(jigsaw_placement_parity PRIVATE glm nlohmann_json miniz)
+if(WIN32)
+    target_link_libraries(jigsaw_placement_parity PRIVATE bcrypt)
+endif()
+set_target_properties(jigsaw_placement_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
