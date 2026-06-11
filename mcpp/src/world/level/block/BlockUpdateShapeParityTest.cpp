@@ -58,7 +58,7 @@ struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
         shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf,
         supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow, supportsBamboo,
-        soulFireBase;
+        soulFireBase, supportsChorusPlant;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -668,7 +668,7 @@ const std::set<std::string> PORTED = {
     // straggler wave 10
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
     "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock",
-    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock"
+    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock", "ChorusPlantBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1172,6 +1172,29 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
             return isHeadOrBody(neighbourId) ? toBody() : stateId;
         return stateId;
     }
+    // ChorusPlantBlock.updateShape — !canSurvive ? super(unchanged) : setValue(PROPERTY_BY_DIRECTION[dir],
+    // neighbour.is(this)||is(chorus_flower)||(DOWN && neighbour.is(#supports_chorus_plant))).
+    if (fam == "ChorusPlantBlock") {
+        auto chorusCanSurvive = [&]() -> bool {
+            int below = level.rel(DOWN), above = level.rel(UP);
+            bool blockAboveOrBelow = g_name[above] != "air" && g_name[below] != "air";
+            for (int hi = 0; hi < 4; ++hi) {
+                int d = HORIZONTAL[hi];
+                int nb = level.rel(d);
+                if (g_name[nb] == "chorus_plant") {
+                    if (blockAboveOrBelow) return false;
+                    int below2 = level.at(DX[d], -1, DZ[d]);
+                    if (g_name[below2] == "chorus_plant" || inTag(g_tags.supportsChorusPlant, below2)) return true;
+                }
+            }
+            return g_name[below] == "chorus_plant" || inTag(g_tags.supportsChorusPlant, below);
+        };
+        if (!chorusCanSurvive()) return stateId;  // super (unchanged; just schedules a tick)
+        bool connect = g_name[neighbourId] == "chorus_plant" || g_name[neighbourId] == "chorus_flower"
+            || (dir == DOWN && inTag(g_tags.supportsChorusPlant, neighbourId));
+        int ns = setProp(stateId, faceProp(dir), connect ? "true" : "false");
+        return ns < 0 ? stateId : ns;
+    }
     // SporeBlossomBlock.updateShape — UP && !canSurvive -> AIR. canSurvive = canSupportCenter(above, DOWN)
     // && !isWaterAt(pos); the spore blossom centre is never water -> !isWaterAt == true.
     if (fam == "SporeBlossomBlock") {
@@ -1395,6 +1418,7 @@ int main(int argc, char** argv) {
         g_tags.snow = resolve("snow");
         g_tags.supportsBamboo = resolve("supports_bamboo");
         g_tags.soulFireBase = resolve("soul_fire_base_blocks");
+        g_tags.supportsChorusPlant = resolve("supports_chorus_plant");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
