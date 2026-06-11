@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
@@ -68,6 +69,32 @@ public final class BlockCollisionShapeParity {
             for (AABB b : boxes)
                 out.append('\t').append(d(b.minX)).append('\t').append(d(b.minY)).append('\t').append(d(b.minZ))
                    .append('\t').append(d(b.maxX)).append('\t').append(d(b.maxY)).append('\t').append(d(b.maxZ));
+            out.append('\n');
+
+            // getBlockSupportShape (BlockBehaviour.java:298 default == getCollisionShape; 9 overrides)
+            // + the 6 isFaceSturdy(FULL) booleans = Block.isFaceFull(supportShape, dir), the exact
+            // primitive CrossCollisionBlock/WallBlock.connectsTo consumes. Direction.values() order:
+            // DOWN, UP, NORTH, SOUTH, WEST, EAST.
+            VoxelShape sup;
+            try {
+                sup = state.getBlockSupportShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+            } catch (Throwable t) {
+                out.append("SUP\t").append(id).append("\t-1\n");
+                count++;
+                continue;
+            }
+            List<AABB> sboxes = new ArrayList<>(sup.toAabbs());
+            sboxes.sort(Comparator.<AABB>comparingDouble(b -> b.minX).thenComparingDouble(b -> b.minY)
+                .thenComparingDouble(b -> b.minZ).thenComparingDouble(b -> b.maxX)
+                .thenComparingDouble(b -> b.maxY).thenComparingDouble(b -> b.maxZ));
+            out.append("SUP\t").append(id).append('\t').append(sboxes.size());
+            for (AABB b : sboxes)
+                out.append('\t').append(d(b.minX)).append('\t').append(d(b.minY)).append('\t').append(d(b.minZ))
+                   .append('\t').append(d(b.maxX)).append('\t').append(d(b.maxY)).append('\t').append(d(b.maxZ));
+            out.append('\n');
+            out.append("STURDY\t").append(id);
+            for (Direction dir : Direction.values())
+                out.append('\t').append(net.minecraft.world.level.block.Block.isFaceFull(sup, dir) ? 1 : 0);
             out.append('\n');
             count++;
         }

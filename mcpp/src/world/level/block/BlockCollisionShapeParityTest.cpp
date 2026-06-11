@@ -17,10 +17,12 @@
 #include "../../phys/shapes/VoxelShape.h"
 #include "../../phys/shapes/BooleanOp.h"
 #include "../../phys/AABB.h"
+#include "../../phys/Direction.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -804,6 +806,72 @@ mc::VoxelShapePtr buildFamilyShape(const std::string& fam, const std::string& na
     if (fam == "PowderSnowBlock") return Shapes::empty();
     return nullptr;
 }
+
+inline bool endsWith(const std::string& s, const std::string& suf) {
+    return s.size() >= suf.size() && s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
+}
+
+// Block.isShapeFullBlock (Block.java:354-356): SHAPE_FULL_BLOCK_CACHE = !joinIsNotEmpty(block, shape,
+// NOT_SAME) — geometric "shape == full unit cube" (XOR with block is empty). getFaceShape returns a
+// SliceShape (full unit cube in its normalized coords when the face is fully covered, even with
+// internal coordinate splits), so a singleton-pointer compare is insufficient.
+bool isShapeFullBlock(const mc::VoxelShapePtr& shape) {
+    return !mc::Shapes::joinIsNotEmpty(mc::Shapes::block(), shape, mc::BooleanOps::NOT_SAME);
+}
+// Block.isFaceFull (Block.java:349-352): isShapeFullBlock(shape.getFaceShape(dir)). The exact
+// primitive CrossCollisionBlock/WallBlock.connectsTo consumes (isFaceSturdy with SupportType.FULL).
+bool isFaceFull(const mc::VoxelShapePtr& shape, mc::Direction dir) {
+    return isShapeFullBlock(shape->getFaceShape(dir));
+}
+
+// C++ collision shape as a VoxelShape (mirrors this gate's classification; collision todo==0 so
+// always defined). Used as the BlockBehaviour default getBlockSupportShape.
+mc::VoxelShapePtr cppCollisionPtr(const std::string& collFam, const std::string& shapeFam,
+                                  int hasColl, const std::string& name, const std::string& props) {
+    if (collFam == "BlockBehaviour" && hasColl == 0) return mc::Shapes::empty();
+    if (collFam == "BlockBehaviour" && shapeFam == "BlockBehaviour")
+        return hasColl ? mc::Shapes::block() : mc::Shapes::empty();
+    std::string fkey = (shapeFam == "BlockBehaviour" ? collFam : shapeFam);
+    return buildFamilyShape(fkey, name, props);
+}
+
+// getBlockSupportShape: BlockBehaviour default (BlockBehaviour.java:298) == getCollisionShape
+// (== cppColl). 9 classes override it (1:1 from 26.1.2/src; identified by block name).
+mc::VoxelShapePtr buildSupportShape(const std::string& name, const std::string& props,
+                                    const mc::VoxelShapePtr& cppColl) {
+    using mc::Shapes;
+    if (name.find("leaves") != std::string::npos) return Shapes::empty();   // LeavesBlock -> empty
+    if (name == "mud" || name == "soul_sand") return Shapes::block();        // Mud/SoulSand -> full cube
+    if (name == "chorus_flower")                                             // SHAPE_BLOCK_SUPPORT=column(14,0,15)
+        return Shapes::box(0.0625, 0.0, 0.0625, 0.9375, 0.9375, 0.9375);
+    if (endsWith(name, "shulker_box")) return Shapes::block();               // null block-entity -> block
+    if (name == "snow") {                                                    // SHAPES[layers]=column(16,0,layers*2)
+        int L = std::stoi(getProp(props, "layers"));
+        return Shapes::box(0.0, 0.0, 0.0, 1.0, (L * 2) / 16.0, 1.0);
+    }
+    if (endsWith(name, "fence_gate")) {                                      // OPEN?empty:SHAPE_SUPPORT[axis]
+        if (getProp(props, "open") == "true") return Shapes::empty();        // =rotateHorizontalAxis(column(16,4,5,24))
+        std::string f = getProp(props, "facing");
+        bool xAxis = (f == "east" || f == "west");
+        return xAxis ? Shapes::box(0.375, 0.3125, 0.0, 0.625, 1.5, 1.0)
+                     : Shapes::box(0.0, 0.3125, 0.375, 1.0, 1.5, 0.625);
+    }
+    if (endsWith(name, "wall_hanging_sign")) {                               // getShape=SHAPES[facing.axis]
+        std::string f = getProp(props, "facing");                           // =or(SHAPES_PLANK[Z], column(14,2,0,10))
+        if (f == "north" || f == "south")
+            return Shapes::or_(Shapes::box(0.0, 0.875, 0.375, 1.0, 1.0, 0.625),
+                               Shapes::box(0.0625, 0.0, 0.4375, 0.9375, 0.625, 0.5625));
+        return Shapes::or_(Shapes::box(0.375, 0.875, 0.0, 0.625, 1.0, 1.0),
+                           Shapes::box(0.4375, 0.0, 0.0625, 0.5625, 0.625, 0.9375));
+    }
+    if (endsWith(name, "hanging_sign")) {                                    // CeilingHangingSign getShape
+        int r = std::stoi(getProp(props, "rotation"));                       // SHAPES{0,4,8,12}, else SHAPE_DEFAULT
+        if (r == 0 || r == 8) return Shapes::box(0.0625, 0.0, 0.4375, 0.9375, 0.625, 0.5625);
+        if (r == 4 || r == 12) return Shapes::box(0.4375, 0.0, 0.0625, 0.5625, 0.625, 0.9375);
+        return Shapes::box(0.1875, 0.0, 0.1875, 0.8125, 1.0, 0.8125);        // SHAPE_DEFAULT=column(10,0,16)
+    }
+    return cppColl;                                                          // default == collision shape
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -832,11 +900,23 @@ int main(int argc, char** argv) {
         }
     }
 
-    // GT: SHAPE rows -> per-id expected AABB list; FAM rows -> block -> (collFam, shapeFam).
-    std::vector<Shape> expected(name.size());
-    std::vector<int> hasShape(name.size(), 0);
+    // GT: SHAPE rows -> per-id expected collision AABB list; SUP -> getBlockSupportShape AABB list;
+    // STURDY -> the 6 isFaceSturdy booleans; FAM -> block -> (collFam, shapeFam, hasCollision).
+    std::vector<Shape> expected(name.size()), expectedSup(name.size());
+    std::vector<int> hasShape(name.size(), 0), hasSup(name.size(), 0), hasSturdy(name.size(), 0);
+    std::vector<std::array<int,6>> sturdy(name.size());
     std::map<std::string, std::pair<std::string,std::string>> fam;
     std::map<std::string, int> blocksMotion;  // block -> default-state blocksMotion (authoritative hasCollision)
+    auto parseBoxes = [](const std::vector<std::string>& c, int n) {
+        Shape sh;
+        for (int b = 0; b < n; ++b) {
+            std::size_t o = 3 + b * 6;
+            if (o + 5 >= c.size()) break;
+            sh.push_back({ std::stod(c[o]), std::stod(c[o+1]), std::stod(c[o+2]),
+                           std::stod(c[o+3]), std::stod(c[o+4]), std::stod(c[o+5]) });
+        }
+        return sh;
+    };
     {
         std::ifstream f(casesPath, std::ios::binary);
         if (!f) { std::cerr << "cannot open " << casesPath << "\n"; return 2; }
@@ -848,14 +928,17 @@ int main(int argc, char** argv) {
                 std::size_t id = (std::size_t)std::stoul(c[1]);
                 int n = std::stoi(c[2]);
                 if (id >= expected.size() || n < 0) continue;  // n<0 = context-dependent (deferred)
-                Shape sh;
-                for (int b = 0; b < n; ++b) {
-                    std::size_t o = 3 + b * 6;
-                    if (o + 5 >= c.size()) break;
-                    sh.push_back({ std::stod(c[o]), std::stod(c[o+1]), std::stod(c[o+2]),
-                                   std::stod(c[o+3]), std::stod(c[o+4]), std::stod(c[o+5]) });
-                }
-                expected[id] = std::move(sh); hasShape[id] = 1;
+                expected[id] = parseBoxes(c, n); hasShape[id] = 1;
+            } else if (c[0] == "SUP" && c.size() >= 3) {
+                std::size_t id = (std::size_t)std::stoul(c[1]);
+                int n = std::stoi(c[2]);
+                if (id >= expectedSup.size() || n < 0) continue;
+                expectedSup[id] = parseBoxes(c, n); hasSup[id] = 1;
+            } else if (c[0] == "STURDY" && c.size() >= 8) {
+                std::size_t id = (std::size_t)std::stoul(c[1]);
+                if (id >= sturdy.size()) continue;
+                for (int d = 0; d < 6; ++d) sturdy[id][d] = std::stoi(c[2 + d]);
+                hasSturdy[id] = 1;
             } else if (c[0] == "FAM" && c.size() >= 4) {
                 std::string key = c[1]; auto col = key.find(':'); if (col != std::string::npos) key = key.substr(col + 1);
                 fam[key] = { c[2], c[3] };
@@ -931,5 +1014,49 @@ int main(int argc, char** argv) {
     std::cout << "remaining shape families (states): ";
     for (std::size_t i = 0; i < tv.size() && i < 14; ++i) std::cout << tv[i].first << "=" << tv[i].second << " ";
     std::cout << "\n";
-    return mis > 0 ? 1 : 0;
+
+    // ── getBlockSupportShape (== getCollisionShape default + 9 overrides) and the 6 isFaceSturdy
+    // booleans (= Block.isFaceFull(supportShape, dir)), the exact primitive connectsTo consumes. ──
+    long supCert = 0, supMis = 0, sturdyCert = 0, sturdyMis = 0;
+    std::map<std::string, long> supBadFam;
+    int shown2 = 0;
+    for (std::size_t id = 0; id < name.size(); ++id) {
+        if (!hasSup[id]) continue;
+        auto fi = fam.find(name[id]);
+        std::string collFam = fi == fam.end() ? "?" : fi->second.first;
+        std::string shapeFam = fi == fam.end() ? "?" : fi->second.second;
+        int hasColl; { auto it = blocksMotion.find(name[id]);
+                       hasColl = (it != blocksMotion.end() ? it->second : isSolid[id]); }
+        mc::VoxelShapePtr coll = cppCollisionPtr(collFam, shapeFam, hasColl, name[id], props[id]);
+        mc::VoxelShapePtr sup = coll ? buildSupportShape(name[id], props[id], coll) : nullptr;
+        if (!sup) { ++supMis; supBadFam[shapeFam]++; continue; }
+        Shape got = toBoxes(sup);
+        Shape want = expectedSup[id];
+        std::sort(want.begin(), want.end(), [](const Box& p, const Box& q){
+            return std::tie(p.x1,p.y1,p.z1,p.x2,p.y2,p.z2) < std::tie(q.x1,q.y1,q.z1,q.x2,q.y2,q.z2); });
+        if (got == want) ++supCert;
+        else { ++supMis; supBadFam[shapeFam]++;
+            if (shown2++ < 16) std::cerr << "SUP mismatch " << name[id] << "[" << props[id]
+                << "] got=" << got.size() << " want=" << want.size() << "\n"; }
+        if (hasSturdy[id]) {
+            bool ok = true;
+            for (int d = 0; d < 6; ++d)
+                if ((isFaceFull(sup, static_cast<mc::Direction>(d)) ? 1 : 0) != sturdy[id][d]) ok = false;
+            if (ok) ++sturdyCert;
+            else { ++sturdyMis;
+                if (shown2++ < 16) { std::cerr << "STURDY mismatch " << name[id] << "[" << props[id] << "] cpp=";
+                    for (int d = 0; d < 6; ++d) std::cerr << (isFaceFull(sup, static_cast<mc::Direction>(d)) ? 1 : 0);
+                    std::cerr << " want="; for (int d = 0; d < 6; ++d) std::cerr << sturdy[id][d]; std::cerr << "\n"; } }
+        }
+    }
+    std::cout << "BlockSupportShape supCert=" << supCert << " supMismatches=" << supMis
+              << " | isFaceSturdy sturdyCert=" << sturdyCert << " sturdyMismatches=" << sturdyMis << "\n";
+    if (supMis > 0) {
+        std::vector<std::pair<std::string,long>> sv(supBadFam.begin(), supBadFam.end());
+        std::sort(sv.begin(), sv.end(), [](auto&a,auto&b){ return a.second > b.second; });
+        std::cout << "support-shape mismatch families: ";
+        for (std::size_t i = 0; i < sv.size() && i < 14; ++i) std::cout << sv[i].first << "=" << sv[i].second << " ";
+        std::cout << "\n";
+    }
+    return (mis > 0 || supMis > 0 || sturdyMis > 0) ? 1 : 0;
 }
