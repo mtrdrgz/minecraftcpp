@@ -5498,3 +5498,27 @@ if(WIN32)
     target_link_libraries(pkt_command_suggestion_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_command_suggestion_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== effect: MobEffectInstance pure state subset (update/withScaledDuration/clamp/hidden chain) =====
+add_executable(mob_effect_instance_parity world/effect/MobEffectInstanceParityTest.cpp)
+target_include_directories(mob_effect_instance_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mob_effect_instance_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item/enchantment: LevelBasedValue.calculate (Constant/Linear/LevelsSquared/Clamped/Fraction/Exponent/Lookup) =====
+add_executable(level_based_value_parity world/item/enchantment/LevelBasedValueParityTest.cpp)
+target_include_directories(level_based_value_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(level_based_value_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundRecipeBookChangeSettingsPacket (writeEnum ordinal VarInt + 2 bools) =====
+add_executable(pkt_recipe_book_settings_sb_parity
+    network/protocol/game/PktRecipeBookSettingsSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_recipe_book_settings_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_recipe_book_settings_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_recipe_book_settings_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_recipe_book_settings_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
