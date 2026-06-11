@@ -668,7 +668,7 @@ const std::set<std::string> PORTED = {
     // straggler wave 10
     "BarrierBlock", "BubbleColumnBlock", "ConduitBlock", "HeavyCoreBlock", "MangroveRootsBlock",
     "DirtPathBlock", "HangingMossBlock", "HangingRootsBlock", "BambooSaplingBlock",
-    "SporeBlossomBlock", "SoulFireBlock"
+    "SporeBlossomBlock", "SoulFireBlock", "GrowingPlantHeadBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1143,6 +1143,33 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
     // (BaseCoralPlantTypeBlock) = below.isFaceSturdy(UP).
     if (fam == "CoralPlantBlock" || fam == "CoralFanBlock") {
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
+        return stateId;
+    }
+    // GrowingPlantHeadBlock.updateShape :? — convert head -> BODY default when the block in growthDir is
+    // head/body (this head is no longer the tip). growthDir: kelp/twisting=UP, weeping/cave=DOWN.
+    // updateBodyAfterConvertedFromHead = body default (CaveVines copies BERRIES). canAttachTo==true, so
+    // canSurvive = attached(is head|body) || isFaceSturdy(attached, growthDir). (canSurvive only gates the
+    // dir==growthDir.opposite conversion; the no-survive path only schedules a tick.)
+    if (fam == "GrowingPlantHeadBlock") {
+        const std::string& n = g_name[stateId];
+        int growthDir = (n == "kelp" || n == "twisting_vines") ? UP : DOWN;
+        std::string body = n + "_plant";  // kelp_plant / twisting_vines_plant / weeping_vines_plant / cave_vines_plant
+        auto toBody = [&]() -> int {
+            std::string key = (n == "cave_vines")
+                ? body + "\x1f" + "berries=" + getProp(g_props[stateId], "berries")
+                : body + "\x1f";  // kelp_plant/twisting/weeping plant have no properties
+            auto it = g_index.find(key);
+            return it == g_index.end() ? stateId : it->second;
+        };
+        auto isHeadOrBody = [&](int id){ return g_name[id] == n || g_name[id] == body; };
+        if (dir == opposite(growthDir)) {
+            int attached = level.rel(opposite(growthDir));
+            bool canSurvive = isHeadOrBody(attached) || isFaceSturdy(attached, growthDir);
+            if (canSurvive && isHeadOrBody(level.rel(growthDir))) return toBody();
+            return stateId;
+        }
+        if (dir == growthDir)
+            return isHeadOrBody(neighbourId) ? toBody() : stateId;
         return stateId;
     }
     // SporeBlossomBlock.updateShape — UP && !canSurvive -> AIR. canSurvive = canSupportCenter(above, DOWN)
