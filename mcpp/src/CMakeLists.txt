@@ -6212,3 +6212,34 @@ if(WIN32)
     target_link_libraries(pkt_set_border_lerp_size_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_set_border_lerp_size_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: RandomBlockMatchTest.test processor predicate (state.is(block) && nextFloat()<prob, && short-circuit) =====
+add_executable(random_block_match_test_parity
+    world/level/levelgen/structure/templatesystem/RandomBlockMatchTestParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(random_block_match_test_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(random_block_match_test_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: Window.calculateScale + setGuiScale (drives REAL Window via reflective Unsafe; strengthens copied-body gui_scale + adds setGuiScale) =====
+add_executable(window_gui_scale_parity render/WindowGuiScaleParityTest.cpp)
+target_include_directories(window_gui_scale_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(window_gui_scale_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== item: DyedItemColor.applyDyes leather-armor dye blending (ARGB channel avg + intensity float cast/narrow) =====
+add_executable(dyed_item_color_parity world/item/component/DyedItemColorParityTest.cpp)
+target_include_directories(dyed_item_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(dyed_item_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundRecipeBookRemovePacket (List<RecipeDisplayId> = VarInt count + VarInt index each) =====
+add_executable(pkt_recipe_book_remove_cb_parity
+    network/protocol/game/PktRecipeBookRemoveParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_recipe_book_remove_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_recipe_book_remove_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_recipe_book_remove_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_recipe_book_remove_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
