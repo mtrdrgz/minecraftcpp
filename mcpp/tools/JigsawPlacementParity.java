@@ -81,7 +81,10 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.blending.Blender;
+import net.minecraft.world.level.levelgen.VerticalAnchor;
+import net.minecraft.world.level.levelgen.heightproviders.ConstantHeight;
 import net.minecraft.world.level.levelgen.heightproviders.HeightProvider;
+import net.minecraft.world.level.levelgen.heightproviders.UniformHeight;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
@@ -399,7 +402,10 @@ public final class JigsawPlacementParity {
             // empty_pool_element; its pools live under template_pool/village (prefix "village").
             new SD("village_plains", net.minecraft.world.level.levelgen.structure.BuiltinStructures.VILLAGE_PLAINS, "village"),
             // bastion_remnant: large single-element pools (expansion OFF, no aliases).
-            new SD("bastion_remnant", net.minecraft.world.level.levelgen.structure.BuiltinStructures.BASTION_REMNANT, "bastion")
+            new SD("bastion_remnant", net.minecraft.world.level.levelgen.structure.BuiltinStructures.BASTION_REMNANT, "bastion"),
+            // trial_chambers: pool_aliases (direct/random/random_group) + uniform start_height
+            // [-40,-20] (one nextInt draw before rotation) + maxDepth 20. All templates present.
+            new SD("trial_chambers", net.minecraft.world.level.levelgen.structure.BuiltinStructures.TRIAL_CHAMBERS, "trial_chambers")
             // NOTE: ancient_city is the only vanilla structure using start_jigsaw_name, but
             // it CANNOT be certified here: its walls/no_corners pool references
             // ancient_city/walls/intact_horizontal_wall_stairs_5.nbt, which is ABSENT from
@@ -428,6 +434,22 @@ public final class JigsawPlacementParity {
                     .orElse(startPool))
                 .orElse(startPool);
 
+            // Resolve start_height to (type, min, max) absolutes for the CONFIG row so the
+            // C++ gate can REPLAY the sample on the worldgen random (constant: no draw;
+            // uniform: one nextInt(max-min+1) draw — runs before the rotation draw).
+            WorldGenerationContext wgc = new WorldGenerationContext(stubGenerator, heightAccessor);
+            int hType, hMin, hMax;
+            if (startHeight instanceof ConstantHeight ch) {
+                VerticalAnchor v = getField(ConstantHeight.class, ch, "value");
+                hType = 0; hMin = v.resolveY(wgc); hMax = hMin;
+            } else if (startHeight instanceof UniformHeight uh) {
+                VerticalAnchor lo = getField(UniformHeight.class, uh, "minInclusive");
+                VerticalAnchor hi = getField(UniformHeight.class, uh, "maxInclusive");
+                hType = 1; hMin = lo.resolveY(wgc); hMax = hi.resolveY(wgc);
+            } else {
+                throw new IllegalStateException("unported start_height provider: " + startHeight.getClass());
+            }
+
             emitNbt(out, sd.name(), sd.prefix(), jar);
             boolean cfgEmitted = false;
 
@@ -448,7 +470,8 @@ public final class JigsawPlacementParity {
                         + "\t" + (useExpansionHack ? 1 : 0)
                         + "\t" + dimensionPadding.bottom() + "\t" + dimensionPadding.top()
                         + "\t" + (startJigsawName.isPresent() ? 1 : 0)
-                        + "\t" + startJigsawName.map(Identifier::toString).orElse("-"));
+                        + "\t" + startJigsawName.map(Identifier::toString).orElse("-")
+                        + "\t" + hType + "\t" + hMin + "\t" + hMax);
                     cfgEmitted = true;
                 }
                 PoolAliasLookup poolAliasLookup = PoolAliasLookup.create(poolAliases, startPos, context.seed());

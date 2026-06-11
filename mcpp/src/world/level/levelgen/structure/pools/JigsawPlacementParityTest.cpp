@@ -13,6 +13,7 @@
 //     mcpp/build/jigsaw_placement.tsv           (the committed oracle)
 
 #include "StructureTemplatePool.h"
+#include "PoolAlias.h"
 #include "../templatesystem/StructureTemplateLoader.h"
 #include "../../../block/JigsawAttach.h"
 #include "../../RandomSource.h"
@@ -38,6 +39,7 @@ using mc::levelgen::structure::Vec3i;
 using mc::levelgen::structure::BlockPos;
 using mc::levelgen::structure::Rotation;
 namespace pools = mc::levelgen::structure::pools;
+namespace palias = mc::levelgen::structure::pools::alias;
 namespace stl = mc::levelgen::structure::templatesystem;
 namespace phys = mc;   // AABB lives in namespace mc
 namespace shp = mc;    // Shapes / BooleanOps / VoxelShapePtr live in namespace mc
@@ -142,6 +144,7 @@ struct Placer {
     bool doExpansionHack;
     std::vector<Placed>* pieces;
     std::shared_ptr<mc::levelgen::RandomSource> random;
+    const std::map<std::string, std::string>* aliasMap;   // pool-alias remap (empty for most)
     mc::util::SequencedPriorityIterator<PieceState> placing;
 
     std::vector<stl::JigsawBlockInfo> shuffledJigsaws(const pools::StructurePoolElement& e,
@@ -165,7 +168,8 @@ struct Placer {
             BlockPos targetJigsawPos = relative(sourceJigsawPos, sourceDirection);
             int sourceJigsawLocalY = sourceJigsawPos.y - sourceBoxY;
             int sourceJigsawBaseHeight = UNSET_HEIGHT;
-            const std::string& poolName = sourceJigsaw.pool;
+            // poolAliasLookup.lookup(sourceJigsaw.pool()) — JigsawPlacement.java:323.
+            std::string poolName = palias::applyAlias(*aliasMap, sourceJigsaw.pool);
             auto pit = poolsMap->find(poolName);
             if (pit == poolsMap->end()) continue;                  // empty/non-existent pool
             pools::StructureTemplatePool& targetPool = pit->second;
@@ -209,7 +213,8 @@ struct Placer {
                         for (const stl::JigsawBlockInfo& tj : targetJigsaws) {
                             BlockPos rp = relative(tj.info.pos, dirOrd(tj.info.orientation.front));
                             if (!hackBox.isInside(rp)) continue;
-                            auto cit = poolsMap->find(tj.pool);
+                            // poolAliasLookup.lookup(targetJigsaw.pool()) — JigsawPlacement.java:374.
+                            auto cit = poolsMap->find(palias::applyAlias(*aliasMap, tj.pool));
                             int childPoolSize = 0, childFbSize = 0;
                             if (cit != poolsMap->end()) {
                                 childPoolSize = cit->second.getMaxSize(sizeOf);
@@ -298,6 +303,9 @@ struct Cfg {
     int padBottom = 0, padTop = 0;
     bool startJigsaw = false;     // start_jigsaw_name present (ancient_city: city_anchor)
     std::string startJigsawName;  // the named jigsaw to anchor on, when startJigsaw
+    // start_height provider (resolved absolutes): type 0=constant (no RNG draw),
+    // 1=uniform (one nextInt(max-min+1) draw on the worldgen random, BEFORE rotation).
+    int heightType = 0, heightMin = 0, heightMax = 0;
 };
 struct Row { std::string loc; int rot; int bb[6]; int gld; int nj; };
 
@@ -326,7 +334,8 @@ int main(int argc, char** argv) {
             auto c = splitTabs(line);
             if (c.empty()) continue;
             if (c[0] == "CONFIG") {
-                // CONFIG name startPool maxDepth posX posY posZ project maxDist expansion padB padT startJigsaw jigsawName
+                // CONFIG name startPool maxDepth posX posY posZ project maxDist expansion
+                //        padB padT startJigsaw jigsawName heightType heightMin heightMax
                 if (c.size() < 13) continue;
                 Cfg cfg;
                 cfg.startPool = c[2];
@@ -338,6 +347,13 @@ int main(int argc, char** argv) {
                 cfg.padBottom = std::stoi(c[10]); cfg.padTop = std::stoi(c[11]);
                 cfg.startJigsaw = std::stoi(c[12]) != 0;
                 if (c.size() >= 14 && c[13] != "-") cfg.startJigsawName = c[13];
+                if (c.size() >= 17) {
+                    cfg.heightType = std::stoi(c[14]);
+                    cfg.heightMin = std::stoi(c[15]);
+                    cfg.heightMax = std::stoi(c[16]);
+                } else {  // legacy CONFIG without height columns: treat posY as a constant.
+                    cfg.heightType = 0; cfg.heightMin = cfg.startPos.y; cfg.heightMax = cfg.startPos.y;
+                }
                 if (cfgs.find(c[1]) == cfgs.end()) structOrder.push_back(c[1]);
                 cfgs[c[1]] = cfg;
             } else if (c[0] == "NBT") {
@@ -394,15 +410,43 @@ int main(int argc, char** argv) {
         }
         poolsMap["minecraft:empty"] = pools::StructureTemplatePool{};
 
+        // pool_aliases live in the STRUCTURE json (worldgen/structure/<name>.json), NOT the
+        // pool jsons. Parse them once per structure (empty for structures without aliases).
+        std::vector<palias::Binding> bindings;
+        {
+            fs::path sjson = base.parent_path() / "structure" / (sname + ".json");
+            std::string txt = readFile(sjson.string());
+            if (!txt.empty()) {
+                auto sj = nlohmann::json::parse(txt);
+                auto it = sj.find("pool_aliases");
+                if (it != sj.end()) bindings = palias::parseBindings(*it);
+            }
+        }
+
         long sChecks = 0, sBad = 0, sMis = 0;
         for (auto& [seed, exp] : expected) {
             ++checks; ++sChecks;
-            // ── ENTRY (JigsawPlacement.addPieces, lines 63-159) ──
+            // ── findGenerationPoint + ENTRY (JigsawStructure.findGenerationPoint + addPieces :63-159) ──
             auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
                 std::make_shared<mc::levelgen::LegacyRandomSource>(0));
             random->setLargeFeatureSeed(seed, 0, 0);
+            // start_height.sample(context.random(), ctx) runs FIRST, on the worldgen random:
+            // constant -> no draw; uniform -> y = min + nextInt(max-min+1) (Mth.randomBetweenInclusive).
+            int startY = cfg.heightMin;
+            if (cfg.heightType == 1) {
+                startY = (cfg.heightMin > cfg.heightMax)
+                    ? cfg.heightMin
+                    : cfg.heightMin + random->nextInt(cfg.heightMax - cfg.heightMin + 1);
+            }
+            BlockPos position{cfg.startPos.x, startY, cfg.startPos.z};
+            // PoolAliasLookup.create(poolAliases, startPos, seed): a SEPARATE positional random;
+            // it does NOT perturb the worldgen RNG. Identity (empty) for alias-free structures.
+            std::map<std::string, std::string> aliasMap =
+                palias::createLookup(bindings, position.x, position.y, position.z, seed);
+
             Rotation centerRotation = static_cast<Rotation>(random->nextInt(4));
-            auto poolIt = poolsMap.find(cfg.startPool);
+            // centerPool = pools.get(poolAliasLookup.lookup(startPool)) — addPieces :70-72.
+            auto poolIt = poolsMap.find(palias::applyAlias(aliasMap, cfg.startPool));
             if (poolIt == poolsMap.end()) { ++seedsBad; ++sBad; continue; }
             pools::StructureTemplatePool& centerPool = poolIt->second;
             int idx = centerPool.getRandomTemplateIndex(*random);
@@ -412,7 +456,7 @@ int main(int argc, char** argv) {
             bool bad = false;
             try {
                 if (centerElement.isEmpty()) { if (!exp.empty()) { ++seedsBad; ++sBad; } continue; }
-                BlockPos position = cfg.startPos;
+                // `position` (per-seed height + chunk min block X/Z) and `aliasMap` computed above.
                 // getRandomNamedJigsaw (addPieces :78-94): when a start jigsaw is named,
                 // anchor on the FIRST shuffled jigsaw of the center element whose name
                 // matches (this shuffle CONSUMES RNG, before the placer re-shuffles); if
@@ -443,6 +487,17 @@ int main(int argc, char** argv) {
                 int bottomY = cfg.project ? position.y + 64 : adjustedPosition.y;   // getFirstFreeHeight stub == 64
                 int oldAbsoluteGroundY = box.minY + 1;
                 center.move(0, bottomY - oldAbsoluteGroundY, 0);
+                // isStartTooCloseToWorldHeightLimits (addPieces :115-121 / :162-172): when
+                // DimensionPadding != ZERO, reject (yield NO pieces) if the moved center box
+                // breaches minY+bottom .. maxY-top. heightAccessor overworld minY=-64, maxY=319.
+                if (!(cfg.padBottom == 0 && cfg.padTop == 0)) {
+                    int minYWithPadding = -64 + cfg.padBottom;
+                    int maxYWithPadding = 319 - cfg.padTop;
+                    if (center.box.minY < minYWithPadding || center.box.maxY > maxYWithPadding) {
+                        if (!exp.empty()) { ++seedsBad; ++sBad; }
+                        continue;
+                    }
+                }
                 pieces.push_back(center);
                 if (cfg.maxDepth > 0) {
                     int centerY = bottomY + localAnchorPosition.y;
@@ -458,7 +513,7 @@ int main(int argc, char** argv) {
                     Placer placer;
                     placer.poolsMap = &poolsMap; placer.templates = &templates; placer.sizeOf = sizeOf;
                     placer.maxDepth = cfg.maxDepth; placer.doExpansionHack = cfg.expansion;
-                    placer.pieces = &pieces; placer.random = random;
+                    placer.pieces = &pieces; placer.random = random; placer.aliasMap = &aliasMap;
                     auto rootFree = std::make_shared<Free>(); rootFree->v = shape;
                     placer.tryPlacingChildren(0, rootFree, 0);
                     while (auto st = placer.placing.nextOrEnd())
