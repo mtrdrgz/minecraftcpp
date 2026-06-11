@@ -5957,3 +5957,32 @@ if(WIN32)
     target_link_libraries(pkt_place_recipe_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_place_recipe_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: MineshaftPieces.MineShaftStairs.findStairs (INVERSE collision contract: box iff no collision) =====
+add_executable(mineshaft_stairs_box_parity world/level/levelgen/structure/structures/MineshaftStairsBoxParityTest.cpp)
+target_include_directories(mineshaft_stairs_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mineshaft_stairs_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render/particles: QuadParticleRenderState.renderRotatedQuad (billboard quad: rotate->mul->add, plain-fma) =====
+add_executable(quad_particle_parity render/state/level/QuadParticleRenderStateParityTest.cpp)
+target_include_directories(quad_particle_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(quad_particle_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== crafting: ShapedRecipePattern shrink/firstNonEmpty/lastNonEmpty/isSymmetrical + matchIndex =====
+add_executable(shaped_recipe_pattern_parity world/item/crafting/ShapedRecipePatternParityTest.cpp)
+target_include_directories(shaped_recipe_pattern_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(shaped_recipe_pattern_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundMoveMinecartPacket (entityId + list<MinecartStep>: 6 doubles + 2 angle-bytes + float) =====
+add_executable(pkt_move_minecart_parity
+    network/protocol/game/PktMoveMinecartParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_move_minecart_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_move_minecart_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_move_minecart_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_move_minecart_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
