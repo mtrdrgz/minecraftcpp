@@ -14,6 +14,7 @@
 import net.minecraft.client.gui.layouts.FrameLayout;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.LayoutSettings;
+import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.layouts.SpacerElement;
 
 public class GridLayoutParity {
@@ -67,6 +68,31 @@ public class GridLayoutParity {
         O.println("FEND");
     }
 
+    // LinearLayout: a 1xN (horizontal) or Nx1 (vertical) grid wrapper.
+    static void emitLinear(boolean horizontal, int x, int y, int spacing, Ch[] specs) {
+        O.println("LIN\t" + (horizontal ? 1 : 0) + "\t" + x + "\t" + y + "\t" + spacing + "\t" + specs.length);
+        LinearLayout lin = horizontal ? LinearLayout.horizontal() : LinearLayout.vertical();
+        lin.spacing(spacing);
+        lin.setX(x);
+        lin.setY(y);
+        SpacerElement[] spacers = new SpacerElement[specs.length];
+        for (int i = 0; i < specs.length; i++) {
+            Ch c = specs[i];
+            SpacerElement sp = new SpacerElement(c.w(), c.h());
+            spacers[i] = sp;
+            LayoutSettings ls = LayoutSettings.defaults()
+                    .padding(c.padL(), c.padT(), c.padR(), c.padB())
+                    .align(c.ax(), c.ay());
+            lin.addChild(sp, ls);
+            O.println("LCH\t" + c.w() + "\t" + c.h() + "\t" + c.padL() + "\t" + c.padT() + "\t" + c.padR() + "\t" + c.padB()
+                    + "\t" + String.format("%08x", Float.floatToRawIntBits(c.ax()))
+                    + "\t" + String.format("%08x", Float.floatToRawIntBits(c.ay())));
+        }
+        lin.arrangeElements();
+        for (SpacerElement sp : spacers) O.println("LPOS\t" + sp.getX() + "\t" + sp.getY());
+        O.println("LEND");
+    }
+
     public static void main(String[] args) {
         // 1: simple 1x3 row, uniform spacers, spacing 4.
         emit(10, 20, 0, 4, new Ch[]{
@@ -115,5 +141,17 @@ public class GridLayoutParity {
         emitFrame(3, 4, 0, 0, new Ch[]{
             new Ch(0, 0, 1, 1, 30, 30, 0, 0, 0, 0, 0f, 0f),
             new Ch(0, 0, 1, 1, 8, 8, 2, 3, 4, 1, 0.5f, 0.5f)});
+
+        // --- LinearLayout (1D grid) ---
+        // L1: horizontal row, varied heights -> row height = max; vertical-center align per child.
+        emitLinear(true, 10, 5, 4, new Ch[]{
+            new Ch(0, 0, 1, 1, 16, 12, 0, 0, 0, 0, 0f, 0.5f),
+            new Ch(0, 0, 1, 1, 16, 20, 0, 0, 0, 0, 0f, 0.5f),
+            new Ch(0, 0, 1, 1, 16, 8, 0, 0, 0, 0, 0f, 0.5f)});
+        // L2: vertical column, varied widths -> column width = max; horizontal alignment.
+        emitLinear(false, 0, 0, 3, new Ch[]{
+            new Ch(0, 0, 1, 1, 10, 10, 0, 0, 0, 0, 0.5f, 0f),
+            new Ch(0, 0, 1, 1, 24, 10, 0, 0, 0, 0, 1.0f, 0f),
+            new Ch(0, 0, 1, 1, 14, 10, 0, 0, 0, 0, 0f, 0f)});
     }
 }

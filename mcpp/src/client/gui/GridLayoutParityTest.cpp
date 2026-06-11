@@ -49,7 +49,31 @@ int main(int argc, char** argv) {
         if (line.empty()) continue;
         auto p = split(line);
         const std::string& t = p[0];
-        if (t == "FRAME") {
+        if (t == "LIN") {
+            // LIN <horizontal> <x> <y> <spacing> <count>
+            fx = std::stoi(p[2]); fy = std::stoi(p[3]); rs = std::stoi(p[4]);  // reuse fx/fy + rs=spacing
+            cs = std::stoi(p[1]);  // reuse cs = horizontal flag
+            children.clear(); expected.clear();
+        } else if (t == "LCH") {
+            gui::GridChild c;
+            c.childW = std::stoi(p[1]); c.childH = std::stoi(p[2]);
+            c.padL = std::stoi(p[3]); c.padT = std::stoi(p[4]); c.padR = std::stoi(p[5]); c.padB = std::stoi(p[6]);
+            c.alignX = bf(p[7]); c.alignY = bf(p[8]);
+            children.push_back(c);
+        } else if (t == "LPOS") {
+            expected.push_back({std::stoi(p[1]), std::stoi(p[2])});
+        } else if (t == "LEND") {
+            ++cases;
+            gui::Orientation o = (cs != 0) ? gui::Orientation::HORIZONTAL : gui::Orientation::VERTICAL;
+            gui::linearArrange(o, fx, fy, rs, children);
+            for (size_t i = 0; i < children.size() && i < expected.size(); ++i) {
+                ++checks;
+                if (children[i].outX != expected[i].first || children[i].outY != expected[i].second)
+                    fail("LIN case " + std::to_string(cases) + " child " + std::to_string(i) +
+                         " got=(" + std::to_string(children[i].outX) + "," + std::to_string(children[i].outY) +
+                         ") exp=(" + std::to_string(expected[i].first) + "," + std::to_string(expected[i].second) + ")");
+            }
+        } else if (t == "FRAME") {
             fx = std::stoi(p[1]); fy = std::stoi(p[2]); fminW = std::stoi(p[3]); fminH = std::stoi(p[4]);
             children.clear(); expected.clear();
         } else if (t == "FCH") {

@@ -107,4 +107,21 @@ inline void frameArrange(int frameX, int frameY, int minWidth, int minHeight,
     }
 }
 
+// 1:1 port of LinearLayout (LinearLayout.java) — a thin wrapper over a 1xN/Nx1 GridLayout:
+// HORIZONTAL -> columnSpacing, child i at (row 0, col i); VERTICAL -> rowSpacing, child i at (row i,
+// col 0); arrangeElements() delegates to the (certified) GridLayout arrange.
+enum class Orientation { HORIZONTAL, VERTICAL };
+
+inline void linearArrange(Orientation o, int x, int y, int spacing, std::vector<GridChild>& children) {
+    int rowSpacing = (o == Orientation::VERTICAL) ? spacing : 0;
+    int columnSpacing = (o == Orientation::HORIZONTAL) ? spacing : 0;
+    for (size_t i = 0; i < children.size(); ++i) {
+        children[i].occRows = 1;
+        children[i].occCols = 1;
+        if (o == Orientation::HORIZONTAL) { children[i].row = 0; children[i].col = static_cast<int>(i); }
+        else { children[i].row = static_cast<int>(i); children[i].col = 0; }
+    }
+    gridArrange(x, y, rowSpacing, columnSpacing, children);
+}
+
 }  // namespace mc::gui
