@@ -641,7 +641,10 @@ const std::set<std::string> PORTED = {
     "ShelfBlock", "CopperGolemStatueBlock",
     // straggler wave 1
     "LightningRodBlock", "ChainBlock", "SculkSensorBlock", "BeehiveBlock", "HugeMushroomBlock",
-    "CampfireBlock", "BaseCoralWallFanBlock", "CoralWallFanBlock", "BasePressurePlateBlock"
+    "CampfireBlock", "BaseCoralWallFanBlock", "CoralWallFanBlock", "BasePressurePlateBlock",
+    // straggler wave 2 (no-ops)
+    "ScaffoldingBlock", "LightBlock", "DriedGhastBlock", "LiquidBlock",
+    "CandleCakeBlock", "BaseCoralPlantTypeBlock", "FlowerPotBlock", "LanternBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -908,7 +911,8 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
     // Pure no-ops (waterlogged tick / side effect, super returns state unchanged):
     // LightningRodBlock, ChainBlock, SculkSensorBlock, BeehiveBlock (fire-emergency side effect only).
     if (fam == "LightningRodBlock" || fam == "ChainBlock" || fam == "SculkSensorBlock"
-        || fam == "BeehiveBlock")
+        || fam == "BeehiveBlock" || fam == "ScaffoldingBlock" || fam == "LightBlock"
+        || fam == "DriedGhastBlock" || fam == "LiquidBlock")
         return stateId;
     // HugeMushroomBlock.updateShape — neighbour.is(this) ? clear PROPERTY_BY_DIRECTION[dir] : super.
     if (fam == "HugeMushroomBlock") {
@@ -940,6 +944,30 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
             int below = level.rel(DOWN);  // canSupportRigidBlock(below) || canSupportCenter(below, UP)
             if (!(isRigidSupport(below, UP) || isCenterSupport(below, UP))) return 0;
         }
+        return stateId;
+    }
+
+    // ── straggler wave 2 (no-op + simple canSurvive). ──
+    // CandleCakeBlock.updateShape — DOWN && !canSurvive(below.isSolid()) -> AIR.
+    if (fam == "CandleCakeBlock") {
+        if (dir == DOWN && !isSolidState(level.rel(DOWN))) return 0;
+        return stateId;
+    }
+    // BaseCoralPlantTypeBlock.updateShape — DOWN && !canSurvive(below.isFaceSturdy(UP)) -> AIR.
+    if (fam == "BaseCoralPlantTypeBlock") {
+        if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
+        return stateId;
+    }
+    // FlowerPotBlock.updateShape — DOWN && !canSurvive -> AIR, but FlowerPotBlock does NOT override
+    // canSurvive (default == true), so the AIR branch never fires -> no-op.
+    if (fam == "FlowerPotBlock") return stateId;
+    // LanternBlock.updateShape — getConnectedDirection().getOpposite()==dir && !canSurvive -> AIR.
+    // getConnectedDirection :73-75 = HANGING ? DOWN : UP; canSurvive = canSupportCenter(rel(d), cd).
+    // (UNSTABLE_BOTTOM_CENTER affects only cd==DOWN; no probe-pool block is in that tag.)
+    if (fam == "LanternBlock") {
+        int cd = getProp(g_props[stateId], "hanging") == "true" ? DOWN : UP;
+        int d = opposite(cd);
+        if (dir == d && !isCenterSupport(level.rel(d), cd)) return 0;
         return stateId;
     }
 
