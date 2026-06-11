@@ -5414,3 +5414,8 @@ set_target_properties(item_transforms_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY
 add_executable(grid_layout_parity client/gui/GridLayoutParityTest.cpp)
 target_include_directories(grid_layout_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(grid_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== GUI/menus: ScreenRectangle (widget bounds / hit-testing / navigation geometry) =====
+add_executable(screen_rectangle_parity client/gui/ScreenRectangleParityTest.cpp)
+target_include_directories(screen_rectangle_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(screen_rectangle_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
