@@ -5756,3 +5756,32 @@ if(WIN32)
     target_link_libraries(pkt_game_test_highlight_pos_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_game_test_highlight_pos_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: LinearPosTest/AxisAlignedLinearPosTest distance + clampedLerp threshold (templatesystem) =====
+add_executable(linear_pos_test_math_parity world/level/levelgen/structure/templatesystem/LinearPosTestMathParityTest.cpp)
+target_include_directories(linear_pos_test_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(linear_pos_test_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render/texture: MipmapGenerator (darkenedAlphaBlend / alphaTestCoverage / scaleAlphaToCoverage) =====
+add_executable(mipmap_generator_parity render/texture/MipmapGeneratorParityTest.cpp)
+target_include_directories(mipmap_generator_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mipmap_generator_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== gameplay: WorldBorder lerp/size/distance math (static + moving extents) =====
+add_executable(world_border_parity world/level/border/WorldBorderParityTest.cpp)
+target_include_directories(world_border_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(world_border_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundRecipeBookSeenRecipePacket (single VarInt RecipeDisplayId) =====
+add_executable(pkt_recipe_book_seen_recipe_sb_parity
+    network/protocol/game/PktRecipeBookSeenRecipeSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_recipe_book_seen_recipe_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_recipe_book_seen_recipe_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_recipe_book_seen_recipe_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_recipe_book_seen_recipe_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
