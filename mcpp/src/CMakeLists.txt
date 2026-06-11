@@ -6403,3 +6403,37 @@ if(WIN32)
     target_link_libraries(pkt_delete_chat_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_delete_chat_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: MineShaftCrossing.findCrossing RNG crossing geometry (nextInt(4) y1 height, dir switch BoundingBox + move; distinct from findStairs/findCorridorSize) =====
+add_executable(mine_shaft_crossing_box_parity
+    world/level/levelgen/structure/structures/MineShaftCrossingBoxParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(mine_shaft_crossing_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(mine_shaft_crossing_box_parity PRIVATE bcrypt)
+endif()
+set_target_properties(mine_shaft_crossing_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: TextureAtlasSprite UV math (ctor u0/u1/v0/v1 = (float)(x+pad[+w])/atlasDim, int-sum-first; getU/getV lerp) =====
+add_executable(texture_atlas_sprite_parity render/texture/TextureAtlasSpriteParityTest.cpp)
+target_include_directories(texture_atlas_sprite_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(texture_atlas_sprite_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: Rabbit.Variant byId (ByIdMap.sparse -> EVIL keeps real id 99 not ordinal 6; non-key ids fold to DEFAULT=BROWN) =====
+add_executable(rabbit_variant_parity world/entity/animal/rabbit/RabbitVariantParityTest.cpp)
+target_include_directories(rabbit_variant_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(rabbit_variant_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundCustomReportDetailsPacket (Map<String,String>(32) = VarInt count + per entry writeUtf key + writeUtf value) =====
+add_executable(pkt_custom_report_details_cb_parity
+    network/protocol/common/PktCustomReportDetailsCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_custom_report_details_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_custom_report_details_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_custom_report_details_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_custom_report_details_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
