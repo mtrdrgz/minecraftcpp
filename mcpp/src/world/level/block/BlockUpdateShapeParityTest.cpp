@@ -56,7 +56,7 @@ std::vector<int> g_hasSturdy;
 // SHULKER_BOXES, LEAVES (proxy for instanceof LeavesBlock — every LeavesBlock IS in #leaves).
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
-        shulkerBoxes, leaves, supportsVegetation;
+        shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -654,7 +654,9 @@ const std::set<std::string> PORTED = {
     // straggler wave 5 (#supports_vegetation plants)
     "VegetationBlock", "DoublePlantBlock",
     // straggler wave 6
-    "SeaPickleBlock", "AttachedStemBlock", "PistonHeadBlock"
+    "SeaPickleBlock", "AttachedStemBlock", "PistonHeadBlock",
+    // straggler wave 7
+    "CocoaBlock", "CoralPlantBlock", "CoralFanBlock"  // (WallHangingSignBlock deferred — canSurvive bug)
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1107,6 +1109,35 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         }
         return stateId;
     }
+    // CocoaBlock.updateShape — dir==FACING && !canSurvive -> AIR. canSurvive = relative(FACING).is(#supports_cocoa).
+    if (fam == "CocoaBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (dir == facing && !inTag(g_tags.supportsCocoa, level.rel(facing))) return 0;
+        return stateId;
+    }
+    // CoralPlantBlock / CoralFanBlock.updateShape — DOWN && !canSurvive -> AIR; canSurvive
+    // (BaseCoralPlantTypeBlock) = below.isFaceSturdy(UP).
+    if (fam == "CoralPlantBlock" || fam == "CoralFanBlock") {
+        if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
+        return stateId;
+    }
+    // WallHangingSignBlock.updateShape :? — dir.axis == FACING.clockWise().axis && !canSurvive -> AIR.
+    // canSurvive (:104-106) = canAttachTo(clockwise side) || canAttachTo(counterClockwise side);
+    // canAttachTo (:108-113) = attach.is(#wall_hanging_signs) ? sameAxis : attach.isFaceSturdy(face,FULL).
+    if (fam == "WallHangingSignBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        int cw = clockWise(facing), ccw = counterClockWise(facing);
+        if (axisOf(dir) == axisOf(cw)) {
+            auto attach = [&](int sideDir, int attachFace) {
+                int as = level.rel(sideDir);
+                if (inTag(g_tags.wallHangingSigns, as))
+                    return axisOf(dirFromName(getProp(g_props[as], "facing"))) == axisOf(facing);
+                return isFaceSturdy(as, attachFace);
+            };
+            if (!(attach(cw, ccw) || attach(ccw, cw))) return 0;
+        }
+        return stateId;
+    }
 
     return -2;  // unported
 }
@@ -1214,6 +1245,8 @@ int main(int argc, char** argv) {
         g_tags.shulkerBoxes = resolve("shulker_boxes");
         g_tags.leaves = resolve("leaves");
         g_tags.supportsVegetation = resolve("supports_vegetation");
+        g_tags.supportsCocoa = resolve("supports_cocoa");
+        g_tags.wallHangingSigns = resolve("wall_hanging_signs");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
