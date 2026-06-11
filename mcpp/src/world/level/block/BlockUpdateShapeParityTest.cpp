@@ -654,7 +654,7 @@ const std::set<std::string> PORTED = {
     // straggler wave 5 (#supports_vegetation plants)
     "VegetationBlock", "DoublePlantBlock",
     // straggler wave 6
-    "SeaPickleBlock", "AttachedStemBlock"
+    "SeaPickleBlock", "AttachedStemBlock", "PistonHeadBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -1078,6 +1078,22 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         int below = level.rel(DOWN);
         bool surv = !faceRects(g_collBoxes[below], UP).empty() || isFaceSturdy(below, UP);
         return surv ? stateId : 0;
+    }
+    // PistonHeadBlock.updateShape — opposite(dir)==FACING && !canSurvive -> AIR. canSurvive =
+    // isFittingBase(base) || (base.is(MOVING_PISTON) && base.FACING==FACING). isFittingBase = base is
+    // the matching piston (TYPE sticky -> sticky_piston) && EXTENDED && FACING==head.FACING.
+    if (fam == "PistonHeadBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (opposite(dir) == facing) {
+            int base = level.rel(opposite(facing));
+            std::string bn = g_name[base];
+            int bf = dirFromName(getProp(g_props[base], "facing"));
+            std::string baseBlock = (getProp(g_props[stateId], "type") == "sticky") ? "sticky_piston" : "piston";
+            bool fitting = (bn == baseBlock) && getProp(g_props[base], "extended") == "true" && bf == facing;
+            bool moving = (bn == "moving_piston") && bf == facing;
+            if (!(fitting || moving)) return 0;
+        }
+        return stateId;
     }
     // AttachedStemBlock.updateShape — when the FACING neighbour is no longer the fruit, revert to the
     // stem block at AGE 7. fruit/stem by name (attached_pumpkin_stem -> pumpkin / pumpkin_stem).
