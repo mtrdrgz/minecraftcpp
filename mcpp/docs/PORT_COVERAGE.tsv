@@ -401,7 +401,7 @@ net/minecraft/advancements/criterion/UsingItemTrigger.java	unvisited
 net/minecraft/advancements/criterion/package-info.java	unvisited	
 net/minecraft/advancements/package-info.java	unvisited	
 net/minecraft/client/AttackIndicatorStatus.java	unvisited	
-net/minecraft/client/Camera.java	unvisited	
+net/minecraft/client/Camera.java	partial	C++ parity gate camera_rotation_math_parity (byte-exact, full-suite reconcile 2026-06-11): CameraRotationMath checks=73 mismatches=0
 net/minecraft/client/CameraType.java	unvisited	
 net/minecraft/client/ClientBootstrap.java	unvisited	
 net/minecraft/client/ClientBrandRetriever.java	unvisited	
@@ -435,7 +435,7 @@ net/minecraft/client/StringSplitter.java	unvisited
 net/minecraft/client/TextureFilteringMethod.java	unvisited	
 net/minecraft/client/ToggleKeyMapping.java	unvisited	
 net/minecraft/client/User.java	unvisited	
-net/minecraft/client/animation/AnimationChannel.java	unvisited	
+net/minecraft/client/animation/AnimationChannel.java	partial	C++ parity gate anim_channel_interp_parity (byte-exact, full-suite reconcile 2026-06-11): AnimationChannelInterpolations checks=35200 mismatches=0
 net/minecraft/client/animation/AnimationDefinition.java	unvisited	
 net/minecraft/client/animation/Keyframe.java	unvisited	
 net/minecraft/client/animation/KeyframeAnimation.java	unvisited	
@@ -458,7 +458,7 @@ net/minecraft/client/animation/definitions/SnifferAnimation.java	unvisited
 net/minecraft/client/animation/definitions/WardenAnimation.java	unvisited	
 net/minecraft/client/animation/definitions/package-info.java	unvisited	
 net/minecraft/client/animation/package-info.java	unvisited	
-net/minecraft/client/color/ColorLerper.java	unvisited	
+net/minecraft/client/color/ColorLerper.java	ported	C++ parity gate colorlerper_parity (byte-exact, full-suite reconcile 2026-06-11): ColorLerper checks=248 mismatches=0
 net/minecraft/client/color/block/BlockColors.java	unvisited	
 net/minecraft/client/color/block/BlockTintCache.java	unvisited	
 net/minecraft/client/color/block/BlockTintSource.java	unvisited	
@@ -536,7 +536,7 @@ net/minecraft/client/gui/components/ComponentRenderUtils.java	unvisited
 net/minecraft/client/gui/components/ContainerObjectSelectionList.java	unvisited	
 net/minecraft/client/gui/components/CycleButton.java	unvisited	
 net/minecraft/client/gui/components/DebugScreenOverlay.java	unvisited	
-net/minecraft/client/gui/components/EditBox.java	unvisited	
+net/minecraft/client/gui/components/EditBox.java	ported	C++ parity gate edit_box_parity (byte-exact, full-suite reconcile 2026-06-11): EditBox checks=52 mismatches=0
 net/minecraft/client/gui/components/FittingMultiLineTextWidget.java	unvisited	
 net/minecraft/client/gui/components/FocusableTextWidget.java	unvisited	
 net/minecraft/client/gui/components/IMEPreeditOverlay.java	unvisited	
@@ -678,7 +678,7 @@ net/minecraft/client/gui/layouts/CommonLayouts.java	unvisited
 net/minecraft/client/gui/layouts/EqualSpacingLayout.java	unvisited	
 net/minecraft/client/gui/layouts/FrameLayout.java	unvisited	
 net/minecraft/client/gui/layouts/GridLayout.java	unvisited	
-net/minecraft/client/gui/layouts/HeaderAndFooterLayout.java	unvisited	
+net/minecraft/client/gui/layouts/HeaderAndFooterLayout.java	partial	C++ parity gate header_footer_layout_parity (byte-exact, full-suite reconcile 2026-06-11): HeaderFooterLayout checks=23 mismatches=0
 net/minecraft/client/gui/layouts/Layout.java	unvisited	
 net/minecraft/client/gui/layouts/LayoutElement.java	unvisited	
 net/minecraft/client/gui/layouts/LayoutSettings.java	unvisited	
@@ -1080,10 +1080,10 @@ net/minecraft/client/model/geom/EntityModelSet.java	unvisited
 net/minecraft/client/model/geom/LayerDefinitions.java	unvisited	
 net/minecraft/client/model/geom/ModelLayerLocation.java	unvisited	
 net/minecraft/client/model/geom/ModelLayers.java	unvisited	
-net/minecraft/client/model/geom/ModelPart.java	unvisited	
+net/minecraft/client/model/geom/ModelPart.java	ported	C++ parity gate model_part_parity (byte-exact, full-suite reconcile 2026-06-11): ModelPart checks=288 mismatches=0
 net/minecraft/client/model/geom/PartNames.java	unvisited	
 net/minecraft/client/model/geom/PartPose.java	unvisited	
-net/minecraft/client/model/geom/builders/CubeDefinition.java	unvisited	
+net/minecraft/client/model/geom/builders/CubeDefinition.java	ported	C++ parity gate cube_definition_parity (byte-exact, full-suite reconcile 2026-06-11): CubeDefinition checks=2807 mismatches=0
 net/minecraft/client/model/geom/builders/CubeDeformation.java	unvisited	
 net/minecraft/client/model/geom/builders/CubeListBuilder.java	unvisited	
 net/minecraft/client/model/geom/builders/LayerDefinition.java	unvisited	
@@ -1284,7 +1284,7 @@ net/minecraft/client/particle/BubbleParticle.java	unvisited
 net/minecraft/client/particle/BubblePopParticle.java	unvisited	
 net/minecraft/client/particle/CampfireSmokeParticle.java	unvisited	
 net/minecraft/client/particle/CritParticle.java	unvisited	
-net/minecraft/client/particle/DragonBreathParticle.java	unvisited	
+net/minecraft/client/particle/DragonBreathParticle.java	ported	C++ parity gate dragon_breath_particle_parity (byte-exact, full-suite reconcile 2026-06-11): DragonBreathParticle checks=12096 mismatches=0
 net/minecraft/client/particle/DripParticle.java	unvisited	
 net/minecraft/client/particle/DustColorTransitionParticle.java	unvisited	
 net/minecraft/client/particle/DustParticle.java	unvisited	
@@ -1300,7 +1300,7 @@ net/minecraft/client/particle/FireflyParticle.java	unvisited
 net/minecraft/client/particle/FireworkParticles.java	unvisited	
 net/minecraft/client/particle/FlameParticle.java	unvisited	
 net/minecraft/client/particle/FlyStraightTowardsParticle.java	unvisited	
-net/minecraft/client/particle/FlyTowardsPositionParticle.java	unvisited	
+net/minecraft/client/particle/FlyTowardsPositionParticle.java	ported	C++ parity gate fly_towards_position_parity (byte-exact, full-suite reconcile 2026-06-11): FlyTowardsPositionParticle checks=3072 mismatches=0
 net/minecraft/client/particle/GlowParticle.java	unvisited	
 net/minecraft/client/particle/GustParticle.java	unvisited	
 net/minecraft/client/particle/GustSeedParticle.java	unvisited	
@@ -1314,7 +1314,7 @@ net/minecraft/client/particle/LavaParticle.java	unvisited
 net/minecraft/client/particle/NoRenderParticle.java	unvisited	
 net/minecraft/client/particle/NoRenderParticleGroup.java	unvisited	
 net/minecraft/client/particle/NoteParticle.java	unvisited	
-net/minecraft/client/particle/Particle.java	unvisited	
+net/minecraft/client/particle/Particle.java	partial	C++ parity gate particle_physics_parity (byte-exact, full-suite reconcile 2026-06-11): ParticlePhysics checks=9666 mismatches=0
 net/minecraft/client/particle/ParticleDescription.java	unvisited	
 net/minecraft/client/particle/ParticleEngine.java	unvisited	
 net/minecraft/client/particle/ParticleGroup.java	unvisited	
@@ -1322,7 +1322,7 @@ net/minecraft/client/particle/ParticleProvider.java	unvisited
 net/minecraft/client/particle/ParticleRenderType.java	unvisited	
 net/minecraft/client/particle/ParticleResources.java	unvisited	
 net/minecraft/client/particle/PlayerCloudParticle.java	unvisited	
-net/minecraft/client/particle/PortalParticle.java	unvisited	
+net/minecraft/client/particle/PortalParticle.java	ported	C++ parity gate portal_particle_parity (byte-exact, full-suite reconcile 2026-06-11): PortalParticle checks=49152 mismatches=0
 net/minecraft/client/particle/QuadParticleGroup.java	unvisited	
 net/minecraft/client/particle/ReversePortalParticle.java	unvisited	
 net/minecraft/client/particle/RisingParticle.java	unvisited	
@@ -1374,12 +1374,12 @@ net/minecraft/client/renderer/CloudRenderer.java	partial	cloud cell geometry mat
 net/minecraft/client/renderer/CubeMap.java	unvisited	
 net/minecraft/client/renderer/DynamicUniformStorage.java	unvisited	
 net/minecraft/client/renderer/DynamicUniforms.java	unvisited	
-net/minecraft/client/renderer/EndFlashState.java	unvisited	
+net/minecraft/client/renderer/EndFlashState.java	ported	C++ parity gate end_flash_state_parity (byte-exact, full-suite reconcile 2026-06-11): EndFlashState checks=1328 mismatches=0
 net/minecraft/client/renderer/FaceInfo.java	unvisited	
 net/minecraft/client/renderer/GameRenderer.java	unvisited	
 net/minecraft/client/renderer/GlobalSettingsUniform.java	unvisited	
 net/minecraft/client/renderer/GpuWarnlistManager.java	unvisited	
-net/minecraft/client/renderer/ItemInHandRenderer.java	unvisited	
+net/minecraft/client/renderer/ItemInHandRenderer.java	partial	C++ parity gate item_in_hand_transform_parity (byte-exact, full-suite reconcile 2026-06-11): ItemInHandTransform checks=110 mismatches=0
 net/minecraft/client/renderer/LevelEventHandler.java	unvisited	
 net/minecraft/client/renderer/LevelRenderer.java	partial	getLightCoords certified: level_render_light_parity 424/0 (byte-exact, 2026-06-11); rest of LevelRenderer unported
 net/minecraft/client/renderer/LevelTargetBundle.java	unvisited	
@@ -1420,7 +1420,7 @@ net/minecraft/client/renderer/SubmitNodeStorage.java	unvisited
 net/minecraft/client/renderer/UiLightmap.java	unvisited	
 net/minecraft/client/renderer/UniformValue.java	unvisited	
 net/minecraft/client/renderer/ViewArea.java	unvisited	
-net/minecraft/client/renderer/WeatherEffectRenderer.java	unvisited	
+net/minecraft/client/renderer/WeatherEffectRenderer.java	partial	C++ parity gate weather_effect_parity (byte-exact, full-suite reconcile 2026-06-11): WeatherEffect checks=3724 mismatches=0
 net/minecraft/client/renderer/WorldBorderRenderer.java	unvisited	
 net/minecraft/client/renderer/block/BlockAndTintGetter.java	unvisited	
 net/minecraft/client/renderer/block/BlockModelLighter.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); block_model_lighter_{ao 48,flat 384,shape 36,tables 258}/0
@@ -1611,7 +1611,7 @@ net/minecraft/client/renderer/entity/DonkeyRenderer.java	unvisited
 net/minecraft/client/renderer/entity/DragonFireballRenderer.java	unvisited	
 net/minecraft/client/renderer/entity/DrownedRenderer.java	unvisited	
 net/minecraft/client/renderer/entity/ElderGuardianRenderer.java	unvisited	
-net/minecraft/client/renderer/entity/EndCrystalRenderer.java	unvisited	
+net/minecraft/client/renderer/entity/EndCrystalRenderer.java	partial	C++ parity gate end_crystal_beam_parity (byte-exact, full-suite reconcile 2026-06-11): EndCrystalBeam checks=12089 mismatches=0
 net/minecraft/client/renderer/entity/EnderDragonRenderer.java	unvisited	
 net/minecraft/client/renderer/entity/EndermanRenderer.java	unvisited	
 net/minecraft/client/renderer/entity/EndermiteRenderer.java	unvisited	
@@ -2781,9 +2781,9 @@ net/minecraft/network/chat/SignedMessageBody.java	unvisited
 net/minecraft/network/chat/SignedMessageChain.java	unvisited	
 net/minecraft/network/chat/SignedMessageLink.java	unvisited	
 net/minecraft/network/chat/SignedMessageValidator.java	unvisited	
-net/minecraft/network/chat/Style.java	unvisited	
+net/minecraft/network/chat/Style.java	ported	C++ parity gate style_parity (byte-exact, full-suite reconcile 2026-06-11): Style checks=49 mismatches=0
 net/minecraft/network/chat/SubStringSource.java	unvisited	
-net/minecraft/network/chat/TextColor.java	unvisited	
+net/minecraft/network/chat/TextColor.java	ported	C++ parity gate text_color_parity (byte-exact, full-suite reconcile 2026-06-11): TextColor checks=65 mismatches=0
 net/minecraft/network/chat/ThrowingComponent.java	unvisited	
 net/minecraft/network/chat/contents/KeybindContents.java	unvisited	
 net/minecraft/network/chat/contents/KeybindResolver.java	unvisited	
@@ -2841,7 +2841,7 @@ net/minecraft/network/protocol/common/ClientboundCustomReportDetailsPacket.java	
 net/minecraft/network/protocol/common/ClientboundDisconnectPacket.java	unvisited	
 net/minecraft/network/protocol/common/ClientboundKeepAlivePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/network/protocol/common/ClientboundPingPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
-net/minecraft/network/protocol/common/ClientboundResourcePackPopPacket.java	unvisited	
+net/minecraft/network/protocol/common/ClientboundResourcePackPopPacket.java	ported	C++ parity gate pkt_resource_pack_pop_cb_parity (byte-exact, full-suite reconcile 2026-06-11): PktResourcePackPopCbParity checks=577 mismatches=0
 net/minecraft/network/protocol/common/ClientboundResourcePackPushPacket.java	unvisited	
 net/minecraft/network/protocol/common/ClientboundServerLinksPacket.java	unvisited	
 net/minecraft/network/protocol/common/ClientboundShowDialogPacket.java	unvisited	
@@ -2851,7 +2851,7 @@ net/minecraft/network/protocol/common/ClientboundUpdateTagsPacket.java	unvisited
 net/minecraft/network/protocol/common/CommonPacketTypes.java	unvisited	
 net/minecraft/network/protocol/common/ServerCommonPacketListener.java	unvisited	
 net/minecraft/network/protocol/common/ServerboundClientInformationPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
-net/minecraft/network/protocol/common/ServerboundCustomClickActionPacket.java	unvisited	
+net/minecraft/network/protocol/common/ServerboundCustomClickActionPacket.java	ported	C++ parity gate pkt_custom_click_action_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktCustomClickActionSbParity checks=50 mismatches=0
 net/minecraft/network/protocol/common/ServerboundCustomPayloadPacket.java	unvisited	
 net/minecraft/network/protocol/common/ServerboundKeepAlivePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/network/protocol/common/ServerboundPongPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
@@ -2866,20 +2866,20 @@ net/minecraft/network/protocol/configuration/ClientboundCodeOfConductPacket.java
 net/minecraft/network/protocol/configuration/ClientboundFinishConfigurationPacket.java	unvisited	
 net/minecraft/network/protocol/configuration/ClientboundRegistryDataPacket.java	unvisited	
 net/minecraft/network/protocol/configuration/ClientboundResetChatPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
-net/minecraft/network/protocol/configuration/ClientboundSelectKnownPacks.java	unvisited	
+net/minecraft/network/protocol/configuration/ClientboundSelectKnownPacks.java	ported	C++ parity gate pkt_select_known_packs_cb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSelectKnownPacksCbParity checks=8 mismatches=0
 net/minecraft/network/protocol/configuration/ClientboundUpdateEnabledFeaturesPacket.java	unvisited	
 net/minecraft/network/protocol/configuration/ConfigurationPacketTypes.java	unvisited	
 net/minecraft/network/protocol/configuration/ConfigurationProtocols.java	unvisited	
 net/minecraft/network/protocol/configuration/ServerConfigurationPacketListener.java	unvisited	
 net/minecraft/network/protocol/configuration/ServerboundAcceptCodeOfConductPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/configuration/ServerboundFinishConfigurationPacket.java	unvisited	
-net/minecraft/network/protocol/configuration/ServerboundSelectKnownPacks.java	unvisited	
+net/minecraft/network/protocol/configuration/ServerboundSelectKnownPacks.java	ported	C++ parity gate pkt_select_known_packs_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSelectKnownPacksSbParity cases=8 mismatches=0
 net/minecraft/network/protocol/configuration/package-info.java	unvisited	
 net/minecraft/network/protocol/cookie/ClientCookiePacketListener.java	unvisited	
 net/minecraft/network/protocol/cookie/ClientboundCookieRequestPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit dd2781fd (wave 7)
 net/minecraft/network/protocol/cookie/CookiePacketTypes.java	unvisited	
 net/minecraft/network/protocol/cookie/ServerCookiePacketListener.java	unvisited	
-net/minecraft/network/protocol/cookie/ServerboundCookieResponsePacket.java	unvisited	
+net/minecraft/network/protocol/cookie/ServerboundCookieResponsePacket.java	ported	C++ parity gate pkt_cookie_response_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktCookieResponseSbParity checks=9 mismatches=0
 net/minecraft/network/protocol/cookie/package-info.java	unvisited	
 net/minecraft/network/protocol/game/ClientGamePacketListener.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
@@ -2953,7 +2953,7 @@ net/minecraft/network/protocol/game/ClientboundPlayerPositionPacket.java	unvisit
 net/minecraft/network/protocol/game/ClientboundPlayerRotationPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundProjectilePowerPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundRecipeBookAddPacket.java	unvisited	
-net/minecraft/network/protocol/game/ClientboundRecipeBookRemovePacket.java	unvisited	
+net/minecraft/network/protocol/game/ClientboundRecipeBookRemovePacket.java	ported	C++ parity gate pkt_recipe_book_remove_cb_parity (byte-exact, full-suite reconcile 2026-06-11): PktRecipeBookRemoveParity checks=31 mismatches=0
 net/minecraft/network/protocol/game/ClientboundRecipeBookSettingsPacket.java	unvisited	
 net/minecraft/network/protocol/game/ClientboundRemoveEntitiesPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 4e133260 (wave 8)
 net/minecraft/network/protocol/game/ClientboundRemoveMobEffectPacket.java	ported	C++ *ParityTest.cpp packet-codec gate (registry-id via NetworkRegistries); commit 039d4fe0
@@ -3063,8 +3063,8 @@ net/minecraft/network/protocol/game/ServerboundSetCommandBlockPacket.java	ported
 net/minecraft/network/protocol/game/ServerboundSetCommandMinecartPacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit 6ce0e4aa (wave 10)
 net/minecraft/network/protocol/game/ServerboundSetCreativeModeSlotPacket.java	ported	C++ *ParityTest.cpp packet gate (no-component ItemStack via NetworkRegistries); commit (inventory wave)
 net/minecraft/network/protocol/game/ServerboundSetGameRulePacket.java	unvisited	
-net/minecraft/network/protocol/game/ServerboundSetJigsawBlockPacket.java	unvisited	
-net/minecraft/network/protocol/game/ServerboundSetStructureBlockPacket.java	unvisited	
+net/minecraft/network/protocol/game/ServerboundSetJigsawBlockPacket.java	ported	C++ parity gate pkt_set_jigsaw_block_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSetJigsawBlockSbParity cases=10 mismatches=0
+net/minecraft/network/protocol/game/ServerboundSetStructureBlockPacket.java	ported	C++ parity gate pkt_set_structure_block_sb_parity (byte-exact, full-suite reconcile 2026-06-11): PktSetStructureBlockSbParity cases=10 mismatches=0
 net/minecraft/network/protocol/game/ServerboundSetTestBlockPacket.java	unvisited	
 net/minecraft/network/protocol/game/ServerboundSignUpdatePacket.java	ported	C++ *ParityTest.cpp + tools/*Parity.java packet-codec byte-parity gate; commit f4a2ee10 (wave 9)
 net/minecraft/network/protocol/game/ServerboundSpectateEntityPacket.java	unvisited	
@@ -3614,7 +3614,7 @@ net/minecraft/util/AbstractListBuilder.java	unvisited
 net/minecraft/util/ArrayListDeque.java	unvisited	
 net/minecraft/util/BinaryAnimator.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/util/BitStorage.java	unvisited	
-net/minecraft/util/BlockUtil.java	unvisited	
+net/minecraft/util/BlockUtil.java	ported	C++ parity gate block_util_parity (byte-exact, full-suite reconcile 2026-06-11): BlockUtil checks=627 mismatches=0
 net/minecraft/util/BoundedFloatFunction.java	unvisited	
 net/minecraft/util/Brightness.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
 net/minecraft/util/ByIdMap.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
@@ -3672,14 +3672,14 @@ net/minecraft/util/ProgressListener.java	unvisited
 net/minecraft/util/RandomSource.java	unvisited	
 net/minecraft/util/RegistryContextSwapper.java	unvisited	
 net/minecraft/util/SegmentedAnglePrecision.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
-net/minecraft/util/SequencedPriorityIterator.java	unvisited	
+net/minecraft/util/SequencedPriorityIterator.java	ported	C++ parity gate sequenced_priority_iterator_parity (byte-exact, full-suite reconcile 2026-06-11): SequencedPriorityIterator checks=1081 mismatches=0
 net/minecraft/util/SignatureUpdater.java	unvisited	
 net/minecraft/util/SignatureValidator.java	unvisited	
 net/minecraft/util/Signer.java	unvisited	
 net/minecraft/util/SimpleBitStorage.java	unvisited	
 net/minecraft/util/SingleKeyCache.java	unvisited	
-net/minecraft/util/SmoothDouble.java	unvisited	
-net/minecraft/util/SortedArraySet.java	unvisited	
+net/minecraft/util/SmoothDouble.java	ported	C++ parity gate smooth_double_parity (byte-exact, full-suite reconcile 2026-06-11): SmoothDouble cases=103 mismatches=0
+net/minecraft/util/SortedArraySet.java	ported	C++ parity gate sorted_array_set_parity (byte-exact, full-suite reconcile 2026-06-11): SortedArraySet checks=717 mismatches=0
 net/minecraft/util/SpawnUtil.java	unvisited	
 net/minecraft/util/SpecialDates.java	unvisited	
 net/minecraft/util/StaticCache2D.java	unvisited	
@@ -3707,7 +3707,7 @@ net/minecraft/util/datafix/DataFixTypes.java	unvisited
 net/minecraft/util/datafix/DataFixers.java	unvisited	
 net/minecraft/util/datafix/ExtraDataFixUtils.java	unvisited	
 net/minecraft/util/datafix/LegacyComponentDataFixUtils.java	unvisited	
-net/minecraft/util/datafix/PackedBitStorage.java	unvisited	
+net/minecraft/util/datafix/PackedBitStorage.java	ported	C++ parity gate packed_bit_storage_parity (byte-exact, full-suite reconcile 2026-06-11): PackedBitStorage checks=20026 mismatches=0
 net/minecraft/util/datafix/fixes/AbstractArrowPickupFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
 net/minecraft/util/datafix/fixes/AbstractBlockPropertyFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
 net/minecraft/util/datafix/fixes/AbstractPoiSectionFix.java	n/a	old-save-format migration (DataFixerUpper); port generates 26.1.2-format worlds only — revisit if loading old vanilla worlds becomes a goal
@@ -4286,7 +4286,7 @@ net/minecraft/util/profiling/metrics/storage/package-info.java	unvisited
 net/minecraft/util/profiling/package-info.java	unvisited	
 net/minecraft/util/random/Weighted.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
 net/minecraft/util/random/WeightedList.java	unvisited	
-net/minecraft/util/random/WeightedRandom.java	unvisited	
+net/minecraft/util/random/WeightedRandom.java	ported	C++ parity gate weighted_random_parity (byte-exact, full-suite reconcile 2026-06-11): WeightedRandom self-checks mismatches=0
 net/minecraft/util/random/package-info.java	unvisited	
 net/minecraft/util/thread/AbstractConsecutiveExecutor.java	unvisited	
 net/minecraft/util/thread/BlockableEventLoop.java	unvisited	
@@ -4384,7 +4384,7 @@ net/minecraft/world/clock/WorldClock.java	unvisited
 net/minecraft/world/clock/WorldClocks.java	unvisited	
 net/minecraft/world/clock/package-info.java	unvisited	
 net/minecraft/world/damagesource/CombatEntry.java	unvisited	
-net/minecraft/world/damagesource/CombatRules.java	unvisited	
+net/minecraft/world/damagesource/CombatRules.java	ported	C++ parity gate combat_rules_parity (byte-exact, full-suite reconcile 2026-06-11): CombatRules cases=4384 mismatches=0
 net/minecraft/world/damagesource/CombatTracker.java	unvisited	
 net/minecraft/world/damagesource/DamageEffects.java	unvisited	
 net/minecraft/world/damagesource/DamageScaling.java	unvisited	
@@ -4748,7 +4748,7 @@ net/minecraft/world/entity/ai/util/DefaultRandomPos.java	unvisited
 net/minecraft/world/entity/ai/util/GoalUtils.java	unvisited	
 net/minecraft/world/entity/ai/util/HoverRandomPos.java	unvisited	
 net/minecraft/world/entity/ai/util/LandRandomPos.java	unvisited	
-net/minecraft/world/entity/ai/util/RandomPos.java	unvisited	
+net/minecraft/world/entity/ai/util/RandomPos.java	ported	C++ parity gate random_pos_parity (byte-exact, full-suite reconcile 2026-06-11): RandomPos checks=288 mismatches=0
 net/minecraft/world/entity/ai/util/package-info.java	unvisited	
 net/minecraft/world/entity/ai/village/ReputationEventType.java	unvisited	
 net/minecraft/world/entity/ai/village/VillageSiege.java	unvisited	
@@ -4773,7 +4773,7 @@ net/minecraft/world/entity/animal/allay/package-info.java	unvisited
 net/minecraft/world/entity/animal/armadillo/Armadillo.java	unvisited	
 net/minecraft/world/entity/animal/armadillo/ArmadilloAi.java	unvisited	
 net/minecraft/world/entity/animal/armadillo/package-info.java	unvisited	
-net/minecraft/world/entity/animal/axolotl/Axolotl.java	unvisited	
+net/minecraft/world/entity/animal/axolotl/Axolotl.java	partial	C++ parity gate axolotl_variant_parity (byte-exact, full-suite reconcile 2026-06-11): AxolotlVariant checks=14 mismatches=0
 net/minecraft/world/entity/animal/axolotl/AxolotlAi.java	unvisited	
 net/minecraft/world/entity/animal/axolotl/PlayDead.java	unvisited	
 net/minecraft/world/entity/animal/axolotl/ValidatePlayDead.java	unvisited	
@@ -4801,7 +4801,7 @@ net/minecraft/world/entity/animal/cow/package-info.java	unvisited
 net/minecraft/world/entity/animal/dolphin/Dolphin.java	unvisited	
 net/minecraft/world/entity/animal/dolphin/package-info.java	unvisited	
 net/minecraft/world/entity/animal/equine/AbstractChestedHorse.java	unvisited	
-net/minecraft/world/entity/animal/equine/AbstractHorse.java	unvisited	
+net/minecraft/world/entity/animal/equine/AbstractHorse.java	ported	C++ parity gate horse_attr_parity (byte-exact, full-suite reconcile 2026-06-11): AbstractHorse self-checks passed
 net/minecraft/world/entity/animal/equine/Donkey.java	unvisited	
 net/minecraft/world/entity/animal/equine/Horse.java	unvisited	
 net/minecraft/world/entity/animal/equine/Llama.java	unvisited	
@@ -4825,7 +4825,7 @@ net/minecraft/world/entity/animal/fish/AbstractSchoolingFish.java	unvisited
 net/minecraft/world/entity/animal/fish/Cod.java	unvisited	
 net/minecraft/world/entity/animal/fish/Pufferfish.java	unvisited	
 net/minecraft/world/entity/animal/fish/Salmon.java	unvisited	
-net/minecraft/world/entity/animal/fish/TropicalFish.java	unvisited	
+net/minecraft/world/entity/animal/fish/TropicalFish.java	partial	C++ parity gate tropical_fish_variant_parity (byte-exact, full-suite reconcile 2026-06-11): TropicalFishVariant checks=12390 mismatches=0
 net/minecraft/world/entity/animal/fish/WaterAnimal.java	unvisited	
 net/minecraft/world/entity/animal/fish/package-info.java	unvisited	
 net/minecraft/world/entity/animal/fox/Fox.java	unvisited	
@@ -4850,7 +4850,7 @@ net/minecraft/world/entity/animal/golem/CopperGolemState.java	unvisited
 net/minecraft/world/entity/animal/golem/IronGolem.java	unvisited	
 net/minecraft/world/entity/animal/golem/SnowGolem.java	unvisited	
 net/minecraft/world/entity/animal/golem/package-info.java	unvisited	
-net/minecraft/world/entity/animal/happyghast/HappyGhast.java	unvisited	
+net/minecraft/world/entity/animal/happyghast/HappyGhast.java	partial	C++ parity gate happy_ghast_wrap_degrees90_parity (byte-exact, full-suite reconcile 2026-06-11): HappyGhastWrapDegrees90 checks=2917 mismatches=0
 net/minecraft/world/entity/animal/happyghast/HappyGhastAi.java	unvisited	
 net/minecraft/world/entity/animal/happyghast/package-info.java	unvisited	
 net/minecraft/world/entity/animal/nautilus/AbstractNautilus.java	unvisited	
@@ -4862,7 +4862,7 @@ net/minecraft/world/entity/animal/nautilus/ZombieNautilusVariant.java	unvisited
 net/minecraft/world/entity/animal/nautilus/ZombieNautilusVariants.java	unvisited	
 net/minecraft/world/entity/animal/nautilus/package-info.java	unvisited	
 net/minecraft/world/entity/animal/package-info.java	unvisited	
-net/minecraft/world/entity/animal/panda/Panda.java	unvisited	
+net/minecraft/world/entity/animal/panda/Panda.java	partial	C++ parity gate panda_gene_parity (byte-exact, full-suite reconcile 2026-06-11): PandaGene checks=88 mismatches=0
 net/minecraft/world/entity/animal/panda/package-info.java	unvisited	
 net/minecraft/world/entity/animal/parrot/Parrot.java	unvisited	
 net/minecraft/world/entity/animal/parrot/ShoulderRidingEntity.java	unvisited	
@@ -4875,7 +4875,7 @@ net/minecraft/world/entity/animal/pig/PigVariants.java	unvisited
 net/minecraft/world/entity/animal/pig/package-info.java	unvisited	
 net/minecraft/world/entity/animal/polarbear/PolarBear.java	unvisited	
 net/minecraft/world/entity/animal/polarbear/package-info.java	unvisited	
-net/minecraft/world/entity/animal/rabbit/Rabbit.java	unvisited	
+net/minecraft/world/entity/animal/rabbit/Rabbit.java	partial	C++ parity gate rabbit_variant_parity (byte-exact, full-suite reconcile 2026-06-11): RabbitVariant checks=19 mismatches=0
 net/minecraft/world/entity/animal/rabbit/package-info.java	unvisited	
 net/minecraft/world/entity/animal/sheep/Sheep.java	unvisited	
 net/minecraft/world/entity/animal/sheep/SheepColorSpawnRules.java	unvisited	
@@ -4894,7 +4894,7 @@ net/minecraft/world/entity/animal/wolf/WolfSoundVariants.java	unvisited
 net/minecraft/world/entity/animal/wolf/WolfVariant.java	unvisited	
 net/minecraft/world/entity/animal/wolf/WolfVariants.java	unvisited	
 net/minecraft/world/entity/animal/wolf/package-info.java	unvisited	
-net/minecraft/world/entity/boss/enderdragon/DragonFlightHistory.java	unvisited	
+net/minecraft/world/entity/boss/enderdragon/DragonFlightHistory.java	ported	C++ parity gate dragon_flight_history_parity (byte-exact, full-suite reconcile 2026-06-11): DragonFlightHistory checks=18513 mismatches=0
 net/minecraft/world/entity/boss/enderdragon/EndCrystal.java	unvisited	
 net/minecraft/world/entity/boss/enderdragon/EnderDragon.java	unvisited	
 net/minecraft/world/entity/boss/enderdragon/EnderDragonPart.java	unvisited	
@@ -5007,7 +5007,7 @@ net/minecraft/world/entity/monster/warden/AngerLevel.java	unvisited
 net/minecraft/world/entity/monster/warden/AngerManagement.java	unvisited	
 net/minecraft/world/entity/monster/warden/Warden.java	unvisited	
 net/minecraft/world/entity/monster/warden/WardenAi.java	unvisited	
-net/minecraft/world/entity/monster/warden/WardenSpawnTracker.java	unvisited	
+net/minecraft/world/entity/monster/warden/WardenSpawnTracker.java	ported	C++ parity gate warden_spawn_tracker_parity (byte-exact, full-suite reconcile 2026-06-11): WardenSpawnTracker checks=24495 mismatches=0
 net/minecraft/world/entity/monster/warden/package-info.java	unvisited	
 net/minecraft/world/entity/monster/zombie/Drowned.java	unvisited	
 net/minecraft/world/entity/monster/zombie/Husk.java	unvisited	
@@ -5022,7 +5022,7 @@ net/minecraft/world/entity/npc/Npc.java	unvisited
 net/minecraft/world/entity/npc/package-info.java	unvisited	
 net/minecraft/world/entity/npc/villager/AbstractVillager.java	unvisited	
 net/minecraft/world/entity/npc/villager/Villager.java	unvisited	
-net/minecraft/world/entity/npc/villager/VillagerData.java	unvisited	
+net/minecraft/world/entity/npc/villager/VillagerData.java	ported	C++ parity gate villager_data_parity (byte-exact, full-suite reconcile 2026-06-11): VillagerData checks=25 mismatches=0
 net/minecraft/world/entity/npc/villager/VillagerDataHolder.java	unvisited	
 net/minecraft/world/entity/npc/villager/VillagerProfession.java	unvisited	
 net/minecraft/world/entity/npc/villager/VillagerType.java	unvisited	
@@ -5131,15 +5131,15 @@ net/minecraft/world/flag/FeatureFlagUniverse.java	unvisited
 net/minecraft/world/flag/FeatureFlags.java	unvisited	
 net/minecraft/world/flag/package-info.java	unvisited	
 net/minecraft/world/food/FoodConstants.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 7de28033 (wave 11)
-net/minecraft/world/food/FoodData.java	unvisited	
+net/minecraft/world/food/FoodData.java	ported	C++ parity gate food_data_parity (byte-exact, full-suite reconcile 2026-06-11): FoodData cases=681 mismatches=0
 net/minecraft/world/food/FoodProperties.java	unvisited	
 net/minecraft/world/food/Foods.java	unvisited	
 net/minecraft/world/food/package-info.java	unvisited	
-net/minecraft/world/inventory/AbstractContainerMenu.java	unvisited	
+net/minecraft/world/inventory/AbstractContainerMenu.java	partial	C++ parity gate abstract_container_math_parity (byte-exact, full-suite reconcile 2026-06-11): AbstractContainerMenuMath checks=892 mismatches=0
 net/minecraft/world/inventory/AbstractCraftingMenu.java	unvisited	
 net/minecraft/world/inventory/AbstractFurnaceMenu.java	unvisited	
 net/minecraft/world/inventory/AbstractMountInventoryMenu.java	unvisited	
-net/minecraft/world/inventory/AnvilMenu.java	unvisited	
+net/minecraft/world/inventory/AnvilMenu.java	partial	C++ parity gate anvil_cost_parity (byte-exact, full-suite reconcile 2026-06-11): AnvilMenuCost checks=195 mismatches=0
 net/minecraft/world/inventory/ArmorSlot.java	unvisited	
 net/minecraft/world/inventory/BeaconMenu.java	unvisited	
 net/minecraft/world/inventory/BlastFurnaceMenu.java	unvisited	
@@ -5210,14 +5210,14 @@ net/minecraft/world/item/BlockItem.java	partial	registry table 1:1 (item_registr
 net/minecraft/world/item/BoatItem.java	unvisited	
 net/minecraft/world/item/BoneMealItem.java	unvisited	
 net/minecraft/world/item/BottleItem.java	unvisited	
-net/minecraft/world/item/BowItem.java	unvisited	
+net/minecraft/world/item/BowItem.java	partial	C++ parity gate bow_item_power_parity (byte-exact, full-suite reconcile 2026-06-11): BowItemPower checks=65 mismatches=0
 net/minecraft/world/item/BrushItem.java	unvisited	
 net/minecraft/world/item/BucketItem.java	unvisited	
 net/minecraft/world/item/BundleItem.java	unvisited	
 net/minecraft/world/item/CompassItem.java	unvisited	
 net/minecraft/world/item/CreativeModeTab.java	unvisited	
 net/minecraft/world/item/CreativeModeTabs.java	unvisited	
-net/minecraft/world/item/CrossbowItem.java	unvisited	
+net/minecraft/world/item/CrossbowItem.java	ported	C++ parity gate crossbow_item_parity (byte-exact, full-suite reconcile 2026-06-11): CrossbowItem self-checks mismatches=0
 net/minecraft/world/item/DebugStickItem.java	unvisited	
 net/minecraft/world/item/DiscFragmentItem.java	unvisited	
 net/minecraft/world/item/DispensibleContainerItem.java	unvisited	
@@ -5301,7 +5301,7 @@ net/minecraft/world/item/WritableBookItem.java	unvisited
 net/minecraft/world/item/WrittenBookItem.java	unvisited	
 net/minecraft/world/item/alchemy/Potion.java	unvisited	
 net/minecraft/world/item/alchemy/PotionBrewing.java	unvisited	
-net/minecraft/world/item/alchemy/PotionContents.java	unvisited	
+net/minecraft/world/item/alchemy/PotionContents.java	ported	C++ parity gate potion_color_parity (byte-exact, full-suite reconcile 2026-06-11): PotionContents checks=571 mismatches=0
 net/minecraft/world/item/alchemy/Potions.java	unvisited	
 net/minecraft/world/item/alchemy/package-info.java	unvisited	
 net/minecraft/world/item/component/AttackRange.java	unvisited	
@@ -5397,7 +5397,7 @@ net/minecraft/world/item/crafting/RecipeType.java	unvisited
 net/minecraft/world/item/crafting/RepairItemRecipe.java	unvisited	
 net/minecraft/world/item/crafting/SelectableRecipe.java	unvisited	
 net/minecraft/world/item/crafting/ShapedRecipe.java	unvisited	
-net/minecraft/world/item/crafting/ShapedRecipePattern.java	unvisited	
+net/minecraft/world/item/crafting/ShapedRecipePattern.java	ported	C++ parity gate shaped_recipe_pattern_parity (byte-exact, full-suite reconcile 2026-06-11): ShapedRecipePattern checks=90 mismatches=0
 net/minecraft/world/item/crafting/ShapelessRecipe.java	unvisited	
 net/minecraft/world/item/crafting/ShieldDecorationRecipe.java	unvisited	
 net/minecraft/world/item/crafting/SimpleSmithingRecipe.java	unvisited	
@@ -5431,12 +5431,12 @@ net/minecraft/world/item/enchantment/Enchantable.java	unvisited
 net/minecraft/world/item/enchantment/EnchantedItemInUse.java	unvisited	
 net/minecraft/world/item/enchantment/Enchantment.java	unvisited	
 net/minecraft/world/item/enchantment/EnchantmentEffectComponents.java	unvisited	
-net/minecraft/world/item/enchantment/EnchantmentHelper.java	unvisited	
+net/minecraft/world/item/enchantment/EnchantmentHelper.java	partial	C++ parity gate enchantment_cost_parity (byte-exact, full-suite reconcile 2026-06-11): EnchantmentCost self-checks mismatches=0
 net/minecraft/world/item/enchantment/EnchantmentInstance.java	unvisited	
 net/minecraft/world/item/enchantment/EnchantmentTarget.java	unvisited	
 net/minecraft/world/item/enchantment/Enchantments.java	unvisited	
 net/minecraft/world/item/enchantment/ItemEnchantments.java	unvisited	
-net/minecraft/world/item/enchantment/LevelBasedValue.java	unvisited	
+net/minecraft/world/item/enchantment/LevelBasedValue.java	ported	C++ parity gate level_based_value_parity (byte-exact, full-suite reconcile 2026-06-11): LevelBasedValue checks=900 mismatches=0
 net/minecraft/world/item/enchantment/Repairable.java	unvisited	
 net/minecraft/world/item/enchantment/TargetedConditionalEffect.java	unvisited	
 net/minecraft/world/item/enchantment/effects/AddValue.java	unvisited	
@@ -5503,7 +5503,7 @@ net/minecraft/world/item/slot/TransformedSlotSource.java	unvisited
 net/minecraft/world/item/slot/package-info.java	unvisited	
 net/minecraft/world/item/trading/ItemCost.java	unvisited	
 net/minecraft/world/item/trading/Merchant.java	unvisited	
-net/minecraft/world/item/trading/MerchantOffer.java	unvisited	
+net/minecraft/world/item/trading/MerchantOffer.java	ported	C++ parity gate merchant_offer_parity (byte-exact, full-suite reconcile 2026-06-11): MerchantOffer checks=93048 mismatches=0
 net/minecraft/world/item/trading/MerchantOffers.java	unvisited	
 net/minecraft/world/item/trading/TradeCost.java	unvisited	
 net/minecraft/world/item/trading/TradeRebalanceVillagerTrades.java	unvisited	
@@ -5723,7 +5723,7 @@ net/minecraft/world/level/block/HangingRootsBlock.java	unvisited
 net/minecraft/world/level/block/HangingSignBlock.java	unvisited	
 net/minecraft/world/level/block/HayBlock.java	unvisited	
 net/minecraft/world/level/block/HeavyCoreBlock.java	unvisited	
-net/minecraft/world/level/block/HoneyBlock.java	unvisited	
+net/minecraft/world/level/block/HoneyBlock.java	ported	C++ parity gate honey_block_parity (byte-exact, full-suite reconcile 2026-06-11): HoneyBlock checks=16876 mismatches=0
 net/minecraft/world/level/block/HopperBlock.java	unvisited	
 net/minecraft/world/level/block/HorizontalDirectionalBlock.java	unvisited	
 net/minecraft/world/level/block/HugeMushroomBlock.java	unvisited	
@@ -5731,7 +5731,7 @@ net/minecraft/world/level/block/IceBlock.java	unvisited
 net/minecraft/world/level/block/InfestedBlock.java	unvisited	
 net/minecraft/world/level/block/InfestedRotatedPillarBlock.java	unvisited	
 net/minecraft/world/level/block/IronBarsBlock.java	unvisited	
-net/minecraft/world/level/block/JigsawBlock.java	unvisited	
+net/minecraft/world/level/block/JigsawBlock.java	partial	C++ parity gate jigsaw_attach_parity (byte-exact, full-suite reconcile 2026-06-11): JigsawAttach checks=4826 mismatches=0
 net/minecraft/world/level/block/JukeboxBlock.java	unvisited	
 net/minecraft/world/level/block/KelpBlock.java	unvisited	
 net/minecraft/world/level/block/KelpPlantBlock.java	unvisited	
@@ -5766,7 +5766,7 @@ net/minecraft/world/level/block/NetherFungusBlock.java	unvisited
 net/minecraft/world/level/block/NetherPortalBlock.java	unvisited	
 net/minecraft/world/level/block/NetherRootsBlock.java	unvisited	
 net/minecraft/world/level/block/NetherSproutsBlock.java	unvisited	
-net/minecraft/world/level/block/NetherVines.java	unvisited	
+net/minecraft/world/level/block/NetherVines.java	ported	C++ parity gate nether_vines_parity (byte-exact, full-suite reconcile 2026-06-11): NetherVines checks=640 mismatches=0
 net/minecraft/world/level/block/NetherWartBlock.java	unvisited	
 net/minecraft/world/level/block/NetherrackBlock.java	unvisited	
 net/minecraft/world/level/block/NoteBlock.java	unvisited	
@@ -5789,7 +5789,7 @@ net/minecraft/world/level/block/PumpkinBlock.java	unvisited
 net/minecraft/world/level/block/RailBlock.java	unvisited	
 net/minecraft/world/level/block/RailState.java	unvisited	
 net/minecraft/world/level/block/RedStoneOreBlock.java	unvisited	
-net/minecraft/world/level/block/RedStoneWireBlock.java	unvisited	
+net/minecraft/world/level/block/RedStoneWireBlock.java	partial	C++ parity gate redstone_wire_color_parity (byte-exact, full-suite reconcile 2026-06-11): RedstoneWireColor checks=33 mismatches=0
 net/minecraft/world/level/block/RedstoneLampBlock.java	unvisited	
 net/minecraft/world/level/block/RedstoneTorchBlock.java	unvisited	
 net/minecraft/world/level/block/RedstoneWallTorchBlock.java	unvisited	
@@ -5813,7 +5813,7 @@ net/minecraft/world/level/block/SculkVeinBlock.java	unvisited
 net/minecraft/world/level/block/SeaPickleBlock.java	unvisited	
 net/minecraft/world/level/block/SeagrassBlock.java	unvisited	
 net/minecraft/world/level/block/SegmentableBlock.java	unvisited	
-net/minecraft/world/level/block/SelectableSlotContainer.java	unvisited	
+net/minecraft/world/level/block/SelectableSlotContainer.java	ported	C++ parity gate selectable_slot_container_parity (byte-exact, full-suite reconcile 2026-06-11): SelectableSlotContainer checks=284256 mismatches=0
 net/minecraft/world/level/block/ShelfBlock.java	unvisited	
 net/minecraft/world/level/block/ShortDryGrassBlock.java	unvisited	
 net/minecraft/world/level/block/ShulkerBoxBlock.java	unvisited	
@@ -5852,7 +5852,7 @@ net/minecraft/world/level/block/TallDryGrassBlock.java	unvisited
 net/minecraft/world/level/block/TallFlowerBlock.java	unvisited	
 net/minecraft/world/level/block/TallGrassBlock.java	unvisited	
 net/minecraft/world/level/block/TallSeagrassBlock.java	unvisited	
-net/minecraft/world/level/block/TargetBlock.java	unvisited	
+net/minecraft/world/level/block/TargetBlock.java	partial	C++ parity gate target_block_redstone_parity (byte-exact, full-suite reconcile 2026-06-11): TargetBlockRedstone checks=3498 mismatches=0
 net/minecraft/world/level/block/TestBlock.java	unvisited	
 net/minecraft/world/level/block/TestInstanceBlock.java	unvisited	
 net/minecraft/world/level/block/TintedGlassBlock.java	unvisited	
@@ -6046,7 +6046,7 @@ net/minecraft/world/level/block/state/properties/WoodType.java	ported	C++ *Parit
 net/minecraft/world/level/block/state/properties/package-info.java	unvisited	
 net/minecraft/world/level/border/BorderChangeListener.java	unvisited	
 net/minecraft/world/level/border/BorderStatus.java	unvisited	
-net/minecraft/world/level/border/WorldBorder.java	unvisited	
+net/minecraft/world/level/border/WorldBorder.java	ported	C++ parity gate world_border_parity (byte-exact, full-suite reconcile 2026-06-11): WorldBorder checks=354816 mismatches=0
 net/minecraft/world/level/border/package-info.java	unvisited	
 net/minecraft/world/level/chunk/BlockColumn.java	unvisited	
 net/minecraft/world/level/chunk/BulkSectionAccess.java	unvisited	
@@ -6057,7 +6057,7 @@ net/minecraft/world/level/chunk/ChunkGeneratorStructureState.java	unvisited
 net/minecraft/world/level/chunk/ChunkGenerators.java	unvisited	
 net/minecraft/world/level/chunk/ChunkSource.java	unvisited	
 net/minecraft/world/level/chunk/Configuration.java	unvisited	
-net/minecraft/world/level/chunk/DataLayer.java	unvisited	
+net/minecraft/world/level/chunk/DataLayer.java	ported	C++ parity gate data_layer_parity (byte-exact, full-suite reconcile 2026-06-11): DataLayer cases=45486 mismatches=0
 net/minecraft/world/level/chunk/EmptyLevelChunk.java	unvisited	
 net/minecraft/world/level/chunk/GlobalPalette.java	unvisited	
 net/minecraft/world/level/chunk/HashMapPalette.java	unvisited	
@@ -6440,7 +6440,7 @@ net/minecraft/world/level/levelgen/placement/package-info.java	unvisited
 net/minecraft/world/level/levelgen/presets/WorldPreset.java	unvisited	
 net/minecraft/world/level/levelgen/presets/WorldPresets.java	unvisited	
 net/minecraft/world/level/levelgen/presets/package-info.java	unvisited	
-net/minecraft/world/level/levelgen/structure/BoundingBox.java	unvisited	
+net/minecraft/world/level/levelgen/structure/BoundingBox.java	ported	C++ parity gate bounding_box_parity (byte-exact, full-suite reconcile 2026-06-11): BoundingBox checks=9060 mismatches=0
 net/minecraft/world/level/levelgen/structure/BuiltinStructureSets.java	unvisited	
 net/minecraft/world/level/levelgen/structure/BuiltinStructures.java	unvisited	
 net/minecraft/world/level/levelgen/structure/PoolElementStructurePiece.java	unvisited	
@@ -6450,7 +6450,7 @@ net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java	unvisited
 net/minecraft/world/level/levelgen/structure/Structure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureCheck.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureCheckResult.java	unvisited	
-net/minecraft/world/level/levelgen/structure/StructurePiece.java	unvisited	
+net/minecraft/world/level/levelgen/structure/StructurePiece.java	partial	C++ parity gate structure_piece_math_parity (byte-exact, full-suite reconcile 2026-06-11): StructurePieceMath checks=1191532 mismatches=0
 net/minecraft/world/level/levelgen/structure/StructurePieceAccessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureSet.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureSpawnOverride.java	unvisited	
@@ -6476,7 +6476,7 @@ net/minecraft/world/level/levelgen/structure/pools/DimensionPadding.java	unvisit
 net/minecraft/world/level/levelgen/structure/pools/EmptyPoolElement.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/FeaturePoolElement.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/JigsawJunction.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java	unvisited	
+net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java	partial	C++ parity gate jigsaw_height_limit_parity (byte-exact, full-suite reconcile 2026-06-11): JigsawHeightLimit checks=280 mismatches=0
 net/minecraft/world/level/levelgen/structure/pools/LegacySinglePoolElement.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/ListPoolElement.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java	unvisited	
@@ -6497,34 +6497,34 @@ net/minecraft/world/level/levelgen/structure/structures/DesertPyramidPiece.java	
 net/minecraft/world/level/levelgen/structure/structures/DesertPyramidStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/EndCityPieces.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/EndCityStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/IglooPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/IglooPieces.java	partial	C++ parity gate igloo_piece_position_parity (byte-exact, full-suite reconcile 2026-06-11): IglooPiecePosition checks=300 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/IglooStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/JigsawStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/JungleTemplePiece.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/JungleTempleStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/MineshaftPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/MineshaftPieces.java	partial	C++ parity gate mineshaft_stairs_box_parity (byte-exact, full-suite reconcile 2026-06-11): MineshaftStairsBox checks=96 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/MineshaftStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/NetherFortressPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/NetherFortressPieces.java	partial	C++ parity gate nether_fortress_piece_box_parity (byte-exact, full-suite reconcile 2026-06-11): NetherFortressPieceBox checks=504 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/NetherFortressStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/NetherFossilPieces.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/NetherFossilStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/OceanMonumentPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/OceanMonumentPieces.java	partial	C++ parity gate ocean_monument_room_parity (byte-exact, full-suite reconcile 2026-06-11): OceanMonumentRoom checks=4299 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/OceanMonumentStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/OceanRuinPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/OceanRuinPieces.java	partial	C++ parity gate ocean_ruin_cluster_parity (byte-exact, full-suite reconcile 2026-06-11): OceanRuinCluster checks=504 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/OceanRuinStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/RuinedPortalPiece.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/RuinedPortalStructure.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/RuinedPortalStructure.java	partial	C++ parity gate ruined_portal_yselector_parity (byte-exact, full-suite reconcile 2026-06-11): RuinedPortalYSelector checks=348 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/ShipwreckPieces.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/ShipwreckStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/StrongholdPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/StrongholdPieces.java	partial	C++ parity gate stronghold_piece_type_box_parity (byte-exact, full-suite reconcile 2026-06-11): StrongholdPieceTypeBox checks=480 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/StrongholdStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/SwampHutPiece.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/SwampHutStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionPieces.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionPieces.java	partial	C++ parity gate woodland_mansion_grid_parity (byte-exact, full-suite reconcile 2026-06-11): WoodlandMansionGrid checks=11016 mismatches=0
 net/minecraft/world/level/levelgen/structure/structures/WoodlandMansionStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/AlwaysTrueTest.java	unvisited	
-net/minecraft/world/level/levelgen/structure/templatesystem/AxisAlignedLinearPosTest.java	unvisited	
+net/minecraft/world/level/levelgen/structure/templatesystem/AxisAlignedLinearPosTest.java	partial	C++ parity gate linear_pos_test_math_parity (byte-exact, full-suite reconcile 2026-06-11): LinearPosTestMath checks=2304 mismatches=0
 net/minecraft/world/level/levelgen/structure/templatesystem/BlackstoneReplaceProcessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/BlockAgeProcessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/templatesystem/BlockIgnoreProcessor.java	unvisited	
@@ -6573,8 +6573,8 @@ net/minecraft/world/level/levelgen/synth/ImprovedNoise.java	unvisited
 net/minecraft/world/level/levelgen/synth/NoiseUtils.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
 net/minecraft/world/level/levelgen/synth/NormalNoise.java	unvisited	
 net/minecraft/world/level/levelgen/synth/PerlinNoise.java	unvisited	
-net/minecraft/world/level/levelgen/synth/PerlinSimplexNoise.java	unvisited	
-net/minecraft/world/level/levelgen/synth/SimplexNoise.java	unvisited	
+net/minecraft/world/level/levelgen/synth/PerlinSimplexNoise.java	partial	C++ parity gate perlin_simplex_noise_parity (byte-exact, full-suite reconcile 2026-06-11): 
+net/minecraft/world/level/levelgen/synth/SimplexNoise.java	partial	C++ parity gate simplex_noise_parity (byte-exact, full-suite reconcile 2026-06-11): 
 net/minecraft/world/level/levelgen/synth/package-info.java	unvisited	
 net/minecraft/world/level/lighting/BlockLightEngine.java	unvisited	
 net/minecraft/world/level/lighting/BlockLightSectionStorage.java	unvisited	
@@ -6619,7 +6619,7 @@ net/minecraft/world/level/pathfinder/Target.java	unvisited
 net/minecraft/world/level/pathfinder/WalkNodeEvaluator.java	unvisited	
 net/minecraft/world/level/pathfinder/package-info.java	unvisited	
 net/minecraft/world/level/portal/PortalForcer.java	unvisited	
-net/minecraft/world/level/portal/PortalShape.java	unvisited	
+net/minecraft/world/level/portal/PortalShape.java	ported	C++ parity gate portal_shape_parity (byte-exact, full-suite reconcile 2026-06-11): PortalShape checks=10000 mismatches=0
 net/minecraft/world/level/portal/TeleportTransition.java	unvisited	
 net/minecraft/world/level/portal/package-info.java	unvisited	
 net/minecraft/world/level/redstone/CollectingNeighborUpdater.java	unvisited	
@@ -6813,9 +6813,9 @@ net/minecraft/world/package-info.java	unvisited
 net/minecraft/world/phys/AABB.java	partial	clip/expandTowards/contract/distanceToSqr bit-exact (aabb_parity 512/0); remaining API surface (intersects/inflate/move/ofSize...) + NaN-ctor semantics (ternary vs Math.min) ungated
 net/minecraft/world/phys/BlockHitResult.java	ported	phys/Direction.h + BlockHitResult.h (collision/clip use)
 net/minecraft/world/phys/EntityHitResult.java	unvisited	
-net/minecraft/world/phys/HitResult.java	unvisited	
+net/minecraft/world/phys/HitResult.java	ported	C++ parity gate hit_result_parity (byte-exact, full-suite reconcile 2026-06-11): HitResult cases=49128 mismatches=0
 net/minecraft/world/phys/Vec2.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
-net/minecraft/world/phys/Vec3.java	unvisited	
+net/minecraft/world/phys/Vec3.java	ported	C++ parity gate vec3_parity (byte-exact, full-suite reconcile 2026-06-11): Vec3 cases=1652 mismatches=0 rotation_libm_diffs=0
 net/minecraft/world/phys/package-info.java	unvisited	
 net/minecraft/world/phys/shapes/ArrayVoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
 net/minecraft/world/phys/shapes/BitSetDiscreteVoxelShape.java	ported	phys/shapes/*.{h,cpp}; voxel_shapes_parity 295 defs/4674 checks/0 (commit 15b799a8)
