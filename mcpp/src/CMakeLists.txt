@@ -5394,3 +5394,8 @@ set_target_properties(cardinal_lighting_parity PROPERTIES RUNTIME_OUTPUT_DIRECTO
 add_executable(block_model_lighter_shape_parity render/block/BlockModelLighterShapeParityTest.cpp)
 target_include_directories(block_model_lighter_shape_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(block_model_lighter_shape_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: BlockModelLighter AO blend (prepareQuadAmbientOcclusion smooth lighting) =====
+add_executable(block_model_lighter_ao_parity render/block/BlockModelLighterAOParityTest.cpp)
+target_include_directories(block_model_lighter_ao_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(block_model_lighter_ao_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
