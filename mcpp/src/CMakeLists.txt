@@ -5469,3 +5469,32 @@ set_target_properties(identifier_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${C
 add_executable(block_util_parity util/BlockUtilParityTest.cpp)
 target_include_directories(block_util_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(block_util_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== util: SortedArraySet (sorted-array set + Util.growByHalf capacity ladder) =====
+add_executable(sorted_array_set_parity util/SortedArraySetParityTest.cpp)
+target_include_directories(sorted_array_set_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(sorted_array_set_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== util: FileUtil (sanitize/portable/decompose/validate pure string surface) =====
+add_executable(file_util_parity util/FileUtilParityTest.cpp)
+target_include_directories(file_util_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(file_util_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== worldgen: FancyTrunkPlacer static math (treeShape/getSteps/getLogAxis/trimBranches) =====
+add_executable(fancy_trunk_math_parity world/level/levelgen/feature/trunkplacers/FancyTrunkMathParityTest.cpp)
+target_include_directories(fancy_trunk_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(fancy_trunk_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundCommandSuggestionPacket (VarInt id + writeUtf maxLen 32500) =====
+add_executable(pkt_command_suggestion_sb_parity
+    network/protocol/game/PktCommandSuggestionSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_command_suggestion_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_command_suggestion_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_command_suggestion_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_command_suggestion_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
