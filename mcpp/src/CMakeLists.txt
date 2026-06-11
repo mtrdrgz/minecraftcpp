@@ -6015,3 +6015,32 @@ if(WIN32)
     target_link_libraries(pkt_set_jigsaw_block_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_set_jigsaw_block_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures: BoundingBox encapsulatingPositions/encapsulate(box)/move/forAllCorners/hashCode/equals =====
+add_executable(bounding_box_aggregate_parity world/level/levelgen/structure/BoundingBoxAggregateParityTest.cpp)
+target_include_directories(bounding_box_aggregate_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(bounding_box_aggregate_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render: VertexFormat layout/offset/elementsMask/hashCode + Mode.indexCount + IndexType.least =====
+add_executable(vertex_format_parity render/VertexFormatParityTest.cpp)
+target_include_directories(vertex_format_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vertex_format_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== entity: TropicalFish variant bit-packing (packVariant/getBaseColor/getPatternColor/getPattern) =====
+add_executable(tropical_fish_variant_parity world/entity/animal/fish/TropicalFishVariantParityTest.cpp)
+target_include_directories(tropical_fish_variant_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(tropical_fish_variant_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundSetTestBlockPacket (BlockPos + TestBlockMode idMapper + STRING_UTF8) =====
+add_executable(pkt_set_test_block_sb_parity
+    network/protocol/game/PktSetTestBlockSbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_test_block_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_test_block_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_test_block_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_test_block_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
