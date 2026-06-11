@@ -6510,3 +6510,32 @@ if(WIN32)
     target_link_libraries(pkt_chunks_biomes_cb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_chunks_biomes_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #18: StructureTemplate.buildInfoList block ordering (stable TimSort by Y,X,Z; concat full++other++blockEntities) =====
+add_executable(structure_template_build_info_list_parity world/level/levelgen/structure/templatesystem/StructureTemplateBuildInfoListParityTest.cpp)
+target_include_directories(structure_template_build_info_list_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(structure_template_build_info_list_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: PortalParticle.tick (curved drift-back -pos+pos*pos*2 + remove gate) + getQuadSize (1-(1-s)^2) =====
+add_executable(portal_particle_parity client/particle/PortalParticleParityTest.cpp)
+target_include_directories(portal_particle_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(portal_particle_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== block: HoneyBlock.getOldDeltaY (dy/0.98F+0.08) / getNewDeltaY ((dy-0.08)*0.98F) — 0.98F float-widened-to-double trap =====
+add_executable(honey_block_parity world/level/block/HoneyBlockParityTest.cpp)
+target_include_directories(honey_block_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(honey_block_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ServerboundChatSessionUpdatePacket (UUID + writeInstant(long) + writePublicKey byteArray + signature byteArray); target name drops "update" (UAC) =====
+add_executable(pkt_chat_session_sb_parity
+    network/protocol/game/PktChatSessionUpdateParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_chat_session_sb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_chat_session_sb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_chat_session_sb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_chat_session_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
