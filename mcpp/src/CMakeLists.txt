@@ -5384,3 +5384,8 @@ set_target_properties(block_model_lighter_tables_parity PROPERTIES RUNTIME_OUTPU
 add_executable(level_render_light_parity render/LevelRenderLightParityTest.cpp)
 target_include_directories(level_render_light_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(level_render_light_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== rendering: CardinalLighting (per-face directional block shading) =====
+add_executable(cardinal_lighting_parity world/level/CardinalLightingParityTest.cpp)
+target_include_directories(cardinal_lighting_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(cardinal_lighting_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
