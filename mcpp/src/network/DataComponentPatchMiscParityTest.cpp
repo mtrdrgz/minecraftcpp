@@ -115,6 +115,24 @@ int main(int argc, char** argv) {
             else if (ty == "l") c.put(name, mc::nbt::NbtTag::long_(std::stoll(vp)));
             else if (ty == "f") c.put(name, mc::nbt::NbtTag::float_(std::bit_cast<float>(static_cast<uint32_t>(std::stoul(vp, nullptr, 16)))));
             buf.writeNbt(mc::nbt::NbtTag::compound(c));
+        } else if (kind == "custommodeldata") {
+            // CustomModelData.STREAM_CODEC = composite(FLOAT.list, BOOL.list, STRING_UTF8.list, INT.list).
+            // valueData = 4 ';'-groups; each ':'-split: count then values (float=bits hex, flag=0/1,
+            // string=UTF-8 hex, color=decimal int).
+            std::vector<std::string> groups;
+            { std::stringstream gs(valueData); std::string it; while (std::getline(gs, it, ';')) groups.push_back(it); }
+            auto toks = [](const std::string& s) {
+                std::vector<std::string> v; std::stringstream ss(s); std::string it;
+                while (std::getline(ss, it, ':')) v.push_back(it); return v;
+            };
+            auto g0 = toks(groups[0]); buf.writeVarInt(std::stoi(g0[0]));   // floats
+            for (size_t k = 1; k < g0.size(); ++k) buf.writeFloat(std::bit_cast<float>(static_cast<uint32_t>(std::stoul(g0[k], nullptr, 16))));
+            auto g1 = toks(groups[1]); buf.writeVarInt(std::stoi(g1[0]));   // flags
+            for (size_t k = 1; k < g1.size(); ++k) buf.writeBool(g1[k] == "1");
+            auto g2 = toks(groups[2]); buf.writeVarInt(std::stoi(g2[0]));   // strings
+            for (size_t k = 1; k < g2.size(); ++k) buf.writeString(fromHexBytes(g2[k]));
+            auto g3 = toks(groups[3]); buf.writeVarInt(std::stoi(g3[0]));   // colors
+            for (size_t k = 1; k < g3.size(); ++k) buf.writeInt(std::stoi(g3[k]));
         } else {
             ++mism;
             if (shown++ < 25) std::cerr << "UNKNOWN-KIND " << kind << "\n";

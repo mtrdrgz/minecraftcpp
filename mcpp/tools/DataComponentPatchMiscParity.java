@@ -52,6 +52,22 @@ public class DataComponentPatchMiscParity {
         emit(access, s, "minecraft:custom_data", "customdata", type + ":" + nameHex + ":" + valuePart);
     }
 
+    static void emitCMD(RegistryAccess access, Item base, java.util.List<Float> floats,
+                        java.util.List<Boolean> flags, java.util.List<String> strings, java.util.List<Integer> colors) {
+        ItemStack s = new ItemStack(base, 1);
+        s.set(DataComponents.CUSTOM_MODEL_DATA,
+                new net.minecraft.world.item.component.CustomModelData(floats, flags, strings, colors));
+        StringBuilder vd = new StringBuilder().append(floats.size());
+        for (float fv : floats) vd.append(":").append(String.format("%08x", Float.floatToRawIntBits(fv)));
+        vd.append(";").append(flags.size());
+        for (boolean b : flags) vd.append(":").append(b ? "1" : "0");
+        vd.append(";").append(strings.size());
+        for (String t : strings) vd.append(":").append(hex(t.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        vd.append(";").append(colors.size());
+        for (int c : colors) vd.append(":").append(c);
+        emit(access, s, "minecraft:custom_model_data", "custommodeldata", vd.toString());
+    }
+
     @SuppressWarnings({"unchecked", "deprecation"})
     public static void main(String[] args) throws Exception {
         net.minecraft.SharedConstants.tryDetectVersion();
@@ -145,6 +161,14 @@ public class DataComponentPatchMiscParity {
             cf.putFloat("scale", 1.5f);
             emitCustomData(access, base, cf, "f", "scale", String.format("%08x", Float.floatToRawIntBits(1.5f)));
         }
+
+        // custom_model_data: composite of 4 lists (FLOAT.list, BOOL.list, STRING_UTF8.list, INT.list).
+        emitCMD(access, base, java.util.List.of(1.5f, 2.25f), java.util.List.of(true, false),
+                java.util.List.of("a", "bb"), java.util.List.of(255, 65280));
+        emitCMD(access, base, java.util.List.of(), java.util.List.of(true),
+                java.util.List.of(), java.util.List.of());
+        emitCMD(access, base, java.util.List.of(0.5f), java.util.List.of(),
+                java.util.List.of("model"), java.util.List.of(16711680, -1));
 
         O.flush();
     }
