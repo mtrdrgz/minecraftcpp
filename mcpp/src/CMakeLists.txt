@@ -5527,6 +5527,11 @@ add_executable(identifier_parity resources/IdentifierParityTest.cpp)
 target_include_directories(identifier_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(identifier_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== client/gui/layouts: FrameLayout + LayoutSettings + AbstractChildWrapper positioning =====
+add_executable(frame_layout_parity client/gui/layouts/FrameLayoutParityTest.cpp)
+target_include_directories(frame_layout_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(frame_layout_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== util: BlockUtil.getMaxRectangleLocation (largest-rectangle-in-histogram + IntBounds) =====
 add_executable(block_util_parity util/BlockUtilParityTest.cpp)
 target_include_directories(block_util_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
