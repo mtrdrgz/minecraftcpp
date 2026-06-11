@@ -5449,3 +5449,8 @@ set_target_properties(slider_button_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "
 add_executable(edit_box_parity client/gui/EditBoxParityTest.cpp)
 target_include_directories(edit_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(edit_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== text: TextColor (parse #RRGGBB / named colors, serialize, fromLegacyFormat, 24-bit mask) =====
+add_executable(text_color_parity network/chat/TextColorParityTest.cpp)
+target_include_directories(text_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(text_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
