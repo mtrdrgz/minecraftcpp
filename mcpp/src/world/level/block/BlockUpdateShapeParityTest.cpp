@@ -57,7 +57,7 @@ std::vector<int> g_hasSturdy;
 struct TagSets {
     std::unordered_set<std::string> walls, fences, woodenFences, bars, wallPostOverride,
         shulkerBoxes, leaves, supportsVegetation, supportsCocoa, wallHangingSigns, supportsBigDripleaf,
-        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf;
+        supportsHangingMangrove, supportsMangrovePropagule, supportsSmallDripleaf, snow;
 };
 TagSets g_tags;
 // block name (no minecraft:) -> updateShape declaring class (FAM rows). Used to detect
@@ -660,7 +660,10 @@ const std::set<std::string> PORTED = {
     "CocoaBlock", "CoralPlantBlock", "CoralFanBlock", "WallHangingSignBlock",
     // straggler wave 8
     "BambooStalkBlock", "BigDripleafBlock", "MangrovePropaguleBlock", "SmallDripleafBlock",
-    "BaseRailBlock"
+    "BaseRailBlock",
+    // straggler wave 9
+    "EnderChestBlock", "SculkShriekerBlock", "ObserverBlock", "BrushableBlock", "FarmlandBlock",
+    "CoralBlock", "ChorusFlowerBlock", "BigDripleafStemBlock", "LadderBlock", "BaseTorchBlock", "SnowyBlock"
 };
 
 int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId, const Level& level) {
@@ -935,7 +938,13 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         || fam == "DecoratedPotBlock" || fam == "CreakingHeartBlock"
         // BaseRailBlock.updateShape — waterlogged tick + super -> no-op (powered/detector/activator rails;
         // the rail SHAPE recompute lives in RailBlock, a separate FAM).
-        || fam == "BaseRailBlock")
+        || fam == "BaseRailBlock"
+        // wave 9 no-ops: EnderChest/SculkShrieker/Brushable/BigDripleafStem (water/self tick),
+        // ObserverBlock (startSignal side effect), FarmlandBlock/ChorusFlowerBlock (canSurvive->tick),
+        // CoralBlock (scanForWater->tick) — all return super/state unchanged.
+        || fam == "EnderChestBlock" || fam == "SculkShriekerBlock" || fam == "ObserverBlock"
+        || fam == "BrushableBlock" || fam == "FarmlandBlock" || fam == "CoralBlock"
+        || fam == "ChorusFlowerBlock" || fam == "BigDripleafStemBlock")
         return stateId;
     // HugeMushroomBlock.updateShape — neighbour.is(this) ? clear PROPERTY_BY_DIRECTION[dir] : super.
     if (fam == "HugeMushroomBlock") {
@@ -1128,6 +1137,26 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
         if (dir == DOWN && !isFaceSturdy(level.rel(DOWN), UP)) return 0;
         return stateId;
     }
+    // LadderBlock.updateShape — opposite(dir)==FACING && !canSurvive -> AIR. canSurvive = canAttachTo(
+    // relative(FACING.opposite())) = behind.isFaceSturdy(FACING).
+    if (fam == "LadderBlock") {
+        int facing = dirFromName(getProp(g_props[stateId], "facing"));
+        if (opposite(dir) == facing && !isFaceSturdy(level.rel(opposite(facing)), facing)) return 0;
+        return stateId;
+    }
+    // BaseTorchBlock.updateShape — DOWN && !canSurvive -> AIR. canSurvive = canSupportCenter(below, UP).
+    if (fam == "BaseTorchBlock") {
+        if (dir == DOWN && !isCenterSupport(level.rel(DOWN), UP)) return 0;
+        return stateId;
+    }
+    // SnowyBlock.updateShape — UP -> SNOWY = isSnowySetting(above) = above.is(#snow); else super.
+    if (fam == "SnowyBlock") {
+        if (dir == UP) {
+            int ns = setProp(stateId, "snowy", inTag(g_tags.snow, level.rel(UP)) ? "true" : "false");
+            return ns < 0 ? stateId : ns;
+        }
+        return stateId;
+    }
     // MangrovePropaguleBlock.updateShape — UP && !canSurvive -> AIR. canSurvive (:?) = HANGING ?
     // above.is(#supports_hanging_mangrove_propagule) : mayPlaceOn(below)=below.is(#supports_mangrove_propagule).
     if (fam == "MangrovePropaguleBlock") {
@@ -1298,6 +1327,7 @@ int main(int argc, char** argv) {
         g_tags.supportsHangingMangrove = resolve("supports_hanging_mangrove_propagule");
         g_tags.supportsMangrovePropagule = resolve("supports_mangrove_propagule");
         g_tags.supportsSmallDripleaf = resolve("supports_small_dripleaf");
+        g_tags.snow = resolve("snow");
     }
 
     // GT: OFFSETS (fixed cell order), U scenarios, FAM (block -> updateShape declaring class).
