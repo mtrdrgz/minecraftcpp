@@ -1967,6 +1967,18 @@ set_target_properties(block_rotate_mirror_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# ===== STRUCTURE PROCESSORS (#19): RuleProcessor RuleTest.test family vs the real game =====
+add_executable(structure_processor_parity
+    world/level/levelgen/structure/templatesystem/StructureProcessorParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/block/BlockTags.cpp)
+target_include_directories(structure_processor_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_processor_parity PRIVATE nlohmann_json)
+set_target_properties(structure_processor_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # net.minecraft.world.level.block.state.properties.RotationSegment
 # net.minecraft.world.level.block.state.properties.RotationSegment
 # RotationSegment 16-segment (4-bit binary angle) quantization parity vs the real
