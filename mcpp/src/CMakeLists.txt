@@ -6188,3 +6188,27 @@ if(WIN32)
     target_link_libraries(pkt_cookie_response_sb_parity PRIVATE bcrypt)
 endif()
 set_target_properties(pkt_cookie_response_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== render #26: Particle base physics integrator (tick gravity/friction/onGround/age + move/setSize/scale/setPower; hasPhysics=false) =====
+add_executable(particle_physics_parity client/particle/ParticlePhysicsParityTest.cpp)
+target_include_directories(particle_physics_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(particle_physics_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== world: DifficultyInstance.calculateDifficulty/getEffectiveDifficulty/getSpecialMultiplier/isHard (float ladders, Mth.clamp) =====
+add_executable(difficultyinstance_parity world/DifficultyInstanceParityTest.cpp)
+target_include_directories(difficultyinstance_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(difficultyinstance_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== netcode: ClientboundSetBorderLerpSizePacket (2x writeDouble + writeVarLong) =====
+add_executable(pkt_set_border_lerp_size_cb_parity
+    network/protocol/game/PktSetBorderLerpSizeCbParityTest.cpp
+    network/PacketBuffer.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+)
+target_include_directories(pkt_set_border_lerp_size_cb_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pkt_set_border_lerp_size_cb_parity PRIVATE miniz)
+if(WIN32)
+    target_link_libraries(pkt_set_border_lerp_size_cb_parity PRIVATE bcrypt)
+endif()
+set_target_properties(pkt_set_border_lerp_size_cb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
