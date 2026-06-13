@@ -45,7 +45,7 @@ add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE vendor/vma)
 
 # volk (Vulkan meta-loader)
-add_library(volk STATIC vendor/volk/volk.c vendor/volk/volk.h)
+add_library(volk STATIC vendor/volk/volk.c vendor/volk.h)
 target_include_directories(volk PUBLIC vendor/volk vendor)
 if(WIN32)
     target_compile_definitions(volk PUBLIC VK_USE_PLATFORM_WIN32_KHR)
@@ -72,8 +72,8 @@ add_subdirectory(tools/asset_packer)
 add_subdirectory(src)
 
 # ── Runtime asset pack ───────────────────────────────────────────────────────
-# The checked-in src/assets/assets.bin may be a tiny placeholder. Always rebuild
-# it before compiling mcpp so the Windows resource compiler embeds the real pack.
+# Always rebuild this during mcpp builds. CI may create tiny dependency files in
+# src/assets, but the shipped executable must embed the real selected pack.
 set(MCPP_RUNTIME_ASSET_PACK "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/assets.bin")
 set(MCPP_SRC_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/assets")
 set(MCPP_EXTERNAL_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets")
@@ -90,18 +90,16 @@ if(EXISTS "${MCPP_WORLDGEN_DATA_DIR}")
     list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_WORLDGEN_DATA_DIR}")
 endif()
 
-add_custom_command(
-    OUTPUT "${MCPP_RUNTIME_ASSET_PACK}"
+add_custom_target(pack_runtime_assets
     COMMAND "${CMAKE_COMMAND}" -P "${MCPP_PREPARE_RUNTIME_ASSETS}"
     COMMAND ${MCPP_ASSET_PACK_COMMAND}
     COMMAND "${CMAKE_COMMAND}" -DASSET_BIN=${MCPP_RUNTIME_ASSET_PACK} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
+    BYPRODUCTS "${MCPP_RUNTIME_ASSET_PACK}"
     DEPENDS asset_packer "${MCPP_PREPARE_RUNTIME_ASSETS}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Packing runtime assets into src/assets/assets.bin"
     VERBATIM
 )
-
-add_custom_target(pack_runtime_assets DEPENDS "${MCPP_RUNTIME_ASSET_PACK}")
 add_dependencies(mcpp pack_runtime_assets)
 set_source_files_properties(src/assets/assets.rc PROPERTIES
     OBJECT_DEPENDS "${MCPP_RUNTIME_ASSET_PACK}"
