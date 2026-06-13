@@ -73,6 +73,15 @@ jobs:
           $tag = 'ci-failure-latest'
           gh release delete $tag --cleanup-tag -y 2>$null
           gh release create $tag build-output.log --target '${{ github.sha }}' --title 'Latest failed CI build log' --notes 'Latest failed Windows CI build log.' --prerelease
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          Copy-Item build-output.log latest-build-output.log -Force
+          git checkout --orphan ci-failure-latest
+          git rm -rf . 2>$null
+          Copy-Item ../minecraftcpp/latest-build-output.log latest-build-output.log -Force
+          git add latest-build-output.log
+          git commit -m 'Update failed build log'
+          git push origin HEAD:ci-failure-latest --force
 
       - name: Package
         run: |
