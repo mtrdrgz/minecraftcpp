@@ -92,6 +92,14 @@ FrequencyReductionMethod parseFrm(const std::string& s) {
     return FrequencyReductionMethod::DEFAULT; // "default"
 }
 
+bool isKnownBrokenRuntimeStructureSet(const std::string& id) {
+    // Villages are jigsaw structures, but the in-game result is currently broken
+    // because the remaining feature_pool_element / legacy pool / template
+    // processor layer is not complete. Keep their placement loaded for other
+    // structures' exclusion zones, but do not generate the village set yet.
+    return id == "minecraft:villages";
+}
+
 } // namespace
 
 StructureState StructureState::loadFromDirectory(const std::string& structureSetDir, int64_t levelSeed) {
@@ -145,6 +153,9 @@ StructureState StructureState::loadFromDirectory(const std::string& structureSet
 
         // Key by "minecraft:<filename-without-ext>".
         const std::string id = "minecraft:" + entry.path().stem().string();
+        if (isKnownBrokenRuntimeStructureSet(id)) {
+            p.generationEnabled = false;
+        }
         state.sets[id] = p;
     }
     return state;
