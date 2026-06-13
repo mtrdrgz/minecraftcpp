@@ -1,4 +1,5 @@
 #pragma once
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -18,6 +19,14 @@
 // ---------------------------------------------------------------------------
 
 namespace mc {
+
+inline constexpr bool rawSignBit(double v) noexcept {
+    return (std::bit_cast<uint64_t>(v) >> 63) != 0;
+}
+
+inline constexpr bool rawSignBit(float v) noexcept {
+    return (std::bit_cast<uint32_t>(v) >> 31) != 0;
+}
 
 // Java narrowing cast double -> long (JLS 5.1.3): NaN -> 0, saturates at the
 // long range, otherwise truncates toward zero. (C++ raw cast would be UB.)
@@ -47,10 +56,9 @@ constexpr int32_t mthClamp(int32_t value, int32_t mn, int32_t mx) noexcept {
 
 // Java: java.lang.Math.min(double, double) — exact JDK semantics: NaN-poisoning
 // on the first operand and min(+0.0, -0.0) == -0.0. (std::fmin differs on NaN.)
-// constexpr via __builtin_signbit (Clang-constexpr) so corner-sorting ctors stay constexpr.
 inline constexpr double javaMathMin(double a, double b) noexcept {
     if (a != a) return a; // a is NaN
-    if (a == 0.0 && b == 0.0 && __builtin_signbit(b)) return b; // min(+0.0,-0.0) == -0.0
+    if (a == 0.0 && b == 0.0 && rawSignBit(b)) return b; // min(+0.0,-0.0) == -0.0
     return (a <= b) ? a : b;
 }
 
@@ -58,7 +66,7 @@ inline constexpr double javaMathMin(double a, double b) noexcept {
 // on the first operand and max(-0.0, +0.0) == +0.0. (std::fmax differs on NaN.)
 inline constexpr double javaMathMax(double a, double b) noexcept {
     if (a != a) return a; // a is NaN
-    if (a == 0.0 && b == 0.0 && __builtin_signbit(a)) return b; // max(-0.0,+0.0) == +0.0
+    if (a == 0.0 && b == 0.0 && rawSignBit(a)) return b; // max(-0.0,+0.0) == +0.0
     return (a >= b) ? a : b;
 }
 
@@ -66,12 +74,12 @@ inline constexpr double javaMathMax(double a, double b) noexcept {
 // the double versions (used by AABB.Builder, which accumulates float corners).
 inline constexpr float javaMathMinF(float a, float b) noexcept {
     if (a != a) return a;
-    if (a == 0.0f && b == 0.0f && __builtin_signbit(b)) return b;
+    if (a == 0.0f && b == 0.0f && rawSignBit(b)) return b;
     return (a <= b) ? a : b;
 }
 inline constexpr float javaMathMaxF(float a, float b) noexcept {
     if (a != a) return a;
-    if (a == 0.0f && b == 0.0f && __builtin_signbit(a)) return b;
+    if (a == 0.0f && b == 0.0f && rawSignBit(a)) return b;
     return (a >= b) ? a : b;
 }
 
@@ -106,9 +114,8 @@ inline int64_t javaMathRound(double a) noexcept {
     constexpr int64_t EXP_BIT_MASK = 0x7FF0000000000000LL;
     constexpr int64_t SIGNIF_BIT_MASK = 0x000FFFFFFFFFFFFFLL;
     constexpr int64_t EXP_BIAS = 1023;
-    int64_t longBits;
     static_assert(sizeof(double) == sizeof(int64_t));
-    __builtin_memcpy(&longBits, &a, sizeof a); // Double.doubleToRawLongBits
+    int64_t longBits = std::bit_cast<int64_t>(a); // Double.doubleToRawLongBits
     int64_t biasedExp = (longBits & EXP_BIT_MASK) >> (SIGNIFICAND_WIDTH - 1);
     int64_t shift = (SIGNIFICAND_WIDTH - 2 + EXP_BIAS) - biasedExp;
     if ((shift & -64) == 0) { // shift >= 0 && shift < 64
@@ -192,8 +199,9 @@ public:
         if (w >= words_.size()) return from;
         uint64_t word = ~words_[w] & (~0ULL << (from & 63));
         while (true) {
-            if (word != 0)
-                return static_cast<int32_t>(w * 64) + __builtin_ctzll(word);
+            if (word != 0) {
+                return static_cast<int32_t>(w * 64) + static_cast<int32_t>(std::countr_zero(word));
+            }
             if (++w == words_.size()) return static_cast<int32_t>(w * 64);
             word = ~words_[w];
         }
