@@ -27,9 +27,22 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
+          lfs: true
+
+      - name: Verify LFS assets
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git lfs version
+          git lfs pull
+          $lfsPointers = git grep -l 'version https://git-lfs.github.com/spec/v1' -- mcpp/src/assets
+          if ($lfsPointers) {
+            Write-Host 'The following runtime assets are still Git LFS pointer files:'
+            $lfsPointers | ForEach-Object { Write-Host $_ }
+            throw 'Git LFS assets were not materialized; refusing to build a broken executable.'
+          }
 
       - name: Configure
-        run: cmake -S mcpp -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        run: cmake -S mcpp -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
 
       - name: Build mcpp only
         run: |
