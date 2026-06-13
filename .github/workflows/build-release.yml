@@ -32,7 +32,7 @@ jobs:
           lfs: false
 
       - name: Configure
-        run: cmake -S mcpp -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
+        run: cmake -S mcpp -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
 
       - name: Build mcpp only
         run: |
