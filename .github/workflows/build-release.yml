@@ -58,7 +58,7 @@ jobs:
           $code = $LASTEXITCODE
           if (Test-Path build-output.log) {
             Write-Host '--- build-output tail ---'
-            Get-Content build-output.log -Tail 120
+            Get-Content build-output.log -Tail 160
             Write-Host '--- end build-output tail ---'
           }
           if ($code -ne 0) { exit $code }
@@ -73,15 +73,6 @@ jobs:
           $tag = 'ci-failure-latest'
           gh release delete $tag --cleanup-tag -y 2>$null
           gh release create $tag build-output.log --target '${{ github.sha }}' --title 'Latest failed CI build log' --notes 'Latest failed Windows CI build log.' --prerelease
-          $raw = Get-Content build-output.log -Raw
-          $bytes = [System.Text.Encoding]::UTF8.GetBytes($raw)
-          $content = [System.Convert]::ToBase64String($bytes)
-          $path = 'latest-build-output.log'
-          $repo = '${{ github.repository }}'
-          $branch = 'ci-failure-latest'
-          $current = gh api "repos/$repo/contents/$path?ref=$branch" | ConvertFrom-Json
-          $body = @{ message = 'Update failed build log'; content = $content; branch = $branch; sha = $current.sha } | ConvertTo-Json
-          $body | gh api "repos/$repo/contents/$path" --method PUT --input - | Out-Null
 
       - name: Package
         run: |
