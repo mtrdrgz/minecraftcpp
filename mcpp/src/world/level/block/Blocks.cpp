@@ -75,6 +75,41 @@ uint32_t checkedStateOffset(const std::string& name, uint32_t base, int offset) 
     return base;
 }
 
+static void setFallbackTexture(Block* block, const std::string& name) {
+    if (!block) return;
+    std::string tex = name;
+    if (tex.starts_with("minecraft:")) tex.erase(0, 10);
+
+    if (tex == "tall_grass") tex = "tall_grass_top";
+    else if (tex == "large_fern") tex = "large_fern_top";
+    else if (tex == "tall_seagrass") tex = "tall_seagrass_top";
+    else if (tex == "sweet_berry_bush") tex = "sweet_berry_bush_stage3";
+    else if (tex == "kelp_plant") tex = "kelp";
+    else if (tex == "cave_vines_plant") tex = "cave_vines";
+    else if (tex == "twisting_vines_plant") tex = "twisting_vines";
+    else if (tex == "weeping_vines_plant") tex = "weeping_vines";
+    else if (tex == "pitcher_plant") tex = "pitcher_plant_top";
+    else if (tex == "big_dripleaf") tex = "big_dripleaf_top";
+    else if (tex == "small_dripleaf") tex = "small_dripleaf_top";
+    else if (tex == "bamboo") tex = "bamboo_stalk";
+    else if (tex == "pumpkin") tex = "pumpkin_side";
+    else if (tex == "melon") tex = "melon_side";
+    else if (tex == "cactus") tex = "cactus_side";
+
+    block->textures.all = tex;
+    if (block->name == "cactus") {
+        block->textures.top = "cactus_top";
+        block->textures.bot = "cactus_bottom";
+        block->textures.side = "cactus_side";
+    } else if (block->name == "pumpkin") {
+        block->textures.top = block->textures.bot = "pumpkin_top";
+        block->textures.side = "pumpkin_side";
+    } else if (block->name == "melon") {
+        block->textures.top = block->textures.bot = "melon_top";
+        block->textures.side = "melon_side";
+    }
+}
+
 } // namespace
 
 uint32_t getBlockStateId(std::string_view serializedState, uint32_t fallback) {
@@ -105,7 +140,7 @@ const BlockState* getDefaultBlockState(std::string_view name) {
     return getBlockState(id);
 }
 
-// â”€â”€ Minimal fallback if block_states.json isn't embedded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Minimal fallback if block_states.json isn't embedded ─────────────────────
 static Block* registerBlock(std::string_view name, Block::Properties props,
                              std::unordered_map<std::string, Block*>& byName) {
     auto b = std::make_unique<Block>(props);
@@ -143,7 +178,9 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     fluid_p.hasCollision = false; fluid_p.isOpaque = false;
     fluid_p.isFluid = true; fluid_p.isSolid = false;
     blocks::WATER = registerBlock("minecraft:water", fluid_p, byName);
+    blocks::WATER->textures.all = "water_still";
     blocks::LAVA  = registerBlock("minecraft:lava", fluid_p, byName);
+    blocks::LAVA->textures.all = "lava_still";
     blocks::BEDROCK = registerBlock("minecraft:bedrock", solid, byName);
     blocks::BEDROCK->textures.all = "bedrock";
     blocks::DEEPSLATE = registerBlock("minecraft:deepslate", solid, byName);
@@ -161,8 +198,6 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LOG->textures.all = "oak_log";
     blocks::OAK_LOG->textures.top = blocks::OAK_LOG->textures.bot = "oak_log_top";
 
-    // Ore decoration fallback blocks. The Windows executable loads the full
-    // block_states.json resource; these keep non-resource tests representative.
     for (const char* b : {
              "minecraft:granite", "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
              "minecraft:clay", "minecraft:blackstone", "minecraft:magma_block", "minecraft:soul_sand",
@@ -180,15 +215,12 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::OAK_LEAVES = registerBlock("minecraft:oak_leaves", leaves_p, byName);
     blocks::OAK_LEAVES->textures.all = "oak_leaves";
 
-    // Tree woods for the decoration step's tree configs (oak above; the rest here)
-    // so they resolve to real states on the fallback registry.
     for (const char* wood : { "birch", "spruce", "jungle", "acacia", "dark_oak", "cherry", "mangrove", "pale_oak" }) {
         registerBlock(("minecraft:" + std::string(wood) + "_log"), solid, byName)
             ->textures.all = wood + std::string("_log");
         registerBlock(("minecraft:" + std::string(wood) + "_leaves"), leaves_p, byName)
             ->textures.all = wood + std::string("_leaves");
     }
-    // Solid decoration blocks (huge mushroom caps/stem, moss, chorus) â€” rendered as voxels.
     for (const char* b : { "minecraft:red_mushroom_block", "minecraft:brown_mushroom_block", "minecraft:mushroom_stem",
                            "minecraft:moss_block", "minecraft:pale_moss_block", "minecraft:nether_wart_block",
                            "minecraft:warped_wart_block", "minecraft:shroomlight", "minecraft:chorus_plant", "minecraft:chorus_flower",
@@ -204,9 +236,6 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     blocks::GLASS = registerBlock("minecraft:glass", glass_p, byName);
     blocks::GLASS->textures.all = "glass";
 
-    // Surface vegetation (non-collidable, non-opaque plants). Required so the
-    // biome-decoration step can actually place them when running on the fallback
-    // registry (no block_states.json); the full table supersedes this on Windows.
     auto plant_p = Block::Properties{};
     plant_p.hasCollision = false; plant_p.isOpaque = false; plant_p.isSolid = false;
     plant_p.noOcclusion = true;
@@ -216,23 +245,21 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
              "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:cornflower", "minecraft:lily_of_the_valley",
              "minecraft:red_tulip", "minecraft:orange_tulip", "minecraft:white_tulip", "minecraft:pink_tulip",
              "minecraft:dead_bush", "minecraft:sugar_cane", "minecraft:lily_pad", "minecraft:sweet_berry_bush",
-             // wider surface vegetation referenced by the data-driven decoration features
              "minecraft:brown_mushroom", "minecraft:red_mushroom", "minecraft:sunflower", "minecraft:lilac",
              "minecraft:rose_bush", "minecraft:peony", "minecraft:wither_rose", "minecraft:torchflower",
              "minecraft:pink_petals", "minecraft:wildflowers", "minecraft:bush", "minecraft:firefly_bush",
              "minecraft:leaf_litter", "minecraft:short_dry_grass", "minecraft:tall_dry_grass", "minecraft:cactus",
              "minecraft:bamboo", "minecraft:melon", "minecraft:pumpkin", "minecraft:spore_blossom",
              "minecraft:closed_eyeblossom", "minecraft:open_eyeblossom", "minecraft:pitcher_plant", "minecraft:seagrass",
-             // underwater / nether / cave vegetation placed by the data-driven features
              "minecraft:tall_seagrass", "minecraft:kelp", "minecraft:kelp_plant", "minecraft:sea_pickle",
              "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:hanging_roots", "minecraft:glow_lichen",
              "minecraft:nether_sprouts", "minecraft:crimson_roots", "minecraft:warped_roots", "minecraft:crimson_fungus",
              "minecraft:warped_fungus", "minecraft:twisting_vines", "minecraft:twisting_vines_plant", "minecraft:weeping_vines",
              "minecraft:weeping_vines_plant", "minecraft:vine", "minecraft:big_dripleaf", "minecraft:small_dripleaf" }) {
-        registerBlock(plant, plant_p, byName);
+        Block* block = registerBlock(plant, plant_p, byName);
+        setFallbackTexture(block, std::string(plant));
     }
 
-    // Build minimal state table: one state per block, state 0 = air
     g_blockStates.resize(g_blockRegistry.size());
     for (uint32_t i = 0; i < g_blockRegistry.size(); ++i) {
         g_blockStates[i].block   = g_blockRegistry.getById(i);
@@ -240,7 +267,6 @@ static void initFallback(std::unordered_map<std::string, Block*>& byName) {
     }
 }
 
-// â”€â”€ Main init â€” loads full state table from block_states.json â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void initBlocks() {
     std::unordered_map<std::string, Block*> byName;
 
@@ -256,8 +282,6 @@ void initBlocks() {
         sz = SizeofResource(hmod, hres);
     }
 #endif
-    // Test/helper binaries may not link the resource script; allow the generated
-    // JSON to be supplied directly on every platform.
     if (!raw) {
         if (const char* path = std::getenv("MCPP_BLOCK_STATES")) {
             std::ifstream in(path, std::ios::binary);
@@ -271,7 +295,7 @@ void initBlocks() {
         }
     }
     if (!raw) {
-        MC_LOG_WARN("Blocks: block_states.json not available â€” using fallback registry");
+        MC_LOG_WARN("Blocks: block_states.json not available — using fallback registry");
         initFallback(byName);
         return;
     }
@@ -315,10 +339,6 @@ void initBlocks() {
                 g_blocksByName[name] = blk;
             }
 
-            // Vanilla Block.defaultBlockState is NOT necessarily the block's first
-            // registered state (e.g. pillar defaults are axis=y): the regenerated
-            // table marks the true default with "default":true. Fall back to first
-            // occurrence only if a table predates the marker.
             const bool isDefault = jst.value("default", false);
             if (isDefault || !g_defaultStateByName.contains(name)) {
                 g_defaultStateByName[name] = (uint32_t)id;
@@ -327,9 +347,6 @@ void initBlocks() {
 
             g_blockStates[id].block   = blk;
             g_blockStates[id].stateId = (uint32_t)id;
-            // Per-state properties come verbatim from the vanilla registry dump
-            // (canonical "a=x,b=y" order). Parse into the state's property map —
-            // this replaces the old name-based pillar-axis offset inference.
             if (auto pit = jst.find("props"); pit != jst.end() && !pit->get<std::string>().empty()) {
                 const std::string& ps = pit->get_ref<const std::string&>();
                 size_t start = 0;
@@ -338,58 +355,50 @@ void initBlocks() {
                     if (comma == std::string::npos) comma = ps.size();
                     size_t eq = ps.find('=', start);
                     if (eq != std::string::npos && eq < comma) {
-                        g_blockStates[id].properties[ps.substr(start, eq - start)] =
-                            ps.substr(eq + 1, comma - eq - 1);
+                        g_blockStates[id].props.emplace(ps.substr(start, eq - start), ps.substr(eq + 1, comma - eq - 1));
                     }
                     start = comma + 1;
                 }
             }
         }
-
-        // Fix any gaps (states not in the JSON map to air)
-        Block* airBlk = byName.count("air") ? byName["air"] : nullptr;
-        for (auto& bs : g_blockStates) {
-            if (!bs.block) {
-                bs.block = airBlk;
-            }
-        }
-
-        MC_LOG_INFO("Blocks: {} blocks, {} states loaded", byName.size(), total);
     } catch (const std::exception& e) {
-        MC_LOG_ERROR("Blocks: JSON parse error: {} â€” falling back", e.what());
-        // Clear partial state and use fallback
-        g_blockStates.clear();
+        MC_LOG_WARN("Blocks: failed to parse block_states.json: {} — using fallback registry", e.what());
+        g_blockRegistry = Registry<Block>();
         g_blockStorage.clear();
+        g_blockStates.clear();
         g_blocksByName.clear();
         g_defaultStateByName.clear();
-        g_blockRegistry = Registry<Block>{};
-        byName.clear();
         initFallback(byName);
         return;
     }
 
-    // Set global convenience pointers
-    auto get = [&](const char* n) -> Block* {
-        auto it = byName.find(n);
-        return (it != byName.end()) ? it->second : nullptr;
-    };
-    blocks::AIR         = get("air");
-    blocks::STONE       = get("stone");
-    blocks::GRASS_BLOCK = get("grass_block");
-    blocks::DIRT        = get("dirt");
-    blocks::WATER       = get("water");
-    blocks::LAVA        = get("lava");
-    blocks::BEDROCK     = get("bedrock");
-    blocks::DEEPSLATE   = get("deepslate");
-    blocks::SAND        = get("sand");
-    blocks::GRAVEL      = get("gravel");
-    blocks::NETHERRACK  = get("netherrack");
-    blocks::END_STONE   = get("end_stone");
-    blocks::OAK_LOG     = get("oak_log");
-    blocks::OAK_LEAVES  = get("oak_leaves");
-    blocks::GLASS       = get("glass");
+    blocks::AIR         = getBlockByName("air");
+    blocks::STONE       = getBlockByName("stone");
+    blocks::GRASS_BLOCK = getBlockByName("grass_block");
+    blocks::DIRT        = getBlockByName("dirt");
+    blocks::WATER       = getBlockByName("water");
+    blocks::LAVA        = getBlockByName("lava");
+    blocks::BEDROCK     = getBlockByName("bedrock");
+    blocks::DEEPSLATE   = getBlockByName("deepslate");
+    blocks::SAND        = getBlockByName("sand");
+    blocks::GRAVEL      = getBlockByName("gravel");
+    blocks::NETHERRACK  = getBlockByName("netherrack");
+    blocks::END_STONE   = getBlockByName("end_stone");
+    blocks::OAK_LOG     = getBlockByName("oak_log");
+    blocks::OAK_LEAVES  = getBlockByName("oak_leaves");
+    blocks::GLASS       = getBlockByName("glass");
+
+    MC_LOG_INFO("Blocks: loaded {} block states, {} blocks", g_blockStates.size(), g_blockRegistry.size());
+}
+
+const BlockState* getBlockState(uint32_t id) {
+    if (id < g_blockStates.size()) return &g_blockStates[id];
+    return nullptr;
+}
+
+const Block* getBlock(uint32_t stateId) {
+    const BlockState* bs = getBlockState(stateId);
+    return bs ? bs->block : nullptr;
 }
 
 } // namespace mc
-
-
