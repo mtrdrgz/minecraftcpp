@@ -39,6 +39,10 @@ struct ExclusionZone {
 struct StructurePlacement {
     PlacementType type = PlacementType::RANDOM_SPREAD;
 
+    // Runtime-only generation gate. Keep disabled sets loaded so other structures'
+    // exclusion zones can still query their vanilla placement chunks.
+    bool generationEnabled = true;
+
     // StructurePlacement base fields.
     int locateOffsetX = 0, locateOffsetY = 0, locateOffsetZ = 0;
     FrequencyReductionMethod frequencyReductionMethod = FrequencyReductionMethod::DEFAULT;
@@ -73,8 +77,10 @@ public:
     // ChunkGeneratorStructureState.hasStructureChunkInRange
     bool hasStructureChunkInRange(const std::string& otherSet, int sourceX, int sourceZ, int range) const;
 
-    // True for placement types this port does not yet certify (concentric_rings).
-    static bool isSupported(const StructurePlacement& p) { return p.type == PlacementType::RANDOM_SPREAD; }
+    // True for placement types this port can currently generate at runtime.
+    static bool isSupported(const StructurePlacement& p) {
+        return p.generationEnabled && p.type == PlacementType::RANDOM_SPREAD;
+    }
 };
 
 } // namespace mc::levelgen::structure
