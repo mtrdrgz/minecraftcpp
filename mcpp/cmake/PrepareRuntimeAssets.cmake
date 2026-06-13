@@ -63,6 +63,7 @@ file(REMOVE_RECURSE
     "${SRC_ASSETS_DIR}/data/minecraft/tags/block"
     "${SRC_ASSETS_DIR}/data/minecraft/tags/fluid"
     "${SRC_ASSETS_DIR}/data/minecraft/structure"
+    "${SRC_ASSETS_DIR}/data/minecraft/structures"
 )
 
 function(copy_asset_tree REL_PATH)
@@ -85,6 +86,18 @@ function(copy_data_tree REL_PATH)
     get_filename_component(DST_PARENT "${DST}" DIRECTORY)
     file(MAKE_DIRECTORY "${DST_PARENT}")
     file(COPY "${SRC}" DESTINATION "${DST_PARENT}")
+endfunction()
+
+function(copy_data_tree_optional REL_PATH)
+    set(SRC "${EXTRACT_DATA_DIR}/${REL_PATH}")
+    set(DST "${SRC_ASSETS_DIR}/data/${REL_PATH}")
+    if(EXISTS "${SRC}")
+        get_filename_component(DST_PARENT "${DST}" DIRECTORY)
+        file(MAKE_DIRECTORY "${DST_PARENT}")
+        file(COPY "${SRC}" DESTINATION "${DST_PARENT}")
+    else()
+        message(STATUS "Optional data tree missing in client jar: ${REL_PATH}")
+    endif()
 endfunction()
 
 function(copy_required OUT_FILE)
@@ -115,7 +128,8 @@ copy_asset_tree("minecraft/textures/font")
 copy_data_tree("minecraft/worldgen")
 copy_data_tree("minecraft/tags/block")
 copy_data_tree("minecraft/tags/fluid")
-copy_data_tree("minecraft/structure")
+copy_data_tree_optional("minecraft/structure")
+copy_data_tree_optional("minecraft/structures")
 
 set(SPLASH_SRC "${EXTRACT_ASSETS_DIR}/minecraft/texts/splashes.txt")
 if(EXISTS "${SPLASH_SRC}")
