@@ -10,6 +10,21 @@
 
 namespace mc::render {
 
+namespace {
+    // Port of Entity.calculateViewVector(xRot, yRot): yaw is negated and pitch
+    // contributes a negative Y component. Keeping the renderer on the same
+    // convention prevents the generated world from appearing mirrored/flipped.
+    glm::vec3 vanillaViewVector(float xRot, float yRot) {
+        const float realXRot = glm::radians(xRot);
+        const float realYRot = glm::radians(-yRot);
+        const float yCos = cosf(realYRot);
+        const float ySin = sinf(realYRot);
+        const float xCos = cosf(realXRot);
+        const float xSin = sinf(realXRot);
+        return { ySin * xCos, -xSin, yCos * xCos };
+    }
+}
+
 LevelRenderer::LevelRenderer(IRenderDevice* device, Minecraft* mc, Window* window)
     : m_device(device), m_mc(mc), m_window(window)
 {
@@ -167,8 +182,8 @@ void LevelRenderer::updateCamera(float dtSec) {
         m_camPitch = std::fmax(-89.f, std::fmin(89.f, m_camPitch));
     }
     float speed = 20.f; if (m_window->isKeyDown(VK_SHIFT)) speed *= 5.f;
-    float yawRad = glm::radians(m_camYaw);
-    glm::vec3 fwd{ sinf(yawRad), 0.f, cosf(yawRad) }, right{ cosf(yawRad), 0.f, -sinf(yawRad) };
+    glm::vec3 fwd = vanillaViewVector(0.0f, m_camYaw);
+    glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3{0.f, 1.f, 0.f}));
     if (m_window->isKeyDown('W')) m_camPos += fwd * speed * dtSec;
     if (m_window->isKeyDown('S')) m_camPos -= fwd * speed * dtSec;
     if (m_window->isKeyDown('A')) m_camPos -= right * speed * dtSec;
@@ -278,8 +293,7 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
 
     if (!m_pipeline) return;
 
-    float pR = glm::radians(m_camPitch), yR = glm::radians(m_camYaw);
-    glm::vec3 f{ cosf(pR)*sinf(yR), sinf(pR), cosf(pR)*cosf(yR) };
+    glm::vec3 f = vanillaViewVector(m_camPitch, m_camYaw);
     glm::mat4 view = glm::lookAt(m_camPos, m_camPos + f, {0,1,0});
     int w = m_window ? m_window->width() : 1280, h = m_window ? m_window->height() : 720;
     glm::mat4 vp = glm::perspective(glm::radians(70.0f), (float)w/(float)h, 0.1f, 512.0f) * view;
