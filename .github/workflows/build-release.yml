@@ -33,6 +33,16 @@ jobs:
           fetch-depth: 1
           submodules: false
           lfs: false
+          show-progress: false
+
+      - name: Prepare transient asset dependency files
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = 'mcpp/src/assets'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          @('assets.bin','block_atlas.png','block_atlas.json','block_states.json','items.json','ascii.png','gui_logo.png','gui_button.png','gui_button_hl.png','gui_dirt.png','gui_edition.png','splashes.txt','gui_lang.png','gui_access.png') | ForEach-Object {
+            if (!(Test-Path (Join-Path $dir $_))) { Set-Content -Path (Join-Path $dir $_) -Encoding ASCII -Value 'ci' }
+          }
 
       - name: Configure
         run: cmake -S mcpp -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
@@ -42,13 +52,12 @@ jobs:
           $ErrorActionPreference = 'Continue'
           cmake --build build --config Release --target mcpp --parallel 4 *> build-output.log
           $code = $LASTEXITCODE
-          if ($code -ne 0) {
+          if (Test-Path build-output.log) {
             Write-Host '--- build-output tail ---'
             Get-Content build-output.log -Tail 300
             Write-Host '--- end build-output tail ---'
-            exit $code
           }
-          Get-Content build-output.log -Tail 80
+          if ($code -ne 0) { exit $code }
 
       - name: Package
         run: |
