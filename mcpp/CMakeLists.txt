@@ -78,6 +78,7 @@ set(MCPP_RUNTIME_ASSET_PACK "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/assets.bin")
 set(MCPP_SRC_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/assets")
 set(MCPP_EXTERNAL_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets")
 set(MCPP_WORLDGEN_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../26.1.2/data/minecraft")
+set(MCPP_PREPARE_RUNTIME_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareRuntimeAssets.cmake")
 
 set(MCPP_ASSET_PACK_COMMAND
     asset_packer
@@ -91,9 +92,10 @@ endif()
 
 add_custom_command(
     OUTPUT "${MCPP_RUNTIME_ASSET_PACK}"
+    COMMAND "${CMAKE_COMMAND}" -P "${MCPP_PREPARE_RUNTIME_ASSETS}"
     COMMAND ${MCPP_ASSET_PACK_COMMAND}
     COMMAND "${CMAKE_COMMAND}" -DASSET_BIN=${MCPP_RUNTIME_ASSET_PACK} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
-    DEPENDS asset_packer
+    DEPENDS asset_packer "${MCPP_PREPARE_RUNTIME_ASSETS}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Packing runtime assets into src/assets/assets.bin"
     VERBATIM
