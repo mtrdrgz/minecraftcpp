@@ -13,6 +13,9 @@ on:
       - 'mcpp/tools/**'
       - 'mcpp/vendor/**'
 
+permissions:
+  contents: write
+
 concurrency:
   group: windows-build-${{ github.ref }}
   cancel-in-progress: true
@@ -41,20 +44,11 @@ jobs:
           $code = $LASTEXITCODE
           if ($code -ne 0) {
             Write-Host '--- build-output tail ---'
-            Get-Content build-output.log -Tail 220
+            Get-Content build-output.log -Tail 300
             Write-Host '--- end build-output tail ---'
             exit $code
           }
           Get-Content build-output.log -Tail 80
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-output-log
-          path: build-output.log
-          if-no-files-found: ignore
-          retention-days: 7
 
       - name: Package
         run: |
@@ -67,10 +61,13 @@ jobs:
           Copy-Item $exe 'dist/mcpp.exe'
           (Get-FileHash 'dist/mcpp.exe' -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -Encoding ASCII 'dist/mcpp.exe.sha256'
           Compress-Archive -Path 'dist/mcpp.exe','dist/mcpp.exe.sha256' -DestinationPath "dist/mcpp-$short-windows-x64.zip" -Force
+          Get-ChildItem dist | Format-Table -AutoSize
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mcpp-windows-x64
-          path: dist/*.zip
-          if-no-files-found: error
-          retention-days: 14
+      - name: Upload build to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'ci-latest'
+          gh release delete $tag --cleanup-tag -y 2>$null
+          gh release create $tag dist/*.zip --target '${{ github.sha }}' --title 'Latest CI build' --notes 'Automated Windows build from CI.' --prerelease
