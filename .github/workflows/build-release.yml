@@ -6,12 +6,12 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/build-release.yml'
-      - '.github/scripts/**'
       - 'mcpp/CMakeLists.txt'
       - 'mcpp/cmake/**'
       - 'mcpp/src/**'
       - 'mcpp/tools/**'
       - 'mcpp/vendor/**'
+      - 'profiling/**'
 
 permissions:
   contents: write
@@ -34,6 +34,10 @@ jobs:
           submodules: false
           lfs: false
           show-progress: false
+          sparse-checkout: |
+            mcpp
+            profiling
+            .github/workflows/build-release.yml
 
       - name: Prepare transient asset dependency files
         run: |
