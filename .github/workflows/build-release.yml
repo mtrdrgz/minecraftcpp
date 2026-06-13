@@ -63,6 +63,17 @@ jobs:
           }
           if ($code -ne 0) { exit $code }
 
+      - name: Upload failed build log to GitHub Release
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          if (!(Test-Path build-output.log)) { 'missing build-output.log' | Set-Content build-output.log }
+          $tag = 'ci-failure-latest'
+          gh release delete $tag --cleanup-tag -y 2>$null
+          gh release create $tag build-output.log --target '${{ github.sha }}' --title 'Latest failed CI build log' --notes 'Latest failed Windows CI build log.' --prerelease
+
       - name: Package
         run: |
           $ErrorActionPreference = 'Stop'
