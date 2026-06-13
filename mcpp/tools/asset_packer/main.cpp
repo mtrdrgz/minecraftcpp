@@ -55,35 +55,6 @@ static bool shouldPackIndexedAsset(const std::string& path) {
     return false;
 }
 
-static fs::path findRepoRoot(fs::path start) {
-    std::error_code ec;
-    start = fs::absolute(start, ec);
-    if (ec) return {};
-    for (int i = 0; i < 8 && !start.empty(); ++i) {
-        if (fs::exists(start / ".git", ec)) return start;
-        fs::path parent = start.parent_path();
-        if (parent == start) break;
-        start = parent;
-    }
-    return {};
-}
-
-static void pullGitLfsIfAvailable(const fs::path& repoRoot) {
-    if (repoRoot.empty()) return;
-    std::error_code ec;
-    fs::path oldCwd = fs::current_path(ec);
-    fs::current_path(repoRoot, ec);
-    if (ec) return;
-
-    std::cout << "Refreshing Git LFS assets from: " << repoRoot << "\n";
-    const int code = std::system("git lfs pull");
-    if (code != 0) {
-        std::cerr << "WARNING: git lfs pull failed; continuing with checked-out files\n";
-    }
-
-    if (!oldCwd.empty()) fs::current_path(oldCwd, ec);
-}
-
 static bool isExcludedFile(const fs::path& file, const fs::path& excludeAbs) {
     if (file.filename() == "assets.bin") return true;
     if (excludeAbs.empty()) return false;
@@ -160,12 +131,10 @@ int main(int argc, char* argv[]) {
         data_minecraft_dir = argv[4];
     }
 
-    // CI can check out LFS-tracked resources as small pointer files. The packer is
-    // the first build step that needs those files, so refresh them here before
-    // reading src/assets and before the mcpp resource compiler embeds them.
-    if (fs::path repoRoot = findRepoRoot(src_assets_dir); !repoRoot.empty()) {
-        pullGitLfsIfAvailable(repoRoot);
-    }
+    // Never run git-lfs from the build tool. CI and local setup scripts are
+    // responsible for preparing any real assets before CMake invokes this target.
+    // Running `git lfs pull` here made clean CI builds fail when the repository's
+    // LFS quota was exhausted, even for compile-only validation.
 
     std::vector<Entry> entries;
 
