@@ -4,6 +4,7 @@ set(ASSETS_ROOT "${REPO_ROOT}/assets")
 set(SRC_ASSETS_DIR "${REPO_ROOT}/mcpp/src/assets")
 set(EXTRACT_DIR "${ASSETS_ROOT}/client-extract")
 set(EXTRACT_ASSETS_DIR "${EXTRACT_DIR}/assets")
+set(EXTRACT_DATA_DIR "${EXTRACT_DIR}/data")
 
 file(MAKE_DIRECTORY "${ASSETS_ROOT}")
 file(MAKE_DIRECTORY "${SRC_ASSETS_DIR}")
@@ -58,13 +59,28 @@ file(REMOVE_RECURSE
     "${SRC_ASSETS_DIR}/minecraft/textures/gui"
     "${SRC_ASSETS_DIR}/minecraft/textures/font"
     "${SRC_ASSETS_DIR}/minecraft/texts"
+    "${SRC_ASSETS_DIR}/data/minecraft/worldgen"
+    "${SRC_ASSETS_DIR}/data/minecraft/tags/block"
+    "${SRC_ASSETS_DIR}/data/minecraft/tags/fluid"
+    "${SRC_ASSETS_DIR}/data/minecraft/structure"
 )
 
-function(copy_tree REL_PATH)
+function(copy_asset_tree REL_PATH)
     set(SRC "${EXTRACT_ASSETS_DIR}/${REL_PATH}")
     set(DST "${SRC_ASSETS_DIR}/${REL_PATH}")
     if(NOT EXISTS "${SRC}")
         message(FATAL_ERROR "Required asset tree missing in client jar: ${REL_PATH}")
+    endif()
+    get_filename_component(DST_PARENT "${DST}" DIRECTORY)
+    file(MAKE_DIRECTORY "${DST_PARENT}")
+    file(COPY "${SRC}" DESTINATION "${DST_PARENT}")
+endfunction()
+
+function(copy_data_tree REL_PATH)
+    set(SRC "${EXTRACT_DATA_DIR}/${REL_PATH}")
+    set(DST "${SRC_ASSETS_DIR}/data/${REL_PATH}")
+    if(NOT EXISTS "${SRC}")
+        message(FATAL_ERROR "Required data tree missing in client jar: ${REL_PATH}")
     endif()
     get_filename_component(DST_PARENT "${DST}" DIRECTORY)
     file(MAKE_DIRECTORY "${DST_PARENT}")
@@ -93,9 +109,13 @@ function(copy_optional OUT_FILE)
     message(WARNING "Optional generated asset missing: ${OUT_FILE}")
 endfunction()
 
-copy_tree("minecraft/textures/block")
-copy_tree("minecraft/textures/gui")
-copy_tree("minecraft/textures/font")
+copy_asset_tree("minecraft/textures/block")
+copy_asset_tree("minecraft/textures/gui")
+copy_asset_tree("minecraft/textures/font")
+copy_data_tree("minecraft/worldgen")
+copy_data_tree("minecraft/tags/block")
+copy_data_tree("minecraft/tags/fluid")
+copy_data_tree("minecraft/structure")
 
 set(SPLASH_SRC "${EXTRACT_ASSETS_DIR}/minecraft/texts/splashes.txt")
 if(EXISTS "${SPLASH_SRC}")
@@ -113,4 +133,4 @@ copy_required("splashes.txt" "minecraft/texts/splashes.txt")
 copy_optional("gui_lang.png" "minecraft/textures/gui/sprites/icon/language.png" "minecraft/textures/gui/sprites/language.png")
 copy_optional("gui_access.png" "minecraft/textures/gui/sprites/icon/accessibility.png" "minecraft/textures/gui/sprites/accessibility.png")
 
-message(STATUS "Prepared runtime assets from client jar into ${SRC_ASSETS_DIR}")
+message(STATUS "Prepared runtime textures and worldgen data from client jar into ${SRC_ASSETS_DIR}")
