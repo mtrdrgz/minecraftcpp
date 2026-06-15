@@ -2,8 +2,10 @@
 
 #include <cassert>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -47,9 +49,24 @@ private:
     std::size_t cursor_ = 0;
 };
 
-} // namespace
+std::vector<std::string> splitTabs(const std::string& line) {
+    std::vector<std::string> out;
+    std::string cur;
+    std::istringstream in(line);
+    while (std::getline(in, cur, '\t')) out.push_back(cur);
+    return out;
+}
 
-int main() {
+mc::levelgen::structure::Rotation parseRotation(const std::string& name) {
+    using mc::levelgen::structure::Rotation;
+    if (name == "NONE") return Rotation::NONE;
+    if (name == "CLOCKWISE_90") return Rotation::CLOCKWISE_90;
+    if (name == "CLOCKWISE_180") return Rotation::CLOCKWISE_180;
+    if (name == "COUNTERCLOCKWISE_90") return Rotation::COUNTERCLOCKWISE_90;
+    throw std::runtime_error("unknown rotation: " + name);
+}
+
+bool runSelfCheck() {
     using namespace mc::levelgen::structure;
     using namespace mc::levelgen::structure::structures;
 
@@ -79,6 +96,60 @@ int main() {
         assert(random.calls() == 2);
     }
 
+    return true;
+}
+
+bool verifyCaseLine(const std::string& line, std::string& err) {
+    using namespace mc::levelgen::structure::structures;
+    if (line.empty()) return true;
+    const std::vector<std::string> parts = splitTabs(line);
+    if (parts.empty() || parts[0].empty()) return true;
+    if (parts[0] != "CASE") return true;
+    if (parts.size() != 4) {
+        err = "bad CASE column count";
+        return false;
+    }
+
+    const int64_t seed = std::stoll(parts[1]);
+    const auto expectedRotation = parseRotation(parts[2]);
+    const std::string& expectedTemplate = parts[3];
+
+    std::shared_ptr<mc::levelgen::RandomSource> random = mc::levelgen::RandomSource::create(seed);
+    const NetherFossilPieceSelection got = selectNetherFossilPiece(*random);
+    if (got.rotation != expectedRotation || expectedTemplate != got.templateId) {
+        err = "seed=" + parts[1] + " got=" + std::string(got.templateId) + "/" + std::to_string(static_cast<int>(got.rotation)) +
+              " expected=" + expectedTemplate + "/" + parts[2];
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    if (argc > 2 && std::string(argv[1]) == "--cases") {
+        std::ifstream f(argv[2]);
+        if (!f) {
+            std::cerr << "cannot open " << argv[2] << '\n';
+            return 2;
+        }
+        std::string line;
+        long cases = 0;
+        long bad = 0;
+        while (std::getline(f, line)) {
+            if (line.empty()) continue;
+            std::string err;
+            if (!verifyCaseLine(line, err)) {
+                ++bad;
+                if (bad <= 20) std::cerr << "MISMATCH: " << err << " | " << line << '\n';
+            }
+            if (line.rfind("CASE\t", 0) == 0) ++cases;
+        }
+        std::cout << "NetherFossilPieces cases=" << cases << " mismatches=" << bad << '\n';
+        return bad == 0 ? 0 : 1;
+    }
+
+    runSelfCheck();
     std::cout << "NetherFossilPieces deterministic selection OK\n";
     return 0;
 }
