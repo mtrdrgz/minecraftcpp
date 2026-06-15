@@ -70,6 +70,7 @@ endif()
 
 add_subdirectory(tools/asset_packer)
 add_subdirectory(src)
+include(cmake/StructureParityTargets.cmake)
 
 # ── Runtime asset pack ───────────────────────────────────────────────────────
 # Always rebuild this during mcpp builds. CI may create tiny dependency files in
