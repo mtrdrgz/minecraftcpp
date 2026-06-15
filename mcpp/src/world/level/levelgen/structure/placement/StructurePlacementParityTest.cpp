@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
     for (int64_t seed : seeds) {
         const auto state = mc::levelgen::structure::StructureState::loadFromDirectory(dir, seed);
         for (const auto& [id, placement] : state.sets) {
-            if (!mc::levelgen::structure::StructureState::isSupported(placement)) continue;
+            if (!mc::levelgen::structure::StructureState::isPlacementSupported(placement)) continue;
             const auto key = std::make_pair(seed, id);
 
             std::set<std::pair<int, int>> got;
