@@ -112,7 +112,7 @@ bool runSelfCheck() {
         const BoundingBox chunkBB{0, 0, 0, 100, 100, 100};
         auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB, true);
         assert(ghast.has_value());
-        assert(ghast->pos == BlockPos{13, 40, 27});
+        assert(ghast->pos == (BlockPos{13, 40, 27}));
         assert(ghast->rotation == Rotation::CLOCKWISE_90);
         assert(random.floatCalls() == 1);
         assert(random.calls() == 3);
