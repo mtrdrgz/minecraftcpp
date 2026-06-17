@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -110,7 +111,8 @@ bool runSelfCheck() {
         ScriptedRandom random({11, 11, 4}, {3, 7, 1}, {0.49F});
         const BoundingBox fossilBB{10, 40, 20, 20, 50, 30};
         const BoundingBox chunkBB{0, 0, 0, 100, 100, 100};
-        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB, true);
+        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB,
+            [](const BlockPos&) { return true; });
         assert(ghast.has_value());
         assert(ghast->pos == (BlockPos{13, 40, 27}));
         assert(ghast->rotation == Rotation::CLOCKWISE_90);
@@ -123,7 +125,8 @@ bool runSelfCheck() {
         ScriptedRandom random({}, {}, {0.5F});
         const BoundingBox fossilBB{10, 40, 20, 20, 50, 30};
         const BoundingBox chunkBB{0, 0, 0, 100, 100, 100};
-        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB, true);
+        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB,
+            [](const BlockPos&) { return true; });
         assert(!ghast.has_value());
         assert(random.floatCalls() == 1);
         assert(random.calls() == 0);
@@ -135,7 +138,8 @@ bool runSelfCheck() {
         ScriptedRandom random({11, 11}, {3, 7}, {0.49F});
         const BoundingBox fossilBB{10, 40, 20, 20, 50, 30};
         const BoundingBox chunkBB{0, 0, 0, 100, 100, 100};
-        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB, false);
+        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB,
+            [](const BlockPos&) { return false; });
         assert(!ghast.has_value());
         assert(random.floatCalls() == 1);
         assert(random.calls() == 2);
@@ -146,7 +150,8 @@ bool runSelfCheck() {
         ScriptedRandom random({11, 11}, {3, 7}, {0.49F});
         const BoundingBox fossilBB{10, 40, 20, 20, 50, 30};
         const BoundingBox chunkBB{0, 0, 0, 12, 100, 100};
-        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB, true);
+        auto ghast = selectNetherFossilDriedGhastFromPositionalRandom(random, fossilBB, chunkBB,
+            [](const BlockPos&) { return true; });
         assert(!ghast.has_value());
         assert(random.floatCalls() == 1);
         assert(random.calls() == 2);
