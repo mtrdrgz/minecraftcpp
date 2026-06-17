@@ -24,6 +24,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -99,7 +100,7 @@ inline std::optional<NetherFossilDriedGhastPlacement> selectNetherFossilDriedGha
     mc::levelgen::RandomSource& positionalRandom,
     const BoundingBox& fossilBB,
     const BoundingBox& chunkBB,
-    bool selectedPositionIsAir) {
+    const std::function<bool(const BlockPos&)>& isAirAt) {
     // Java: if (positionalRandom.nextFloat() < 0.5F) { ... }
     if (!(positionalRandom.nextFloat() < 0.5F)) return std::nullopt;
 
@@ -110,7 +111,7 @@ inline std::optional<NetherFossilDriedGhastPlacement> selectNetherFossilDriedGha
         fossilBB.minZ + positionalRandom.nextInt(netherFossilBoxZSpan(fossilBB))};
 
     // Java checks air and chunkBB.isInside BEFORE consuming Rotation.getRandom.
-    if (!selectedPositionIsAir || !chunkBB.isInside(randomPos)) return std::nullopt;
+    if (!isAirAt(randomPos) || !chunkBB.isInside(randomPos)) return std::nullopt;
 
     return NetherFossilDriedGhastPlacement{
         randomPos,
@@ -121,13 +122,13 @@ inline std::optional<NetherFossilDriedGhastPlacement> selectNetherFossilDriedGha
     int64_t levelSeed,
     const BoundingBox& fossilBB,
     const BoundingBox& chunkBB,
-    bool selectedPositionIsAir) {
+    const std::function<bool(const BlockPos&)>& isAirAt) {
     // Java: RandomSource.createThreadLocalInstance(level.getSeed()).forkPositional().at(fossilBB.getCenter()).
     std::shared_ptr<mc::levelgen::RandomSource> source = mc::levelgen::RandomSource::createThreadLocalInstance(levelSeed);
     std::shared_ptr<mc::levelgen::PositionalRandomFactory> positional = source->forkPositional();
     const BlockPos center = netherFossilBoxCenter(fossilBB);
     std::shared_ptr<mc::levelgen::RandomSource> random = positional->at(center.x, center.y, center.z);
-    return selectNetherFossilDriedGhastFromPositionalRandom(*random, fossilBB, chunkBB, selectedPositionIsAir);
+    return selectNetherFossilDriedGhastFromPositionalRandom(*random, fossilBB, chunkBB, isAirAt);
 }
 
 } // namespace mc::levelgen::structure::structures
