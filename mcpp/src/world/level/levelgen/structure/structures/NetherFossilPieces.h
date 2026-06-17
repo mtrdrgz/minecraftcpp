@@ -8,22 +8,34 @@
 //   addPieces(...):
 //     Rotation nextRotation = Rotation.getRandom(random);
 //     Util.getRandom(FOSSILS, random)
+//   NetherFossilPiece.placeDriedGhast(...):
+//     RandomSource.createThreadLocalInstance(level.getSeed())
+//       .forkPositional().at(fossilBB.getCenter())
+//     chance < 0.5F, random x/z within fossil BB, y=minY,
+//     air + chunkBB gate, then dried_ghast rotated by Rotation.getRandom.
 //
-// This file intentionally does NOT place blocks yet. It captures the exact RNG
-// consumption order and selected template/rotation so the eventual runtime wiring
-// can call into a small certified unit instead of inlining approximate logic in
-// StructureGen.cpp.
+// This file intentionally does NOT own full template placement yet. It captures
+// exact RNG consumption and deterministic selections so runtime wiring can call
+// certified units instead of inlining approximate logic in StructureGen.cpp.
 
 #include "../templatesystem/StructureTransforms.h"
 #include "../../RandomSource.h"
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
 
 namespace mc::levelgen::structure::structures {
 
 struct NetherFossilPieceSelection {
     const char* templateId = "minecraft:nether_fossils/fossil_1";
+    Rotation rotation = Rotation::NONE;
+};
+
+struct NetherFossilDriedGhastPlacement {
+    BlockPos pos{};
     Rotation rotation = Rotation::NONE;
 };
 
@@ -66,6 +78,56 @@ inline NetherFossilPieceSelection selectNetherFossilPiece(mc::levelgen::RandomSo
     // Util.getRandom(FOSSILS, random) consumes AFTER the rotation draw.
     const int templateIndex = random.nextInt(static_cast<int>(kNetherFossilTemplates.size()));
     return NetherFossilPieceSelection{kNetherFossilTemplates[static_cast<std::size_t>(templateIndex)], rotation};
+}
+
+inline constexpr BlockPos netherFossilBoxCenter(const BoundingBox& box) noexcept {
+    // BoundingBox.getCenter(): min + (max - min + 1) / 2, component-wise.
+    return {box.minX + (box.maxX - box.minX + 1) / 2,
+            box.minY + (box.maxY - box.minY + 1) / 2,
+            box.minZ + (box.maxZ - box.minZ + 1) / 2};
+}
+
+inline constexpr int netherFossilBoxXSpan(const BoundingBox& box) noexcept {
+    return box.maxX - box.minX + 1;
+}
+
+inline constexpr int netherFossilBoxZSpan(const BoundingBox& box) noexcept {
+    return box.maxZ - box.minZ + 1;
+}
+
+inline std::optional<NetherFossilDriedGhastPlacement> selectNetherFossilDriedGhastFromPositionalRandom(
+    mc::levelgen::RandomSource& positionalRandom,
+    const BoundingBox& fossilBB,
+    const BoundingBox& chunkBB,
+    bool selectedPositionIsAir) {
+    // Java: if (positionalRandom.nextFloat() < 0.5F) { ... }
+    if (!(positionalRandom.nextFloat() < 0.5F)) return std::nullopt;
+
+    // Java: x=minX + nextInt(getXSpan()), y=minY, z=minZ + nextInt(getZSpan()).
+    const BlockPos randomPos{
+        fossilBB.minX + positionalRandom.nextInt(netherFossilBoxXSpan(fossilBB)),
+        fossilBB.minY,
+        fossilBB.minZ + positionalRandom.nextInt(netherFossilBoxZSpan(fossilBB))};
+
+    // Java checks air and chunkBB.isInside BEFORE consuming Rotation.getRandom.
+    if (!selectedPositionIsAir || !chunkBB.isInside(randomPos)) return std::nullopt;
+
+    return NetherFossilDriedGhastPlacement{
+        randomPos,
+        netherFossilRotationByJavaIndex(positionalRandom.nextInt(4))};
+}
+
+inline std::optional<NetherFossilDriedGhastPlacement> selectNetherFossilDriedGhast(
+    int64_t levelSeed,
+    const BoundingBox& fossilBB,
+    const BoundingBox& chunkBB,
+    bool selectedPositionIsAir) {
+    // Java: RandomSource.createThreadLocalInstance(level.getSeed()).forkPositional().at(fossilBB.getCenter()).
+    std::shared_ptr<mc::levelgen::RandomSource> source = mc::levelgen::RandomSource::createThreadLocalInstance(levelSeed);
+    std::shared_ptr<mc::levelgen::PositionalRandomFactory> positional = source->forkPositional();
+    const BlockPos center = netherFossilBoxCenter(fossilBB);
+    std::shared_ptr<mc::levelgen::RandomSource> random = positional->at(center.x, center.y, center.z);
+    return selectNetherFossilDriedGhastFromPositionalRandom(*random, fossilBB, chunkBB, selectedPositionIsAir);
 }
 
 } // namespace mc::levelgen::structure::structures
