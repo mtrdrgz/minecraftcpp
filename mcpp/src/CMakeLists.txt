@@ -534,6 +534,43 @@ set_target_properties(nbt_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# Base terrain column parity: isolates fillFromNoise/getBaseColumn before surface,
+# carvers and decoration, so aquifer/material bugs can be diagnosed directly.
+add_executable(base_terrain_column_parity
+    world/level/levelgen/BaseTerrainColumnParityTest.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+)
+target_include_directories(base_terrain_column_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(base_terrain_column_parity PRIVATE glm nlohmann_json)
+if(WIN32)
+    target_link_libraries(base_terrain_column_parity PRIVATE bcrypt)
+endif()
+set_target_properties(base_terrain_column_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
 # Full-chunk terrain parity: proves the C++ generator is byte-for-byte identical to
 # the real Java generator over EVERY block of a chunk (not sampled columns), through
 # fillFromNoise + buildSurface + applyCarvers. Ground truth: tools/FullChunkParity.java.
