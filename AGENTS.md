@@ -75,7 +75,7 @@ C:\Users\Mateo\Desktop\minecraftcpp\
 │   └── src\                ← Decompiled Java source — READ THIS before porting
 │       ├── net\minecraft\  ← Main game code
 │       └── com\mojang\     ← Mojang platform libs
-├── mcpp\                   ← the C++ project (build here)
+├── (repo root)            ← the C++ project
 ├── memory\ (per-agent)     ← Claude Code memory (build quirks etc.)
 └── AGENTS.md               ← This file (keep updated)
 ```
@@ -150,7 +150,7 @@ Notes:
 ## C++ PROJECT STRUCTURE
 
 ```
-C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
+C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 ├── CMakeLists.txt
 ├── cmake\
 │   ├── FindVulkan.cmake
@@ -269,7 +269,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - **Generator**: CMake 3.28+
 - **Compiler**: MSVC 2022 or Clang-CL 17+
 - **C++ standard**: C++23
-- **Command safety**: All build/run/test commands must go through `mcpp\tools\run_with_timeout.ps1` with an explicit `-TimeoutSec`. Do not run raw long-lived commands.
+- **Command safety**: All build/run/test commands must go through `tools\run_with_timeout.ps1` with an explicit `-TimeoutSec`. Do not run raw long-lived commands.
 
 ---
 
@@ -289,7 +289,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
       (`world/level/biome/Biome.h` + `BiomeRegistry`), verified field-for-field
       against an independent parser. This is the data hub for biome-specific
       blocks/trees/colours/carvers/spawns.
-- [ ] Full worldgen feature/structure pipeline — see `mcpp/docs/WORLDGEN_PLAN.md`
+- [ ] Full worldgen feature/structure pipeline — see `docs/WORLDGEN_PLAN.md`
       for the complete phased checklist (features, trees, carvers, structures).
 - [ ] Port remaining ~277 mob goals.
 - [ ] Implement Crafting and Smelting logic.
@@ -308,9 +308,9 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 **Session 66 continued (2026-06-10) — engine integration + full-port kickoff:**
 - GOAL EXPANDED by the user: full 1:1 port of EVERYTHING (rendering, GUI, netcode,
   entities/movement, structures, packaging single .exe, optimization, cleanup), every
-  Java file visited with proof. Master ledger: `mcpp/docs/PORT_COVERAGE.tsv` (6,882
+  Java file visited with proof. Master ledger: `docs/PORT_COVERAGE.tsv` (6,882
   files; 143 ported / 36 partial / 449 reasoned-n/a) + `PORT_COVERAGE.md` roadmap
-  (per-subsystem verification gates). Maintain via `mcpp/tools/port_coverage.sh`.
+  (per-subsystem verification gates). Maintain via `tools/port_coverage.sh`.
 - BIOME BREADTH: 9 classes certified vs server (cfd5b3d3: taiga/plains/birch/swamp/
   snowy×2/ice_spikes/desert@seed4/old-growth + lush/dripstone caves; 1,867,776 cells)
   then 16 more at C++==GT 0 (d5ff8a5e: jungle/savanna/dark_forest/cherry/mangrove/
@@ -319,7 +319,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
 - ENGINE INTEGRATION (9035e916): mcpp.exe decorates in-game with the certified
   machinery — the decoration TU compiles into the engine as a library
   (MCPP_DECORATE_NO_MAIN; the parity executable stays the truth). Run from repo
-  root: `mcpp\build\mcpp.exe --quickPlaySingleplayer`. Smoke: 65 biomes, 199 placed
+  root: `build\mcpp.exe --quickPlaySingleplayer`. Smoke: 65 biomes, 199 placed
   features (0 no-ops), 300+ chunks, zero failures. Deltas documented in
   EngineDecoration.h (neighbour-availability order; disk-only data; legacy
   approximate runStructures pending #18).
@@ -364,7 +364,7 @@ C:\Users\Mateo\Desktop\Claude\mcpp\     ← C++ project root
    GT↔server link is proven separately). Then underground/top-layer (task #17).
 
 **Session 66** (worldgen 1:1 — decoration track): the fixed-order Java ground truth
-`mcpp/tools/FullChunkDecorateParity.java` now reproduces the real server.jar's saved chunks
+`tools/FullChunkDecorateParity.java` now reproduces the real server.jar's saved chunks
 **byte-for-byte** — all 6 primary chunks (seed 1) match 98304/98304 cells each, full content
 (terrain + carvers + ALL decoration + FULL-promotion post-processing). 13/18 on an extended
 sweep; the 5 misses are pure cross-chunk border-spill ORDER (server scheduler artifact).
@@ -425,18 +425,18 @@ server.
   indices in source-encounter order). Also decoration overlap order across the 3×3 and the
   `getHeight +1` (MultiChunkLevel lacks the real WorldGenRegion +1). Close → ore=0, then port
   the next families (vegetal → trees → lakes/springs → local mods → underground/top-layer).
-  See `mcpp/docs/DECORATION_PLAN.md` + per-agent memory.
+  See `docs/DECORATION_PLAN.md` + per-agent memory.
 
 **Last updated prior**: Session 64 (worldgen 1:1 — SERVER .mca byte-match ground truth; decoration gap quantified + plan)
 
 **Session 64** (worldgen 1:1 — decoration track, toward server byte-match): goal set by
 the user — port ALL decorations + biome characteristics 1:1 (everything EXCEPT structures)
 and prove it with the server test. Built the server ground-truth and the porting plan.
-- SERVER GROUND TRUTH ("la prueba del server"): `mcpp/tools/run_server_gen.ps1` runs the
+- SERVER GROUND TRUTH ("la prueba del server"): `tools/run_server_gen.ps1` runs the
   real `server.jar` (JDK25) with `generate-structures=false`, forceloads a chunk rectangle
   to FULL status, flushes, stops (writes stdin as raw ASCII with a leading-newline BOM
   absorber — the server otherwise parses a U+FEFF as part of the first command).
-  `mcpp/tools/ServerChunkDump.java` reads the `.mca` (manual region container parse + real
+  `tools/ServerChunkDump.java` reads the `.mca` (manual region container parse + real
   `NbtIo` + 1.16+ paletted section unpack) and dumps every block as TSV in FullChunkParity
   format. Restored the `biome_decoration_parity` target (dropped by c7abe591).
 - GAP QUANTIFIED + decoder VALIDATED: terrain-only C++ vs the server's full chunks =
@@ -449,7 +449,7 @@ and prove it with the server test. Built the server ground-truth and the porting
   out-of-chunk drop), so blobs past the edge wrap into the center chunk (artifact). Ore et al.
   must be certified in the real **3×3 WorldGenRegion vs the server**. Surface features that
   write only via `level.setBlock` (grass/flowers/small trees) stay fine in isolation.
-- PLAN: `mcpp/docs/DECORATION_PLAN.md` — trustworthy-to-reuse infra (FeatureSorter,
+- PLAN: `docs/DECORATION_PLAN.md` — trustworthy-to-reuse infra (FeatureSorter,
   DecorationDriver seeds, PlacedFeature pipeline, BiomeFeatures), the 3×3-region byte-match
   design (5×5 terrain / 3×3 decorate, shared region, multi-heightmap WG-vs-frozen), and the
   coverage-ordered feature porting list (ores → modifiers → vegetal → trees → lakes/springs →
@@ -463,17 +463,17 @@ that is provably 1:1 with the real generator, the acid test being the server jar
 producing byte-matching chunks. Built the strongest proof the project has had and used
 it to find + fix a real port bug.
 - ENV: provisioned the real-Java runtime on this Windows box via new
-  `mcpp/tools/provision_parity_runtime.ps1` — sha1-verified `26.1.2/server.jar`, the 107
+  `tools/provision_parity_runtime.ps1` — sha1-verified `26.1.2/server.jar`, the 107
   manifest libs, and JDK 25 (client/server jar is Java 25 bytecode; system JDK was 21).
   The portable llvm-mingw/cmake/ninja toolchain lives under a Codex work dir (see the
   per-agent `memory/` notes). Re-verified the chain end-to-end: `worldgen_random_parity
   cases=540 mismatches=0`.
 - STALE-DOC NOTE: the recent fast-start commit (`c7abe591`) had DROPPED the terrain
-  column parity targets from `mcpp/src/CMakeLists.txt` (base/surface/carved/density/
+  column parity targets from `src/CMakeLists.txt` (base/surface/carved/density/
   climate/world_placement/…); their `.cpp` files remain but were un-buildable, so the
   "certified" claims below were stale until rewired. Restore the removed blocks from
   `git show 0bfc8121:mcpp/src/CMakeLists.txt` if you need the column tests.
-- NEW HARNESS: `mcpp/tools/FullChunkParity.java` drives the REAL generator through
+- NEW HARNESS: `tools/FullChunkParity.java` drives the REAL generator through
   fillFromNoise+buildSurface+applyCarvers and dumps EVERY block of a chunk (98,304/chunk,
   canonical order lx→lz→y); C++ `full_chunk_parity` (`FullChunkParityTest.cpp`) generates
   the same chunks and compares all cells. This is FULL-CHUNK, not sampled columns — the
@@ -486,7 +486,7 @@ it to find + fix a real port bug.
   `interpolated()` over the density cell), with `abs()` applied AFTER the wrapper. The
   missing interpolation shifted `|veininess|` at the 0.4 vein threshold. Fixed in
   `NoiseRouterData.cpp` with the existing `yLimitedInterpolatable` helper + `y()`.
-- Also added `-ffp-contract=off` to the Clang flags (`mcpp/cmake/CompilerFlags.cmake`):
+- Also added `-ffp-contract=off` to the Clang flags (`cmake/CompilerFlags.cmake`):
   Java never fuses a*b+c into FMA; clang's default contraction can 1-ULP-flip threshold
   comparisons and break byte-exact parity. (Not the vein cause, but a correctness
   requirement for all worldgen FP.)
@@ -499,7 +499,7 @@ it to find + fix a real port bug.
   approximate), heightmaps, light, or block entities — so an actual server `.mca` chunk
   (status `full`) does not byte-match yet. The path to the full acid test is to extend
   this harness stage-by-stage (heightmaps → features → structures), each certified the
-  same way, plus a separate `.mca` verifier. See `mcpp/docs/WORLDGEN_PLAN.md`.
+  same way, plus a separate `.mca` verifier. See `docs/WORLDGEN_PLAN.md`.
 
 **Last updated prior**: Session 62 (performance: 3 critical bottlenecks fixed)
 
@@ -715,7 +715,7 @@ biomes.
   toolchain (Sessions 50–52). The per-biome surface certification feeds vanilla
   base terrain in precisely to factor this out; closing the terrain FP gap on
   Linux (or confirming it stays 0 on Windows) is a separate terrain-track task.
-  NOTE for parity work on a fresh clone: `26.1.2/` and `mcpp/src/assets/*.json`
+  NOTE for parity work on a fresh clone: `26.1.2/` and `src/assets/*.json`
   are git-LFS; run `git lfs pull` + re-extract `data/` from the real jar first.
 
 **Session 53** (feature ordering + structure placement track): integrated the
@@ -730,7 +730,7 @@ stage — structure *placement* (where structures can spawn for a seed).
   per the AGENTS.md CDN workflow, and re-extracted `data/minecraft/**` from the
   real jar (the cloned `26.1.2/` was git-LFS pointers, not real content — any
   parity work MUST materialize the LFS content first). Added
-  `mcpp/tools/run_groundtruth.sh`, the Linux counterpart of `run_groundtruth.ps1`.
+  `tools/run_groundtruth.sh`, the Linux counterpart of `run_groundtruth.ps1`.
 
 - FeatureSorter (PR #7, now mainline): `FeatureSorter::buildFeaturesPerStep`
   matches Java — `maxStep` uses each biome's full JSON feature-list length
@@ -766,7 +766,7 @@ Claude Code transcript. Generated the Java carved-terrain ground truth with
 224 C++ over-carve mismatches. Root cause #1 was the Java harness, not C++:
 `VanillaRegistries.createLookup()` alone left `BlockTags.OVERWORLD_CARVER_REPLACEABLES`
 effectively unbound, so real replaceables such as `minecraft:deepslate` tested
-false in Java. Fixed `mcpp/tools/CarvedTerrainColumnParity.java` to load and
+false in Java. Fixed `tools/CarvedTerrainColumnParity.java` to load and
 resolve the vanilla block tag JSON from `26.1.2/data/minecraft/tags/block/**`
 and apply it to `BuiltInRegistries.BLOCK` before creating the registry lookup.
 That dropped carved parity to one mismatch. Root cause #2 was a real C++ aquifer
@@ -784,7 +784,7 @@ remain uncertified.
 
 **Session 51**: continued the terrain-only 1:1 track by adding the first Java-shaped
 overworld carver stage after the now-certified base/surface pipeline. Added
-`mcpp/tools/CarvedTerrainColumnParity.java` and the C++ target
+`tools/CarvedTerrainColumnParity.java` and the C++ target
 `carved_terrain_column_parity` to compare Java `buildSurface()+applyCarvers()`
 columns before structures/features/decoration. Implemented
 `world/level/levelgen/carver/WorldCarver.{h,cpp}` with the vanilla overworld
@@ -805,14 +805,14 @@ carved-terrain TSV could not be generated in this session. The normal sandbox ru
 failed with JDK/libs access errors, and the required escalated runner was rejected
 by the Codex usage limit until 8:40 PM. Therefore carver code is compiled and
 Java-shaped, but carved terrain is NOT yet certified 1:1; next terrain work should
-first generate `mcpp/build/carved_terrain_columns.tsv` with
-`mcpp/tools/run_groundtruth.ps1 -Tool CarvedTerrainColumnParity` and run
+first generate `build/carved_terrain_columns.tsv` with
+`tools/run_groundtruth.ps1 -Tool CarvedTerrainColumnParity` and run
 `carved_terrain_column_parity --cases ...`, then fix any mismatches.
 
 **Session 50**: focused exclusively on proving/fixing the current overworld base
 terrain before continuing terrain generation. Added real Java ground-truth
-harnesses `mcpp/tools/BaseTerrainColumnParity.java` and
-`mcpp/tools/SurfaceTerrainColumnParity.java`, plus C++ targets
+harnesses `tools/BaseTerrainColumnParity.java` and
+`tools/SurfaceTerrainColumnParity.java`, plus C++ targets
 `base_terrain_column_parity` and `surface_terrain_column_parity`. The base
 terrain harness compares C++ `NoiseBasedChunkGenerator::fillFromNoise()` against
 Java `NoiseBasedChunkGenerator.getBaseColumn()` before surface/carvers/features;
@@ -836,14 +836,14 @@ features, decorations, exhaustive surface-rule coverage, and nether/end terrain
 are not certified by these two tests.
 
 **Session 49**: pulled `origin/main` to `208c9c0` and continued the strict
-Java-vs-C++ worldgen parity track. Fixed `mcpp/tools/run_with_timeout.ps1` so it
+Java-vs-C++ worldgen parity track. Fixed `tools/run_with_timeout.ps1` so it
 normalizes duplicate `Path`/`PATH` process environment entries before
 `Start-Process`; this keeps the mandatory timeout wrapper usable in the Codex
 desktop environment. Re-generated real Java `DensityParity` cases with
 `run_groundtruth.ps1` and verified `density_parity`: `DensityRouter cases=488
 mismatches=0`, so the seed-wired overworld `NoiseRouter` functions
 (`temperature` through `final_density`) are bit-exact for the sampled cases.
-Added the next parity stage: `mcpp/tools/ClimateBiomeParity.java` emits real
+Added the next parity stage: `tools/ClimateBiomeParity.java` emits real
 Java `RandomState` + `Climate.Sampler` +
 `MultiNoiseBiomeSourceParameterList.Preset.OVERWORLD` rows, and
 `climate_biome_parity` compares all six quantized climate target coordinates
@@ -913,7 +913,7 @@ biome features and block tags from embedded MCAS `data/minecraft/...` entries
 and installs the JSON asset reader for placed/configured feature resolution.
 `biome_decorator_test` now has a deterministic edge-oak regression check that
 places an oak at `x=15` and proves leaves/logs appear in chunk `x=1`; the test
-also locates `26.1.2/data` from either repo root or `mcpp/`. Verified with wrapper
+also locates `26.1.2/data` from the repo root. Verified with wrapper
 commands: built `biome_decorator_test`, ran `biome_decorator_test`, built
 `embedded_worldgen_assets_test`, ran `embedded_worldgen_assets_test`, built
 `mcpp`, and ran a 35s `--quickPlaySingleplayer` smoke (world loaded and entered
@@ -974,7 +974,7 @@ colors need biome IDs available to the mesher and Java colormap sampling.
 now accepts an optional `data_minecraft_dir` argument and packs
 `data/minecraft/worldgen/**` plus the direct `data/minecraft/tags/block/*.json`
 files into MCAS under stable `data/minecraft/...` keys. The local ignored
-`mcpp/src/assets/assets.bin` was regenerated from `assets/`,
+`src/assets/assets.bin` was regenerated from `assets/`,
 `26.1.2/src/assets` (absent/skip), and `26.1.2/data/minecraft`; it now contains
 5944 entries and the worldgen/tag JSON needed by decoration. `AssetManager` can
 now list packed paths by prefix. `BlockTags` and `BiomeFeatures` share their disk
@@ -983,7 +983,7 @@ produce the same data. `BiomeDecorator` has an optional JSON asset-reader fallba
 for lazy `placed_feature`/`configured_feature` resolution, and
 `NoiseBasedChunkGenerator::decorationData()` now tries local `26.1.2/data` first
 but falls back to MCAS when the exe is moved. `.gitignore` now permits source files
-under `mcpp/src/assets` to be versioned while keeping extracted/proprietary blobs
+under `src/assets` to be versioned while keeping extracted/proprietary blobs
 ignored, and `assets/assets.rc` has explicit CMake `OBJECT_DEPENDS` so resource
 objects rebuild when the local pack changes. Added `embedded_worldgen_assets_test`,
 which initializes the embedded resource and verifies 65 biome JSON files and 244
@@ -1083,9 +1083,9 @@ Now verified: `NormalNoise.getValue` matches Java bit-for-bit and the
 NoiseThresholdProvider (flower_plain) state selection matches 1:1
 (`block_state_provider_parity` NOISE + BSPN cases).
 **Current phase**: PHASE 15 (Game Logic) in progress; worldgen feature/structure port started
-**Executable**: `C:\Users\Mateo\Desktop\minecraftcpp\mcpp\build\mcpp.exe` - built 2026-06-06
+**Executable**: `C:\Users\Mateo\Desktop\minecraftcpp\build\mcpp.exe` - built 2026-06-06
 
-**Worldgen roadmap**: `mcpp/docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
+**Worldgen roadmap**: `docs/WORLDGEN_PLAN.md` is the master 1:1 checklist for
 the full feature/tree/structure port (Phases A–G, with real data counts). Phase A
  (biome registry) is done; overworld carvers now have sampled Java parity through
 `carved_terrain_column_parity`; the remaining work is decoration framework,
@@ -1168,7 +1168,7 @@ the removed hand-authored approximate generators — port from Java + data only.
     thread-local to avoid a data race and to match Java's per-thread semantics.
     `lastResult` only affects which leaf is returned among exact distance ties.
 - Session 31 began the full worldgen feature/structure port (master plan:
-  `mcpp/docs/WORLDGEN_PLAN.md`). Delivered Phase A — the biome registry data
+  `docs/WORLDGEN_PLAN.md`). Delivered Phase A — the biome registry data
   layer (`world/level/biome/Biome.h` + `BiomeRegistry.{h,cpp}`): a faithful
   loader of all 65 `worldgen/biome/*.json` (climate, effects colours, the new
   26.1.2 `attributes` map incl. value-modifier form for water_fog_end_distance,

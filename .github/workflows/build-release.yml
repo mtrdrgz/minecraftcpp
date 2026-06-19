@@ -6,11 +6,11 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/build-release.yml'
-      - 'mcpp/CMakeLists.txt'
-      - 'mcpp/cmake/**'
-      - 'mcpp/src/**'
-      - 'mcpp/tools/**'
-      - 'mcpp/vendor/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'src/**'
+      - 'tools/asset_packer/**'
+      - 'vendor/**'
       - 'profiling/**'
 
 permissions:
@@ -35,21 +35,24 @@ jobs:
           lfs: false
           show-progress: false
           sparse-checkout: |
-            mcpp
+            src
+            cmake
+            vendor
+            tools/asset_packer
             profiling
             .github/workflows/build-release.yml
 
       - name: Prepare transient asset dependency files
         run: |
           $ErrorActionPreference = 'Stop'
-          $dir = 'mcpp/src/assets'
+          $dir = 'src/assets'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           @('assets.bin','block_atlas.png','block_atlas.json','block_states.json','items.json','ascii.png','gui_logo.png','gui_button.png','gui_button_hl.png','gui_dirt.png','gui_edition.png','splashes.txt','gui_lang.png','gui_access.png') | ForEach-Object {
             if (!(Test-Path (Join-Path $dir $_))) { Set-Content -Path (Join-Path $dir $_) -Encoding ASCII -Value 'ci' }
           }
 
       - name: Configure
-        run: cmake -S mcpp -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
+        run: cmake -S . -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>' -DMCPP_SKIP_ASSET_PACK=ON
 
       - name: Build mcpp only
         run: |
