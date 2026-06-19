@@ -11,11 +11,10 @@
 //   tools/run_groundtruth.ps1 -Tool ServerChunkDump -Out mcpp/build/server_chunk_cases.tsv -ToolArgs "1 0,0 1,1 -1,-1"
 //      args: <seed> then any number of "cx,cz" chunk coords. Defaults if none given.
 //
-// Region container parsing is done by hand (version-stable); only the per-chunk NBT
-// payload is parsed with the real net.minecraft.nbt.NbtIo. Block-state section layout
-// is the standard 1.16+ paletted format: index = y*256 + z*16 + x (x fastest);
-// bitsPerEntry = max(4, ceil(log2(paletteSize))); entries packed LSB-first and never
-// spanning a long. region-file-compression=deflate => compression type 2 (zlib).
+// Region container parsing is done by hand (version-stable); the per-chunk NBT payload
+// and block-state sections are decoded with Minecraft's own NbtIo and PalettedContainer
+// codec, so the saved-world oracle follows the server registry and palette rules.
+// region-file-compression=deflate => compression type 2 (zlib).
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -25,9 +24,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
+import com.mojang.serialization.Codec;
+import net.minecraft.SharedConstants;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.Strategy;
 
 public class ServerChunkDump {
     static final int MIN_Y = -64;
@@ -68,7 +77,17 @@ public class ServerChunkDump {
         }
     }
 
-    // Decode one chunk's blocks into a [24][4096] palette-name grid (sectionIdx, yzx index).
+    static Codec<PalettedContainer<BlockState>> blockStateCodec;
+
+    static Codec<PalettedContainer<BlockState>> blockStateCodec() {
+        if (blockStateCodec == null) {
+            Strategy<BlockState> strategy = Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
+            blockStateCodec = PalettedContainer.codecRW(BlockState.CODEC, strategy, Blocks.AIR.defaultBlockState());
+        }
+        return blockStateCodec;
+    }
+
+    // Decode one chunk's blocks with Minecraft's real PalettedContainer codec.
     // Missing sections / out-of-range => "minecraft:air".
     static String[][] decodeChunk(CompoundTag root) {
         String[][] grid = new String[24][];   // grid[sectionIdx][yzxIndex] = block name
@@ -79,33 +98,22 @@ public class ServerChunkDump {
             int sectionIdx = sectionY - (MIN_Y >> 4);   // -4 -> 0 .. 19 -> 23
             if (sectionIdx < 0 || sectionIdx >= 24) continue;
             CompoundTag blockStates = section.getCompoundOrEmpty("block_states");
-            ListTag palette = blockStates.getListOrEmpty("palette");
-            int paletteSize = palette.size();
-            if (paletteSize == 0) continue;
-            String[] names = new String[paletteSize];
-            for (int p = 0; p < paletteSize; p++) {
-                names[p] = palette.getCompoundOrEmpty(p).getStringOr("Name", "minecraft:air");
-            }
+            if (blockStates.isEmpty()) continue;
+            PalettedContainer<BlockState> container = blockStateCodec().parse(NbtOps.INSTANCE, blockStates)
+                .getOrThrow(msg -> new IllegalStateException("block_states decode failed at section " + sectionY + ": " + msg));
             String[] cells = new String[4096];
-            if (paletteSize == 1) {
-                java.util.Arrays.fill(cells, names[0]);
-            } else {
-                long[] data = blockStates.getLongArray("data").orElse(new long[0]);
-                int bits = Math.max(4, 32 - Integer.numberOfLeadingZeros(paletteSize - 1));
-                int valuesPerLong = 64 / bits;
-                long mask = (1L << bits) - 1L;
-                for (int yzx = 0; yzx < 4096; yzx++) {
-                    int cell = yzx / valuesPerLong;
-                    int bitIndex = (yzx % valuesPerLong) * bits;
-                    int id = cell < data.length ? (int) ((data[cell] >>> bitIndex) & mask) : 0;
-                    cells[yzx] = id < names.length ? names[id] : "minecraft:air";
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        BlockState state = container.get(x, y, z);
+                        cells[y * 256 + z * 16 + x] = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+                    }
                 }
             }
             grid[sectionIdx] = cells;
         }
         return grid;
     }
-
     static String blockAt(String[][] grid, int lx, int y, int lz) {
         int sectionIdx = (y - MIN_Y) >> 4;
         if (sectionIdx < 0 || sectionIdx >= 24 || grid[sectionIdx] == null) return "minecraft:air";
@@ -115,6 +123,10 @@ public class ServerChunkDump {
     }
 
     public static void main(String[] args) throws IOException {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        java.io.PrintStream out = new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), false, "US-ASCII");
+        java.io.PrintStream err = new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), false, "US-ASCII");
         long seed = 1L;
         boolean statusScan = false;
         List<int[]> chunks = new ArrayList<>();
@@ -143,7 +155,7 @@ public class ServerChunkDump {
                         if (beInt(file, i * 4) == 0) continue;
                         int cx = rx * 32 + (i & 31), cz = rz * 32 + (i >> 5);
                         CompoundTag root = readChunkNbt(cx, cz);
-                        System.out.println(cx + "\t" + cz + "\t" + (root == null ? "?" : root.getStringOr("Status", "?")));
+                        out.println(cx + "\t" + cz + "\t" + (root == null ? "?" : root.getStringOr("Status", "?")));
                     }
                 }
             }
@@ -154,17 +166,16 @@ public class ServerChunkDump {
             for (int[] c : def) chunks.add(c);
         }
 
-        java.io.PrintStream out = System.out;
         for (int[] c : chunks) {
             int cx = c[0], cz = c[1];
             CompoundTag root = readChunkNbt(cx, cz);
             if (root == null) {
-                System.err.println("SKIP chunk " + cx + "," + cz + " (absent in region)");
+                err.println("SKIP chunk " + cx + "," + cz + " (absent in region)");
                 continue;
             }
             String status = root.getStringOr("Status", "");
             if (!status.equals("minecraft:full") && !status.equals("full")) {
-                System.err.println("SKIP chunk " + cx + "," + cz + " (status=" + status + ", not full)");
+                err.println("SKIP chunk " + cx + "," + cz + " (status=" + status + ", not full)");
                 continue;
             }
             String[][] grid = decodeChunk(root);
@@ -177,7 +188,7 @@ public class ServerChunkDump {
                     }
                 }
             }
-            System.err.println("DUMPED chunk " + cx + "," + cz);
+            err.println("DUMPED chunk " + cx + "," + cz);
         }
     }
 }
