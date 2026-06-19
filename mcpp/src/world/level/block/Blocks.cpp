@@ -110,6 +110,35 @@ static void setFallbackTexture(Block* block, const std::string& name) {
     }
 }
 
+static void assignKnownBlockTextures() {
+    if (blocks::STONE)       blocks::STONE->textures.all = "stone";
+    if (blocks::GRASS_BLOCK) {
+        blocks::GRASS_BLOCK->textures.top  = "grass_block_top";
+        blocks::GRASS_BLOCK->textures.side = "grass_block_side";
+        blocks::GRASS_BLOCK->textures.bot  = blocks::GRASS_BLOCK->textures.all = "dirt";
+    }
+    if (blocks::DIRT)       blocks::DIRT->textures.all = "dirt";
+    if (blocks::WATER)      blocks::WATER->textures.all = "water_still";
+    if (blocks::LAVA)       blocks::LAVA->textures.all = "lava_still";
+    if (blocks::BEDROCK)    blocks::BEDROCK->textures.all = "bedrock";
+    if (blocks::DEEPSLATE)  blocks::DEEPSLATE->textures.all = "deepslate";
+    if (blocks::SAND)       blocks::SAND->textures.all = "sand";
+    if (blocks::GRAVEL)     blocks::GRAVEL->textures.all = "gravel";
+    if (blocks::NETHERRACK) blocks::NETHERRACK->textures.all = "netherrack";
+    if (blocks::END_STONE)  blocks::END_STONE->textures.all = "end_stone";
+    if (blocks::OAK_LOG) {
+        blocks::OAK_LOG->textures.all = "oak_log";
+        blocks::OAK_LOG->textures.top = blocks::OAK_LOG->textures.bot = "oak_log_top";
+    }
+    if (blocks::OAK_LEAVES) blocks::OAK_LEAVES->textures.all = "oak_leaves";
+    if (blocks::GLASS)      blocks::GLASS->textures.all = "glass";
+
+    for (auto& blockPtr : g_blockStorage) {
+        if (!blockPtr || !blockPtr->textures.all.empty()) continue;
+        setFallbackTexture(blockPtr.get(), blockPtr->name);
+    }
+}
+
 } // namespace
 
 uint32_t getBlockStateId(std::string_view serializedState, uint32_t fallback) {
@@ -389,6 +418,7 @@ void initBlocks() {
     blocks::OAK_LEAVES  = getBlockByName("oak_leaves");
     blocks::GLASS       = getBlockByName("glass");
 
+    assignKnownBlockTextures();
     MC_LOG_INFO("Blocks: loaded {} block states, {} blocks", g_blockStates.size(), g_blockRegistry.size());
 }
 
