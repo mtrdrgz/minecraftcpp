@@ -178,7 +178,7 @@ void LevelRenderer::updateCamera(float dtSec) {
     if (!m_window) return;
     int dx = 0, dy = 0; m_window->consumeMouseDelta(dx, dy);
     if (dx || dy) {
-        m_camYaw -= (float)dx * 0.15f; m_camPitch -= (float)dy * 0.15f;
+        m_camYaw -= (float)dx * 0.15f; m_camPitch += (float)dy * 0.15f;
         m_camPitch = std::fmax(-89.f, std::fmin(89.f, m_camPitch));
     }
     float speed = 20.f; if (m_window->isKeyDown(VK_SHIFT)) speed *= 5.f;
