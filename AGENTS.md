@@ -42,6 +42,44 @@ If you only read one line of this file: **port it from the source; do not make i
 
 ---
 
+## MANDATORY AGENT WORKFLOW — follow this every session
+
+> This section is non-negotiable. Skipping it produces silent drift that compounds across sessions.
+
+### Files you MUST read before writing any code
+1. `AGENTS.md` (this file) — rules, source locations, build, current state
+2. `PROJECT_COVERAGE.md` — live port-progress dashboard, devlog of all findings, proof records
+3. `TASKLIST.md` — current bug/feature queue
+
+### While working — documentation requirements
+
+**Every Java file you open:**
+Update its row in `docs/PORT_COVERAGE.tsv`. Three columns: `path  status  proof`.
+- Even if you just read it and concluded it needs no port: mark `n/a` and explain why.
+- `unvisited` means no human or agent has ever looked at it.
+
+**Proof requirement (anti-hallucination):**
+- `ported` → C++ file + function/class + parity gate (`gate_name N/0`) OR exact Java method citation (`ClassName.method → src/path.h:line`)
+- `partial` → list what IS ported (C++ location) and what is NOT (specific methods/features)
+- `n/a` → one sentence why (Java-only infra, replaced by architecture, test scaffolding, etc.)
+- **Never mark `ported` without proof. A wrong port that looks right is worse than `unvisited`.**
+
+**Every significant finding (algorithm quirk, bug, parity delta, Java behaviour):**
+Add a bullet to the devlog in `PROJECT_COVERAGE.md` (newest session at top).
+
+**Every system-level status change:**
+Update `README.md` status tables and parity certification numbers.
+
+### Session end checklist
+- [ ] `docs/PORT_COVERAGE.tsv` updated for every file touched
+- [ ] Devlog entry added to `PROJECT_COVERAGE.md` (even a one-liner)
+- [ ] Progress dashboard numbers in `PROJECT_COVERAGE.md` updated
+- [ ] `AGENTS.md` § CURRENT STATE updated with session summary
+- [ ] `README.md` updated if any system status or parity number changed
+- [ ] All changes committed and pushed to `main`
+
+---
+
 ## WHAT THIS PROJECT IS
 
 A faithful **port** of Minecraft Java Edition 26.1.2 to native C++ for Windows.
