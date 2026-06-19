@@ -140,6 +140,17 @@ carries the logic.
 
 ## FETCHING SOURCE MATERIAL FROM THE MOJANG CDN
 
+> **⚠️ IMPORTANT — LFS budget workaround (2026-06):** the repo's GitHub LFS quota was
+> exhausted by the previously-committed `26.1.2/src/` (decompiled Java) and
+> `26.1.2/data/minecraft/worldgen/*.json` files. To avoid this happening again:
+> 1. **Do NOT commit Minecraft source or assets.** `.gitignore` ignores ALL of
+>    `26.1.2/` — everything is reproducible via the script below.
+> 2. **Fresh clones / ephemeral machines** fetch everything they need from the open
+>    Mojang CDN via the script below. No LFS, no auth, no proprietary commit.
+> 3. **Existing LFS-tracked source/data files** can be removed from history with
+>    `git lfs migrate export` + force-push when the team is ready (this is destructive
+>    to history, so it's a separate operation from the certification work).
+
 The Mojang CDN is open to `curl` (no auth) and is the canonical way to obtain
 the inputs above on a fresh/ephemeral machine (e.g. a cloud session). Everything
 lands under the git-ignored `26.1.2/` directory, so nothing proprietary is ever

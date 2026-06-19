@@ -213,7 +213,9 @@ add_executable(biome_manager_parity
     world/level/levelgen/OverworldBiomeBuilder.cpp
 )
 target_include_directories(biome_manager_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(biome_manager_parity PRIVATE bcrypt)
+if(WIN32)
+    target_link_libraries(biome_manager_parity PRIVATE bcrypt)
+endif()
 set_target_properties(biome_manager_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"

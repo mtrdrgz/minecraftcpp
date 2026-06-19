@@ -51,6 +51,20 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # -Wl,-Bdynamic must not be nested inside the first group or lld sees a
     # bare "-Wl" token and errors.
     add_link_options("-Wl,-Bstatic,-lc++,-lunwind" "-Wl,-Bdynamic")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # Linux CI / parity-only build (the engine itself targets Windows+MSVC/clang).
+    # GCC defaults to -ffp-contract=off which is what byte-exact FP parity needs.
+    add_compile_options(
+        -Wall -Wno-unused-variable -Wno-missing-field-initializers
+        # WORLDGEN 1:1 CORRECTNESS — keep FP strict (no contraction, no fast-math,
+        # no reassociation). Same rule as the clang branch above.
+        -ffp-contract=off
+    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_compile_options(-O2)
+    else()
+        add_compile_options(-O0 -g)
+    endif()
 else()
     message(FATAL_ERROR "Unsupported compiler: ${CMAKE_CXX_COMPILER_ID}")
 endif()

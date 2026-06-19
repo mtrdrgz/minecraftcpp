@@ -296,7 +296,11 @@ double ImprovedNoise::noise(double x, double y, double z, double yScale, double 
     double yrFudge;
     if (yScale != 0.0) {
         double fudgeLimit = (yFudge >= 0.0 && yFudge < yr) ? yFudge : yr;
-        yrFudge = std::floor(fudgeLimit / yScale + 1.0E-7) * yScale;
+        // Java source: `Mth.floor(fudgeLimit / yScale + 1.0E-7F) * yScale` — the `F`
+        // suffix makes the literal a float, which Java widens to double for the add.
+        // C++ `1.0E-7` would be a true double literal (different value), so we must
+        // cast through float to reproduce Java's widening semantics bit-for-bit.
+        yrFudge = std::floor(fudgeLimit / yScale + static_cast<double>(1.0E-7F)) * yScale;
     } else {
         yrFudge = 0.0;
     }
@@ -584,15 +588,23 @@ BlendedNoise BlendedNoise::createUnseeded(double xzScale, double yScale, double 
 }
 
 BlendedNoise::BlendedNoise(std::shared_ptr<RandomSource> random, double xzScale, double yScale, double xzFactor, double yFactor, double smearScaleMultiplier)
-    : BlendedNoise(
-        PerlinNoise::createLegacyForBlendedNoise(*random, rangeClosed(-15, 0)),
-        PerlinNoise::createLegacyForBlendedNoise(*random, rangeClosed(-15, 0)),
-        PerlinNoise::createLegacyForBlendedNoise(*random, rangeClosed(-7, 0)),
-        xzScale,
-        yScale,
-        xzFactor,
-        yFactor,
-        smearScaleMultiplier) {
+    : m_minLimitNoise(PerlinNoise::createLegacyForBlendedNoise(*random, rangeClosed(-15, 0))),
+      m_maxLimitNoise(PerlinNoise::createLegacyForBlendedNoise(*random, rangeClosed(-15, 0))),
+      m_mainNoise(PerlinNoise::createLegacyForBlendedNoise(*random, rangeClosed(-7, 0))),
+      m_xzFactor(xzFactor),
+      m_yFactor(yFactor),
+      m_smearScaleMultiplier(smearScaleMultiplier),
+      m_xzScale(xzScale),
+      m_yScale(yScale) {
+    // NOTE: members are initialized in DECLARATION order (minLimit, maxLimit, main),
+    // NOT the textual order in the initializer list. This guarantees the three
+    // PerlinNoise instances consume `random` in the same order as Java's BlendedNoise
+    // constructor (min first, max second, main third). The previous delegating-ctor
+    // form relied on argument-evaluation order which is UNSPECIFIED in C++ and broke
+    // parity on GCC (which evaluated right-to-left, putting main first).
+    m_xzMultiplier = 684.412 * m_xzScale;
+    m_yMultiplier = 684.412 * m_yScale;
+    m_maxValue = m_minLimitNoise.maxBrokenValue(m_yMultiplier);
 }
 
 BlendedNoise::BlendedNoise(
