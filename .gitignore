@@ -21,6 +21,7 @@ out/
 
 # Project build outputs/logs
 mcpp/build/
+mcpp/build-win/
 mcpp/cmake-build-*/
 mcpp/mcpp_err.txt
 mcpp/mcpp_log.txt
