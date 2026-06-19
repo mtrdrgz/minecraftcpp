@@ -219,3 +219,15 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 - **Reverted**: restored all files to the 7,673-mismatch baseline. NoiseChunk.h/.cpp removed. `prepareResolver` infrastructure kept in DensityFunction.h for future use.
 - **Root cause of remaining 10,884 mismatches in the port**: likely the `CacheOnce` implementation is missing the `lastArray`/`arrayInterpolationCounter` optimization path, or the `FlatCache`/`Cache2D` implementations have incorrect key computation. Needs further investigation.
 - **Files examined**: `26.1.2/src/net/minecraft/world/level/levelgen/NoiseChunk.java` (809 lines), `src/world/level/levelgen/DensityFunction.{h,cpp}`, `src/world/level/levelgen/NoiseBasedChunkGenerator.cpp`
+
+---
+
+### 2026-06-20 — Session: Interpolation order + CornerResolver + key finding
+
+**Agent**: Super Z (GLM)
+
+- **CornerResolver**: during corner computation, inner Interpolated markers now return 0.0 (matching Java's NoiseInterpolator.value stale behavior during fillSlice). Cache markers compute normally.
+- **Lerp order**: changed computeInterpolated from X→Y→Z (lerp3) to Y→X→Z to match Java's NoiseInterpolator incremental path (updateForY → updateForX → updateForZ).
+- **Key finding**: `BaseTerrainColumnParity` (fillFromNoise, 14 sampled columns × 4 seeds = 21,504 cases) passes with **0 mismatches**. This proves the density computation is byte-exact for sampled positions. The 7,673 full-chunk mismatches are at specific cell boundary positions that the column test doesn't sample.
+- **Root cause refined**: the CellInterpolationResolver is correct for most positions but has subtle FP differences at specific cell boundaries. A full NoiseChunk port with slice arrays is needed to resolve these — the per-cell resolver approach cannot exactly replicate Java's chunk-persistent NoiseInterpolator state.
+- **All noise/density subsystems remain byte-exact**: ImprovedNoise (956K), PerlinNoise (6M), BlendedNoise (18.6K), NormalNoise (81K), SimplexNoise (125K), PerlinSimplexNoise (141K), WorldgenRandom (540), OverworldBiome (300K), ClimateBiome (56), StructurePlacement (29K), Mth (5.4K), MthExtra (6K), DensityRouter (488), BaseTerrainColumn (21.5K).
