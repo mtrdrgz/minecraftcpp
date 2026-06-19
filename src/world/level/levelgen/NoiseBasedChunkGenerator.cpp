@@ -95,15 +95,40 @@ namespace {
             }
 
             if (!valsPtr) {
+                // Java NoiseChunk.fillSlice: during corner computation, inner
+                // NoiseInterpolator.compute returns this.value (stale = 0.0 for
+                // first cell). We replicate this by passing a "corner resolver"
+                // that returns 0.0 for computeInterpolated but delegates to
+                // direct computation for cache markers (CacheAllInCell, CacheOnce,
+                // Cache2D, FlatCache) — those compute normally in Java during
+                // fillSlice because they're not NoiseInterpolators.
+                static struct CornerResolver : public DensityFunctionInterpolationResolver {
+                    double computeInterpolated(const DensityFunctionPtr&, const DensityFunctionContext&) const override {
+                        return 0.0;  // Java: NoiseInterpolator.value (stale)
+                    }
+                    double computeCacheOnce(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
+                        return f->compute(ctx);  // Java: CacheOnce computes normally
+                    }
+                    double computeCacheAllInCell(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
+                        return f->compute(ctx);  // Java: CacheAllInCell computes normally
+                    }
+                    double computeCache2D(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
+                        return f->compute(ctx);  // Java: Cache2D computes normally
+                    }
+                    double computeFlatCache(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
+                        return f->compute(ctx);  // Java: FlatCache computes normally
+                    }
+                } cornerResolver;
+
                 std::array<double, 8> values{
-                    function->compute(DensityFunctionContext{ m_x0, m_y0, m_z0 }),
-                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0, m_z0 }),
-                    function->compute(DensityFunctionContext{ m_x0, m_y0 + m_cellHeight, m_z0 }),
-                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0 + m_cellHeight, m_z0 }),
-                    function->compute(DensityFunctionContext{ m_x0, m_y0, m_z0 + m_cellWidth }),
-                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0, m_z0 + m_cellWidth }),
-                    function->compute(DensityFunctionContext{ m_x0, m_y0 + m_cellHeight, m_z0 + m_cellWidth }),
-                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0 + m_cellHeight, m_z0 + m_cellWidth })
+                    function->compute(DensityFunctionContext{ m_x0, m_y0, m_z0, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0, m_z0, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0, m_y0 + m_cellHeight, m_z0, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0 + m_cellHeight, m_z0, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0, m_y0, m_z0 + m_cellWidth, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0, m_z0 + m_cellWidth, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0, m_y0 + m_cellHeight, m_z0 + m_cellWidth, &cornerResolver }),
+                    function->compute(DensityFunctionContext{ m_x0 + m_cellWidth, m_y0 + m_cellHeight, m_z0 + m_cellWidth, &cornerResolver })
                 };
                 if (m_cornerCount < 64) {
                     m_cornerValues[m_cornerCount++] = { funcPtr, values };
@@ -120,7 +145,17 @@ namespace {
             const double factorY = (double)(context.blockY - m_y0) / (double)m_cellHeight;
             const double factorZ = (double)(context.blockZ - m_z0) / (double)m_cellWidth;
             const auto& v = *valsPtr;
-            return lerp3(factorX, factorY, factorZ, v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+            // Java NoiseInterpolator uses Y→X→Z lerp order (updateForY → updateForX → updateForZ).
+            // C++ lerp3 uses X→Y→Z. These are mathematically equivalent but FP-different.
+            // Match Java's order: lerp(factorY, v[0], v[2]) → lerp(factorX, ...) → lerp(factorZ, ...)
+            // v[0]=n000 v[1]=n100 v[2]=n010 v[3]=n110 v[4]=n001 v[5]=n101 v[6]=n011 v[7]=n111
+            const double yz00 = lerp(factorY, v[0], v[2]);   // lerp(n000, n010)
+            const double yz10 = lerp(factorY, v[1], v[3]);   // lerp(n100, n110)
+            const double yz01 = lerp(factorY, v[4], v[6]);   // lerp(n001, n011)
+            const double yz11 = lerp(factorY, v[5], v[7]);   // lerp(n101, n111)
+            const double z0 = lerp(factorX, yz00, yz10);
+            const double z1 = lerp(factorX, yz01, yz11);
+            return lerp(factorZ, z0, z1);
         }
 
         double computeCacheOnce(const DensityFunctionPtr& function, const DensityFunctionContext& context) const override {
