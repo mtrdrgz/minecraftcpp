@@ -206,3 +206,16 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 ---
 
 *Add new entries above this line. Format: `### YYYY-MM-DD — Session name` followed by bullets.*
+
+---
+
+### 2026-06-20 — Session: NoiseChunk port attempt (reverted)
+
+**Agent**: Super Z (GLM)
+
+- **Attempted NoiseChunk port**: created `NoiseChunk.h`/`NoiseChunk.cpp` to replace `CellInterpolationResolver` with a faithful port of Java's `NoiseChunk` (independent `NoiseInterpolator` instances with slice arrays, `fillSlice`/`selectCellYZ`/`updateForY/X/Z` lifecycle).
+- **Added `prepareResolver` virtual method** to `DensityFunction` base class, with overrides in `Interpolated`, `CacheMarker`, `TwoArgument`, `Mapped`, `Clamp`, `RangeChoice`, `ShiftedNoiseFunction`, `WeirdScaledSamplerFunction`, `FindTopSurfaceFunction`, `PeaksAndValleysFunction` — traverses the density tree to pre-register all markers before `fillSlice`.
+- **Result**: NoiseChunk port reduced mismatches from 216K (initial broken state) to 10,884, but this is WORSE than the 7,673 baseline. The port introduced new mismatches while fixing others.
+- **Reverted**: restored all files to the 7,673-mismatch baseline. NoiseChunk.h/.cpp removed. `prepareResolver` infrastructure kept in DensityFunction.h for future use.
+- **Root cause of remaining 10,884 mismatches in the port**: likely the `CacheOnce` implementation is missing the `lastArray`/`arrayInterpolationCounter` optimization path, or the `FlatCache`/`Cache2D` implementations have incorrect key computation. Needs further investigation.
+- **Files examined**: `26.1.2/src/net/minecraft/world/level/levelgen/NoiseChunk.java` (809 lines), `src/world/level/levelgen/DensityFunction.{h,cpp}`, `src/world/level/levelgen/NoiseBasedChunkGenerator.cpp`
