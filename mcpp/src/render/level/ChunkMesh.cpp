@@ -78,7 +78,8 @@ static TintRGB getTextureTint(const std::string& name) {
         return {121, 192, 90};   // #79C05A plains grass
     if (name == "water_still" || name == "water_flow")
         return {63, 118, 228};   // #3F76E4 beautiful water blue
-    if (name == "short_dry_grass" || name == "tall_dry_grass")
+    // leaf_litter uses dryFoliage() tint (BlockColors.java:37), same constant
+    if (name == "short_dry_grass" || name == "tall_dry_grass" || name == "leaf_litter")
         return {92, 60, 50};      // DryFoliageColor.FOLIAGE_DRY_DEFAULT (#5C3C32)
     // Fixed spruce leaf tint (biome-independent per BlockColors.java)
     if (name == "spruce_leaves") return {97,  153, 97};  // #619961
@@ -389,6 +390,62 @@ static void emitGroundPlant(SectionMesh& mesh, float bx, float by, float bz,
     }}, atlas, texture, light);
 }
 
+// Segment-aware renderer for leaf_litter (LeafLitterBlock.java).
+// Java creates 4 model variants (template_leaf_litter_1..4) via createLeafLitter /
+// createSegmentedBlock; each shows N 8×8 half-quads at floor level, oriented by
+// FACING. LEAF_LITTER_MODEL_2_SEGMENT_CONDITION covers amounts {2,3} while
+// LEAF_LITTER_MODEL_3_SEGMENT_CONDITION adds a 3rd quad for amount==3.
+// The vanilla Y-rotation applied per facing is (x,z)→(1-z, x) per 90° step.
+static void emitLeafLitter(SectionMesh& mesh, float bx, float by, float bz,
+                            const TextureAtlas* atlas, uint8_t light,
+                            const mc::BlockState* bs) {
+    int amount = 1;
+    std::string facing = "north";
+    if (bs) {
+        const std::string aStr = bs->getProperty("segment_amount");
+        if (!aStr.empty()) {
+            try { amount = std::stoi(aStr); } catch (...) {}
+        }
+        const std::string fStr = bs->getProperty("facing");
+        if (!fStr.empty()) facing = fStr;
+    }
+    amount = std::max(1, std::min(4, amount));
+
+    const float y = by + 0.0625f;
+
+    // Base 8×8 quadrant positions for FACING=NORTH (template_leaf_litter_N)
+    struct HalfQuad { float x0, z0, x1, z1; };
+    static const HalfQuad BASE[4] = {
+        { 0.5f, 0.0f, 1.0f, 0.5f }, // segment 1: NE
+        { 0.0f, 0.0f, 0.5f, 0.5f }, // segment 2: NW
+        { 0.0f, 0.5f, 0.5f, 1.0f }, // segment 3: SW
+        { 0.5f, 0.5f, 1.0f, 1.0f }, // segment 4: SE
+    };
+
+    int rotSteps = 0;
+    if (facing == "east")       rotSteps = 1;
+    else if (facing == "south") rotSteps = 2;
+    else if (facing == "west")  rotSteps = 3;
+
+    auto rotXZ = [rotSteps](float x, float z) -> std::pair<float, float> {
+        for (int r = 0; r < rotSteps; ++r) { float nx = 1.0f - z; z = x; x = nx; }
+        return { x, z };
+    };
+
+    for (int i = 0; i < amount; ++i) {
+        const HalfQuad& q = BASE[i];
+        // Corner order matches emitGroundPlant / UV_CORNERS: BL, BR, TR, TL
+        float cx[4] = { q.x0, q.x1, q.x1, q.x0 };
+        float cz[4] = { q.z1, q.z1, q.z0, q.z0 };
+        std::array<std::array<float, 3>, 4> corners;
+        for (int v = 0; v < 4; ++v) {
+            auto [rx, rz] = rotXZ(cx[v], cz[v]);
+            corners[v] = { bx + rx, y, bz + rz };
+        }
+        emitTexturedQuad(mesh, corners, atlas, "leaf_litter", light);
+    }
+}
+
 static void emitVineFace(SectionMesh& mesh, float bx, float by, float bz,
                          const TextureAtlas* atlas, uint8_t light, int dir) {
     constexpr float kInset = 0.05f;
@@ -470,8 +527,12 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                 bool isPlant = false;
                 if (bs && bs->block) {
                     const std::string& name = bs->block->name;
-                    if (name == "pink_petals" || name == "wildflowers" || name == "leaf_litter") {
+                    if (name == "pink_petals" || name == "wildflowers") {
                         emitGroundPlant(out, bx, by, bz, atlas, name, light);
+                        continue;
+                    }
+                    if (name == "leaf_litter") {
+                        emitLeafLitter(out, bx, by, bz, atlas, light, bs);
                         continue;
                     }
                     if (name == "vine") {
