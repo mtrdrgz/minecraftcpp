@@ -1,4 +1,4 @@
-﻿#include "Blocks.h"
+#include "Blocks.h"
 #include "../../../core/Log.h"
 #include "BlockStates.h"
 #include <nlohmann/json.hpp>
@@ -140,7 +140,7 @@ const BlockState* getDefaultBlockState(std::string_view name) {
     return getBlockState(id);
 }
 
-// ── Minimal fallback if block_states.json isn't embedded ─────────────────────
+// -- Minimal fallback if block_states.json isn't embedded ---------------------
 static Block* registerBlock(std::string_view name, Block::Properties props,
                              std::unordered_map<std::string, Block*>& byName) {
     auto b = std::make_unique<Block>(props);
@@ -295,7 +295,7 @@ void initBlocks() {
         }
     }
     if (!raw) {
-        MC_LOG_WARN("Blocks: block_states.json not available — using fallback registry");
+        MC_LOG_WARN("Blocks: block_states.json not available - using fallback registry");
         initFallback(byName);
         return;
     }
@@ -349,20 +349,21 @@ void initBlocks() {
             g_blockStates[id].stateId = (uint32_t)id;
             if (auto pit = jst.find("props"); pit != jst.end() && !pit->get<std::string>().empty()) {
                 const std::string& ps = pit->get_ref<const std::string&>();
+                g_blockStates[id].props = ps;
                 size_t start = 0;
                 while (start < ps.size()) {
                     size_t comma = ps.find(',', start);
                     if (comma == std::string::npos) comma = ps.size();
                     size_t eq = ps.find('=', start);
                     if (eq != std::string::npos && eq < comma) {
-                        g_blockStates[id].props.emplace(ps.substr(start, eq - start), ps.substr(eq + 1, comma - eq - 1));
+                        g_blockStates[id].properties.emplace(ps.substr(start, eq - start), ps.substr(eq + 1, comma - eq - 1));
                     }
                     start = comma + 1;
                 }
             }
         }
     } catch (const std::exception& e) {
-        MC_LOG_WARN("Blocks: failed to parse block_states.json: {} — using fallback registry", e.what());
+        MC_LOG_WARN("Blocks: failed to parse block_states.json: {} - using fallback registry", e.what());
         g_blockRegistry = Registry<Block>();
         g_blockStorage.clear();
         g_blockStates.clear();
@@ -389,11 +390,6 @@ void initBlocks() {
     blocks::GLASS       = getBlockByName("glass");
 
     MC_LOG_INFO("Blocks: loaded {} block states, {} blocks", g_blockStates.size(), g_blockRegistry.size());
-}
-
-const BlockState* getBlockState(uint32_t id) {
-    if (id < g_blockStates.size()) return &g_blockStates[id];
-    return nullptr;
 }
 
 const Block* getBlock(uint32_t stateId) {

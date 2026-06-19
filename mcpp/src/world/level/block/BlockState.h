@@ -15,6 +15,7 @@ struct BlockState {
     uint32_t     stateId   = 0;   // global state ID (matches protocol)
 
     // Properties as string key-value (e.g. "facing" -> "north")
+    std::string props;
     std::unordered_map<std::string, std::string> properties;
 
     bool isAir()    const { return block && block->isAir(); }
