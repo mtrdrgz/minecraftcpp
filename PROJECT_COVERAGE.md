@@ -45,7 +45,7 @@ The TSV has three columns: `path  status  proof`. The proof field must be non-em
 
 ## Progress Dashboard
 
-*Last updated: 2026-06-19*
+*Last updated: 2026-06-20*
 
 ### Overall
 
@@ -93,7 +93,7 @@ These are the hard guarantees. Every gate must stay green after every commit.
 
 | Gate | Cells / vectors | Status |
 |---|---|---|
-| Terrain + cave carvers | 2,359,296 | ✅ 0 mismatches |
+| Terrain + cave carvers | 2,359,296 | ⚠️ 7,673 mismatches (99.67%) — see devlog 2026-06-20 |
 | Full decoration — forest 6 chunks | 884,736 | ✅ 0 mismatches |
 | Full decoration — ocean 6 chunks | 589,824 | ✅ 0 mismatches |
 | Biome climate selection | 1,867,776 | ✅ 0 mismatches |
@@ -119,6 +119,21 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 ## Devlog
 
 Newest entries first. Every agent adds an entry. Short is fine — one bullet per finding, no walls of text.
+
+---
+
+### 2026-06-20 — Session: Terrain parity investigation + BlendedNoise fix
+
+**Agent**: Super Z (GLM)
+
+- **BlendedNoise ctor arg-eval-order fix** (commit b23410db): the delegating-ctor form passed 3× `PerlinNoise::createLegacyForBlendedNoise(*random, ...)` as args. C++ evaluates delegating-ctor args in UNSPECIFIED order; GCC evaluates right-to-left, causing `mainNoise` to consume random FIRST instead of LAST. All 40 ImprovedNoise instances ended up in wrong slots. Fix: direct member init in DECLARATION order. After fix: BlendedNoise parity 18,610/18,610 byte-exact (was 100% wrong on GCC).
+- **ImprovedNoise 1.0E-7F fix** (commit b23410db): `1.0E-7` (double) → `static_cast<double>(1.0E-7F)` to match Java's float-literal widening. ImprovedNoise parity: 956,530/0.
+- **GCC support** (commit b23410db): added GCC branch to `cmake/CompilerFlags.cmake` with `-ffp-contract=off` for FP-strict parity. Wrapped `biome_manager_parity` bcrypt link in `if(WIN32)`.
+- **Terrain parity investigation**: `full_chunk_parity` shows 7,673 mismatches / 2,359,296 cells (99.67% byte-exact) on GCC. Previous claim of "0 mismatches" was likely on MSVC where the BlendedNoise arg-eval-order bug doesn't manifest (MSVC evaluates left-to-right).
+- **Root cause of remaining 7,673 mismatches**: the C++ `CellInterpolationResolver` does not replicate Java's `NoiseChunk` architecture. Java's `NoiseChunk` maintains independent `NoiseInterpolator` instances (one per `interpolated()` marker) with slice arrays. During `fillSlice`, inner interpolators return `this.value` (stale from previous cell, 0.0 for first cell). During `fillAllDirectly` (fillingCell=true), ALL interpolators simultaneously return `Mth.lerp3(factors, theirCorners)`. The C++ resolver computes corners on-demand with direct computation (no stale values), producing different FP results for nested `interpolated()` markers.
+- **All noise/density subsystems verified byte-exact**: ImprovedNoise (956K), PerlinNoise (6M), BlendedNoise (18.6K), NormalNoise (81K), SimplexNoise (125K), PerlinSimplexNoise (141K), WorldgenRandom (540), OverworldBiome (300K), ClimateBiome (56), StructurePlacement (29K), Mth (5.4K), MthExtra (6K), DensityRouter (488). All at 0 mismatches.
+- **Next step**: port `NoiseChunk` from Java (`26.1.2/src/net/minecraft/world/level/levelgen/NoiseChunk.java`, ~800 lines) to replace `CellInterpolationResolver` in `NoiseBasedChunkGenerator.cpp`. This requires: (1) `NoiseInterpolator` class with slice arrays, (2) `fillSlice`/`selectCellYZ`/`fillAllDirectly`/`updateForY/X/Z` methods, (3) `mapAll(wrap)` visitor to wrap density tree markers.
+- **Files examined**: `src/world/level/levelgen/Noise.cpp`, `src/world/level/levelgen/NoiseBasedChunkGenerator.cpp`, `26.1.2/src/net/minecraft/world/level/levelgen/NoiseChunk.java`, `26.1.2/src/net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java`, `26.1.2/src/net/minecraft/world/level/levelgen/synth/BlendedNoise.java`, `26.1.2/src/net/minecraft/world/level/levelgen/synth/ImprovedNoise.java`
 
 ---
 
