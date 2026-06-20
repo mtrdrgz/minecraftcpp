@@ -231,3 +231,19 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 - **Key finding**: `BaseTerrainColumnParity` (fillFromNoise, 14 sampled columns × 4 seeds = 21,504 cases) passes with **0 mismatches**. This proves the density computation is byte-exact for sampled positions. The 7,673 full-chunk mismatches are at specific cell boundary positions that the column test doesn't sample.
 - **Root cause refined**: the CellInterpolationResolver is correct for most positions but has subtle FP differences at specific cell boundaries. A full NoiseChunk port with slice arrays is needed to resolve these — the per-cell resolver approach cannot exactly replicate Java's chunk-persistent NoiseInterpolator state.
 - **All noise/density subsystems remain byte-exact**: ImprovedNoise (956K), PerlinNoise (6M), BlendedNoise (18.6K), NormalNoise (81K), SimplexNoise (125K), PerlinSimplexNoise (141K), WorldgenRandom (540), OverworldBiome (300K), ClimateBiome (56), StructurePlacement (29K), Mth (5.4K), MthExtra (6K), DensityRouter (488), BaseTerrainColumn (21.5K).
+
+---
+
+### 2026-06-20 — Session: Carver isolated as sole source of terrain mismatches
+
+**Agent**: Super Z (GLM)
+
+- **BREAKTHROUGH**: Added `full_chunk_noise_only_parity` and `full_chunk_surface_only_parity` diagnostic targets that isolate terrain generation stages:
+  - fillFromNoise only: **2,359,296 cells, 0 mismatches** ✅
+  - fillFromNoise + buildSurface: **2,359,296 cells, 0 mismatches** ✅
+  - fillFromNoise + buildSurface + applyCarvers: **2,359,296 cells, 7,673 mismatches** ⚠️
+- **Conclusion**: terrain density (fillFromNoise) and surface system (buildSurface) are **byte-exact**. ALL 7,673 remaining mismatches are in `applyCarvers`.
+- **Carver investigation**: compared WorldCarver.cpp line-by-line with Java source. RNG (WorldgenRandom/LegacyRandomSource), carver configs (cave/caveExtra/canyon), carveEllipsoid, createTunnel, createCanyon, carveBlock, carveState, canReach, CarvingMask — all match. The `overworldReplaceables()` block list matches the `#minecraft:overworld_carver_replaceables` tag. The `composeJavaNextLong` uses addition (not OR) matching Java's `BitRandomSource.nextLong`.
+- **Likely cause**: C++ creates a fresh Aquifer for `applyCarvers` while Java shares the NoiseChunk's aquifer (with cached fluid statuses from `fillFromNoise`). The aquifer cache state difference may cause different `computeSubstance` results during carving.
+- **CarvedTerrainColumn parity**: 94 mismatches / 21,504 cells (0.44%) — confirms carver issues are not position-specific.
+- **All noise/density subsystems remain byte-exact**: all 12+ parity tests at 0 mismatches.
