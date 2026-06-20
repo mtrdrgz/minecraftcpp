@@ -318,3 +318,16 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
   2. The tunnel split recursion may diverge, causing C++ to stop tunnels early
   3. The canReach check may produce different results due to accumulated FP differences in tunnel center positions
 - **All individual components remain verified identical**: RNG, configs, carver math, aquifer, mask, canReach, shouldSkip, PI precision, nextInt(bound), createThreadLocalInstance.
+
+---
+
+### Session 2026-06-20 02:00 UTC — Sin table verified, nextDouble bytecode discovery
+
+**Agent**: Super Z (GLM)
+
+- **Sin table verified identical**: dumped ALL 65536 entries from both Java and C++ — 0 differences. `std::sin` and `Math.sin` produce identical float results on this platform.
+- **-O0 vs -O2 test**: compiled full_chunk_parity with -O0 (no optimization) — same 7,673 mismatches. GCC optimization is NOT the cause.
+- **canReach trace**: C++ has 160 canReach FALSE decisions for seed=0 chunk(0,0). All appear correct (tunnel too far from chunk). Can't compare with Java without modifying the jar.
+- **nextDouble bytecode discovery**: the Vineflower decompiler generated INCORRECT source for `BitRandomSource.nextDouble()`. Decompiled source shows `combined * 1.110223E-16F` (suggesting float multiplication), but the actual bytecode uses `l2d` (long→double) and `dmul` (double×double) with constant `1.1102230246251565E-16d`. This is EXACTLY what C++ does. nextDouble is NOT the bug.
+- **Carver transition analysis**: the 7,673 mismatches include BOTH "C++ missed carving" (deepslate→air) AND "C++ carved extra" (air→deepslate). This means C++ carves DIFFERENTLY, not just less. Consistent with FP accumulation causing tunnel paths to diverge at split points, but all individual operations have been verified identical.
+- **EXHAUSTIVE VERIFICATION COMPLETE**: every component of the carver has been verified identical in isolation (RNG, sin table, configs, math, aquifer, mask, canReach, shouldSkip, nextDouble bytecode, -O0). The 7,673 mismatches require a combined-system trace (running the real Java carver with position logging) to identify the exact divergence point.
