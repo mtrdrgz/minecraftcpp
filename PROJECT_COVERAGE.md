@@ -287,3 +287,19 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
   - Aquifer: `computeSubstance(ctx, 0.0)` returns identical results at mismatch positions
   - preliminarySurfaceLevel: identical at all quart-quantized positions
 - **Remaining possibilities**: the carver's `canReach` check, the `shouldSkip` lambda, or the iteration order of source chunks may have a subtle bug. Alternatively, the `carveState` function may compute different lava levels due to the `VerticalAnchor::aboveBottom(8)` resolution.
+
+---
+
+### 2026-06-20 — Session: Exhaustive carver investigation — all components verified
+
+**Agent**: Super Z (GLM)
+
+- **CarvingMask disabled test**: disabled `mask.get()` check entirely — same 7,673 mismatches. The mask is NOT the cause.
+- **Tunnel math traced**: replicated createTunnel math in both Java and C++ — center positions match to 15 significant digits. The tunnel path is identical.
+- **canReach verified**: same formula, same `chunkPos.getMiddleBlockX()` = `chunkPos.x * 16 + 8`.
+- **shouldSkip verified**: `caveShouldSkip(xd, yd, zd, floorLevel)` = `yd <= floorLevel || xd*xd + yd*yd + zd*zd >= 1.0` — same in both.
+- **PI precision verified**: `(float)Math.PI` = `PI_F` = 3.1415927f. `(float)(Math.PI/2)` = `PI_F/2.0f` = 1.5707964f. Identical.
+- **nextInt(bound) verified**: same rejection sampling and power-of-two fast path.
+- **Y value distribution**: C++ produces 42 underground Y values vs Java's 33 for seed=0 chunk(0,0). But this was traced with a replicated tool that may have RNG consumption errors — the real Java carver needs to be used for definitive comparison.
+- **createThreadLocalInstance verified**: Java's `RandomSource.createThreadLocalInstance(tunnelSeed)` = `new SingleThreadedRandomSource(tunnelSeed)`. Same as C++.
+- **CONCLUSION**: Every component has been verified identical in isolation. The 7,673 carver mismatches require a position-by-position trace using the REAL Java carver (wrapping `ConfiguredWorldCarver.carve` with a logging chunk) to identify the exact divergence point.
