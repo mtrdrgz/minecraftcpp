@@ -247,3 +247,14 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 - **Likely cause**: C++ creates a fresh Aquifer for `applyCarvers` while Java shares the NoiseChunk's aquifer (with cached fluid statuses from `fillFromNoise`). The aquifer cache state difference may cause different `computeSubstance` results during carving.
 - **CarvedTerrainColumn parity**: 94 mismatches / 21,504 cells (0.44%) — confirms carver issues are not position-specific.
 - **All noise/density subsystems remain byte-exact**: all 12+ parity tests at 0 mismatches.
+
+---
+
+### 2026-06-20 — Session: Carver RNG verified identical, issue in carving logic
+
+**Agent**: Super Z (GLM)
+
+- **RNG verification**: created `DebugCarverParity` tool that dumps `setLargeFeatureSeed` + `nextFloat` raw bits for ALL 289 source chunks (17×17 grid) at seed=0. Java and C++ produce **identical raw float bits** for all 867 values (289 chunks × 3 carvers). The carver RNG is 100% correct.
+- **Carver start positions**: all 62 source chunks that start carving match exactly between Java and C++ (same `nextFloat` values, same `isStartChunk` decisions).
+- **Remaining issue**: despite identical RNG, identical configs, identical carveEllipsoid/createTunnel/createCanyon/carveBlock logic, and identical CarvingMask — the carver still produces 7,673 mismatches. The issue is NOT in the RNG or the carver math logic.
+- **Next investigation**: the `CarvingContext` in Java includes a `NoiseChunk` (used by the aquifer for `preliminarySurfaceLevel`). C++ creates a separate aquifer. While the noise functions themselves are NOT wrapped (they're `NoiseFunction`, not markers), the `preliminarySurfaceLevel` IS wrapped in a `FlatCache` in Java. C++ evaluates it directly. This might cause subtle differences in the aquifer's fluid status computation, leading to different `carveState` results.
