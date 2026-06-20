@@ -108,7 +108,7 @@ void canon(const NbtTag& tag, std::string& sb) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/nbt_cases.tsv";
+    std::string casesPath = "build/nbt_cases.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
     std::string casesDir = casesPath.substr(0, casesPath.find_last_of("/\\") + 1) + "nbt_cases/";

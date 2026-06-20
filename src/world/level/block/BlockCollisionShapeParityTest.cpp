@@ -875,8 +875,8 @@ mc::VoxelShapePtr buildSupportShape(const std::string& name, const std::string& 
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/block_collision_shape.tsv";
-    std::string statesPath = "mcpp/src/assets/block_states.json";
+    std::string casesPath = "build/block_collision_shape.tsv";
+    std::string statesPath = "src/assets/block_states.json";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];

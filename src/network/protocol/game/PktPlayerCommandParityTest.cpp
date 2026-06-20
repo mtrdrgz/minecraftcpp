@@ -62,7 +62,7 @@ const std::array<const char*, 7> kActionNames = {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_player_command.tsv";
+    std::string casesPath = "build/pkt_player_command.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

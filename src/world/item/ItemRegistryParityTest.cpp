@@ -14,8 +14,8 @@
 #include <vector>
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/item_registry.tsv";
-    std::string itemsPath = "mcpp/src/assets/items.json";
+    std::string casesPath = "build/item_registry.tsv";
+    std::string itemsPath = "src/assets/items.json";
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
         if (std::string(argv[i]) == "--items") itemsPath = argv[i + 1];

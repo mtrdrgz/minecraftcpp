@@ -6424,6 +6424,20 @@ add_executable(scattered_feature_box_parity
 target_include_directories(scattered_feature_box_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(scattered_feature_box_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== structures: SwampHutPiece.postProcess block-placement body (floor, walls,
+# roof w/ 4 stair facings + 4 outer-left/right corners, foundation) — driven
+# against the REAL SwampHutPiece via a capturing WorldGenLevel proxy. =====
+add_executable(swamp_hut_piece_parity
+    world/level/levelgen/structure/structures/SwampHutPieceParityTest.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/block/Blocks.cpp)
+target_include_directories(swamp_hut_piece_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(swamp_hut_piece_parity PRIVATE nlohmann_json)
+if(WIN32)
+    target_link_libraries(swamp_hut_piece_parity PRIVATE bcrypt)
+endif()
+set_target_properties(swamp_hut_piece_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== render #26: org.joml.Matrix4f setOrtho/setOrthoLH/setOrthoSymmetric/setOrthoSymmetricLH (transcendental-free projection setters) =====
 add_executable(matrix4f_ortho_parity render/model/Matrix4fOrthoParityTest.cpp)
 target_include_directories(matrix4f_ortho_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

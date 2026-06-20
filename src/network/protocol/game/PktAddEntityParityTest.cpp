@@ -122,12 +122,12 @@ uint8_t packDegrees(float angle) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_add_entity.tsv";
+    std::string casesPath = "build/pkt_add_entity.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 
     NetworkRegistries reg;
-    if (!reg.loadFromFile("mcpp/src/assets/network_registries.tsv")) {
+    if (!reg.loadFromFile("src/assets/network_registries.tsv")) {
         std::cerr << "FATAL: cannot load mcpp/src/assets/network_registries.tsv (run from repo root)\n";
         return 2;
     }

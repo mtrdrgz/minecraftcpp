@@ -57,7 +57,7 @@ constexpr int kMaxLen = 32500;
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_command_suggestion_sb.tsv";
+    std::string casesPath = "build/pkt_command_suggestion_sb.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

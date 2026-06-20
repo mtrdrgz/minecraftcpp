@@ -57,7 +57,7 @@ std::string unescape(const std::string& s) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_chat_command.tsv";
+    std::string casesPath = "build/pkt_chat_command.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

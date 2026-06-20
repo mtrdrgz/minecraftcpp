@@ -97,7 +97,7 @@ std::string poolJsonPath(const std::string& key) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/structure_template_pool.tsv";
+    std::string casesPath = "build/structure_template_pool.tsv";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];

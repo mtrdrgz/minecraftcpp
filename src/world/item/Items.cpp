@@ -114,7 +114,7 @@ void initItems() {
 #endif
     if (!raw) {
         const char* env = std::getenv("MCPP_ITEMS");
-        for (const char* p : { env, "mcpp/src/assets/items.json", "src/assets/items.json" }) {
+        for (const char* p : { env, "src/assets/items.json", "src/assets/items.json" }) {
             if (!p) continue;
             std::ifstream in(p, std::ios::binary);
             if (in) { std::stringstream ss; ss << in.rdbuf(); fileData = ss.str(); raw = fileData.data(); sz = fileData.size(); break; }

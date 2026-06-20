@@ -17,8 +17,8 @@ namespace mc {
 Registry<Block>                     g_blockRegistry;
 std::vector<std::unique_ptr<Block>> g_blockStorage;
 std::vector<BlockState>             g_blockStates;
-static std::unordered_map<std::string, Block*> g_blocksByName;
-static std::unordered_map<std::string, uint32_t> g_defaultStateByName;
+std::unordered_map<std::string, Block*> g_blocksByName;
+std::unordered_map<std::string, uint32_t> g_defaultStateByName;
 
 namespace blocks {
     Block* AIR         = nullptr;
@@ -167,6 +167,43 @@ uint32_t getBlockStateId(std::string_view serializedState, uint32_t fallback) {
 const BlockState* getDefaultBlockState(std::string_view name) {
     uint32_t id = getDefaultBlockStateId(name, 0);
     return getBlockState(id);
+}
+
+uint32_t getBlockStateIdWith(std::string_view name,
+                             const std::initializer_list<std::pair<std::string_view, std::string_view>>& overrides,
+                             uint32_t fallback) {
+    // Match Java's BlockState.setValue(key, value) semantics: start from the
+    // block's default state and override only the specified properties. So we
+    // first find the default state for `name`, then look for a state whose
+    // properties equal the default's properties with the overrides applied.
+    // This matters for blocks like spruce_stairs where the default is
+    // (facing=north,half=bottom,shape=straight,waterlogged=false) — calling
+    // setValue(FACING, EAST) should produce (facing=east,half=bottom,...) NOT
+    // the first matching state in the table (which might be half=top,waterlogged=true).
+    const std::string nameStr(name);
+    // Find the default state for this block.
+    auto defIt = g_defaultStateByName.find(nameStr);
+    if (defIt == g_defaultStateByName.end()) {
+        return getDefaultBlockStateId(name, fallback);
+    }
+    const BlockState& defBs = g_blockStates[defIt->second];
+    // Build the target props map: default + overrides.
+    std::unordered_map<std::string, std::string> target = defBs.properties;
+    for (const auto& kv : overrides) target[std::string(kv.first)] = std::string(kv.second);
+    // Now find a state for this block whose properties exactly match `target`.
+    for (uint32_t id = 0; id < g_blockStates.size(); ++id) {
+        const BlockState& bs = g_blockStates[id];
+        if (!bs.block || bs.block->name != nameStr) continue;
+        if (bs.properties.size() != target.size()) continue;
+        bool ok = true;
+        for (const auto& [k, v] : target) {
+            auto it = bs.properties.find(k);
+            if (it == bs.properties.end() || it->second != v) { ok = false; break; }
+        }
+        if (ok) return id;
+    }
+    // No exact match — fall back to the block's default state.
+    return defIt->second;
 }
 
 // -- Minimal fallback if block_states.json isn't embedded ---------------------

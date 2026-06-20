@@ -48,7 +48,7 @@ std::string stripNs(const std::string& id) {
 }
 void installDefaultBlockStatesEnv() {
     if (std::getenv("MCPP_BLOCK_STATES")) return;
-    for (const char* path : { "mcpp/src/assets/block_states.json", "src/assets/block_states.json" }) {
+    for (const char* path : { "src/assets/block_states.json", "src/assets/block_states.json" }) {
         std::ifstream probe(path, std::ios::binary);
         if (!probe) continue;
 #if defined(_WIN32)

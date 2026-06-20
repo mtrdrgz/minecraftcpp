@@ -59,8 +59,8 @@ uint32_t floatToBits(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_sound_entity.tsv";
-    std::string assetPath = "mcpp/src/assets/network_registries.tsv";
+    std::string casesPath = "build/pkt_sound_entity.tsv";
+    std::string assetPath = "src/assets/network_registries.tsv";
     for (int i = 1; i + 1 < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases") casesPath = argv[++i];

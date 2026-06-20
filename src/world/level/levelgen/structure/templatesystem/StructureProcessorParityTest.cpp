@@ -49,8 +49,8 @@ struct Rule {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/structure_processor.tsv";
-    std::string statesPath = "mcpp/src/assets/block_states.json";
+    std::string casesPath = "build/structure_processor.tsv";
+    std::string statesPath = "src/assets/block_states.json";
     std::string tagsDir = "26.1.2/data/minecraft/tags/block";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];

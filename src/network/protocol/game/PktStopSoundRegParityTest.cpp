@@ -88,7 +88,7 @@ const std::array<const char*, 11> kSoundSourceNames = {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_stop_sound_reg.tsv";
+    std::string casesPath = "build/pkt_stop_sound_reg.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 
@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
     // StopSound packet does not use it, but the harness requires it be loadable so that a
     // future registry-id field could be resolved. Fail loudly if the table is missing.
     NetworkRegistries reg;
-    if (!reg.loadFromFile("mcpp/src/assets/network_registries.tsv")) {
+    if (!reg.loadFromFile("src/assets/network_registries.tsv")) {
         std::cerr << "FATAL cannot load mcpp/src/assets/network_registries.tsv "
                      "(run from repo root)\n";
         return 2;

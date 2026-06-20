@@ -59,7 +59,7 @@ std::string hexToAscii(const std::string& h) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_select_advancements_tab.tsv";
+    std::string casesPath = "build/pkt_select_advancements_tab.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

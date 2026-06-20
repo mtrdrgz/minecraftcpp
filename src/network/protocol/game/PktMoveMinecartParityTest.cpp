@@ -90,7 +90,7 @@ struct Step {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_move_minecart.tsv";
+    std::string casesPath = "build/pkt_move_minecart.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

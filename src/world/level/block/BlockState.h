@@ -39,6 +39,7 @@ extern std::vector<BlockState> g_blockStates;
 
 // Convenience accessor
 inline const BlockState* getBlockState(uint32_t id) {
+    if (g_blockStates.empty()) return nullptr;  // before initBlocks()
     if (id < g_blockStates.size()) return &g_blockStates[id];
     return &g_blockStates[0]; // air
 }

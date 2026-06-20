@@ -41,7 +41,7 @@ std::vector<uint8_t> unhex(const std::string& s) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_status_request_sb.tsv";
+    std::string casesPath = "build/pkt_status_request_sb.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
     std::ifstream f(casesPath, std::ios::binary);

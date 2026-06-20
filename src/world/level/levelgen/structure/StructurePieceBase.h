@@ -22,6 +22,12 @@ struct StructureWorldAccess {
     std::function<void(int, int, int, uint32_t)> setBlock;
     std::function<int(int, int)> getHeight;
     std::function<bool(int, int, int)> isInsideBoundingBox;
+    // Optional state-transform hook: given a stateId + Mirror + Rotation, returns
+    // the transformed stateId (Java's BlockState.mirror().rotate() applied).
+    // If null, placeBlock uses the state as-is (correct only when the piece's
+    // mirror/rotation are NONE, e.g. SwampHutPiece facing NORTH). Used by the
+    // SwampHutPiece parity test to replicate Java's placeBlock transform.
+    std::function<uint32_t(uint32_t stateId, piece::Mirror mir, piece::Rotation rot)> transformState;
     int minY = -64;
 };
 
@@ -38,15 +44,49 @@ public:
         , m_width(width), m_height(height), m_depth(depth)
         , m_heightPosition(-1) {}
 
-    // Get world position from local coords
+    // Get world position from local coords. Java's StructurePiece.getWorldPos
+    // is orientation-dependent:
+    //   NORTH: worldX = minX + x, worldZ = maxZ - z
+    //   SOUTH: worldX = minX + x, worldZ = minZ + z
+    //   WEST:  worldX = maxX - z, worldZ = minZ + x
+    //   EAST:  worldX = minX + z, worldZ = minZ + x
+    //   worldY = minY + y (always, when orientation != null)
+    // (StructurePiece.java:132-176.) The previous C++ port was NORTH-only,
+    // which placed blocks at wrong world positions for any non-NORTH piece.
     struct LocalPos { int x, y, z; };
     LocalPos getWorldPos(int x, int y, int z) const {
-        return { m_boundingBox.minX + x, m_boundingBox.minY + y, m_boundingBox.minZ + z };
+        int wx, wz;
+        switch (m_orientation) {
+            case piece::Direction::NORTH: wx = m_boundingBox.minX + x; wz = m_boundingBox.maxZ - z; break;
+            case piece::Direction::SOUTH: wx = m_boundingBox.minX + x; wz = m_boundingBox.minZ + z; break;
+            case piece::Direction::WEST:  wx = m_boundingBox.maxX - z; wz = m_boundingBox.minZ + x; break;
+            case piece::Direction::EAST:  wx = m_boundingBox.minX + z; wz = m_boundingBox.minZ + x; break;
+            default:                      wx = m_boundingBox.minX + x; wz = m_boundingBox.minZ + z; break;
+        }
+        return { wx, m_boundingBox.minY + y, wz };
     }
 
     void placeBlock(StructureWorldAccess& world, uint32_t state, int x, int y, int z) const {
+        // Java StructurePiece.placeBlock:
+        //   BlockPos pos = getWorldPos(x, y, z);
+        //   if (chunkBB.isInside(pos)) {
+        //       if (canBeReplaced(level, x, y, z, chunkBB)) {  // default: true
+        //           if (mirror != NONE)  blockState = blockState.mirror(mirror);
+        //           if (rotation != NONE) blockState = blockState.rotate(rotation);
+        //           level.setBlock(pos, blockState, 2);
+        //           ...fluid / shape-check postprocessing...
+        //       }
+        //   }
+        // We apply the mirror/rotate via world.transformState if the caller
+        // supplied one (the engine wires it to BlockRotation.h's rotate/mirror;
+        // standalone parity binaries wire it to a local lookup). If null, the
+        // state is placed as-is — correct only when the piece's mirror/rotation
+        // are NONE.
         auto pos = getWorldPos(x, y, z);
         if (world.isInsideBoundingBox && !world.isInsideBoundingBox(pos.x, pos.y, pos.z)) return;
+        if (world.transformState) {
+            state = world.transformState(state, m_mirror, m_rotation);
+        }
         if (world.setBlock) world.setBlock(pos.x, pos.y, pos.z, state);
     }
 
@@ -72,17 +112,37 @@ public:
     }
 
     void fillColumnDown(StructureWorldAccess& world, uint32_t blockState, int x, int startY, int z) const {
+        // Java StructurePiece.fillColumnDown:
+        //   while (isReplaceableByStructures(level.getBlockState(pos)) && pos.getY() > level.getMinY() + 1) {
+        //       level.setBlock(pos, blockState, 2);
+        //       pos.move(Direction.DOWN);
+        //   }
+        // isReplaceableByStructures = isAir() || liquid() || is(GLOW_LICHEN) || is(SEAGRASS) || is(TALL_SEAGRASS).
+        // NOTE: the check happens FIRST each iteration — if the starting block is
+        // already solid (e.g. floor under the hut), NOTHING is placed. The previous
+        // C++ port did setBlock-then-check, which over-wrote one solid block per
+        // column before noticing. This fix matches Java exactly.
         auto pos = getWorldPos(x, startY, z);
         if (world.isInsideBoundingBox && !world.isInsideBoundingBox(pos.x, pos.y, pos.z)) return;
-        while (pos.y > world.minY + 1) {
+        while (pos.y > world.minY + 1 && isReplaceableByStructures(world, pos.x, pos.y, pos.z)) {
             if (world.setBlock) world.setBlock(pos.x, pos.y, pos.z, blockState);
             pos.y--;
-            if (world.getBlock) {
-                uint32_t existing = world.getBlock(pos.x, pos.y, pos.z);
-                const mc::BlockState* bs = mc::getBlockState(existing);
-                if (bs && bs->block && !bs->block->isAir() && !bs->block->isFluid()) break;
-            }
         }
+    }
+
+    // Java StructurePiece.isReplaceableByStructures(state):
+    //   state.isAir() || state.liquid() || state.is(Blocks.GLOW_LICHEN)
+    //                  || state.is(Blocks.SEAGRASS) || state.is(Blocks.TALL_SEAGRASS)
+    static bool isReplaceableByStructures(StructureWorldAccess& world, int x, int y, int z) {
+        if (!world.getBlock) return true;  // unknown => treat as replaceable (matches air)
+        uint32_t id = world.getBlock(x, y, z);
+        const mc::BlockState* bs = mc::getBlockState(id);
+        if (!bs || !bs->block) return true;  // unknown => replaceable
+        if (bs->block->isAir()) return true;
+        if (bs->block->isFluid()) return true;
+        const std::string& name = bs->block->name;
+        if (name == "glow_lichen" || name == "seagrass" || name == "tall_seagrass") return true;
+        return false;
     }
 
     bool updateAverageGroundHeight(StructureWorldAccess& world, int offset) {

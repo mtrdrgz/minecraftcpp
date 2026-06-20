@@ -53,7 +53,7 @@ constexpr std::array<std::string_view, 2> kInteractionHand = {"MAIN_HAND", "OFF_
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_open_book.tsv";
+    std::string casesPath = "build/pkt_open_book.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

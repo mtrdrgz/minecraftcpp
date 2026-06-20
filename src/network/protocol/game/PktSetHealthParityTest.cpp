@@ -53,7 +53,7 @@ float bitsToFloat(uint32_t bits) { return std::bit_cast<float>(bits); }
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_set_health.tsv";
+    std::string casesPath = "build/pkt_set_health.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

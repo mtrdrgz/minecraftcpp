@@ -1402,9 +1402,9 @@ int updateShapeOne(const std::string& fam, int stateId, int dir, int neighbourId
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/block_update_shape.tsv";
-    std::string statesPath = "mcpp/src/assets/block_states.json";
-    std::string shapesPath = "mcpp/build/block_collision_shape.tsv";  // STURDY + SHAPE rows
+    std::string casesPath = "build/block_update_shape.tsv";
+    std::string statesPath = "src/assets/block_states.json";
+    std::string shapesPath = "build/block_collision_shape.tsv";  // STURDY + SHAPE rows
     std::string tagsDir = "26.1.2/data/minecraft/tags/block";  // connection-family block tags
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];

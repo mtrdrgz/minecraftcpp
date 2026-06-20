@@ -54,12 +54,12 @@ constexpr const char* MOB_EFFECT = "minecraft:mob_effect";
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_update_mob_effect.tsv";
+    std::string casesPath = "build/pkt_update_mob_effect.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 
     NetworkRegistries reg;
-    const std::string regPath = "mcpp/src/assets/network_registries.tsv";
+    const std::string regPath = "src/assets/network_registries.tsv";
     if (!reg.loadFromFile(regPath)) {
         std::cerr << "FATAL cannot open " << regPath
                   << " (run from repo root)\n";

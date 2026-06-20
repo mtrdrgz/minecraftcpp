@@ -50,7 +50,7 @@ double bitsToDouble(uint64_t bits) { return std::bit_cast<double>(bits); }
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_set_border_size.tsv";
+    std::string casesPath = "build/pkt_set_border_size.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

@@ -71,7 +71,7 @@ int32_t blockPosGetZ(int64_t node) { return (int32_t)((node << 26) >> 38); }
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_set_test_block_sb.tsv";
+    std::string casesPath = "build/pkt_set_test_block_sb.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

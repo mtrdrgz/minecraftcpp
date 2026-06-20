@@ -55,7 +55,7 @@ std::vector<std::string> split(const std::string& line) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/boolean_op.tsv";
+    std::string casesPath = "build/boolean_op.tsv";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];

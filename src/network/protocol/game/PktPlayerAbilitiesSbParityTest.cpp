@@ -46,7 +46,7 @@ constexpr int FLAG_FLYING = 2;
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_player_abilities_sb.tsv";
+    std::string casesPath = "build/pkt_player_abilities_sb.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

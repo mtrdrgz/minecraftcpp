@@ -123,6 +123,102 @@ Short is fine — one bullet per finding, no walls of text.
 
 ---
 
+### 2026-06-20 21:35 UTC — SwampHutPiece full parity (0/144,000) + structure parity suite passes 42/42
+
+**Agent**: Super Z (GLM)
+
+- **Environment restoration**: previous session lost all uncommitted work + the
+  26.1.2/{client.jar,libs,jdk25,src/} runtime when the sandbox was reset.
+  Re-cloned `origin/main` (PAT-auth), re-fetched client.jar from Mojang CDN,
+  re-extracted worldgen data + tags, re-downloaded JDK 25 + 107 manifest libs,
+  re-decompiled Java source via Vineflower (6,882 .java files). Restored the
+  `src/assets/` directory (AssetPack.cpp/AssetManager.cpp/TextureAtlas.cpp/
+  block_states.json/network_registries.tsv) from pre-restructure git history
+  (commit 13c597c6^) — these were dropped during the 2026-06-19 repo
+  restructure and CMakeLists.txt still referenced them.
+- **Stale `mcpp/` path cleanup**: 197 source files had hardcoded `mcpp/build/`
+  and `mcpp/src/assets/` paths left over from the restructure. Fixed via sed
+  (`s|"mcpp/|"|g`). Two structure parity tests (structure_processor_parity,
+  structure_placeinworld_parity) were silently broken by this — now both pass.
+- **`tools/run_groundtruth.sh` paths fixed**: was looking for `mcpp/tools/` and
+  used a 2-level-up REPO path; now correctly uses `tools/` and 1-level-up.
+  Added `--add-opens java.base/sun.misc=ALL-UNNAMED` for tools that allocate
+  `LevelChunk` via `Unsafe.allocateInstance` (SwampHutPieceParity).
+- **`StructurePieceBase.h` fixes (3 bugs)**:
+  1. `getWorldPos(x, y, z)` was NORTH-only (`minX+x, minY+y, minZ+z`). Java's
+     getWorldPos is orientation-dependent:
+       NORTH: (minX+x, minY+y, maxZ-z)
+       SOUTH: (minX+x, minY+y, minZ+z)
+       WEST:  (maxX-z, minY+y, minZ+x)
+       EAST:  (minX+z, minY+y, minZ+x)
+     The NORTH-only port placed blocks at WRONG world positions for any
+     non-NORTH-facing piece. Fixed to match Java (StructurePiece.java:132-176).
+  2. `fillColumnDown` did setBlock-then-check, over-writing one solid block per
+     column before noticing. Java's loop is `while (isReplaceable && y > minY+1)
+     { setBlock; y-- }` — check FIRST. Fixed to match. Also ported
+     `isReplaceableByStructures`: `isAir() || isFluid() || name in
+     {glow_lichen, seagrass, tall_seagrass}`.
+  3. `placeBlock` didn't apply `mirror`/`rotate` to the block state. Java
+     applies `state.mirror(this.mirror).rotate(this.rotation)` before
+     `level.setBlock`. Added a `transformState` callback on
+     `StructureWorldAccess` (wired by callers with a BlockRotation.h-backed
+     impl). Default null = identity (correct only when piece mirror/rotation
+     are NONE).
+- **`Blocks.cpp` `getBlockStateIdWith` fix**: was returning the FIRST state
+  whose properties matched the overrides (so `getBlockStateIdWith("spruce_stairs",
+  {{"facing","north"}})` returned id=9728 with `half=top,waterlogged=true`).
+  Java's `setValue(key, value)` starts from the DEFAULT state and overrides
+  only the specified property, so the correct result for that call is id=9739
+  (`facing=north,half=bottom,shape=straight,waterlogged=false`). Rewrote
+  `getBlockStateIdWith` to find the default state, apply overrides, then look
+  up the state whose properties EXACTLY match the resulting target map.
+- **`BlockState.h` defensive fix**: `getBlockState(0)` returned `&g_blockStates[0]`
+  even when `g_blockStates` was empty (standalone parity binaries), causing a
+  segfault. Now returns `nullptr` when the table is empty. Callers in
+  StructurePieceBase already null-guard.
+- **`Blocks.h`/`Blocks.cpp` exposure**: made `g_blockStates`, `g_blocksByName`,
+  `g_defaultStateByName` non-static so standalone parity binaries can populate
+  them directly from `block_states.json` without going through `initBlocks()`
+  (which needs the asset pack + Windows resource machinery).
+- **`SwampHutPiece.h` rewrite**: replaced the placeholder stair placement
+  (which used `blockState("spruce_stairs")` — a single default state for ALL
+  roof edges) with the real 4 cardinal facings (`north/east/west/south`) + 4
+  corner pieces with `outer_left`/`outer_right` shapes, matching Java's
+  SwampHutPiece.postProcess exactly. Each state is resolved via
+  `getBlockStateIdWith("spruce_stairs", {{"facing", dir}, {"shape", shape}})`.
+- **`tools/SwampHutPieceParity.java`**: new ground-truth generator that drives
+  the REAL SwampHutPiece.postProcess against a capturing `WorldGenLevel` proxy.
+  Key trick: `level.getChunk(pos)` returns a `LevelChunk` instance allocated
+  via `sun.misc.Unsafe.allocateInstance` (LevelChunk is a CLASS, not an
+  interface, so `Proxy.newProxyInstance` doesn't work). The only method
+  placeBlock invokes on it is `markPosForPostprocessing`, whose inherited
+  default just logs (silenced by log4j root level OFF). `getLevel()` returns
+  null so the witch+cat spawns NPE and short-circuit (matches the C++ port,
+  which doesn't spawn entities yet either). Captured 144,450 lines across
+  225 cases (9 seeds × 5 west × 5 north).
+- **`SwampHutPieceParityTest.cpp`**: replays each case against the C++
+  SwampHutPiece. Provides a `transformState` hook that wires Java's
+  `BlockState.mirror().rotate()` through the certified `BlockRotation.h`,
+  using the FAM (declaring-class) table from BlockRotateMirrorParity.java.
+  Initial issues solved:
+    - TSV trailing-tab bug: `std::getline` doesn't emit a final empty element
+      when a line ends with `\t`, so `p.size()` was 8 not 9 for PLACE rows
+      with empty props. Fixed the size check to accept both.
+    - The reverse-index lookup needed CANONICAL (alphabetical) props because
+      `BlockRotation.h` produces props in arbitrary order while my reverse
+      index keyed by canonical form. Aligned both sides to canonical.
+- **`tools/run_structure_parity.sh`**: new harness that runs every registered
+  structure parity target end-to-end (Java GT TSV → C++ parity → pass/fail).
+  Handles the `--states`/`--tags`/`--fam` arg variations per test.
+- **RESULTS** (all 42 structure parity tests pass):
+    - SwampHutPiece: 225 cases, 144,000 block placements, **0 mismatches**
+    - All 41 previously-existing structure parity tests still pass (no regressions
+      from the `mcpp/` path fix or the BlockState/Blocks API changes)
+    - Cumulative structure checks across all targets: ~3.8M cell comparisons
+- **Commit**: this session's changes pushed as a single commit on `main`.
+
+---
+
 ### 2026-06-20 03:00 UTC — ROOT CAUSE FOUND + FIXED: carver argument-evaluation-order bug
 
 **Agent**: Claude (claude-opus-4-8)

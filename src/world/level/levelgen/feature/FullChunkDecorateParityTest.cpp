@@ -135,7 +135,7 @@ std::int64_t packChunk(int cx, int cz) { return (static_cast<std::int64_t>(stati
 
 [[maybe_unused]] void installBlockStatesEnv() {   // parity-main only (unused in MCPP_DECORATE_NO_MAIN builds)
     if (std::getenv("MCPP_BLOCK_STATES")) return;
-    for (const char* p : { "mcpp/src/assets/block_states.json", "src/assets/block_states.json" }) {
+    for (const char* p : { "src/assets/block_states.json", "src/assets/block_states.json" }) {
         std::ifstream f(p, std::ios::binary);
         if (f) {
 #if defined(_WIN32)

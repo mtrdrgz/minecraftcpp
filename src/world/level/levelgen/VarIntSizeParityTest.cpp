@@ -30,7 +30,7 @@ std::string hex(const std::vector<uint8_t>& v) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/varint_size.tsv";
+    std::string casesPath = "build/varint_size.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
     std::ifstream f(casesPath, std::ios::binary);

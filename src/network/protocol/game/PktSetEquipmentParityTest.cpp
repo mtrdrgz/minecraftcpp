@@ -46,8 +46,8 @@ std::string hex(const std::vector<uint8_t>& v) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_set_equipment.tsv";
-    std::string assetPath = "mcpp/src/assets/network_registries.tsv";
+    std::string casesPath = "build/pkt_set_equipment.tsv";
+    std::string assetPath = "src/assets/network_registries.tsv";
     for (int i = 1; i + 1 < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases") casesPath = argv[++i];

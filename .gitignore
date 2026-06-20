@@ -32,6 +32,18 @@ assets/
 src/assets/*
 !src/assets/assets.rc
 !src/assets/resource_ids.h
+# Source files (AssetPack.cpp, AssetManager.cpp, TextureAtlas.cpp, block_states.json,
+# network_registries.tsv) ARE tracked — they're engine sources referenced by
+# src/CMakeLists.txt. The restructure commit accidentally dropped them; restored
+# from pre-restructure git history (commit 13c597c6^).
+!src/assets/AssetPack.cpp
+!src/assets/AssetPack.h
+!src/assets/AssetManager.cpp
+!src/assets/AssetManager.h
+!src/assets/TextureAtlas.cpp
+!src/assets/TextureAtlas.h
+!src/assets/block_states.json
+!src/assets/network_registries.tsv
 
 # Profiling output (generated CSV data, not source)
 profiling/profiles/

@@ -73,7 +73,7 @@ int32_t blockPosGetZ(int64_t node) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_open_sign_editor.tsv";
+    std::string casesPath = "build/pkt_open_sign_editor.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

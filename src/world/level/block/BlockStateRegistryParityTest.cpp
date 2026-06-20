@@ -18,8 +18,8 @@
 #include <vector>
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/block_state_registry.tsv";
-    std::string statesPath = "mcpp/src/assets/block_states.json";
+    std::string casesPath = "build/block_state_registry.tsv";
+    std::string statesPath = "src/assets/block_states.json";
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
         if (std::string(argv[i]) == "--states") statesPath = argv[i + 1];

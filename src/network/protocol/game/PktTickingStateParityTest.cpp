@@ -59,7 +59,7 @@ uint32_t floatToBits(float f) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_ticking_state.tsv";
+    std::string casesPath = "build/pkt_ticking_state.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

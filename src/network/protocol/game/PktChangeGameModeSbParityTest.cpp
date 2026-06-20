@@ -52,7 +52,7 @@ const std::array<const char*, 4> kModeNames = {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/pkt_change_gamemode_sb.tsv";
+    std::string casesPath = "build/pkt_change_gamemode_sb.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

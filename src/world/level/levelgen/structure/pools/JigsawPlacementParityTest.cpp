@@ -312,7 +312,7 @@ struct Row { std::string loc; int rot; int bb[6]; int gld; int nj; };
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string oracleTsv = "mcpp/build/jigsaw_placement.tsv";
+    std::string oracleTsv = "build/jigsaw_placement.tsv";
     std::string poolBase = "26.1.2/data/minecraft/worldgen/template_pool";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];

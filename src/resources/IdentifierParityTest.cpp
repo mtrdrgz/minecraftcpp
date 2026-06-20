@@ -73,7 +73,7 @@ bool isSentinel(const std::string& s) { return s == "-"; }
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/identifier.tsv";
+    std::string casesPath = "build/identifier.tsv";
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--cases") casesPath = argv[i + 1];
 

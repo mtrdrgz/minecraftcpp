@@ -103,9 +103,9 @@ Tmpl parseTemplate(const mc::nbt::NbtCompound& root) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string casesPath = "mcpp/build/structure_placeinworld.tsv";
-    std::string statesPath = "mcpp/src/assets/block_states.json";
-    std::string famPath = "mcpp/build/block_rotate_mirror.tsv";
+    std::string casesPath = "build/structure_placeinworld.tsv";
+    std::string statesPath = "src/assets/block_states.json";
+    std::string famPath = "build/block_rotate_mirror.tsv";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cases" && i + 1 < argc) casesPath = argv[++i];

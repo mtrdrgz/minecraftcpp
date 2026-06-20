@@ -18,10 +18,10 @@ TOOL="${1:?usage: run_groundtruth.sh <Tool> <out.tsv> [args...]}"
 OUT="${2:?usage: run_groundtruth.sh <Tool> <out.tsv> [args...]}"
 shift 2
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JAR="$REPO/26.1.2/client.jar"
 LIBS="$REPO/26.1.2/libs/*"
-SRC="$REPO/mcpp/tools/$TOOL.java"
+SRC="$REPO/tools/$TOOL.java"
 CLASSES="$REPO/26.1.2/parity_classes"
 JAVAC="$REPO/26.1.2/jdk25/bin/javac"
 JAVA="$REPO/26.1.2/jdk25/bin/java"
@@ -33,5 +33,6 @@ done
 mkdir -p "$CLASSES" "$(dirname "$OUT")"
 "$JAVAC" -cp "$JAR:$LIBS" -d "$CLASSES" "$SRC"
 # JVM deprecation warnings go to stderr; keep them out of the TSV.
-"$JAVA" -cp "$CLASSES:$JAR:$LIBS" "$TOOL" "$@" >"$OUT" 2>"$OUT.stderr.log"
+# --add-opens sun.misc for tools that allocate LevelChunk via Unsafe (e.g. SwampHutPieceParity).
+"$JAVA" --add-opens java.base/sun.misc=ALL-UNNAMED -cp "$CLASSES:$JAR:$LIBS" "$TOOL" "$@" >"$OUT" 2>"$OUT.stderr.log"
 echo "Ground truth written: $OUT ($(wc -l <"$OUT") lines)"

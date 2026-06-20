@@ -76,7 +76,7 @@ Minecraft 1.18+ replaced old noise sampling with a composable "density function"
 | `Cache2D` / `CacheAllInCell` / `CacheOnce` / `FlatCache` | Caching layers to avoid redundant evaluation | ✅ Byte-exact | 2,359,296/0 |
 | `Interpolated` | Tri-linear interpolation across 4x4x4 cell | ✅ Byte-exact | 2,359,296/0 |
 | `BlendDensity` / `BlendAlpha` / `BlendOffset` | Chunk-border blending | ✅ Byte-exact | 2,359,296/0 |
-| `BeardifierOrMarker` | Adds structure influence (structures pull terrain) | 🔄 Partial | No gate (structures not ported) |
+| `BeardifierOrMarker` | Adds structure influence (structures pull terrain) | 🔄 Partial | Integrated (returns 0 — no structure markers ported yet) |
 
 ### Biome System
 
@@ -171,16 +171,28 @@ Minecraft builds chunks in stages. Each status adds data on top of the previous.
 | Component | What it does | Status | Final Certification |
 |---|---|---|---|
 | Structure registry | JSON-defined structure list loaded | 🔄 Partial | — |
-| Jigsaw assembler | JIGSAW piece-based structure assembly | ❌ Not started | — |
-| Village | Houses, paths, lampposts | ❌ Not started | — |
-| Pillager Outpost | Tower + patrol cage | ❌ Not started | — |
-| Desert Temple | TNT + hidden chamber | ❌ Not started | — |
-| Woodland Mansion | Large multi-room structure | ❌ Not started | — |
-| Stronghold | Rooms with End Portal | ❌ Not started | — |
-| Mineshaft | Tunnels + wood supports + chests | ❌ Not started | — |
-| Ocean Monument | Guardian temple | ❌ Not started | — |
-| Nether Fortress | Nether-specific hallways + blaze spawners | ❌ Not started | — |
-| Bastion Remnant | Piglin structure | ❌ Not started | — |
+| Structure placement (RTree, RandomSpread, ConcentricRings) | Where each structure starts | ✅ Byte-exact | 29K cells/0 (placement), 3,840/0 (concentric_rings) |
+| Structure transforms (BoundingBox, Mirror, Rotation) | Pure math under all template/jigsaw placement | ✅ Byte-exact | 4,679/0 |
+| StructurePiece base (placeBlock, generateBox, fillColumnDown, getWorldPos, updateAverageGroundHeight) | Helpers used by all non-jigsaw pieces | ✅ Byte-exact | Integrated in SwampHutPiece 144,000/0 |
+| StructureTemplatePool + JigsawPlacement | Jigsaw assembler core (pool selection, attach math) | ✅ Byte-exact | 551/0 + 1,055 seeds/0 (bastion + trial_chambers) |
+| StructureTemplate (loader, placeInWorld, processors) | .nbt template load + place + rule processors | ✅ Byte-exact | 15,873/0 + 346,872/0 + 544,050/0 |
+| SwampHut (Witch Hut) | Scattered-feature temple: floor, walls, roof (4 stair facings + 4 corners), foundation | ✅ Byte-exact | 225 cases / 144,000 placements / 0 |
+| ScatteredFeaturePiece ctor (SwampHut, DesertPyramid) | RNG-driven bounding-box + orientation | ✅ Byte-exact | 5,184/0 |
+| Woodland Mansion grid (SimpleGrid, MansionGrid, GridLayout, EdgeClean) | Floor-plan generation | ✅ Byte-exact | 11,016/0 + 1,212,000/0 + 3,547/0 |
+| Ocean Monument (room geometry, graph, fitter) | Room layout | ✅ Byte-exact | 4,299/0 + 1,188/0 + 2,600/0 |
+| Stronghold (piece boxes, type boxes, small doors, smooth-stone selector) | Room geometry + RNG door picks | ✅ Byte-exact | 280/0 + 480/0 + 3,936/0 + 481/0 |
+| Mineshaft (corridor, crossing, room, stairs) | RNG corridor geometry + boxes | ✅ Byte-exact | 17,280/0 + 17,280/0 + 5,760/0 + 96/0 |
+| Nether Fortress (piece box, child offset) | RNG geometry | ✅ Byte-exact | 504/0 + 736/0 |
+| Igloo piece position | Y-offset positioning | ✅ Byte-exact | 300/0 |
+| Ocean Ruin cluster geometry | Cluster layout | ✅ Byte-exact | 504/0 |
+| Ruined Portal Y-selector | Y-position RNG | ✅ Byte-exact | 348/0 |
+| Jungle Temple stone selector | BlockSelector RNG (mossy/cobble maze) | ✅ Byte-exact | self-check/0 |
+| BeardifierOrMarker | Adds structure influence (structures pull terrain) | 🔄 Partial | Integrated (no structure markers yet) |
+| Jigsaw assembler (engine integration) | Full Village/Pillager Outpost/etc. assembly via the engine | 🔄 Partial | Components certified, integration pending |
+| Village | Houses, paths, lampposts | 🔄 Partial | JigsawPlacement certified, piece assembly pending |
+| Pillager Outpost | Tower + patrol cage | 🔄 Partial | StructureTemplate.placeInWorld certified, integration pending |
+| Desert Temple | TNT + hidden chamber | ❌ Not started | DesertPyramidPiece ctor certified via scattered_feature_box |
+| Bastion Remnant | Piglin structure | 🔄 Partial | JigsawPlacement certified (211 seeds/0) |
 | End City | End-specific loot structure | ❌ Not started | — |
 
 </details>
