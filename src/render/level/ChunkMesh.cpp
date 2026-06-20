@@ -902,20 +902,28 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
     int baseY = CHUNK_MIN_Y + sectionIndex * 16;
     int chunkWorldX = chunk.pos().x * 16;
     int chunkWorldZ = chunk.pos().z * 16;
+    // Hoist chunk coords out of the lambda — they were being recomputed on
+    // EVERY stateAt call (4096+ times per section).
+    const int chunkCx = chunk.pos().x;
+    const int chunkCz = chunk.pos().z;
+    const LevelChunk* nbrEast  = neighbors[0];
+    const LevelChunk* nbrWest  = neighbors[1];
+    const LevelChunk* nbrSouth = neighbors[2];
+    const LevelChunk* nbrNorth = neighbors[3];
     auto stateAt = [&](int wx, int wy, int wz) -> uint32_t {
         const int cx = wx >> 4;
         const int cz = wz >> 4;
-        const int chunkCx = chunk.pos().x;
-        const int chunkCz = chunk.pos().z;
-        if (cx == chunkCx && cz == chunkCz) {
-            return chunk.getBlock(wx, wy, wz);
+        if (cx == chunkCx) {
+            if (cz == chunkCz)    return chunk.getBlock(wx, wy, wz);
+            if (cz == chunkCz+1)  return nbrSouth ? nbrSouth->getBlock(wx, wy, wz) : 0;
+            if (cz == chunkCz-1)  return nbrNorth ? nbrNorth->getBlock(wx, wy, wz) : 0;
+            return 0;
         }
-        const LevelChunk* nbr = nullptr;
-        if      (cx == chunkCx + 1 && cz == chunkCz) nbr = neighbors[0];
-        else if (cx == chunkCx - 1 && cz == chunkCz) nbr = neighbors[1];
-        else if (cz == chunkCz + 1 && cx == chunkCx) nbr = neighbors[2];
-        else if (cz == chunkCz - 1 && cx == chunkCx) nbr = neighbors[3];
-        return nbr ? nbr->getBlock(wx, wy, wz) : 0;
+        if (cz == chunkCz) {
+            if (cx == chunkCx+1)  return nbrEast  ? nbrEast->getBlock(wx, wy, wz)  : 0;
+            if (cx == chunkCx-1)  return nbrWest  ? nbrWest->getBlock(wx, wy, wz)  : 0;
+        }
+        return 0;
     };
     auto solidAt = [&](int wx, int wy, int wz) {
         const mc::BlockState* s = mc::getBlockState(stateAt(wx, wy, wz));

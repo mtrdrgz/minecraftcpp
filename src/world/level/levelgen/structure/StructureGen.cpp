@@ -3,6 +3,7 @@
 #include "placement/StructurePlacement.h"
 #include "StructurePieceBase.h"
 #include "structures/SwampHutPiece.h"
+#include "structures/DesertPyramidPiece.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -1232,10 +1233,28 @@ bool Runtime::tryPlaceSwampHut(ChunkPos active, const StructureWorld& world) {
 }
 
 bool Runtime::tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world) {
-    // TODO: port DesertPyramidPiece.postProcess
-    // For now, stub — will be implemented next
-    MC_LOG_DEBUG("Structure desert_pyramid: not yet implemented at chunk ({},{})", active.x, active.z);
-    return false;
+    // DesertPyramidStructure.findGenerationPoint:
+    //   onTopOfChunkCenter(context, WORLD_SURFACE_WG, builder -> generatePieces(builder, context))
+    //   generatePieces: builder.addPiece(new DesertPyramidPiece(context.random(), chunkPos.getMinBlockX(), chunkPos.getMinBlockZ()))
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    int west = active.x * 16;
+    int north = active.z * 16;
+
+    piece::DesertPyramidPiece pyramid(*random, west, north);
+
+    StructureWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.minY = -64;
+    access.isInsideBoundingBox = nullptr;
+
+    pyramid.postProcess(access, *random);
+    MC_LOG_INFO("Structure desert_pyramid placed at chunk ({},{})", active.x, active.z);
+    return true;
 }
 
 void Runtime::generate(ChunkPos active, const StructureWorld& world,

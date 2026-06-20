@@ -146,6 +146,16 @@ public:
     }
 
     bool updateAverageGroundHeight(StructureWorldAccess& world, int offset) {
+        // Java ScatteredFeaturePiece.updateAverageGroundHeight:
+        //   if (heightPosition >= 0) return true;
+        //   int total=0, count=0;
+        //   for z in [minZ..maxZ] for x in [minX..maxX]:
+        //     pos.set(x, 64, z);
+        //     if (chunkBB.isInside(pos)) { total += getHeightmapPos(MOTION_BLOCKING_NO_LEAVES, pos).getY(); count++; }
+        //   if (count == 0) return false;
+        //   heightPosition = total / count;
+        //   boundingBox.move(0, heightPosition - minY + offset, 0);
+        // (ScatteredFeaturePiece.java:50-76.)
         if (m_heightPosition >= 0) return true;
         int total = 0, count = 0;
         for (int z = m_boundingBox.minZ; z <= m_boundingBox.maxZ; z++)
@@ -156,6 +166,40 @@ public:
         if (count == 0) return false;
         m_heightPosition = total / count + offset;
         int dy = m_heightPosition - m_boundingBox.minY;
+        m_boundingBox.minY += dy;
+        m_boundingBox.maxY += dy;
+        return true;
+    }
+
+    bool updateHeightPositionToLowestGroundHeight(StructureWorldAccess& world, int offset) {
+        // Java ScatteredFeaturePiece.updateHeightPositionToLowestGroundHeight:
+        //   if (heightPosition >= 0) return true;
+        //   int lowest = level.getMaxY() + 1;
+        //   boolean found = false;
+        //   for z in [minZ..maxZ] for x in [minX..maxX]:
+        //     pos.set(x, 0, z);
+        //     lowest = min(lowest, getHeightmapPos(MOTION_BLOCKING_NO_LEAVES, pos).getY());
+        //     found = true;
+        //   if (!found) return false;
+        //   heightPosition = lowest;
+        //   boundingBox.move(0, heightPosition - minY + offset, 0);
+        // (ScatteredFeaturePiece.java:78-102.) Used by DesertPyramidPiece and
+        // JungleTemplePiece. NOTE: no chunkBB.isInside check here (unlike
+        // updateAverageGroundHeight) — Java iterates the whole bounding box.
+        if (m_heightPosition >= 0) return true;
+        int lowest = 319 + 1;  // level.getMaxY() + 1 for overworld
+        bool found = false;
+        for (int z = m_boundingBox.minZ; z <= m_boundingBox.maxZ; z++)
+            for (int x = m_boundingBox.minX; x <= m_boundingBox.maxX; x++) {
+                if (world.getHeight) {
+                    int h = world.getHeight(x, z);
+                    if (h < lowest) lowest = h;
+                    found = true;
+                }
+            }
+        if (!found) return false;
+        m_heightPosition = lowest;
+        int dy = m_heightPosition - m_boundingBox.minY + offset;
         m_boundingBox.minY += dy;
         m_boundingBox.maxY += dy;
         return true;

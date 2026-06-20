@@ -6430,7 +6430,9 @@ set_target_properties(scattered_feature_box_parity PROPERTIES RUNTIME_OUTPUT_DIR
 add_executable(swamp_hut_piece_parity
     world/level/levelgen/structure/structures/SwampHutPieceParityTest.cpp
     world/level/levelgen/RandomSource.cpp
-    world/level/block/Blocks.cpp)
+    world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp)
 target_include_directories(swamp_hut_piece_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(swamp_hut_piece_parity PRIVATE nlohmann_json)
 if(WIN32)
