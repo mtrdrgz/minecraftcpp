@@ -313,18 +313,38 @@ void createCaveTunnel(
         horizontalRotation += yRota * 0.1f;
         xRota *= 0.9f;
         yRota *= 0.75f;
-        xRota += (random.nextFloat() - random.nextFloat()) * random.nextFloat() * 2.0f;
-        yRota += (random.nextFloat() - random.nextFloat()) * random.nextFloat() * 4.0f;
+        // RNG draw order must match Java exactly: subtraction operands are unsequenced
+        // in C++ (GCC may reorder them), so draw all three floats into locals in Java's
+        // source order before combining (a-b is not commutative, so order matters).
+        const float xRotaR1 = random.nextFloat();
+        const float xRotaR2 = random.nextFloat();
+        const float xRotaR3 = random.nextFloat();
+        xRota += (xRotaR1 - xRotaR2) * xRotaR3 * 2.0f;
+        const float yRotaR1 = random.nextFloat();
+        const float yRotaR2 = random.nextFloat();
+        const float yRotaR3 = random.nextFloat();
+        yRota += (yRotaR1 - yRotaR2) * yRotaR3 * 4.0f;
 
         if (currentStep == splitPoint && thickness > 1.0f) {
-            createCaveTunnel(context, config, chunk, random.nextLong(), aquifer, x, y, z,
+            // Java (CaveWorldCarver.createTunnel) evaluates each recursive call's
+            // arguments strictly LEFT-TO-RIGHT: nextLong() (the child seed) is drawn
+            // BEFORE nextFloat() (the child thickness). C++ leaves function-argument
+            // evaluation order unspecified and GCC evaluates right-to-left, which would
+            // draw the thickness float before the seed long — swapping the RNG draw
+            // order and corrupting BOTH child tunnels' seed and thickness. Hoist into
+            // locals in source order so the draw order matches Java on every compiler.
+            const std::int64_t childSeed1 = random.nextLong();
+            const float childThickness1 = random.nextFloat() * 0.5f + 0.5f;
+            createCaveTunnel(context, config, chunk, childSeed1, aquifer, x, y, z,
                              horizontalRadiusMultiplier, verticalRadiusMultiplier,
-                             random.nextFloat() * 0.5f + 0.5f,
+                             childThickness1,
                              horizontalRotation - PI_F / 2.0f, verticalRotation / 3.0f,
                              currentStep, dist, 1.0, mask, floorLevel);
-            createCaveTunnel(context, config, chunk, random.nextLong(), aquifer, x, y, z,
+            const std::int64_t childSeed2 = random.nextLong();
+            const float childThickness2 = random.nextFloat() * 0.5f + 0.5f;
+            createCaveTunnel(context, config, chunk, childSeed2, aquifer, x, y, z,
                              horizontalRadiusMultiplier, verticalRadiusMultiplier,
-                             random.nextFloat() * 0.5f + 0.5f,
+                             childThickness2,
                              horizontalRotation + PI_F / 2.0f, verticalRotation / 3.0f,
                              currentStep, dist, 1.0, mask, floorLevel);
             return;
@@ -456,8 +476,17 @@ void doCanyonCarve(
         horizontalRotation += yRota * 0.05f;
         xRota *= 0.8f;
         yRota *= 0.5f;
-        xRota += (random.nextFloat() - random.nextFloat()) * random.nextFloat() * 2.0f;
-        yRota += (random.nextFloat() - random.nextFloat()) * random.nextFloat() * 4.0f;
+        // RNG draw order must match Java exactly: subtraction operands are unsequenced
+        // in C++ (GCC may reorder them), so draw all three floats into locals in Java's
+        // source order before combining (a-b is not commutative, so order matters).
+        const float xRotaR1 = random.nextFloat();
+        const float xRotaR2 = random.nextFloat();
+        const float xRotaR3 = random.nextFloat();
+        xRota += (xRotaR1 - xRotaR2) * xRotaR3 * 2.0f;
+        const float yRotaR1 = random.nextFloat();
+        const float yRotaR2 = random.nextFloat();
+        const float yRotaR3 = random.nextFloat();
+        yRota += (yRotaR1 - yRotaR2) * yRotaR3 * 4.0f;
         if (random.nextInt(4) == 0) {
             continue;
         }

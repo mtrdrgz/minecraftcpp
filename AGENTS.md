@@ -352,6 +352,21 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
+**Last updated**: 2026-06-20 03:00 UTC — carver gate restored to **0 mismatches**.
+
+**Carver root cause FIXED (2026-06-20 03:00):** the long-standing 7,673 carver
+mismatches (`full_chunk_parity`) were a C++ **argument-evaluation-order** bug, not an
+FP-parity limitation. `CaveWorldCarver.createTunnel`'s split recursion draws
+`nextLong()` (child seed) then `nextFloat()` (child thickness) as arguments to one
+call; Java evaluates left-to-right, GCC right-to-left, swapping the RNG draw order and
+corrupting every split child tunnel. Fixed by hoisting RNG draws into locals in Java
+source order (and hardening the `(nextFloat()-nextFloat())*nextFloat()` xRota/yRota
+lines, same UB class) in `src/world/level/levelgen/carver/WorldCarver.cpp`. Verified
+against real Java 26.1.2 ground truth (2,359,296 cells): carver mismatches 7,673 → 0.
+See devlog 2026-06-20 03:00 for the empirical trace. (Lesson: never put two RNG draws in
+one C++ argument list / unsequenced expression — argument and operand order is
+unspecified and GCC differs from Java.)
+
 **Last updated**: Session 66+ (worldgen ≈8M cells certified; engine decorates in-game; full-port goal set; audits + parallel pillars running)
 
 **Session 66 continued (2026-06-10) — engine integration + full-port kickoff:**
