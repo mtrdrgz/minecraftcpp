@@ -6,6 +6,7 @@
 
 # Build outputs
 build/
+build-vs/
 build-win/
 cmake-build-*/
 out/

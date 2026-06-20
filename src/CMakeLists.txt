@@ -11,7 +11,7 @@ set(MC_SOURCES
     core/StbImpl.cpp
     core/ThreadPool.cpp
     # Profiling
-    ../../profiling/src/Profiler.cpp
+    ../profiling/src/Profiler.cpp
 
     # NBT
     nbt/Tag.cpp
@@ -155,7 +155,7 @@ target_include_directories(mcpp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/render/dx12
     ../vendor/vma
     ../vendor/d3d12ma
-    ../../profiling/include
+    ../profiling/include
 )
 
 target_link_libraries(mcpp PRIVATE
