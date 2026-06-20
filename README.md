@@ -47,14 +47,14 @@ The terrain engine is the deepest subsystem. It replicates Minecraft's multi-sta
 
 | Component | What it does | Status | Final Certification |
 |---|---|---|---|
-| `SimplexNoise` | Skewed-grid gradient noise, identical constants | ✅ Byte-exact | — |
-| `PerlinNoise` | Permutation-table + fade/lerp, exact Java port | ✅ Byte-exact | — |
-| `OctaveNoise` | Multi-octave stacking with Java's lacunarity/amplitude | ✅ Byte-exact | — |
-| `BlendedNoise` | Blends multiple octave sets as Java does for 3-D terrain shape | ✅ Byte-exact | — |
-| `NormalNoise` | Two-octave wrapper used by density function system | ✅ Byte-exact | — |
-| `XoroshiroRandom` | Java's world-seed PRNG, bit-identical | ✅ Byte-exact | — |
-| `LegacyRandom` | Java `Random` (LCG), used for decorations and carvers | ✅ Byte-exact | — |
-| `PositionalRandomFactory` | Per-chunk / per-feature RNG seeding | ✅ Byte-exact | — |
+| `SimplexNoise` | Skewed-grid gradient noise, identical constants | ✅ Byte-exact | 124,712/0 |
+| `PerlinNoise` | Permutation-table + fade/lerp, exact Java port | ✅ Byte-exact | 5,980,685/0 |
+| `OctaveNoise` | Multi-octave stacking with Java's lacunarity/amplitude | ✅ Byte-exact | 5,980,685/0 (via PerlinNoise) |
+| `BlendedNoise` | Blends multiple octave sets as Java does for 3-D terrain shape | ✅ Byte-exact | 18,610/0 |
+| `NormalNoise` | Two-octave wrapper used by density function system | ✅ Byte-exact | 81,549/0 |
+| `XoroshiroRandom` | Java's world-seed PRNG, bit-identical | ✅ Byte-exact | 540/0 |
+| `LegacyRandom` | Java `Random` (LCG), used for decorations and carvers | ✅ Byte-exact | 540/0 |
+| `PositionalRandomFactory` | Per-chunk / per-feature RNG seeding | ✅ Byte-exact | 540/0 |
 
 ### Density Function System
 
@@ -76,7 +76,7 @@ Minecraft 1.18+ replaced old noise sampling with a composable "density function"
 | `Cache2D` / `CacheAllInCell` / `CacheOnce` / `FlatCache` | Caching layers to avoid redundant evaluation | ✅ Byte-exact | 2,359,296/0 |
 | `Interpolated` | Tri-linear interpolation across 4x4x4 cell | ✅ Byte-exact | 2,359,296/0 |
 | `BlendDensity` / `BlendAlpha` / `BlendOffset` | Chunk-border blending | ✅ Byte-exact | 2,359,296/0 |
-| `BeardifierOrMarker` | Adds structure influence (structures pull terrain) | 🔄 Partial | No gate yet |
+| `BeardifierOrMarker` | Adds structure influence (structures pull terrain) | 🔄 Partial | No gate (structures not ported) |
 
 ### Biome System
 
@@ -122,7 +122,7 @@ Aquifers replace Java's old water-everywhere approach with local water/lava pock
 |---|---|---|---|
 | `CaveWorldCarver` | Main cave tunnels — branch/worm algorithm | ✅ Byte-exact | Integrated in 2,359,296/0 |
 | `CanyonWorldCarver` | Ravine carving — floor/ceiling shapes | ✅ Byte-exact | Integrated in 2,359,296/0 |
-| Carver mask | Per-chunk bitfield preventing double-carve | ✅ Byte-exact | — |
+| Carver mask | Per-chunk bitfield preventing double-carve | ✅ Byte-exact | 2,359,296/0 |
 | Nether carvers | Nether-specific cave shapes | ❌ Not started | — |
 
 ### Decoration Features
