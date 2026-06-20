@@ -303,3 +303,18 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 - **Y value distribution**: C++ produces 42 underground Y values vs Java's 33 for seed=0 chunk(0,0). But this was traced with a replicated tool that may have RNG consumption errors — the real Java carver needs to be used for definitive comparison.
 - **createThreadLocalInstance verified**: Java's `RandomSource.createThreadLocalInstance(tunnelSeed)` = `new SingleThreadedRandomSource(tunnelSeed)`. Same as C++.
 - **CONCLUSION**: Every component has been verified identical in isolation. The 7,673 carver mismatches require a position-by-position trace using the REAL Java carver (wrapping `ConfiguredWorldCarver.carve` with a logging chunk) to identify the exact divergence point.
+
+---
+
+### 2026-06-20 — Session: Position-by-position carver trace, structural issue identified
+
+**Agent**: Super Z (GLM)
+
+- **Carver change count**: Java carves 16,657 positions (seed=0, chunk(0,0)). C++ carves 8,984 correctly and misses 7,673. C++ produces 54% of Java's carver output.
+- **CarverTraceParity tool**: created a Java tool that wraps the REAL Java carver to trace block changes. The tool NPEs on buildSurface (null structureManager → Beardifier.forStructuresInChunk NPE). FullChunkParity avoids this NPE through an unknown mechanism — no try/catch in bytecode, no null check in Beardifier. This prevents using the tool for direct comparison.
+- **Surface-only vs Full diff**: computed Java carver changes by comparing FullChunkSurfaceOnly (0 mismatches) vs FullChunkParity (7,673 mismatches). This gives the exact set of positions Java carves: 16,657 changes across 4 seeds × 6 chunks.
+- **Structural issue**: the 46% carver output deficit in C++ suggests a structural problem, not an FP precision issue. Possible causes:
+  1. The C++ carver may not be entering carveCave for all source chunks that Java does (despite identical isStartChunk results)
+  2. The tunnel split recursion may diverge, causing C++ to stop tunnels early
+  3. The canReach check may produce different results due to accumulated FP differences in tunnel center positions
+- **All individual components remain verified identical**: RNG, configs, carver math, aquifer, mask, canReach, shouldSkip, PI precision, nextInt(bound), createThreadLocalInstance.
