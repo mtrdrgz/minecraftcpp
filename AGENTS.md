@@ -352,6 +352,19 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
+**Last updated**: 2026-06-20 22:10 UTC - block texture/model hint pass + atlas fallback guard.
+
+**Block texture rendering FIXED (2026-06-20 22:10):** `mcpp.exe` was showing some
+vegetation/ground-detail blocks with the entire atlas smeared across quads or with
+cube fallback geometry. Root fixes: `Blocks.cpp` now derives per-block texture hints
+from vanilla `assets/minecraft/blockstates/*.json` + `models/block/*.json` in
+`assets.bin` (with local extracted-assets fallback for dev builds), `ChunkMesh.cpp`
+uses the complete `isCrossPlant` set for cutout plant rendering instead of a stale
+second list, and special-quad texture fallback no longer maps UV `0..1` over the
+whole atlas when atlas data is unavailable. `TextureAtlas.cpp` also initializes the
+embedded missing-texture UV from `__missing__` / `missing_texture` when present.
+Verified by rebuilding Release `mcpp.exe` with MSVC.
+
 **Last updated**: 2026-06-20 21:52 UTC — local-root parity/runtime setup restored; structure placement gate reverified.
 
 **Local-root parity/runtime setup FIXED (2026-06-20 21:52):** fresh clones whose repo

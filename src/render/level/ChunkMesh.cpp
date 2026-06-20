@@ -347,7 +347,20 @@ static bool resolveTexture(const TextureAtlas* atlas, const std::string& texture
         tint = {255, 255, 255};
         return false;
     }
-    u0 = 0.0f; v0 = 0.0f; u1 = 1.0f; v1 = 1.0f;
+    // Avoid smearing an entire atlas over a special quad when the atlas was not
+    // available during mesh construction. A tiny deterministic tile is much
+    // less destructive and matches the regular cube fallback path.
+    uint32_t h = 2166136261u;
+    for (unsigned char c : texture) {
+        h ^= c;
+        h *= 16777619u;
+    }
+    constexpr float s = 1.0f / 16.0f;
+    const uint32_t tileIdx = h % 256u;
+    u0 = static_cast<float>(tileIdx % 16u) * s;
+    v0 = static_cast<float>(tileIdx / 16u) * s;
+    u1 = u0 + s;
+    v1 = v0 + s;
     return true;
 }
 
@@ -549,16 +562,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                         }
                         continue;
                     }
-                    isPlant = (name == "short_grass" || name == "tall_grass" || name == "fern" || name == "large_fern" ||
-                               name == "short_dry_grass" || name == "tall_dry_grass" || name == "dead_bush" ||
-                               name == "dandelion" || name == "poppy" || name == "blue_orchid" || name == "allium" || name == "azure_bluet" ||
-                               name == "oxeye_daisy" || name == "cornflower" || name == "lily_of_the_valley" ||
-                               name == "red_tulip" || name == "orange_tulip" || name == "white_tulip" || name == "pink_tulip" ||
-                               name == "bush" || name == "firefly_bush" || name == "sweet_berry_bush" ||
-                               name == "sugar_cane" || name == "seagrass" || name == "tall_seagrass" ||
-                               name == "sea_pickle" || name == "kelp" || name == "kelp_plant" ||
-                               name == "cave_vines" || name == "cave_vines_plant" ||
-                               name.find("coral") != std::string::npos);
+                    isPlant = isCrossPlant(name);
                 }
 
                 if (isPlant) {

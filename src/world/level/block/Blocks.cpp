@@ -1,5 +1,6 @@
 #include "Blocks.h"
 #include "../../../core/Log.h"
+#include "../../../assets/AssetManager.h"
 #include "BlockStates.h"
 #include <nlohmann/json.hpp>
 #if defined(_WIN32)
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <set>
 #include <string>
 
 namespace mc {
@@ -110,6 +112,153 @@ static void setFallbackTexture(Block* block, const std::string& name) {
     }
 }
 
+std::string normalizeModelPath(std::string value) {
+    if (value.starts_with("minecraft:")) value.erase(0, 10);
+    return "minecraft/models/" + value + ".json";
+}
+
+std::string normalizeTextureName(std::string value) {
+    if (value.empty()) return value;
+    if (value.starts_with("minecraft:")) value.erase(0, 10);
+    if (value.starts_with("block/")) value.erase(0, 6);
+    if (value.starts_with("blocks/")) value.erase(0, 7);
+    if (value.starts_with("textures/block/")) value.erase(0, 15);
+    if (value.ends_with(".png")) value.resize(value.size() - 4);
+    return value;
+}
+
+std::vector<uint8_t> readAssetOrLocal(const std::string& assetPath) {
+    if (auto bytes = AssetManager::instance().readRaw(assetPath); !bytes.empty()) {
+        return bytes;
+    }
+    std::ifstream in("assets/client-extract/assets/" + assetPath, std::ios::binary);
+    if (!in) return {};
+    return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), {});
+}
+
+bool parseAssetJson(const std::string& assetPath, nlohmann::json& out) {
+    const std::vector<uint8_t> bytes = readAssetOrLocal(assetPath);
+    if (bytes.empty()) return false;
+    try {
+        out = nlohmann::json::parse(bytes.begin(), bytes.end());
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+std::string firstModelFromBlockstate(const std::string& blockName) {
+    nlohmann::json j;
+    if (!parseAssetJson("minecraft/blockstates/" + blockName + ".json", j)) {
+        return {};
+    }
+
+    auto readApply = [](const nlohmann::json& node) -> std::string {
+        if (node.is_array() && !node.empty()) {
+            const auto& first = node.front();
+            return first.value("model", "");
+        }
+        if (node.is_object()) return node.value("model", "");
+        return {};
+    };
+
+    if (auto it = j.find("variants"); it != j.end() && it->is_object() && !it->empty()) {
+        for (const auto& item : it->items()) {
+            if (std::string model = readApply(item.value()); !model.empty()) return model;
+        }
+    }
+    if (auto it = j.find("multipart"); it != j.end() && it->is_array()) {
+        for (const auto& part : *it) {
+            if (auto app = part.find("apply"); app != part.end()) {
+                if (std::string model = readApply(*app); !model.empty()) return model;
+            }
+        }
+    }
+    return {};
+}
+
+void collectModelTextures(const std::string& modelName,
+                          std::unordered_map<std::string, std::string>& textures,
+                          std::set<std::string>& seen) {
+    if (modelName.empty() || !seen.insert(modelName).second) return;
+
+    nlohmann::json j;
+    if (!parseAssetJson(normalizeModelPath(modelName), j)) {
+        return;
+    }
+    if (std::string parent = j.value("parent", ""); !parent.empty()) {
+        collectModelTextures(parent, textures, seen);
+    }
+    if (auto it = j.find("textures"); it != j.end() && it->is_object()) {
+        for (const auto& item : it->items()) {
+            if (item.value().is_string()) {
+                textures[item.key()] = item.value().get<std::string>();
+            }
+        }
+    }
+}
+
+std::string resolveTextureRef(const std::unordered_map<std::string, std::string>& textures,
+                              std::string key) {
+    std::set<std::string> seen;
+    while (!key.empty()) {
+        if (key[0] != '#') return normalizeTextureName(key);
+        key.erase(0, 1);
+        if (!seen.insert(key).second) return {};
+        auto it = textures.find(key);
+        if (it == textures.end()) return {};
+        key = it->second;
+    }
+    return {};
+}
+
+std::string firstTextureKey(const std::unordered_map<std::string, std::string>& textures,
+                            std::initializer_list<const char*> keys) {
+    for (const char* key : keys) {
+        auto it = textures.find(key);
+        if (it == textures.end()) continue;
+        if (std::string tex = resolveTextureRef(textures, it->second); !tex.empty()) {
+            return tex;
+        }
+    }
+    return {};
+}
+
+static void assignVanillaModelTextures() {
+    int assigned = 0;
+    for (auto& blockPtr : g_blockStorage) {
+        if (!blockPtr) continue;
+        const std::string model = firstModelFromBlockstate(blockPtr->name);
+        if (model.empty()) continue;
+
+        std::unordered_map<std::string, std::string> textures;
+        std::set<std::string> seen;
+        collectModelTextures(model, textures, seen);
+        if (textures.empty()) continue;
+
+        const std::string all = firstTextureKey(textures, {
+            "all", "texture", "cross", "plant", "layer0", "particle"
+        });
+        const std::string top = firstTextureKey(textures, {
+            "top", "up", "end", "all", "texture", "cross", "plant", "particle"
+        });
+        const std::string bot = firstTextureKey(textures, {
+            "bottom", "down", "end", "all", "texture", "cross", "plant", "particle"
+        });
+        const std::string side = firstTextureKey(textures, {
+            "side", "north", "south", "east", "west", "all", "texture", "cross", "plant", "particle"
+        });
+
+        if (all.empty() && top.empty() && bot.empty() && side.empty()) continue;
+        blockPtr->textures.all = !all.empty() ? all : (!side.empty() ? side : (!top.empty() ? top : bot));
+        blockPtr->textures.top = top;
+        blockPtr->textures.bot = bot;
+        blockPtr->textures.side = side;
+        ++assigned;
+    }
+    MC_LOG_INFO("Blocks: assigned vanilla model texture hints for {} blocks", assigned);
+}
+
 static void assignKnownBlockTextures() {
     if (blocks::STONE)       blocks::STONE->textures.all = "stone";
     if (blocks::GRASS_BLOCK) {
@@ -132,6 +281,8 @@ static void assignKnownBlockTextures() {
     }
     if (blocks::OAK_LEAVES) blocks::OAK_LEAVES->textures.all = "oak_leaves";
     if (blocks::GLASS)      blocks::GLASS->textures.all = "glass";
+
+    assignVanillaModelTextures();
 
     for (auto& blockPtr : g_blockStorage) {
         if (!blockPtr || !blockPtr->textures.all.empty()) continue;

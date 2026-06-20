@@ -118,6 +118,19 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-20 22:10 UTC - Block texture runtime cleanup for mcpp.exe
+
+**Agent**: Codex
+
+- Fixed the visual atlas-smearing bug seen in-game on some vegetation/ground-detail
+  blocks. `Blocks.cpp` now resolves vanilla texture hints from embedded
+  `assets/minecraft/blockstates/*.json` and recursive `models/block/*.json` parent
+  chains, instead of relying only on name fallbacks. `ChunkMesh.cpp` now renders all
+  entries from the shared `isCrossPlant` set as cutout plants and no longer uses
+  full-atlas UVs when a special quad is built before atlas data is available.
+  `TextureAtlas.cpp` now records the embedded missing-texture UV. Rebuilt
+  `build-vs/Release/mcpp.exe` successfully.
+
 ### 2026-06-20 21:52 UTC — Structure parity infra restored for local-root checkout
 
 - Fixed the Windows parity scripts to resolve the repo root when the checkout itself is `minecraftcpp/` rather than an older parent `mcpp/` layout. `tools/provision_parity_runtime.ps1` now bootstraps the Mojang version manifest, `client.jar`, `server.jar`, `26.1.2/data/minecraft`, libraries, and JDK 25 into the repo-local ignored `26.1.2/`.

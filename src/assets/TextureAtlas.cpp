@@ -118,6 +118,9 @@ void TextureAtlas::load(render::IRenderDevice* dev, render::ICommandList* cmd,
                 auv.u1 = arr[2].get<float>();
                 auv.v1 = arr[3].get<float>();
                 m_uvMap[name] = auv;
+                if (name == "__missing__" || name == "missing_texture" || name == "missingno") {
+                    m_missing = auv;
+                }
             }
         }
     } catch (const std::exception& e) {
