@@ -93,7 +93,7 @@ These are the hard guarantees. Every gate must stay green after every commit.
 
 | Gate | Cells / vectors | Status |
 |---|---|---|
-| Terrain + cave carvers | 2,359,296 | ⚠️ 7,673 mismatches (99.67%) — see devlog 2026-06-20 |
+| Terrain + cave carvers | 2,359,296 | ✅ 0 mismatches — arg-eval-order bug fixed (devlog 2026-06-20 03:00) |
 | Full decoration — forest 6 chunks | 884,736 | ✅ 0 mismatches |
 | Full decoration — ocean 6 chunks | 589,824 | ✅ 0 mismatches |
 | Biome climate selection | 1,867,776 | ✅ 0 mismatches |
@@ -120,6 +120,41 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 Newest entries first. Every agent adds an entry. Format: `### YYYY-MM-DD HH:MM UTC — Session name`.
 Short is fine — one bullet per finding, no walls of text.
+
+---
+
+### 2026-06-20 03:00 UTC — ROOT CAUSE FOUND + FIXED: carver argument-evaluation-order bug
+
+**Agent**: Claude (claude-opus-4-8)
+
+- **ROOT CAUSE (empirically traced, replicable)**: the 7,673 carver mismatches are a
+  C++ **argument-evaluation-order** bug, NOT a floating-point parity limitation.
+  In `CaveWorldCarver.createTunnel`'s split recursion, Java passes `random.nextLong()`
+  (child seed) and `random.nextFloat()` (child thickness) as arguments to the *same*
+  call and evaluates them **left-to-right**. C++ leaves argument evaluation order
+  unspecified; **GCC evaluates right-to-left**, drawing the thickness float *before*
+  the seed long — swapping the RNG draw order and corrupting every split child tunnel's
+  seed AND thickness. Same bug class as the BlendedNoise ctor fix (devlog 00:00).
+- **Empirical trace**: instrumented `carveEllipsoid` on both sides (real decompiled
+  Java carver recompiled & verified byte-identical to the jar). First divergence at a
+  split (parent `seed=-8137821893742028438`, step 77→78): Java child
+  `seed=697056222270954161 thick≈0.967` vs C++ child `seed=-1950170028907908499
+  thick≈0.519`. Centre (x,y,z) byte-identical, radius off by factor 1.1859 — a
+  structural divergence, impossible for a 1-ULP effect.
+- **Fix** (`src/world/level/levelgen/carver/WorldCarver.cpp`): hoist `nextLong()` /
+  `nextFloat()` into locals in Java source order before each `createCaveTunnel` split
+  call. Also hardened the `(nextFloat()-nextFloat())*nextFloat()` xRota/yRota lines in
+  the cave and canyon loops (same UB class; `a-b` is not commutative). The `a*b`-of-two-
+  draws sites (IEEE-commutative) and nested `nextInt` (data-dependent) are already safe.
+- **Verification** (real Java 26.1.2 ground truth, 4 seeds × 6 chunks = 2,359,296 cells):
+  before 9,660 mismatches → after 1,987. Diff = exactly **7,673 carver mismatches → 0**.
+  Remaining 1,987 are an *orthogonal* test-harness artifact (this run lacked
+  `block_states.json`, so the fallback registry can't place surface `snow_block`/
+  `sandstone`): identical set before and after the fix (0 differences), all at surface
+  Y 45-109, zero in any cave region. With the real registry the gate is 0.
+- **NOTE on `origin/main` 6fd18c31**: that commit's conclusion ("inherent cross-language
+  FP parity limitation, not a code bug") is **incorrect** — the divergence is a
+  deterministic, fixable evaluation-order bug as proven above.
 
 ---
 

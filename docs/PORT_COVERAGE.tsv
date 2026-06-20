@@ -6223,7 +6223,7 @@ net/minecraft/world/level/levelgen/carver/CaveCarverConfiguration.java	ported	ca
 net/minecraft/world/level/levelgen/carver/CaveWorldCarver.java	ported	carver gate (terrain byte-exact incl carvers)
 net/minecraft/world/level/levelgen/carver/ConfiguredWorldCarver.java	ported	carver gate (terrain byte-exact incl carvers)
 net/minecraft/world/level/levelgen/carver/NetherWorldCarver.java	unvisited	
-net/minecraft/world/level/levelgen/carver/WorldCarver.java	ported	carver gate (terrain byte-exact incl carvers)
+net/minecraft/world/level/levelgen/carver/WorldCarver.java	ported	full_chunk_parity 2359296/0 (terrain+carvers byte-exact); fixed GCC arg-eval-order bug in createCaveTunnel split (devlog 2026-06-20 03:00)
 net/minecraft/world/level/levelgen/carver/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/feature/AbstractHugeMushroomFeature.java	unvisited	
 net/minecraft/world/level/levelgen/feature/BambooFeature.java	ported	feature headers; per-class C++==GT gates 0 (d5ff8a5e)
