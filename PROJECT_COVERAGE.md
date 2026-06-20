@@ -118,6 +118,28 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-20 22:30 UTC - Runtime block rendering now reads vanilla blockstate/model JSON
+
+**Agent**: Codex
+
+- Reworked the in-game chunk mesher away from targeted per-block texture fixes.
+  `ChunkMesh.cpp` now first attempts a vanilla-data path: load
+  `assets/minecraft/blockstates/<block>.json`, evaluate `variants` or `multipart`
+  selectors against the C++ `BlockState` properties, recursively load
+  `assets/minecraft/models/<model>.json` including parent texture/element
+  inheritance, resolve `#texture` references, and emit model `elements/faces` with
+  `cullface` and FaceBakery default UV formulas. This is based on the Java pipeline
+  read in `BlockStateModelLoader`, `BlockStateModelDispatcher`, `CuboidFace`,
+  `FaceBakery`, `SpriteLoader`, `TextureAtlas`, and `MissingTextureAtlasSprite`.
+- Removed the previous bamboo-specific renderer and the non-stone/stone texture
+  guard. If a model cannot resolve a texture, it now resolves through the atlas
+  `missingno` path instead of being papered over by a block-name heuristic.
+- Scope is explicitly **partial**, not certified complete: runtime still lacks exact
+  `WeightedVariants` random selection, model x/y rotations + uvlock, full Java
+  `StateDefinition` validation/pack stacking, render-layer separation, AO, and the
+  complete `ModelBakery`/`MaterialBaker` object model. Release `mcpp.exe` rebuilt
+  successfully after the change.
+
 ### 2026-06-20 22:18 UTC - Bamboo/stone visual fix + A/D camera movement
 
 **Agent**: Codex

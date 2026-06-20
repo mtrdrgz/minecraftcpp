@@ -352,6 +352,21 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
+**Last updated**: 2026-06-20 22:30 UTC - runtime block meshing now uses vanilla blockstate/model JSON.
+
+**Block model path PARTIAL (2026-06-20 22:30):** stop doing targeted texture
+patches. `ChunkMesh.cpp` now tries a vanilla data-driven path before the old
+fallback renderer: it loads `assets/minecraft/blockstates/<block>.json`, evaluates
+`variants` / `multipart` selectors against `BlockState` properties, recursively loads
+`assets/minecraft/models/<model>.json` with parent texture/element inheritance,
+resolves `#texture` references, and emits model `elements/faces` with `cullface` and
+FaceBakery default UV formulas. This is intentionally documented as partial, not
+ported: remaining work includes weighted variants, x/y rotations + uvlock, full
+StateDefinition/pack-stack semantics, render-layer separation, AO, and the complete
+ModelBakery/MaterialBaker runtime. The previous bamboo-specific renderer and
+non-stone texture guard were removed; unresolved model textures go through
+`missingno`. Release `mcpp.exe` rebuilt successfully.
+
 **Last updated**: 2026-06-20 22:18 UTC - bamboo/stone visual fix + A/D camera movement.
 
 **Jungle visual + camera controls FIXED (2026-06-20 22:18):** A/D free-camera

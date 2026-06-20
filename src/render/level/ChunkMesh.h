@@ -39,6 +39,10 @@ public:
                                                 const LevelChunk* neighbors[4],
                                                 const TextureAtlas* atlas);
 
+    static bool shouldCull(const LevelChunk& chunk, const LevelChunk* neighbors[4],
+                            int wx, int wy, int wz,
+                            uint32_t myStateId);
+
 private:
     static void buildSection(const LevelChunk& chunk, int sectionIndex,
                               const LevelChunk* neighbors[4],
@@ -58,10 +62,6 @@ private:
                           uint8_t light,
                           const TextureAtlas* atlas,
                           const std::string& texOverride = "");
-
-    static bool shouldCull(const LevelChunk& chunk, const LevelChunk* neighbors[4],
-                            int wx, int wy, int wz,
-                            uint32_t myStateId);
 };
 
 } // namespace mc::render

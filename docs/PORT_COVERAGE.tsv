@@ -1439,7 +1439,7 @@ net/minecraft/client/renderer/block/MovingBlockRenderState.java	unvisited
 net/minecraft/client/renderer/block/SelectBlockModel.java	unvisited	
 net/minecraft/client/renderer/block/dispatch/BlockModelRotation.java	unvisited	
 net/minecraft/client/renderer/block/dispatch/BlockStateModel.java	unvisited	
-net/minecraft/client/renderer/block/dispatch/BlockStateModelDispatcher.java	unvisited	
+net/minecraft/client/renderer/block/dispatch/BlockStateModelDispatcher.java	partial	ChunkMesh vanilla_model::modelsForState reads variants/multipart and when/OR/AND from blockstate JSON; missing exact Java instantiate semantics for weighted variants, full StateDefinition validation, and pack stacking.
 net/minecraft/client/renderer/block/dispatch/BlockStateModelPart.java	unvisited	
 net/minecraft/client/renderer/block/dispatch/ModelState.java	unvisited	
 net/minecraft/client/renderer/block/dispatch/SingleVariant.java	unvisited	
@@ -2024,16 +2024,16 @@ net/minecraft/client/renderer/texture/Dumpable.java	unvisited
 net/minecraft/client/renderer/texture/DynamicTexture.java	unvisited	
 net/minecraft/client/renderer/texture/MipmapGenerator.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); mipmap_generator_parity 546/0
 net/minecraft/client/renderer/texture/MipmapStrategy.java	unvisited	
-net/minecraft/client/renderer/texture/MissingTextureAtlasSprite.java	unvisited	
+net/minecraft/client/renderer/texture/MissingTextureAtlasSprite.java	partial	tools/build_atlas.py now emits real missingno/__missing__ tile per MissingTextureAtlasSprite.generateMissingImage concept; exact ARGB constant/pattern parity not separately gated.
 net/minecraft/client/renderer/texture/OverlayTexture.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); overlay_texture_parity 240/0
 net/minecraft/client/renderer/texture/ReloadableTexture.java	unvisited	
 net/minecraft/client/renderer/texture/SimpleTexture.java	unvisited	
 net/minecraft/client/renderer/texture/SkinTextureDownloader.java	unvisited	
 net/minecraft/client/renderer/texture/SpriteContents.java	unvisited	
-net/minecraft/client/renderer/texture/SpriteLoader.java	unvisited	
+net/minecraft/client/renderer/texture/SpriteLoader.java	partial	Atlas still generated offline by tools/build_atlas.py from atlases/blocks.json-equivalent block directory source; C++ TextureAtlas loads stitched PNG/JSON. Missing exact SpriteLoader stitcher pipeline, metadata animation, mip/anisotropy behavior.
 net/minecraft/client/renderer/texture/Stitcher.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); stitcher_parity 78/0
 net/minecraft/client/renderer/texture/StitcherException.java	unvisited	
-net/minecraft/client/renderer/texture/TextureAtlas.java	unvisited	
+net/minecraft/client/renderer/texture/TextureAtlas.java	partial	TextureAtlas.cpp mirrors getSprite fallback-to-missing behavior for embedded atlas and records missing UV; missing full Java upload/animation/sprite map lifecycle.
 net/minecraft/client/renderer/texture/TextureAtlasSprite.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); texture_atlas_sprite_parity 154720/0
 net/minecraft/client/renderer/texture/TextureContents.java	unvisited	
 net/minecraft/client/renderer/texture/TextureManager.java	unvisited	
@@ -2083,7 +2083,7 @@ net/minecraft/client/resources/metadata/package-info.java	unvisited
 net/minecraft/client/resources/metadata/texture/TextureMetadataSection.java	unvisited	
 net/minecraft/client/resources/metadata/texture/package-info.java	unvisited	
 net/minecraft/client/resources/model/BlockStateDefinitions.java	unvisited	
-net/minecraft/client/resources/model/BlockStateModelLoader.java	unvisited	
+net/minecraft/client/resources/model/BlockStateModelLoader.java	partial	ChunkMesh vanilla_model loads blockstates/<block>.json from assets.bin/local extract and maps C++ BlockState props to model ids; missing full ResourceManager pack stack and StateDefinition-driven instantiate validation.
 net/minecraft/client/resources/model/ClientItemInfoLoader.java	unvisited	
 net/minecraft/client/resources/model/EquipmentAssetManager.java	unvisited	
 net/minecraft/client/resources/model/EquipmentClientInfo.java	unvisited	
@@ -2097,7 +2097,7 @@ net/minecraft/client/resources/model/ResolvableModel.java	unvisited
 net/minecraft/client/resources/model/ResolvedModel.java	ported	C++ render parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); resolved_model_parity 17/0
 net/minecraft/client/resources/model/SimpleModelWrapper.java	unvisited	
 net/minecraft/client/resources/model/UnbakedModel.java	unvisited	
-net/minecraft/client/resources/model/cuboid/CuboidFace.java	unvisited	
+net/minecraft/client/resources/model/cuboid/CuboidFace.java	partial	ChunkMesh vanilla_model parses face texture/cullface/uv and uses CuboidFace UV vertex order; FaceBakery/UnbakedCuboidGeometry full bake parity remains covered by existing gates, but runtime model path lacks rotation/uvlock parity.
 net/minecraft/client/resources/model/cuboid/CuboidModel.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); cuboid_model_json_parity 6 cases/35 checks/0
 net/minecraft/client/resources/model/cuboid/CuboidModelElement.java	unvisited	
 net/minecraft/client/resources/model/cuboid/CuboidRotation.java	ported	C++ render/model parity gate (byte-exact, 0 mismatches, session 2026-06-11 verify); cuboid_rotation_parity 46/0

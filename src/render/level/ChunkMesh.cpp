@@ -1,11 +1,18 @@
 #include "ChunkMesh.h"
+#include "../../assets/AssetManager.h"
 #include "../../world/level/block/BlockState.h"
 #include "../../world/level/block/Blocks.h"
 #include "../../core/Log.h"
 #include <array>
 #include <algorithm>
+#include <fstream>
+#include <iterator>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <nlohmann/json.hpp>
 
 namespace mc::render {
 
@@ -59,6 +66,8 @@ static constexpr float FACE_VERTS[6][4][3] = {
 static const float UV_CORNERS[4][2] = {
     {0,1},{0,0},{1,0},{1,1}
 };
+
+static const char* FACE_NAMES[6] = { "east", "west", "up", "down", "south", "north" };
 
 // Per-vertex tint applied as vertex color multiplier (shader does tex * vColor)
 struct TintRGB { uint8_t r, g, b; };
@@ -119,13 +128,7 @@ static std::string textureForStateFace(const mc::BlockState& state, int face) {
         }
     }
 
-    const std::string& tex = block->textures.forFace(face);
-    if (tex == "stone" && block->name != "stone" &&
-        block->name != "infested_stone" &&
-        block->name.find("stone") == std::string::npos) {
-        return block->name;
-    }
-    return tex;
+    return block->textures.forFace(face);
 }
 
 // Get UV coordinates and biome tint from atlas (or fallback grid if atlas null)
@@ -409,29 +412,6 @@ static void emitGroundPlant(SectionMesh& mesh, float bx, float by, float bz,
     }}, atlas, texture, light);
 }
 
-static void emitBamboo(SectionMesh& mesh, float bx, float by, float bz,
-                       const TextureAtlas* atlas, uint8_t light,
-                       const mc::BlockState* bs) {
-    const float x0 = bx + 7.0f / 16.0f;
-    const float x1 = bx + 9.0f / 16.0f;
-    const float z0 = bz + 7.0f / 16.0f;
-    const float z1 = bz + 9.0f / 16.0f;
-    const float y0 = by;
-    const float y1 = by + 1.0f;
-
-    emitTexturedQuad(mesh, {{{{x0, y0, z0}}, {{x1, y0, z0}}, {{x1, y1, z0}}, {{x0, y1, z0}}}}, atlas, "bamboo_stalk", light);
-    emitTexturedQuad(mesh, {{{{x1, y0, z1}}, {{x0, y0, z1}}, {{x0, y1, z1}}, {{x1, y1, z1}}}}, atlas, "bamboo_stalk", light);
-    emitTexturedQuad(mesh, {{{{x0, y0, z1}}, {{x0, y0, z0}}, {{x0, y1, z0}}, {{x0, y1, z1}}}}, atlas, "bamboo_stalk", light);
-    emitTexturedQuad(mesh, {{{{x1, y0, z0}}, {{x1, y0, z1}}, {{x1, y1, z1}}, {{x1, y1, z0}}}}, atlas, "bamboo_stalk", light);
-
-    const std::string leaves = bs ? bs->getProperty("leaves") : "";
-    if (leaves == "small" || leaves == "large") {
-        const std::string leafTexture = leaves == "large" ? "bamboo_large_leaves" : "bamboo_small_leaves";
-        emitTexturedQuad(mesh, {{{{bx + 0.05f, y0, bz + 0.5f}}, {{bx + 0.95f, y0, bz + 0.5f}}, {{bx + 0.95f, y1, bz + 0.5f}}, {{bx + 0.05f, y1, bz + 0.5f}}}}, atlas, leafTexture, light);
-        emitTexturedQuad(mesh, {{{{bx + 0.5f, y0, bz + 0.05f}}, {{bx + 0.5f, y0, bz + 0.95f}}, {{bx + 0.5f, y1, bz + 0.95f}}, {{bx + 0.5f, y1, bz + 0.05f}}}}, atlas, leafTexture, light);
-    }
-}
-
 // Segment-aware renderer for leaf_litter (LeafLitterBlock.java).
 // Java creates 4 model variants (template_leaf_litter_1..4) via createLeafLitter /
 // createSegmentedBlock; each shows N 8×8 half-quads at floor level, oriented by
@@ -506,6 +486,359 @@ static void emitVineFace(SectionMesh& mesh, float bx, float by, float bz,
     }
 }
 
+namespace vanilla_model {
+
+struct Face {
+    std::string texture;
+    std::string cullface;
+    float uv[4] = {0.f, 0.f, 16.f, 16.f};
+    bool hasUv = false;
+};
+
+struct Element {
+    float from[3] = {0.f, 0.f, 0.f};
+    float to[3] = {16.f, 16.f, 16.f};
+    std::unordered_map<std::string, Face> faces;
+};
+
+struct Model {
+    std::unordered_map<std::string, std::string> textures;
+    std::vector<Element> elements;
+    bool loaded = false;
+};
+
+std::mutex& cacheMutex() {
+    static std::mutex m;
+    return m;
+}
+
+std::unordered_map<std::string, nlohmann::json>& jsonCache() {
+    static std::unordered_map<std::string, nlohmann::json> c;
+    return c;
+}
+
+std::unordered_map<std::string, Model>& modelCache() {
+    static std::unordered_map<std::string, Model> c;
+    return c;
+}
+
+std::string stripMinecraftNamespace(std::string id) {
+    if (id.starts_with("minecraft:")) id.erase(0, 10);
+    return id;
+}
+
+std::string normalizeTexture(std::string id) {
+    id = stripMinecraftNamespace(std::move(id));
+    if (id.starts_with("block/")) id.erase(0, 6);
+    if (id.starts_with("textures/block/")) id.erase(0, 15);
+    if (id.ends_with(".png")) id.resize(id.size() - 4);
+    return id;
+}
+
+std::vector<uint8_t> readAssetOrLocal(const std::string& path) {
+    if (auto bytes = mc::AssetManager::instance().readRaw(path); !bytes.empty()) {
+        return bytes;
+    }
+    std::ifstream in("assets/client-extract/assets/" + path, std::ios::binary);
+    if (!in) return {};
+    return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), {});
+}
+
+std::optional<nlohmann::json> loadJson(const std::string& path) {
+    std::lock_guard<std::mutex> lock(cacheMutex());
+    auto it = jsonCache().find(path);
+    if (it != jsonCache().end()) return it->second;
+    const std::vector<uint8_t> bytes = readAssetOrLocal(path);
+    if (bytes.empty()) return std::nullopt;
+    try {
+        nlohmann::json j = nlohmann::json::parse(bytes.begin(), bytes.end());
+        jsonCache()[path] = j;
+        return j;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::string modelAssetPath(std::string id) {
+    id = stripMinecraftNamespace(std::move(id));
+    return "minecraft/models/" + id + ".json";
+}
+
+bool readVec3(const nlohmann::json& j, const char* key, float out[3]) {
+    auto it = j.find(key);
+    if (it == j.end() || !it->is_array() || it->size() != 3) return false;
+    for (int i = 0; i < 3; ++i) out[i] = (*it)[i].get<float>();
+    return true;
+}
+
+Model loadModel(const std::string& id, std::unordered_set<std::string>& visiting) {
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex());
+        auto it = modelCache().find(id);
+        if (it != modelCache().end()) return it->second;
+    }
+    if (!visiting.insert(id).second) return {};
+
+    Model result;
+    auto jsonOpt = loadJson(modelAssetPath(id));
+    if (!jsonOpt) return {};
+    const nlohmann::json& j = *jsonOpt;
+
+    if (auto pit = j.find("parent"); pit != j.end() && pit->is_string()) {
+        result = loadModel(pit->get<std::string>(), visiting);
+    }
+    if (auto tit = j.find("textures"); tit != j.end() && tit->is_object()) {
+        for (const auto& item : tit->items()) {
+            if (item.value().is_string()) result.textures[item.key()] = item.value().get<std::string>();
+        }
+    }
+    if (auto eit = j.find("elements"); eit != j.end() && eit->is_array()) {
+        result.elements.clear();
+        for (const auto& ejson : *eit) {
+            Element e;
+            readVec3(ejson, "from", e.from);
+            readVec3(ejson, "to", e.to);
+            if (auto fit = ejson.find("faces"); fit != ejson.end() && fit->is_object()) {
+                for (const auto& fitem : fit->items()) {
+                    Face f;
+                    const auto& fj = fitem.value();
+                    f.texture = fj.value("texture", "");
+                    f.cullface = fj.value("cullface", "");
+                    if (auto uit = fj.find("uv"); uit != fj.end() && uit->is_array() && uit->size() == 4) {
+                        for (int i = 0; i < 4; ++i) f.uv[i] = (*uit)[i].get<float>();
+                        f.hasUv = true;
+                    }
+                    e.faces[fitem.key()] = f;
+                }
+            }
+            result.elements.push_back(std::move(e));
+        }
+    }
+    result.loaded = !result.elements.empty();
+
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex());
+        modelCache()[id] = result;
+    }
+    return result;
+}
+
+std::string resolveTextureRef(const Model& model, std::string ref) {
+    std::unordered_set<std::string> seen;
+    while (!ref.empty() && ref[0] == '#') {
+        ref.erase(0, 1);
+        if (!seen.insert(ref).second) return "missingno";
+        auto it = model.textures.find(ref);
+        if (it == model.textures.end()) return "missingno";
+        ref = it->second;
+    }
+    return ref.empty() ? "missingno" : normalizeTexture(ref);
+}
+
+bool matchesWhen(const nlohmann::json& when, const mc::BlockState& state) {
+    if (!when.is_object()) return true;
+    if (auto orIt = when.find("OR"); orIt != when.end() && orIt->is_array()) {
+        for (const auto& child : *orIt) if (matchesWhen(child, state)) return true;
+        return false;
+    }
+    if (auto andIt = when.find("AND"); andIt != when.end() && andIt->is_array()) {
+        for (const auto& child : *andIt) if (!matchesWhen(child, state)) return false;
+        return true;
+    }
+    for (const auto& item : when.items()) {
+        if (!item.value().is_string()) continue;
+        const std::string actual = state.getProperty(item.key());
+        bool ok = false;
+        std::string allowed = item.value().get<std::string>();
+        size_t start = 0;
+        while (start <= allowed.size()) {
+            size_t bar = allowed.find('|', start);
+            if (bar == std::string::npos) bar = allowed.size();
+            if (actual == allowed.substr(start, bar - start)) { ok = true; break; }
+            start = bar + 1;
+        }
+        if (!ok) return false;
+    }
+    return true;
+}
+
+bool selectorMatches(const std::string& selector, const mc::BlockState& state) {
+    if (selector.empty()) return true;
+    size_t start = 0;
+    while (start < selector.size()) {
+        size_t comma = selector.find(',', start);
+        if (comma == std::string::npos) comma = selector.size();
+        size_t eq = selector.find('=', start);
+        if (eq == std::string::npos || eq > comma) return false;
+        std::string key = selector.substr(start, eq - start);
+        std::string allowed = selector.substr(eq + 1, comma - eq - 1);
+        const std::string actual = state.getProperty(key);
+        bool ok = false;
+        size_t vstart = 0;
+        while (vstart <= allowed.size()) {
+            size_t bar = allowed.find('|', vstart);
+            if (bar == std::string::npos) bar = allowed.size();
+            if (actual == allowed.substr(vstart, bar - vstart)) { ok = true; break; }
+            vstart = bar + 1;
+        }
+        if (!ok) return false;
+        start = comma + 1;
+    }
+    return true;
+}
+
+void collectApplyModels(const nlohmann::json& apply, std::vector<std::string>& out) {
+    if (apply.is_array()) {
+        if (!apply.empty()) collectApplyModels(apply.front(), out);
+        return;
+    }
+    if (apply.is_object()) {
+        std::string model = apply.value("model", "");
+        if (!model.empty()) out.push_back(model);
+    }
+}
+
+std::vector<std::string> modelsForState(const mc::BlockState& state) {
+    std::vector<std::string> out;
+    if (!state.block) return out;
+    auto jOpt = loadJson("minecraft/blockstates/" + state.block->name + ".json");
+    if (!jOpt) return out;
+    const nlohmann::json& j = *jOpt;
+
+    if (auto vit = j.find("variants"); vit != j.end() && vit->is_object()) {
+        if (auto exact = vit->find(state.props); exact != vit->end()) {
+            collectApplyModels(*exact, out);
+            return out;
+        }
+        if (auto empty = vit->find(""); empty != vit->end()) {
+            collectApplyModels(*empty, out);
+            return out;
+        }
+        for (const auto& item : vit->items()) {
+            if (selectorMatches(item.key(), state)) {
+                collectApplyModels(item.value(), out);
+                return out;
+            }
+        }
+    }
+    if (auto mit = j.find("multipart"); mit != j.end() && mit->is_array()) {
+        for (const auto& part : *mit) {
+            const auto wit = part.find("when");
+            if (wit == part.end() || matchesWhen(*wit, state)) {
+                if (auto ait = part.find("apply"); ait != part.end()) collectApplyModels(*ait, out);
+            }
+        }
+    }
+    return out;
+}
+
+int faceIndex(const std::string& name) {
+    for (int i = 0; i < 6; ++i) if (name == FACE_NAMES[i]) return i;
+    return -1;
+}
+
+void defaultFaceUv(const Element& e, int face, float uv[4]) {
+    const float* f = e.from;
+    const float* t = e.to;
+    switch (face) {
+        case 3: uv[0] = f[0];        uv[1] = 16.f - t[2]; uv[2] = t[0];        uv[3] = 16.f - f[2]; break;
+        case 2: uv[0] = f[0];        uv[1] = f[2];        uv[2] = t[0];        uv[3] = t[2];        break;
+        case 5: uv[0] = 16.f - t[0]; uv[1] = 16.f - t[1]; uv[2] = 16.f - f[0]; uv[3] = 16.f - f[1]; break;
+        case 4: uv[0] = f[0];        uv[1] = 16.f - t[1]; uv[2] = t[0];        uv[3] = 16.f - f[1]; break;
+        case 1: uv[0] = f[2];        uv[1] = 16.f - t[1]; uv[2] = t[2];        uv[3] = 16.f - f[1]; break;
+        case 0: uv[0] = 16.f - t[2]; uv[1] = 16.f - t[1]; uv[2] = 16.f - f[2]; uv[3] = 16.f - f[1]; break;
+        default: uv[0] = 0.f; uv[1] = 0.f; uv[2] = 16.f; uv[3] = 16.f; break;
+    }
+}
+
+std::array<std::array<float, 3>, 4> faceCorners(const Element& e, float bx, float by, float bz, int face) {
+    const float x0 = bx + e.from[0] / 16.f, y0 = by + e.from[1] / 16.f, z0 = bz + e.from[2] / 16.f;
+    const float x1 = bx + e.to[0] / 16.f,   y1 = by + e.to[1] / 16.f,   z1 = bz + e.to[2] / 16.f;
+    switch (face) {
+        case 0: return {{{{x1,y0,z1}}, {{x1,y1,z1}}, {{x1,y1,z0}}, {{x1,y0,z0}}}};
+        case 1: return {{{{x0,y0,z0}}, {{x0,y1,z0}}, {{x0,y1,z1}}, {{x0,y0,z1}}}};
+        case 2: return {{{{x0,y1,z0}}, {{x1,y1,z0}}, {{x1,y1,z1}}, {{x0,y1,z1}}}};
+        case 3: return {{{{x0,y0,z1}}, {{x1,y0,z1}}, {{x1,y0,z0}}, {{x0,y0,z0}}}};
+        case 4: return {{{{x0,y0,z1}}, {{x0,y1,z1}}, {{x1,y1,z1}}, {{x1,y0,z1}}}};
+        default:return {{{{x1,y0,z0}}, {{x1,y1,z0}}, {{x0,y1,z0}}, {{x0,y0,z0}}}};
+    }
+}
+
+void emitModelFace(SectionMesh& mesh,
+                   const Element& e,
+                   const Face& f,
+                   const Model& model,
+                   int face,
+                   float bx, float by, float bz,
+                   const TextureAtlas* atlas,
+                   uint8_t light) {
+    const std::string texture = resolveTextureRef(model, f.texture);
+    float u0, v0, u1, v1;
+    TintRGB tint;
+    resolveTexture(atlas, texture, u0, v0, u1, v1, tint);
+
+    float uv[4];
+    if (f.hasUv) std::copy(std::begin(f.uv), std::end(f.uv), uv);
+    else defaultFaceUv(e, face, uv);
+
+    const uint8_t shade = (face == 2) ? 255 : (face == 3 ? 128 : (face == 0 || face == 1 ? 210 : 230));
+    const uint8_t r = (uint8_t)((uint32_t)shade * light * tint.r / (15u * 255u));
+    const uint8_t g = (uint8_t)((uint32_t)shade * light * tint.g / (15u * 255u));
+    const uint8_t b = (uint8_t)((uint32_t)shade * light * tint.b / (15u * 255u));
+
+    const float uu[4] = { uv[0], uv[0], uv[2], uv[2] };
+    const float vv[4] = { uv[1], uv[3], uv[3], uv[1] };
+    auto corners = faceCorners(e, bx, by, bz, face);
+    const uint32_t base = (uint32_t)mesh.vertices.size();
+    for (int i = 0; i < 4; ++i) {
+        mesh.vertices.push_back({
+            corners[i][0], corners[i][1], corners[i][2],
+            u0 + (uu[i] / 16.f) * (u1 - u0),
+            v0 + (vv[i] / 16.f) * (v1 - v0),
+            r, g, b, 255
+        });
+    }
+    mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
+    mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 2); mesh.indices.push_back(base + 3);
+}
+
+bool tryEmitVanillaBlockModel(SectionMesh& mesh,
+                              const LevelChunk& chunk,
+                              const LevelChunk* neighbors[4],
+                              int wx, int wy, int wz,
+                              const mc::BlockState& state,
+                              uint32_t stateId,
+                              uint8_t light,
+                              const TextureAtlas* atlas) {
+    const std::vector<std::string> modelIds = modelsForState(state);
+    if (modelIds.empty()) return false;
+
+    bool emitted = false;
+    std::unordered_set<std::string> visiting;
+    for (const std::string& modelId : modelIds) {
+        visiting.clear();
+        const Model model = loadModel(modelId, visiting);
+        if (!model.loaded) continue;
+        for (const Element& e : model.elements) {
+            for (const auto& [faceName, face] : e.faces) {
+                int fi = faceIndex(faceName);
+                if (fi < 0) continue;
+                if (!face.cullface.empty()) {
+                    const int ci = faceIndex(face.cullface);
+                    if (ci >= 0 && ChunkMesher::shouldCull(chunk, neighbors, wx + DX[ci], wy + DY[ci], wz + DZ[ci], stateId)) {
+                        continue;
+                    }
+                }
+                emitModelFace(mesh, e, face, model, fi, (float)wx, (float)wy, (float)wz, atlas, light);
+                emitted = true;
+            }
+        }
+    }
+    return emitted;
+}
+
+} // namespace vanilla_model
+
 void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                                 const LevelChunk* neighbors[4],
                                 const TextureAtlas* atlas,
@@ -569,12 +902,11 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                 bool isPlant = false;
                 if (bs && bs->block) {
                     const std::string& name = bs->block->name;
-                    if (name == "pink_petals" || name == "wildflowers") {
-                        emitGroundPlant(out, bx, by, bz, atlas, name, light);
+                    if (vanilla_model::tryEmitVanillaBlockModel(out, chunk, neighbors, wx, wy, wz, *bs, stateId, light, atlas)) {
                         continue;
                     }
-                    if (name == "bamboo") {
-                        emitBamboo(out, bx, by, bz, atlas, light, bs);
+                    if (name == "pink_petals" || name == "wildflowers") {
+                        emitGroundPlant(out, bx, by, bz, atlas, name, light);
                         continue;
                     }
                     if (name == "leaf_litter") {
