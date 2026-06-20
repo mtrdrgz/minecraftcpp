@@ -270,3 +270,20 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 - **nextInt(bound) investigated and ruled out**: the rejection sampling loop and power-of-two fast path are identical between Java and C++. `nextInt(16)` uses the fast path `(int)((long)16 * next(31) >> 31)` in both.
 - **Carver math compared line-by-line**: carveEllipsoid, createTunnel, createCanyon, carveBlock, carveState, canReach, CarvingMask — all identical formulas and FP operations.
 - **Remaining hypothesis**: the aquifer's `computeSubstance` may produce different results during carving because Java's aquifer uses the NoiseChunk's `wrappedRouter` (with FlatCache/Interpolated markers replaced by NoiseChunk-specific implementations), while C++ uses the unwrapped router. Although the function values should be the same at quart-quantized positions, there may be a subtle FP difference in the FlatCache path vs direct computation that affects the aquifer's fluid status computation at specific grid positions.
+
+---
+
+### 2026-06-20 — Session: Aquifer verified identical, carver bug is elsewhere
+
+**Agent**: Super Z (GLM)
+
+- **Aquifer verified identical**: created `DebugAquiferParity` tool that dumps `aquifer.computeSubstance(ctx, 0.0)` at ALL 32 mismatch positions (x=0..1, y=-12..-5, z=0..1) for seed=0, chunk(0,0). Both Java and C++ return `minecraft:air` for ALL 32 positions. The aquifer is NOT the source of the carver mismatches.
+- **preliminarySurfaceLevel verified identical**: both Java and C++ return the same PSL values at all tested positions (-10..10 step 4).
+- **Summary of what's been verified identical**:
+  - RNG: 867/867 raw float bits, 20/20 `next(31)` values
+  - Carver configs: probability, y-range, lavaLevel, all FloatProviders
+  - Carver math: carveEllipsoid, createTunnel, createCanyon, carveBlock, carveState, canReach
+  - CarvingMask: bit packing `(x&15) | ((z&15)<<4) | ((y-minY)<<8)`
+  - Aquifer: `computeSubstance(ctx, 0.0)` returns identical results at mismatch positions
+  - preliminarySurfaceLevel: identical at all quart-quantized positions
+- **Remaining possibilities**: the carver's `canReach` check, the `shouldSkip` lambda, or the iteration order of source chunks may have a subtle bug. Alternatively, the `carveState` function may compute different lava levels due to the `VerticalAnchor::aboveBottom(8)` resolution.
