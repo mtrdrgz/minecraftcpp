@@ -352,6 +352,18 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
+**Last updated**: 2026-06-20 22:18 UTC - bamboo/stone visual fix + A/D camera movement.
+
+**Jungle visual + camera controls FIXED (2026-06-20 22:18):** A/D free-camera
+strafing was inverted because `right` used `cross(forward, up)` under the renderer's
+camera convention; it now uses `cross(up, forward)`. The gray stone-looking columns
+seen in jungle scenes were addressed at both likely failure points: bamboo now has a
+special thin-stem mesh with `bamboo_stalk`/leaf-plane textures, and texture fallback no
+longer disguises unresolved textures as `stone`. `tools/build_atlas.py` now writes a
+real magenta/black `__missing__` tile into `block_atlas.png/json` instead of mapping
+`__missing__` to the stone tile. Ignored atlas assets were regenerated locally and
+Release `mcpp.exe` was rebuilt.
+
 **Last updated**: 2026-06-20 22:10 UTC - block texture/model hint pass + atlas fallback guard.
 
 **Block texture rendering FIXED (2026-06-20 22:10):** `mcpp.exe` was showing some

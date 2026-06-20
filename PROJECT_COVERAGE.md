@@ -118,6 +118,23 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-20 22:18 UTC - Bamboo/stone visual fix + A/D camera movement
+
+**Agent**: Codex
+
+- Fixed inverted horizontal free-camera movement by computing the right vector as
+  `cross(up, forward)` for the renderer's vanilla-facing convention. A now strafes
+  left and D strafes right.
+- Fixed the gray stone-looking columns reported in jungle scenes. Bamboo now uses a
+  thin 2x2-pixel-center stem mesh with `bamboo_stalk` and optional leaf planes instead
+  of any full-cube fallback. Also hardened texture resolution so non-stone blocks do
+  not silently resolve to `stone`.
+- Fixed `tools/build_atlas.py`: the generated `__missing__` UV previously fell back to
+  the `stone` tile, so unresolved textures were disguised as rock. The script now
+  pastes a real magenta/black missing tile into the atlas and maps both `__missing__`
+  and `missingno` to it. Regenerated ignored atlas assets and rebuilt
+  `build-vs/Release/mcpp.exe`.
+
 ### 2026-06-20 22:10 UTC - Block texture runtime cleanup for mcpp.exe
 
 **Agent**: Codex

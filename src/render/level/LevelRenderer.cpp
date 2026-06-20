@@ -183,7 +183,7 @@ void LevelRenderer::updateCamera(float dtSec) {
     }
     float speed = 20.f; if (m_window->isKeyDown(VK_SHIFT)) speed *= 5.f;
     glm::vec3 fwd = vanillaViewVector(0.0f, m_camYaw);
-    glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3{0.f, 1.f, 0.f}));
+    glm::vec3 right = glm::normalize(glm::cross(glm::vec3{0.f, 1.f, 0.f}, fwd));
     if (m_window->isKeyDown('W')) m_camPos += fwd * speed * dtSec;
     if (m_window->isKeyDown('S')) m_camPos -= fwd * speed * dtSec;
     if (m_window->isKeyDown('A')) m_camPos -= right * speed * dtSec;

@@ -119,7 +119,13 @@ static std::string textureForStateFace(const mc::BlockState& state, int face) {
         }
     }
 
-    return block->textures.forFace(face);
+    const std::string& tex = block->textures.forFace(face);
+    if (tex == "stone" && block->name != "stone" &&
+        block->name != "infested_stone" &&
+        block->name.find("stone") == std::string::npos) {
+        return block->name;
+    }
+    return tex;
 }
 
 // Get UV coordinates and biome tint from atlas (or fallback grid if atlas null)
@@ -403,6 +409,29 @@ static void emitGroundPlant(SectionMesh& mesh, float bx, float by, float bz,
     }}, atlas, texture, light);
 }
 
+static void emitBamboo(SectionMesh& mesh, float bx, float by, float bz,
+                       const TextureAtlas* atlas, uint8_t light,
+                       const mc::BlockState* bs) {
+    const float x0 = bx + 7.0f / 16.0f;
+    const float x1 = bx + 9.0f / 16.0f;
+    const float z0 = bz + 7.0f / 16.0f;
+    const float z1 = bz + 9.0f / 16.0f;
+    const float y0 = by;
+    const float y1 = by + 1.0f;
+
+    emitTexturedQuad(mesh, {{{{x0, y0, z0}}, {{x1, y0, z0}}, {{x1, y1, z0}}, {{x0, y1, z0}}}}, atlas, "bamboo_stalk", light);
+    emitTexturedQuad(mesh, {{{{x1, y0, z1}}, {{x0, y0, z1}}, {{x0, y1, z1}}, {{x1, y1, z1}}}}, atlas, "bamboo_stalk", light);
+    emitTexturedQuad(mesh, {{{{x0, y0, z1}}, {{x0, y0, z0}}, {{x0, y1, z0}}, {{x0, y1, z1}}}}, atlas, "bamboo_stalk", light);
+    emitTexturedQuad(mesh, {{{{x1, y0, z0}}, {{x1, y0, z1}}, {{x1, y1, z1}}, {{x1, y1, z0}}}}, atlas, "bamboo_stalk", light);
+
+    const std::string leaves = bs ? bs->getProperty("leaves") : "";
+    if (leaves == "small" || leaves == "large") {
+        const std::string leafTexture = leaves == "large" ? "bamboo_large_leaves" : "bamboo_small_leaves";
+        emitTexturedQuad(mesh, {{{{bx + 0.05f, y0, bz + 0.5f}}, {{bx + 0.95f, y0, bz + 0.5f}}, {{bx + 0.95f, y1, bz + 0.5f}}, {{bx + 0.05f, y1, bz + 0.5f}}}}, atlas, leafTexture, light);
+        emitTexturedQuad(mesh, {{{{bx + 0.5f, y0, bz + 0.05f}}, {{bx + 0.5f, y0, bz + 0.95f}}, {{bx + 0.5f, y1, bz + 0.95f}}, {{bx + 0.5f, y1, bz + 0.05f}}}}, atlas, leafTexture, light);
+    }
+}
+
 // Segment-aware renderer for leaf_litter (LeafLitterBlock.java).
 // Java creates 4 model variants (template_leaf_litter_1..4) via createLeafLitter /
 // createSegmentedBlock; each shows N 8×8 half-quads at floor level, oriented by
@@ -542,6 +571,10 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                     const std::string& name = bs->block->name;
                     if (name == "pink_petals" || name == "wildflowers") {
                         emitGroundPlant(out, bx, by, bz, atlas, name, light);
+                        continue;
+                    }
+                    if (name == "bamboo") {
+                        emitBamboo(out, bx, by, bz, atlas, light, bs);
                         continue;
                     }
                     if (name == "leaf_litter") {

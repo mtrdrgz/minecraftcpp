@@ -90,8 +90,20 @@ def main():
         for x in range(16):
             color = (200, 0, 200, 255) if (x + y) % 2 == 0 else (0, 0, 0, 255)
             missing_img.putpixel((x, y), color)
-    uv_map["__missing__"] = uv_map.get("missing_texture",
-                                        uv_map.get("stone", [0, 0, 1/tiles_per_row, 1/tiles_per_row]))
+    missing_index = n
+    missing_col = missing_index % tiles_per_row
+    missing_row = missing_index // tiles_per_row
+    missing_px = missing_col * 16
+    missing_py = missing_row * 16
+    atlas.paste(missing_img, (missing_px, missing_py))
+    missing_uv = [
+        missing_px / atlas_size,
+        missing_py / atlas_size,
+        (missing_px + 16) / atlas_size,
+        (missing_py + 16) / atlas_size,
+    ]
+    uv_map["__missing__"] = missing_uv
+    uv_map["missingno"] = missing_uv
 
     # Save atlas PNG
     atlas_png = OUT_DIR / "block_atlas.png"
