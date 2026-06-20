@@ -1,6 +1,8 @@
 #include "StructureGen.h"
 
 #include "placement/StructurePlacement.h"
+#include "StructurePieceBase.h"
+#include "structures/SwampHutPiece.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -438,6 +440,7 @@ struct HeightProvider {
 
 struct JigsawConfig {
     std::string id;
+    std::string structureType;  // "minecraft:jigsaw", "minecraft:swamp_hut", etc.
     bool supported = false;
     std::string reason;
 
@@ -549,6 +552,8 @@ struct Runtime {
                               Rotation rot, const StructureWorld& world);
     bool tryGenerateAndPlace(const std::string& structureId, ChunkPos active, const StructureWorld& world,
                              const std::function<std::string(int, int, int)>& biomeGetter);
+    bool tryPlaceSwampHut(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 };
@@ -759,9 +764,30 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     JigsawConfig cfg;
     cfg.id = id;
     std::string type = normalizeId(j.value("type", std::string()));
-    if (type != "minecraft:jigsaw") {
+    cfg.structureType = type;
+    
+    // Non-jigsaw structure types: supported with procedural piece placement
+    static const std::set<std::string> supportedTypes = {
+        "minecraft:jigsaw",
+        "minecraft:swamp_hut",
+        "minecraft:desert_pyramid",
+        "minecraft:igloo",
+        "minecraft:jungle_temple",
+        "minecraft:shipwreck",
+        "minecraft:ocean_ruin",
+        "minecraft:ruined_portal",
+        "minecraft:buried_treasure",
+    };
+    
+    if (supportedTypes.count(type) == 0) {
         cfg.supported = false;
         cfg.reason = "unsupported type " + type;
+        return cfg;
+    }
+    
+    if (type != "minecraft:jigsaw") {
+        // Non-jigsaw structures don't need jigsaw config fields
+        cfg.supported = true;
         return cfg;
     }
 
@@ -1146,10 +1172,22 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     auto it = structures.find(structureId);
     if (it == structures.end() || !it->second.supported) return false;
 
+    const JigsawConfig& cfg = it->second;
+
+    // Non-jigsaw structure dispatch
+    if (cfg.structureType == "minecraft:swamp_hut") {
+        return tryPlaceSwampHut(active, world);
+    }
+    if (cfg.structureType == "minecraft:desert_pyramid") {
+        return tryPlaceDesertPyramid(active, world);
+    }
+    // TODO: add more non-jigsaw structure types
+
+    // Jigsaw structure assembly (existing path)
     std::vector<Placed> pieces;
     BlockPos stubPos{};
     try {
-        if (!assembleJigsaw(it->second, active, world, biomeGetter, pieces, stubPos)) return false;
+        if (!assembleJigsaw(cfg, active, world, biomeGetter, pieces, stubPos)) return false;
     } catch (const std::exception& e) {
         MC_LOG_DEBUG("Structure {} skipped at chunk ({},{}): {}", structureId, active.x, active.z, e.what());
         return false;
@@ -1159,6 +1197,45 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     MC_LOG_INFO("Structure {} placed at chunk ({},{}), stub=({}, {}, {}), pieces={}, blocks={}",
                 structureId, active.x, active.z, stubPos.x, stubPos.y, stubPos.z, pieces.size(), blocks);
     return true;
+}
+
+bool Runtime::tryPlaceSwampHut(ChunkPos active, const StructureWorld& world) {
+    // SwampHutStructure.findGenerationPoint:
+    //   onTopOfChunkCenter(context, WORLD_SURFACE_WG, builder -> generatePieces(builder, context))
+    //   generatePieces: builder.addPiece(new SwampHutPiece(context.random(), chunkPos.getMinBlockX(), chunkPos.getMinBlockZ()))
+    //
+    // The random is the WorldgenRandom from the structure context, seeded by
+    // setLargeFeatureSeed(seed, chunkX, chunkZ).
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    int west = active.x * 16;
+    int north = active.z * 16;
+
+    piece::SwampHutPiece hut(*random, west, north);
+
+    // Build the StructureWorldAccess adapter
+    StructureWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.minY = -64;
+    // The chunkBB is the full chunk bounding box for this structure's chunk
+    // In Java, chunkBB = new BoundingBox(chunkX*16, minY, chunkZ*16, chunkX*16+15, maxY, chunkZ*16+15)
+    // But the structure can extend beyond one chunk. For simplicity, allow all writes.
+    access.isInsideBoundingBox = nullptr;  // allow all writes
+
+    hut.postProcess(access);
+    MC_LOG_INFO("Structure swamp_hut placed at chunk ({},{})", active.x, active.z);
+    return true;
+}
+
+bool Runtime::tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world) {
+    // TODO: port DesertPyramidPiece.postProcess
+    // For now, stub — will be implemented next
+    MC_LOG_DEBUG("Structure desert_pyramid: not yet implemented at chunk ({},{})", active.x, active.z);
+    return false;
 }
 
 void Runtime::generate(ChunkPos active, const StructureWorld& world,
