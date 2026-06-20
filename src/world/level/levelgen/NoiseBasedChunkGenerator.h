@@ -17,6 +17,9 @@
 
 namespace mc::levelgen {
 
+class RandomState;
+class SurfaceSystem;
+
 // Port of net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator.
 // fillFromNoise follows Java's cell interpolation order with the full density router.
 // buildSurface delegates to the partial SurfaceSystem port with Java Climate /
@@ -79,6 +82,8 @@ private:
     std::shared_ptr<PositionalRandomFactory> m_oreRandom;
 
     SurfaceRules::RuleSourcePtr m_surfaceRuleSource;
+    mutable std::unique_ptr<RandomState> m_surfaceRandomState;
+    mutable std::unique_ptr<SurfaceSystem> m_surfaceSystem;
     std::unique_ptr<BiomeSource> m_biomeSource;
     std::unique_ptr<BiomeManager> m_biomeManager;
     std::vector<std::string> m_decorationSourceBiomes;

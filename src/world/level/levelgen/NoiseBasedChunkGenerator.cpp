@@ -345,6 +345,13 @@ NoiseBasedChunkGenerator::NoiseBasedChunkGenerator(NoiseGeneratorSettings settin
             *m_biomeSource,
             BiomeManager::obfuscateSeed(static_cast<int64_t>(m_seed)));
     }
+
+    m_surfaceRandomState = std::make_unique<RandomState>(m_settings, m_seed);
+    m_surfaceSystem = std::make_unique<SurfaceSystem>(
+        *m_surfaceRandomState,
+        m_surfaceRandomState->random(),
+        m_settings.defaultBlock,
+        m_settings.seaLevel);
 }
 
 uint32_t NoiseBasedChunkGenerator::stateIdFor(const char* blockName, uint32_t fallback) const {
@@ -455,7 +462,7 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::
                             }
 
                             if (state != air) {
-                                chunk.setBlock(blockX, blockY, blockZ, state);
+                                chunk.setBlockDuringNoise(blockX, blockY, blockZ, state);
                                 // NoiseBasedChunkGenerator.java:442-446: fluid cells
                                 // are marked for FULL postprocessing when the aquifer
                                 // requests a fluid update.
@@ -484,17 +491,6 @@ void NoiseBasedChunkGenerator::buildSurface(
     // Ensure heightmap is accurate before SurfaceSystem reads it (for steep condition)
     chunk.computeHeightmap();
 
-    // Build a fresh RandomState to pass into the surface system.
-    // In Java, the server keeps one persistent RandomState per world; here we
-    // recreate it per chunk (cheap since noise instances are just seeded Perlin trees).
-    RandomState randomState(m_settings, m_seed);
-
-    // Java SurfaceSystem receives RandomState.random directly. "minecraft:terrain"
-    // is only for BlendedNoise re-seeding, not surface depth/clay-band randomness.
-    auto noiseRandom = randomState.random();
-
-    SurfaceSystem system(randomState, noiseRandom, m_settings.defaultBlock, m_settings.seaLevel);
-
     WorldGenCtx genCtx;
     genCtx.minGenY  = m_settings.noiseSettings.minY;
     genCtx.genDepth = m_settings.noiseSettings.height;
@@ -504,7 +500,7 @@ void NoiseBasedChunkGenerator::buildSurface(
         return samplePreliminarySurfaceLevel(bx, bz);
     };
 
-    system.buildSurface(randomState, chunk, prelimSurf, biomeOverride, genCtx, m_surfaceRuleSource);
+    m_surfaceSystem->buildSurface(*m_surfaceRandomState, chunk, prelimSurf, biomeOverride, genCtx, m_surfaceRuleSource);
 
     chunk.computeHeightmap();
     chunk.setLoaded(true);
@@ -523,14 +519,12 @@ void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk, std::vector<mc::B
     auto biomeGetter = [this](int blockX, int blockY, int blockZ) -> std::string {
         return m_biomeManager ? m_biomeManager->getBiome(blockX, blockY, blockZ) : "";
     };
-    RandomState randomState(m_settings, m_seed);
-    SurfaceSystem surfaceSystem(randomState, randomState.random(), m_settings.defaultBlock, m_settings.seaLevel);
     WorldGenCtx genCtx;
     genCtx.minGenY = m_settings.noiseSettings.minY;
     genCtx.genDepth = m_settings.noiseSettings.height;
     auto topMaterial = [&](LevelChunk& targetChunk, int blockX, int blockY, int blockZ, bool underFluid) {
-        return surfaceSystem.topMaterial(
-            randomState,
+        return m_surfaceSystem->topMaterial(
+            *m_surfaceRandomState,
             targetChunk,
             preliminarySurface,
             biomeGetter,

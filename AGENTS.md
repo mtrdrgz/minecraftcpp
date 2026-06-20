@@ -352,6 +352,24 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
+**Last updated**: 2026-06-20 22:40 UTC - terrain/meshing profiling pass and first engine performance fixes.
+
+**Terrain/engine performance PARTIAL (2026-06-20 22:40):** added
+`terrain_engine_perf` to measure full CPU terrain generation plus chunk meshing
+without a window/GPU. Repro: `build-vs/Release/terrain_engine_perf.exe --radius 4
+--seed 1`. Profile before final worldgen setter fix showed `fillFromNoise` ~190.5
+ms/chunk, `buildSurface` ~105.8 ms/chunk, `applyCarvers` ~4.9 ms/chunk, mesh ~56.7
+ms/chunk. Fixes landed: profiler no longer overwrites same-name worker events;
+vanilla block model IDs are cached by numeric `stateId` and `Model` instances are
+reused by reference; async local generation uses one thread-local
+`NoiseBasedChunkGenerator` per worker/seed; `NoiseBasedChunkGenerator` keeps
+persistent `RandomState`/`SurfaceSystem`; `fillFromNoise` uses a NOISE-stage block
+setter that avoids per-block render-dirty atomics/heightmap writes. Re-profile
+seed=1 radius=4: `fillFromNoise` ~138.3 ms/chunk, `buildSurface` ~76.4 ms/chunk,
+`applyCarvers` ~3.6 ms/chunk, mesh ~57.2 ms/chunk. This is better but not done:
+density-function and surface-rule execution remain the dominant CPU bottlenecks.
+Release `mcpp.exe` rebuilt successfully.
+
 **Last updated**: 2026-06-20 22:30 UTC - runtime block meshing now uses vanilla blockstate/model JSON.
 
 **Block model path PARTIAL (2026-06-20 22:30):** stop doing targeted texture

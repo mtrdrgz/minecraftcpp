@@ -3,6 +3,7 @@
 #include "../../world/level/block/BlockState.h"
 #include "../../world/level/block/Blocks.h"
 #include "../../core/Log.h"
+#include "../../../profiling/include/Profiler.h"
 #include <array>
 #include <algorithm>
 #include <fstream>
@@ -623,6 +624,22 @@ Model loadModel(const std::string& id, std::unordered_set<std::string>& visiting
     return result;
 }
 
+const Model* loadModelCached(const std::string& id) {
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex());
+        auto it = modelCache().find(id);
+        if (it != modelCache().end()) return it->second.loaded ? &it->second : nullptr;
+    }
+
+    std::unordered_set<std::string> visiting;
+    (void)loadModel(id, visiting);
+
+    std::lock_guard<std::mutex> lock(cacheMutex());
+    auto it = modelCache().find(id);
+    if (it == modelCache().end() || !it->second.loaded) return nullptr;
+    return &it->second;
+}
+
 std::string resolveTextureRef(const Model& model, std::string ref) {
     std::unordered_set<std::string> seen;
     while (!ref.empty() && ref[0] == '#') {
@@ -732,6 +749,41 @@ std::vector<std::string> modelsForState(const mc::BlockState& state) {
     return out;
 }
 
+const std::vector<std::string>& cachedModelsForState(uint32_t stateId, const mc::BlockState& state) {
+    static std::mutex stateMutex;
+    static std::vector<std::vector<std::string>> cache;
+    static std::vector<uint8_t> resolved;
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (cache.size() < mc::g_blockStates.size()) {
+            cache.resize(mc::g_blockStates.size());
+            resolved.resize(mc::g_blockStates.size(), 0);
+        }
+        if (stateId < resolved.size() && resolved[stateId]) {
+            return cache[stateId];
+        }
+    }
+
+    std::vector<std::string> models = modelsForState(state);
+
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (cache.size() < mc::g_blockStates.size()) {
+        cache.resize(mc::g_blockStates.size());
+        resolved.resize(mc::g_blockStates.size(), 0);
+    }
+    if (stateId < cache.size()) {
+        if (!resolved[stateId]) {
+            cache[stateId] = std::move(models);
+            resolved[stateId] = 1;
+        }
+        return cache[stateId];
+    }
+
+    static const std::vector<std::string> empty;
+    return empty;
+}
+
 int faceIndex(const std::string& name) {
     for (int i = 0; i < 6; ++i) if (name == FACE_NAMES[i]) return i;
     return -1;
@@ -810,16 +862,14 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                               uint32_t stateId,
                               uint8_t light,
                               const TextureAtlas* atlas) {
-    const std::vector<std::string> modelIds = modelsForState(state);
+    const std::vector<std::string>& modelIds = cachedModelsForState(stateId, state);
     if (modelIds.empty()) return false;
 
     bool emitted = false;
-    std::unordered_set<std::string> visiting;
     for (const std::string& modelId : modelIds) {
-        visiting.clear();
-        const Model model = loadModel(modelId, visiting);
-        if (!model.loaded) continue;
-        for (const Element& e : model.elements) {
+        const Model* model = loadModelCached(modelId);
+        if (!model) continue;
+        for (const Element& e : model->elements) {
             for (const auto& [faceName, face] : e.faces) {
                 int fi = faceIndex(faceName);
                 if (fi < 0) continue;
@@ -829,7 +879,7 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                         continue;
                     }
                 }
-                emitModelFace(mesh, e, face, model, fi, (float)wx, (float)wy, (float)wz, atlas, light);
+                emitModelFace(mesh, e, face, *model, fi, (float)wx, (float)wy, (float)wz, atlas, light);
                 emitted = true;
             }
         }
@@ -844,6 +894,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                                 const TextureAtlas* atlas,
                                 SectionMesh& out)
 {
+    PROFILE_SCOPE("chunk_mesh_buildSection");
     out.clear();
     const ChunkSection* sec = chunk.getSection(sectionIndex);
     if (!sec || sec->isEmpty()) return;
@@ -983,6 +1034,7 @@ std::vector<SectionMesh> ChunkMesher::buildChunk(const LevelChunk& chunk,
                                                    const LevelChunk* neighbors[4],
                                                    const TextureAtlas* atlas)
 {
+    PROFILE_SCOPE_CHUNK("chunk_mesh_buildChunk", chunk.pos().x, chunk.pos().z);
     std::vector<SectionMesh> meshes(CHUNK_SECTION_COUNT);
     for (int s = 0; s < CHUNK_SECTION_COUNT; ++s)
         buildSection(chunk, s, neighbors, atlas, meshes[s]);

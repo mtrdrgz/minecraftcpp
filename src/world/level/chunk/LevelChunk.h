@@ -25,6 +25,7 @@ public:
     // World-space block access
     uint32_t getBlock(int worldX, int worldY, int worldZ) const;
     void     setBlock(int worldX, int worldY, int worldZ, uint32_t stateId);
+    void     setBlockDuringNoise(int worldX, int worldY, int worldZ, uint32_t stateId);
 
     const ChunkSection* getSection(int sectionIndex) const;
           ChunkSection* getSection(int sectionIndex);

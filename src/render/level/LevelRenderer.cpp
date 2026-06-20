@@ -2,6 +2,7 @@
 #include "../../world/level/block/Blocks.h"
 #include "../../assets/resource_ids.h"
 #include "../../core/Log.h"
+#include "../../../profiling/include/Profiler.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
@@ -201,6 +202,7 @@ void LevelRenderer::updateCamera(float dtSec) {
 }
 
 void LevelRenderer::rebuildDirtyChunks() {
+    PROFILE_SCOPE("level_renderer_rebuildDirtyChunks");
     struct DirtyCandidate {
         int64_t key;
         int distSq;
@@ -252,6 +254,7 @@ void LevelRenderer::rebuildDirtyChunks() {
 void LevelRenderer::uploadAndDrawSection(ICommandList* cmd, SectionMesh& mesh) {
     if (mesh.empty()) return;
     if (!mesh.uploaded) {
+        PROFILE_SCOPE("level_renderer_uploadSection");
         if (!mesh.vbo) mesh.vbo = m_device->createBuffer({mesh.vertices.size() * sizeof(ChunkVertex), BufferUsage::Vertex, false});
         if (!mesh.ibo) mesh.ibo = m_device->createBuffer({mesh.indices.size() * sizeof(uint32_t), BufferUsage::Index, false});
         cmd->uploadBuffer(mesh.vbo, mesh.vertices.data(), mesh.vertices.size() * sizeof(ChunkVertex));

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <thread>
 
 namespace mc::profiling {
@@ -11,8 +12,11 @@ Profiler::Profiler()
 }
 
 void Profiler::beginEvent(const std::string& eventName, const std::string& chunkKey) {
+    std::ostringstream threadIdStream;
+    threadIdStream << std::this_thread::get_id();
+    std::string key = threadIdStream.str() + ":" + eventName;
+
     std::lock_guard<std::mutex> lock(m_mutex);
-    std::string key = eventName;
     m_activeTimings[key] = {
         eventName,
         chunkKey,
@@ -22,9 +26,14 @@ void Profiler::beginEvent(const std::string& eventName, const std::string& chunk
 
 void Profiler::endEvent(const std::string& eventName) {
     auto now = std::chrono::high_resolution_clock::now();
+    std::ostringstream threadIdStream;
+    threadIdStream << std::this_thread::get_id();
+    std::string threadId = threadIdStream.str();
+    std::string key = threadId + ":" + eventName;
+
     std::lock_guard<std::mutex> lock(m_mutex);
     
-    auto it = m_activeTimings.find(eventName);
+    auto it = m_activeTimings.find(key);
     if (it == m_activeTimings.end()) {
         return;  // Event not started or already ended
     }
@@ -35,10 +44,6 @@ void Profiler::endEvent(const std::string& eventName) {
     double timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - m_profileStart
     ).count() / 1000.0;
-
-    std::ostringstream threadIdStream;
-    threadIdStream << std::this_thread::get_id();
-    std::string threadId = threadIdStream.str();
 
     m_timings.push_back({
         state.eventName,

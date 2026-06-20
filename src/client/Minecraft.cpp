@@ -1014,7 +1014,17 @@ void Minecraft::updateLocalChunks() {
             m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed]() -> GeneratedChunk {
                 GeneratedChunk out;
                 out.chunk = std::make_unique<LevelChunk>(pos);
-                levelgen::NoiseBasedChunkGenerator generator(seed);
+                struct ThreadGeneratorCache {
+                    uint64_t seed = 0;
+                    std::unique_ptr<levelgen::NoiseBasedChunkGenerator> generator;
+                };
+                thread_local ThreadGeneratorCache cache;
+                if (!cache.generator || cache.seed != seed) {
+                    PROFILE_SCOPE_CHUNK("generator_threadlocal_setup", pos.x, pos.z);
+                    cache.seed = seed;
+                    cache.generator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
+                }
+                levelgen::NoiseBasedChunkGenerator& generator = *cache.generator;
                 {
                     PROFILE_SCOPE_CHUNK("fillFromNoise", pos.x, pos.z);
                     generator.fillFromNoise(*out.chunk, &out.genMarks);

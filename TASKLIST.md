@@ -27,6 +27,7 @@
 - [ ] Hay race conditions que hacen que el chunk que se genere esté corrupto. Solo pasa al ir rápido, y a peor CPU más pasa.
 - [ ] Hay que compilar todo a un solo ejecutable. Si el ejecutable se saca de la carpeta funciona, pero no se generan árboles ni nada; supongo que hay otros ejecutables en la carpeta de `/build` de los que depende `mcpp.exe`. Compila todo a uno. Además, seguramente el tener un proceso de generación de decoración esté quitando rendimiento y causando los problemas de chunks corruptos.
 - [ ] La generación de terreno presenta problemas de rendimiento, debe ser optimizada; hace que el juego tenga stutters.
+  - [ ] Perfil 2026-06-20 22:40 UTC: `terrain_engine_perf --radius 4 --seed 1` bajó de `fillFromNoise` 190.5 ms/chunk + `buildSurface` 105.8 ms/chunk a 138.3 + 76.4 ms/chunk tras cachear generadores/RandomState/SurfaceSystem, usar setter de fase NOISE y cachear modelos vanilla por `stateId`. Sigue abierta: density functions/surface rules son aún demasiado lentos.
 - [ ] Cuando los chunks se están generando y el usuario va muy rápido e intenta mover la cámara, la cámara da como un lagback que se siente terrible y no debería existir.
 
 ## Menú / UI

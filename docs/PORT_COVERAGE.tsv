@@ -1538,7 +1538,7 @@ net/minecraft/client/renderer/chunk/CompileTaskDynamicQueue.java	unvisited
 net/minecraft/client/renderer/chunk/CompiledSectionMesh.java	unvisited	
 net/minecraft/client/renderer/chunk/RenderRegionCache.java	unvisited	
 net/minecraft/client/renderer/chunk/RenderSectionRegion.java	unvisited	
-net/minecraft/client/renderer/chunk/SectionCompiler.java	unvisited	
+net/minecraft/client/renderer/chunk/SectionCompiler.java	partial	ChunkMesher::buildChunk/buildSection emits section geometry and now profiles/cache-resolves vanilla block models by stateId; missing Java SectionCompiler render-layer/AO/visibility/translucency sorting and full ModelBlockRenderer path.
 net/minecraft/client/renderer/chunk/SectionCopy.java	unvisited	
 net/minecraft/client/renderer/chunk/SectionMesh.java	unvisited	
 net/minecraft/client/renderer/chunk/SectionRenderDispatcher.java	unvisited	
@@ -6179,7 +6179,7 @@ net/minecraft/world/level/levelgen/OreVeinifier.java	ported	terrain gate + vein 
 net/minecraft/world/level/levelgen/PatrolSpawner.java	unvisited	
 net/minecraft/world/level/levelgen/PhantomSpawner.java	unvisited	
 net/minecraft/world/level/levelgen/PositionalRandomFactory.java	unvisited	
-net/minecraft/world/level/levelgen/RandomState.java	unvisited	
+net/minecraft/world/level/levelgen/RandomState.java	partial	C++ RandomState.{h,cpp} provides world-seed positional factories and named noise cache used by NoiseBasedChunkGenerator/SurfaceSystem; not fully audited against Java RandomState lifecycle/noise registry.
 net/minecraft/world/level/levelgen/RandomSupport.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/SingleThreadedRandomSource.java	unvisited	
 net/minecraft/world/level/levelgen/SurfaceRules.java	ported	terrain gate + vein fix cd1ecd1f

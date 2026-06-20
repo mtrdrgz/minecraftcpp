@@ -35,6 +35,13 @@ void LevelChunk::setBlock(int wx, int wy, int wz, uint32_t stateId) {
         m_heightmap[lz * 16 + lx] = std::max(m_heightmap[lz * 16 + lx], (int16_t)wy);
 }
 
+void LevelChunk::setBlockDuringNoise(int wx, int wy, int wz, uint32_t stateId) {
+    int idx = sectionIndex(wy);
+    if (idx < 0 || idx >= CHUNK_SECTION_COUNT) return;
+    if (!m_sections[idx]) m_sections[idx] = std::make_unique<ChunkSection>();
+    m_sections[idx]->setBlock(wx & 15, localY(wy), wz & 15, stateId);
+}
+
 void LevelChunk::computeHeightmap() {
     // Scan each column top-down, record highest non-air block Y (world coords)
     for (int lz = 0; lz < 16; ++lz) {

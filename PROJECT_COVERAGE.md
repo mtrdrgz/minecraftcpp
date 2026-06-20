@@ -52,12 +52,12 @@ The TSV has three columns: `path  status  proof`. The proof field must be non-em
 ```
 Total Java files tracked : 6,882
 Ported (full)            : 503   ( 7.3%)
-Partial                  : 97    ( 1.4%)
+Partial                  : 99    ( 1.4%)
 Reasoned N/A             : 449   ( 6.5%)
-Unvisited                : 5,833 (84.8%)
+Unvisited                : 5,831 (84.7%)
 
 Actionable files (excl. N/A): 6,433
-Weighted progress            : 551.5 / 6,433
+Weighted progress            : 552.5 / 6,433
 
 [████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 8.6%
 ```
@@ -66,8 +66,8 @@ Weighted progress            : 551.5 / 6,433
 
 | Package | Total | Ported | Partial | N/A | Progress |
 |---|---|---|---|---|---|
-| `net/minecraft/world/` | 2,559 | 243 | 55 | 0 | `[██░░░░░░░░]` 10.6% |
-| `net/minecraft/client/` | 1,813 | 28 | 16 | 0 | `[░░░░░░░░░░]` 2.0% |
+| `net/minecraft/world/` | 2,559 | 243 | 56 | 0 | `[██░░░░░░░░]` 10.6% |
+| `net/minecraft/client/` | 1,813 | 28 | 17 | 0 | `[░░░░░░░░░░]` 2.0% |
 | `net/minecraft/util/` | 713 | 43 | 0 | 386 | `[█░░░░░░░░░]` 13.1% of actionable |
 | `net/minecraft/server/` | 418 | 0 | 1 | 0 | `[░░░░░░░░░░]` 0.1% |
 | `net/minecraft/network/` | 411 | 162 | 3 | 0 | `[████░░░░░░]` 39.8% |
@@ -80,7 +80,7 @@ Weighted progress            : 551.5 / 6,433
 
 | Subpackage | Total | Ported | Partial | Progress |
 |---|---|---|---|---|
-| `world/level/` | 1,297 | 179 | 39 | 15.0% |
+| `world/level/` | 1,297 | 179 | 40 | 15.3% |
 | `world/entity/` | 708 | 24 | 6 | 3.8% |
 | `world/item/` | 313 | 11 | 6 | 4.5% |
 | `world/phys/` | 27 | 20 | 2 | 78.0% |
@@ -109,7 +109,7 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 1. **`net/minecraft/world/entity/`** (708 files, 3.8% done) — all mob classes, AI goals, attributes, effects
 2. **`net/minecraft/client/`** (1,813 files, 2.0% done) — rendering pipeline, GUI screens, input handling, sound
-3. **`net/minecraft/world/level/`** (1,297 files, 15.0% done) — remaining worldgen: structures, light engine, chunk loading
+3. **`net/minecraft/world/level/`** (1,297 files, 15.3% done) — remaining worldgen: structures, light engine, chunk loading
 4. **`net/minecraft/world/item/`** (313 files, 4.5% done) — all item types, use behaviours
 5. **`net/minecraft/server/`** (418 files, 0.1% done) — integrated server, commands
 6. **`net/minecraft/util/`** (713 files, 13.1% of actionable) — utilities, most are n/a candidates
@@ -117,6 +117,32 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 ---
 
 ## Devlog
+
+### 2026-06-20 22:40 UTC - Terrain/meshing performance profile and first fixes
+
+**Agent**: Codex
+
+- Added `terrain_engine_perf`, a standalone CPU benchmark for full local terrain
+  generation plus chunk mesh construction (no window/GPU dependency). Baseline
+  measurement before the final worldgen setter fix, seed=1 radius=4 (81 chunks):
+  `fillFromNoise` 190.5 ms/chunk, `buildSurface` 105.8 ms/chunk, `applyCarvers`
+  4.9 ms/chunk, `chunkMesh` 56.7 ms/chunk.
+- Fixed profiler correctness for worker threads: active timings are now keyed by
+  thread id + event name, so simultaneous `fillFromNoise`/`buildSurface` scopes no
+  longer overwrite each other in CSV output.
+- Removed a render/meshing hot path introduced by the vanilla block-model runtime:
+  blockstate model IDs are now cached by numeric `stateId`, and loaded `Model`
+  instances are reused by reference instead of copied/re-resolved for every block.
+  Added profiler scopes around chunk meshing, dirty rebuilds, and section uploads.
+- Reduced local chunk generation overhead without changing vanilla algorithms:
+  async workers now keep a `thread_local` `NoiseBasedChunkGenerator` per seed, the
+  generator keeps persistent `RandomState`/`SurfaceSystem` instances like the Java
+  world runtime, and `fillFromNoise` writes through a NOISE-stage setter that avoids
+  per-block render-dirty atomics/heightmap maintenance later recomputed by
+  `buildSurface`. Re-profiled seed=1 radius=4: `fillFromNoise` 138.3 ms/chunk,
+  `buildSurface` 76.4 ms/chunk, `applyCarvers` 3.6 ms/chunk, `chunkMesh` 57.2
+  ms/chunk. Remaining bottleneck is still the density-function/surface-rule CPU
+  implementation, not GPU upload.
 
 ### 2026-06-20 22:30 UTC - Runtime block rendering now reads vanilla blockstate/model JSON
 

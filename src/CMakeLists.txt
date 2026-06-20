@@ -6962,3 +6962,51 @@ set_target_properties(carver_diff_parity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+# Standalone CPU benchmark for the local terrain engine: full terrain generation
+# plus chunk mesh construction, with no window/GPU dependency.
+add_executable(terrain_engine_perf
+    perf/TerrainEnginePerf.cpp
+    assets/AssetPack.cpp
+    assets/AssetManager.cpp
+    assets/TextureAtlas.cpp
+    core/StbImpl.cpp
+    ../profiling/src/Profiler.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    render/level/ChunkMesh.cpp
+)
+target_include_directories(terrain_engine_perf PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ../profiling/include
+)
+target_link_libraries(terrain_engine_perf PRIVATE glm nlohmann_json stb)
+if(WIN32)
+    target_link_libraries(terrain_engine_perf PRIVATE bcrypt user32 kernel32)
+endif()
+target_compile_definitions(terrain_engine_perf PRIVATE NLOHMANN_JSON_NOEXCEPTION=0)
+set_target_properties(terrain_engine_perf PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
