@@ -258,3 +258,15 @@ Newest entries first. Every agent adds an entry. Short is fine — one bullet pe
 - **Carver start positions**: all 62 source chunks that start carving match exactly between Java and C++ (same `nextFloat` values, same `isStartChunk` decisions).
 - **Remaining issue**: despite identical RNG, identical configs, identical carveEllipsoid/createTunnel/createCanyon/carveBlock logic, and identical CarvingMask — the carver still produces 7,673 mismatches. The issue is NOT in the RNG or the carver math logic.
 - **Next investigation**: the `CarvingContext` in Java includes a `NoiseChunk` (used by the aquifer for `preliminarySurfaceLevel`). C++ creates a separate aquifer. While the noise functions themselves are NOT wrapped (they're `NoiseFunction`, not markers), the `preliminarySurfaceLevel` IS wrapped in a `FlatCache` in Java. C++ evaluates it directly. This might cause subtle differences in the aquifer's fluid status computation, leading to different `carveState` results.
+
+---
+
+### 2026-06-20 — Session: RNG next(31) verified identical, carver issue elsewhere
+
+**Agent**: Super Z (GLM)
+
+- **RNG next(31) verified**: traced 20 consecutive `next(31)` calls after `setLargeFeatureSeed(0, -5, 0)` — ALL 20 values identical between Java and C++ (raw hex match). The WorldgenRandom/LegacyRandomSource RNG chain is 100% byte-exact.
+- **PI precision investigated and ruled out**: Java uses `(float)Math.PI * currentStep / dist` (float math), C++ uses `PI_F * currentStep / dist` (also float math). `(float)Math.PI == PI_F` — both are 3.1415927f. No difference.
+- **nextInt(bound) investigated and ruled out**: the rejection sampling loop and power-of-two fast path are identical between Java and C++. `nextInt(16)` uses the fast path `(int)((long)16 * next(31) >> 31)` in both.
+- **Carver math compared line-by-line**: carveEllipsoid, createTunnel, createCanyon, carveBlock, carveState, canReach, CarvingMask — all identical formulas and FP operations.
+- **Remaining hypothesis**: the aquifer's `computeSubstance` may produce different results during carving because Java's aquifer uses the NoiseChunk's `wrappedRouter` (with FlatCache/Interpolated markers replaced by NoiseChunk-specific implementations), while C++ uses the unwrapped router. Although the function values should be the same at quart-quantized positions, there may be a subtle FP difference in the FlatCache path vs direct computation that affects the aquifer's fluid status computation at specific grid positions.
