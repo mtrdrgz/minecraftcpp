@@ -3,7 +3,9 @@
 
 namespace mc {
 
-LevelChunk::LevelChunk(ChunkPos pos) : m_pos(pos) {}
+LevelChunk::LevelChunk(ChunkPos pos) : m_pos(pos) {
+    m_heightmap.fill(static_cast<int16_t>(CHUNK_MIN_Y - 1));
+}
 
 ChunkSection* LevelChunk::getSection(int idx) {
     if (idx < 0 || idx >= CHUNK_SECTION_COUNT) return nullptr;
@@ -27,19 +29,49 @@ uint32_t LevelChunk::getBlock(int wx, int wy, int wz) const {
 void LevelChunk::setBlock(int wx, int wy, int wz, uint32_t stateId) {
     int idx = sectionIndex(wy);
     if (idx < 0 || idx >= CHUNK_SECTION_COUNT) return;
-    if (!m_sections[idx]) m_sections[idx] = std::make_unique<ChunkSection>();
-    m_sections[idx]->setBlock(wx & 15, localY(wy), wz & 15, stateId);
-    meshDirty = true;
     int lx = wx & 15, lz = wz & 15;
-    if (stateId != 0)
-        m_heightmap[lz * 16 + lx] = std::max(m_heightmap[lz * 16 + lx], (int16_t)wy);
+    uint32_t oldStateId = 0;
+    if (m_sections[idx]) {
+        oldStateId = m_sections[idx]->getBlock(lx, localY(wy), lz);
+    }
+    if (oldStateId == stateId) return;
+    if (stateId == 0 && !m_sections[idx]) return;
+    if (!m_sections[idx]) m_sections[idx] = std::make_unique<ChunkSection>();
+    m_sections[idx]->setBlock(lx, localY(wy), lz, stateId);
+    meshDirty = true;
+    updateHeightmapAfterSet(lx, wy, lz, oldStateId, stateId);
 }
 
 void LevelChunk::setBlockDuringNoise(int wx, int wy, int wz, uint32_t stateId) {
     int idx = sectionIndex(wy);
     if (idx < 0 || idx >= CHUNK_SECTION_COUNT) return;
+    int lx = wx & 15, lz = wz & 15;
+    uint32_t oldStateId = 0;
+    if (m_sections[idx]) {
+        oldStateId = m_sections[idx]->getBlock(lx, localY(wy), lz);
+    }
+    if (oldStateId == stateId) return;
+    if (stateId == 0 && !m_sections[idx]) return;
     if (!m_sections[idx]) m_sections[idx] = std::make_unique<ChunkSection>();
-    m_sections[idx]->setBlock(wx & 15, localY(wy), wz & 15, stateId);
+    m_sections[idx]->setBlock(lx, localY(wy), lz, stateId);
+    updateHeightmapAfterSet(lx, wy, lz, oldStateId, stateId);
+}
+
+void LevelChunk::updateHeightmapAfterSet(int lx, int wy, int lz, uint32_t oldStateId, uint32_t newStateId) {
+    int16_t& h = m_heightmap[lz * 16 + lx];
+    if (newStateId != 0) {
+        h = std::max(h, static_cast<int16_t>(wy));
+        return;
+    }
+
+    if (oldStateId == 0 || h != wy) return;
+    h = static_cast<int16_t>(CHUNK_MIN_Y - 1);
+    for (int y = wy - 1; y >= CHUNK_MIN_Y; --y) {
+        if (getBlock(m_pos.x * 16 + lx, y, m_pos.z * 16 + lz) != 0) {
+            h = static_cast<int16_t>(y);
+            return;
+        }
+    }
 }
 
 void LevelChunk::computeHeightmap() {

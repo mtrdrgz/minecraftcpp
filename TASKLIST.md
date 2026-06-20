@@ -42,6 +42,8 @@
   - [ ] Hay que añadir la interfaz del selector de mundos singleplayer para hacer un port 1:1 de verdad.
   - [x] Hay que añadir el menú de pausa (ESC) ingame para poder volver al menú, etc. (Añadido `PauseScreen`: ESC abre/cierra pausa en mundo, Back to Game reanuda y recaptura mouse, Disconnect vuelve al TitleScreen; Options desde pausa vuelve a pausa al pulsar Done. También se corrigió que quickplay reabriera el TitleScreen al inicializar texturas GUI.)
 
+  - [ ] Perfil 2026-06-21 00:10 UTC: causa base encontrada en el router/caches Java. C++ omitia `flatCache(cache2d(...))` de `NoiseRouterData` y el `CornerResolver` anulaba marcadores `cache2d`/`flatCache`; ademas `buildSurface` recacheaba biomas y recalculaba heightmaps completos en vez de mantenerlos como Java. Nuevo `terrain_engine_perf --radius 4 --seed 1`: `fillFromNoise` 77.2 ms/chunk, `buildSurface` 18.8 ms/chunk, `applyCarvers` 4.1 ms/chunk, `chunkMesh` 62.1 ms/chunk. Sigue abierta: `fillFromNoise` y `chunkMesh` aun son demasiado altos.
+
 ## Menas / minerales
 
 - [ ] La generación de menas en la mayor parte funciona bien, pero a veces spawnean conjuntos gigantes de menas como diamantes que nunca se verían en el juego normal en estas cantidades.

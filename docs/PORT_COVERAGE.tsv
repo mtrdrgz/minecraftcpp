@@ -5566,7 +5566,7 @@ net/minecraft/world/level/WorldDataConfiguration.java	unvisited
 net/minecraft/world/level/WorldGenLevel.java	unvisited	
 net/minecraft/world/level/biome/Biome.java	partial	shouldFreeze/shouldSnow/climate/TemperatureModifier.FROZEN ported (SnowAndFreezeFeature gate); rest of Biome partial
 net/minecraft/world/level/biome/BiomeGenerationSettings.java	unvisited	
-net/minecraft/world/level/biome/BiomeManager.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 8f55e4e6
+net/minecraft/world/level/biome/BiomeManager.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 2026-06-21 exposed selectQuart for Java BiomeManager.getBiome cache-equivalent surface lookup
 net/minecraft/world/level/biome/BiomeResolver.java	unvisited	
 net/minecraft/world/level/biome/BiomeSource.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 8f55e4e6
 net/minecraft/world/level/biome/BiomeSources.java	unvisited	
@@ -6051,7 +6051,7 @@ net/minecraft/world/level/border/package-info.java	unvisited
 net/minecraft/world/level/chunk/BlockColumn.java	unvisited	
 net/minecraft/world/level/chunk/BulkSectionAccess.java	unvisited	
 net/minecraft/world/level/chunk/CarvingMask.java	unvisited	
-net/minecraft/world/level/chunk/ChunkAccess.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; full chunk API partial
+net/minecraft/world/level/chunk/ChunkAccess.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; 2026-06-21 LevelChunk now keeps heightmap incrementally during noise/surface writes; full chunk API partial
 net/minecraft/world/level/chunk/ChunkGenerator.java	unvisited	
 net/minecraft/world/level/chunk/ChunkGeneratorStructureState.java	unvisited	
 net/minecraft/world/level/chunk/ChunkGenerators.java	unvisited	
@@ -6168,11 +6168,11 @@ net/minecraft/world/level/levelgen/GeodeLayerSettings.java	unvisited
 net/minecraft/world/level/levelgen/Heightmap.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/LegacyRandomSource.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/MarsagliaPolarGaussian.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit ba677949 (wave 4)
-net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java	ported	NoiseBasedChunkGenerator.cpp et al; full_chunk_parity 2359296/0
+net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator.java	ported	NoiseBasedChunkGenerator.cpp et al; full_chunk_parity 2359296/0; 2026-06-21 cache marker + heightmap perf audit against Java fillFromNoise/buildSurface
 net/minecraft/world/level/levelgen/NoiseChunk.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/NoiseGeneratorSettings.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/NoiseRouter.java	unvisited	
-net/minecraft/world/level/levelgen/NoiseRouterData.java	ported	terrain gate + vein fix cd1ecd1f
+net/minecraft/world/level/levelgen/NoiseRouterData.java	ported	terrain gate + vein fix cd1ecd1f; 2026-06-21 restored Java flatCache/cache2d wrappers for overworld 2D density functions
 net/minecraft/world/level/levelgen/NoiseSettings.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/Noises.java	unvisited	
 net/minecraft/world/level/levelgen/OreVeinifier.java	ported	terrain gate + vein fix cd1ecd1f
@@ -6182,8 +6182,8 @@ net/minecraft/world/level/levelgen/PositionalRandomFactory.java	unvisited
 net/minecraft/world/level/levelgen/RandomState.java	partial	C++ RandomState.{h,cpp} provides world-seed positional factories and named noise cache used by NoiseBasedChunkGenerator/SurfaceSystem; not fully audited against Java RandomState lifecycle/noise registry.
 net/minecraft/world/level/levelgen/RandomSupport.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/SingleThreadedRandomSource.java	unvisited	
-net/minecraft/world/level/levelgen/SurfaceRules.java	ported	terrain gate + vein fix cd1ecd1f
-net/minecraft/world/level/levelgen/SurfaceSystem.java	ported	terrain gate + vein fix cd1ecd1f
+net/minecraft/world/level/levelgen/SurfaceRules.java	ported	terrain gate + vein fix cd1ecd1f; 2026-06-21 audited lazy XZ/Y conditions for buildSurface profile
+net/minecraft/world/level/levelgen/SurfaceSystem.java	ported	terrain gate + vein fix cd1ecd1f; 2026-06-21 buildSurface profile matched Java heightmap/biome lifecycle and removed redundant rescans
 net/minecraft/world/level/levelgen/ThreadSafeLegacyRandomSource.java	unvisited	
 net/minecraft/world/level/levelgen/VerticalAnchor.java	ported	terrain gate + vein fix cd1ecd1f
 net/minecraft/world/level/levelgen/WorldDimensions.java	unvisited	

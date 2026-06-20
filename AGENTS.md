@@ -352,7 +352,25 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-20 22:40 UTC - terrain/meshing profiling pass and first engine performance fixes.
+**Last updated**: 2026-06-21 00:10 UTC - terrain performance cache/heightmap checkpoint.
+
+**Terrain/engine performance PARTIAL (2026-06-21 00:10):** found a real base
+problem in the Java cache model, not just a need for generic tuning. The C++ router
+was missing Java's `flatCache(cache2d(...))` wrappers for key overworld 2D density
+functions, and the interpolation corner resolver bypassed cache markers while
+sampling cell corners. Fixed by restoring the Java-shaped wrappers, delegating cache
+markers inside corner sampling, and adding shared per-noise-chunk 2D/flat caches.
+`buildSurface` also repeated biome climate samples and full heightmap rescans; the
+port now exposes `BiomeManager::selectQuart`, caches surface biomes by selected
+quart for one chunk build, keeps `LevelChunk` heightmaps incrementally updated
+during NOISE writes, removes redundant buildSurface `computeHeightmap()` calls, and
+fixes `ChunkSection::setBlock` non-air accounting for solid-to-solid replacement.
+Release checkpoint: `terrain_engine_perf --radius 4 --seed 1` => `fillFromNoise`
+77.2 ms/chunk, `buildSurface` 18.8 ms/chunk, `applyCarvers` 4.1 ms/chunk,
+`chunkMesh` 62.1 ms/chunk. `mcpp.exe` rebuilt. Still not done: `fillFromNoise` and
+`chunkMesh` remain the next hot paths.
+
+**Last updated prior**: 2026-06-20 22:40 UTC - terrain/meshing profiling pass and first engine performance fixes.
 
 **Terrain/engine performance PARTIAL (2026-06-20 22:40):** added
 `terrain_engine_perf` to measure full CPU terrain generation plus chunk meshing

@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -78,10 +79,50 @@ namespace {
         bool hasValue = false;
     };
 
+    struct SharedCacheKey {
+        const DensityFunction* func = nullptr;
+        int64_t key = 0;
+
+        bool operator==(const SharedCacheKey& other) const {
+            return func == other.func && key == other.key;
+        }
+    };
+
+    struct SharedCacheKeyHash {
+        size_t operator()(const SharedCacheKey& key) const noexcept {
+            const auto ptr = reinterpret_cast<uintptr_t>(key.func);
+            return std::hash<uintptr_t>{}(ptr) ^ (std::hash<int64_t>{}(key.key) + 0x9e3779b97f4a7c15ULL + (ptr << 6) + (ptr >> 2));
+        }
+    };
+
+    struct BiomeCacheKey {
+        int x = 0;
+        int y = 0;
+        int z = 0;
+
+        bool operator==(const BiomeCacheKey& other) const noexcept {
+            return x == other.x && y == other.y && z == other.z;
+        }
+    };
+
+    struct BiomeCacheKeyHash {
+        size_t operator()(const BiomeCacheKey& key) const noexcept {
+            size_t h = std::hash<int>{}(key.x);
+            h ^= std::hash<int>{}(key.y) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+            h ^= std::hash<int>{}(key.z) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+
+    struct NoiseChunkSharedCache {
+        std::unordered_map<SharedCacheKey, double, SharedCacheKeyHash> cache2d;
+        std::unordered_map<SharedCacheKey, double, SharedCacheKeyHash> flatCache;
+    };
+
     class CellInterpolationResolver final : public DensityFunctionInterpolationResolver {
     public:
-        CellInterpolationResolver(int x0, int y0, int z0, int cellWidth, int cellHeight)
-            : m_x0(x0), m_y0(y0), m_z0(z0), m_cellWidth(cellWidth), m_cellHeight(cellHeight) {
+        CellInterpolationResolver(int x0, int y0, int z0, int cellWidth, int cellHeight, NoiseChunkSharedCache* sharedCache)
+            : m_x0(x0), m_y0(y0), m_z0(z0), m_cellWidth(cellWidth), m_cellHeight(cellHeight), m_sharedCache(sharedCache) {
         }
 
         double computeInterpolated(const DensityFunctionPtr& function, const DensityFunctionContext& context) const override {
@@ -102,23 +143,26 @@ namespace {
                 // direct computation for cache markers (CacheAllInCell, CacheOnce,
                 // Cache2D, FlatCache) — those compute normally in Java during
                 // fillSlice because they're not NoiseInterpolators.
-                static struct CornerResolver : public DensityFunctionInterpolationResolver {
+                struct CornerResolver : public DensityFunctionInterpolationResolver {
+                    explicit CornerResolver(const CellInterpolationResolver& parentIn) : parent(parentIn) {}
+
                     double computeInterpolated(const DensityFunctionPtr&, const DensityFunctionContext&) const override {
                         return 0.0;  // Java: NoiseInterpolator.value (stale)
                     }
                     double computeCacheOnce(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
-                        return f->compute(ctx);  // Java: CacheOnce computes normally
+                        return parent.computeCacheOnce(f, ctx);
                     }
                     double computeCacheAllInCell(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
-                        return f->compute(ctx);  // Java: CacheAllInCell computes normally
+                        return parent.computeCacheAllInCell(f, ctx);
                     }
                     double computeCache2D(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
-                        return f->compute(ctx);  // Java: Cache2D computes normally
+                        return parent.computeCache2D(f, ctx);
                     }
                     double computeFlatCache(const DensityFunctionPtr& f, const DensityFunctionContext& ctx) const override {
-                        return f->compute(ctx);  // Java: FlatCache computes normally
+                        return parent.computeFlatCache(f, ctx);
                     }
-                } cornerResolver;
+                    const CellInterpolationResolver& parent;
+                } cornerResolver(*this);
 
                 std::array<double, 8> values{
                     function->compute(DensityFunctionContext{ m_x0, m_y0, m_z0, &cornerResolver }),
@@ -169,6 +213,14 @@ namespace {
         double computeCache2D(const DensityFunctionPtr& function, const DensityFunctionContext& context) const override {
             const DensityFunction* funcPtr = function.get();
             const int64_t key = packXZ(context.blockX, context.blockZ);
+            if (m_sharedCache) {
+                SharedCacheKey sharedKey{ funcPtr, key };
+                auto it = m_sharedCache->cache2d.find(sharedKey);
+                if (it != m_sharedCache->cache2d.end()) return it->second;
+                double value = function->compute(context);
+                m_sharedCache->cache2d.emplace(sharedKey, value);
+                return value;
+            }
             Cache2DEntry* entry = nullptr;
             for (int i = 0; i < m_cache2DCount; ++i) {
                 if (m_cache2DEntries[i].func == funcPtr) {
@@ -202,6 +254,14 @@ namespace {
             const int quantizedX = floorDiv(context.blockX, 4) * 4;
             const int quantizedZ = floorDiv(context.blockZ, 4) * 4;
             const int64_t key = packXZ(quantizedX, quantizedZ);
+            if (m_sharedCache) {
+                SharedCacheKey sharedKey{ funcPtr, key };
+                auto it = m_sharedCache->flatCache.find(sharedKey);
+                if (it != m_sharedCache->flatCache.end()) return it->second;
+                double value = function->compute(DensityFunctionContext{ quantizedX, 0, quantizedZ });
+                m_sharedCache->flatCache.emplace(sharedKey, value);
+                return value;
+            }
             
             FlatCacheEntry* entry = nullptr;
             for (int i = 0; i < m_flatCacheCount; ++i) {
@@ -250,6 +310,7 @@ namespace {
 
         mutable FlatCacheEntry m_flatCacheEntries[32];
         mutable int m_flatCacheCount = 0;
+        NoiseChunkSharedCache* m_sharedCache = nullptr;
 
         int64_t localCellIndex(const DensityFunctionContext& context) const {
             const int x = context.blockX - m_x0;
@@ -425,6 +486,7 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::
     if (m_settings.areOreVeinsEnabled()) {
         oreVeinifier.emplace(m_router.veinToggle, m_router.veinRidged, m_router.veinGap, m_oreRandom);
     }
+    NoiseChunkSharedCache sharedCache;
 
     for (int cellXIndex = 0; cellXIndex < cellCountX; ++cellXIndex) {
         for (int cellZIndex = 0; cellZIndex < cellCountZ; ++cellZIndex) {
@@ -438,7 +500,7 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::
                 (void)x1;
                 (void)y1;
                 (void)z1;
-                CellInterpolationResolver interpolationResolver(x0, y0, z0, cellWidth, cellHeight);
+                CellInterpolationResolver interpolationResolver(x0, y0, z0, cellWidth, cellHeight, &sharedCache);
 
                 for (int yInCell = cellHeight - 1; yInCell >= 0; --yInCell) {
                     const int blockY = y0 + yInCell;
@@ -480,17 +542,22 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::
 }
 
 void NoiseBasedChunkGenerator::buildSurface(LevelChunk& chunk) const {
-    buildSurface(chunk, [this](int bx, int by, int bz) -> std::string {
-        return m_biomeManager ? m_biomeManager->getBiome(bx, by, bz) : "";
+    auto biomeCache = std::make_shared<std::unordered_map<BiomeCacheKey, std::string, BiomeCacheKeyHash>>();
+    buildSurface(chunk, [this, biomeCache](int bx, int by, int bz) -> std::string {
+        if (!m_biomeManager) return "";
+        const auto quart = m_biomeManager->selectQuart(bx, by, bz);
+        const BiomeCacheKey key{ quart[0], quart[1], quart[2] };
+        auto it = biomeCache->find(key);
+        if (it != biomeCache->end()) return it->second;
+        std::string biome = m_biomeManager->getNoiseBiomeAtQuart(key.x, key.y, key.z);
+        auto inserted = biomeCache->emplace(key, std::move(biome));
+        return inserted.first->second;
     });
 }
 
 void NoiseBasedChunkGenerator::buildSurface(
     LevelChunk& chunk,
     const std::function<std::string(int, int, int)>& biomeOverride) const {
-    // Ensure heightmap is accurate before SurfaceSystem reads it (for steep condition)
-    chunk.computeHeightmap();
-
     WorldGenCtx genCtx;
     genCtx.minGenY  = m_settings.noiseSettings.minY;
     genCtx.genDepth = m_settings.noiseSettings.height;
@@ -502,7 +569,6 @@ void NoiseBasedChunkGenerator::buildSurface(
 
     m_surfaceSystem->buildSurface(*m_surfaceRandomState, chunk, prelimSurf, biomeOverride, genCtx, m_surfaceRuleSource);
 
-    chunk.computeHeightmap();
     chunk.setLoaded(true);
     chunk.meshDirty = true;
 }

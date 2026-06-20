@@ -64,8 +64,8 @@ namespace {
     }
 
     DensityFunctionPtr preliminarySurfaceLevel(DensityFunctionPtr offset, DensityFunctionPtr factor, bool amplified) {
-        DensityFunctionPtr cachedFactor = std::move(factor);
-        DensityFunctionPtr cachedOffset = std::move(offset);
+        DensityFunctionPtr cachedFactor = DensityFunctions::cache2d(std::move(factor));
+        DensityFunctionPtr cachedOffset = DensityFunctions::cache2d(std::move(offset));
         DensityFunctionPtr upperBound = remap(
             DensityFunctions::add(
                 DensityFunctions::mul(DensityFunctions::constant(0.2734375), DensityFunctions::map(cachedFactor, DensityFunctions::MapType::Invert)),
@@ -273,19 +273,19 @@ NoiseRouter none() {
 NoiseRouter overworld(RandomState& randomState, bool largeBiomes, bool amplified) {
     auto zero = DensityFunctions::zero();
     auto shiftNoise = randomState.getOrCreateNoise(Noises::SHIFT);
-    auto shiftX = DensityFunctions::shiftA(shiftNoise);
-    auto shiftZ = DensityFunctions::shiftB(shiftNoise);
+    auto shiftX = DensityFunctions::flatCache(DensityFunctions::cache2d(DensityFunctions::shiftA(shiftNoise)));
+    auto shiftZ = DensityFunctions::flatCache(DensityFunctions::cache2d(DensityFunctions::shiftB(shiftNoise)));
 
     auto temperature = DensityFunctions::shiftedNoise2d(
         shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(largeBiomes ? Noises::TEMPERATURE_LARGE : Noises::TEMPERATURE));
     auto vegetation = DensityFunctions::shiftedNoise2d(
         shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(largeBiomes ? Noises::VEGETATION_LARGE : Noises::VEGETATION));
-    auto continents = DensityFunctions::shiftedNoise2d(
-        shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(largeBiomes ? Noises::CONTINENTALNESS_LARGE : Noises::CONTINENTALNESS));
-    auto erosion = DensityFunctions::shiftedNoise2d(
-        shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(largeBiomes ? Noises::EROSION_LARGE : Noises::EROSION));
-    auto ridges = DensityFunctions::shiftedNoise2d(
-        shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(Noises::RIDGE));
+    auto continents = DensityFunctions::flatCache(DensityFunctions::shiftedNoise2d(
+        shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(largeBiomes ? Noises::CONTINENTALNESS_LARGE : Noises::CONTINENTALNESS)));
+    auto erosion = DensityFunctions::flatCache(DensityFunctions::shiftedNoise2d(
+        shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(largeBiomes ? Noises::EROSION_LARGE : Noises::EROSION)));
+    auto ridges = DensityFunctions::flatCache(DensityFunctions::shiftedNoise2d(
+        shiftX, shiftZ, 0.25, randomState.getOrCreateNoise(Noises::RIDGE)));
     auto ridgesFolded = DensityFunctions::peaksAndValleys(ridges);
 
     auto continentsCoordinate = densityCoordinate(continents);
@@ -293,14 +293,16 @@ NoiseRouter overworld(RandomState& randomState, bool largeBiomes, bool amplified
     auto weirdnessCoordinate = densityCoordinate(ridges);
     auto ridgesCoordinate = densityCoordinate(ridgesFolded);
 
-    auto offset = DensityFunctions::add(
+    auto offset = DensityFunctions::flatCache(DensityFunctions::cache2d(DensityFunctions::add(
         // Java: DensityFunctions.constant(-0.50375F) — a float literal widened to
         // double (= -0.5037500262260437), NOT the exact double -0.50375.
         DensityFunctions::constant(static_cast<double>(-0.50375f)),
-        spline(TerrainProvider::overworldOffset(continentsCoordinate, erosionCoordinate, ridgesCoordinate, amplified)));
-    auto factor = spline(TerrainProvider::overworldFactor(continentsCoordinate, erosionCoordinate, weirdnessCoordinate, ridgesCoordinate, amplified));
+        spline(TerrainProvider::overworldOffset(continentsCoordinate, erosionCoordinate, ridgesCoordinate, amplified)))));
+    auto factor = DensityFunctions::flatCache(DensityFunctions::cache2d(
+        spline(TerrainProvider::overworldFactor(continentsCoordinate, erosionCoordinate, weirdnessCoordinate, ridgesCoordinate, amplified))));
     auto depth = offsetToDepth(offset);
-    auto unscaledJaggedness = spline(TerrainProvider::overworldJaggedness(continentsCoordinate, erosionCoordinate, weirdnessCoordinate, ridgesCoordinate, amplified));
+    auto unscaledJaggedness = DensityFunctions::flatCache(DensityFunctions::cache2d(
+        spline(TerrainProvider::overworldJaggedness(continentsCoordinate, erosionCoordinate, weirdnessCoordinate, ridgesCoordinate, amplified))));
     auto jaggedNoise = DensityFunctions::noise(randomState.getOrCreateNoise(Noises::JAGGED), 1500.0, 0.0);
     auto jaggedness = DensityFunctions::mul(std::move(unscaledJaggedness), DensityFunctions::map(std::move(jaggedNoise), DensityFunctions::MapType::HalfNegative));
     auto initialDensity = noiseGradientDensity(factor, DensityFunctions::add(depth, std::move(jaggedness)));

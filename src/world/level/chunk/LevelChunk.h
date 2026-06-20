@@ -57,6 +57,8 @@ public:
     std::vector<nbt::NbtCompound> blockEntities;
 
 private:
+    void updateHeightmapAfterSet(int localX, int worldY, int localZ, uint32_t oldStateId, uint32_t newStateId);
+
     ChunkPos m_pos;
     std::array<std::unique_ptr<ChunkSection>, CHUNK_SECTION_COUNT> m_sections;
     std::array<int16_t, 256> m_heightmap{}; // 16x16

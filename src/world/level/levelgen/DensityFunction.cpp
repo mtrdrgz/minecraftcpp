@@ -34,7 +34,9 @@ namespace {
     public:
         explicit Constant(double value) : m_value(value) {}
 
-        double compute(const DensityFunctionContext&) const override { return m_value; }
+        double compute(const DensityFunctionContext&) const override {
+            return m_value;
+        }
         double minValue() const override { return m_value; }
         double maxValue() const override { return m_value; }
 

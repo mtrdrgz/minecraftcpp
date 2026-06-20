@@ -14,9 +14,11 @@ public:
     uint32_t getBiome(int x, int y, int z) const { return m_biomes.get(x >> 2, y >> 2, z >> 2); }
 
     void setBlock(int x, int y, int z, uint32_t stateId) {
+        const uint32_t oldStateId = m_blocks.get(x, y, z);
+        if (oldStateId == stateId) return;
         m_blocks.set(x, y, z, stateId);
-        if (stateId != 0) ++m_nonAirCount;
-        else if (m_nonAirCount > 0) --m_nonAirCount;
+        if (oldStateId == 0 && stateId != 0) ++m_nonAirCount;
+        else if (oldStateId != 0 && stateId == 0 && m_nonAirCount > 0) --m_nonAirCount;
     }
 
     bool isEmpty() const { return m_nonAirCount == 0; }

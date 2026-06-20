@@ -19,6 +19,7 @@ public:
 
     std::string getBiome(int blockX, int blockY, int blockZ) const;
     std::string getNoiseBiomeAtQuart(int quartX, int quartY, int quartZ) const;
+    std::array<int, 3> selectQuart(int blockX, int blockY, int blockZ) const;
 
 private:
     static double getFiddledDistance(int64_t seed, int xRandom, int yRandom, int zRandom,

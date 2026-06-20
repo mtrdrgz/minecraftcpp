@@ -118,6 +118,11 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 00:10 UTC — Terrain performance root-cause checkpoint
+- Read the vanilla `NoiseRouterData`, `NoiseBasedChunkGenerator`, `SurfaceSystem`, `SurfaceRules`, `Aquifer`, `ChunkAccess`, and `Heightmap` paths while profiling terrain generation. Root cause #1 was not a generic C++ slowdown: the C++ overworld router omitted Java's `flatCache(cache2d(...))` wrappers for key 2D terrain functions, and the C++ corner resolver bypassed cache markers while filling interpolation corners. Fixed those by restoring the Java-shaped cache wrappers, preserving cache-marker behavior inside corner sampling, and adding a per-noise-chunk shared 2D/flat cache.
+- Root cause #2 was surface work: `buildSurface` recomputed biome climate samples and forced full heightmap rescans around surface application. The port now exposes `BiomeManager::selectQuart`, caches surface biome lookups by selected quart during a chunk build, keeps `LevelChunk` heightmaps incrementally updated during noise writes like Java's `Heightmap.update`, removes the redundant pre/post `computeHeightmap()` calls, and fixes `ChunkSection::setBlock` non-air accounting for solid-to-solid replacements.
+- Measurement checkpoint, Release build: `build-vs/Release/terrain_engine_perf.exe --radius 4 --seed 1` => `fillFromNoise avg_ms=77.2404`, `buildSurface avg_ms=18.7958`, `applyCarvers avg_ms=4.06234`, `chunkMesh avg_ms=62.1196`. This is a checkpoint, not done: the next real targets are still `fillFromNoise` and `chunkMesh`.
+
 ### 2026-06-20 22:40 UTC - Terrain/meshing performance profile and first fixes
 
 **Agent**: Codex

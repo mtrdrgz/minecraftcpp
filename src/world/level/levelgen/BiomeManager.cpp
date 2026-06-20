@@ -69,8 +69,12 @@ int64_t BiomeManager::obfuscateSeed(int64_t seed) {
 }
 
 std::string BiomeManager::getBiome(int blockX, int blockY, int blockZ) const {
-    const std::array<int, 3> biomeQuart = debugSelectQuart(m_biomeZoomSeed, blockX, blockY, blockZ);
+    const std::array<int, 3> biomeQuart = selectQuart(blockX, blockY, blockZ);
     return m_noiseBiomeSource.getNoiseBiome(biomeQuart[0], biomeQuart[1], biomeQuart[2]);
+}
+
+std::array<int, 3> BiomeManager::selectQuart(int blockX, int blockY, int blockZ) const {
+    return debugSelectQuart(m_biomeZoomSeed, blockX, blockY, blockZ);
 }
 
 std::array<int, 3> BiomeManager::debugSelectQuart(int64_t biomeZoomSeed, int blockX, int blockY, int blockZ) {
