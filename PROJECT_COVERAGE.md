@@ -51,22 +51,22 @@ The TSV has three columns: `path  status  proof`. The proof field must be non-em
 
 ```
 Total Java files tracked : 6,882
-Ported (full)            : 502   ( 7.3%)
-Partial                  : 95    ( 1.4%)
+Ported (full)            : 503   ( 7.3%)
+Partial                  : 97    ( 1.4%)
 Reasoned N/A             : 449   ( 6.5%)
-Unvisited                : 5,836 (84.8%)
+Unvisited                : 5,833 (84.8%)
 
 Actionable files (excl. N/A): 6,433
-Weighted progress            : 549.5 / 6,433
+Weighted progress            : 551.5 / 6,433
 
-[████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 8.5%
+[████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 8.6%
 ```
 
 ### By major package
 
 | Package | Total | Ported | Partial | N/A | Progress |
 |---|---|---|---|---|---|
-| `net/minecraft/world/` | 2,559 | 242 | 53 | 0 | `[██░░░░░░░░]` 10.5% |
+| `net/minecraft/world/` | 2,559 | 243 | 55 | 0 | `[██░░░░░░░░]` 10.6% |
 | `net/minecraft/client/` | 1,813 | 28 | 16 | 0 | `[░░░░░░░░░░]` 2.0% |
 | `net/minecraft/util/` | 713 | 43 | 0 | 386 | `[█░░░░░░░░░]` 13.1% of actionable |
 | `net/minecraft/server/` | 418 | 0 | 1 | 0 | `[░░░░░░░░░░]` 0.1% |
@@ -80,7 +80,7 @@ Weighted progress            : 549.5 / 6,433
 
 | Subpackage | Total | Ported | Partial | Progress |
 |---|---|---|---|---|
-| `world/level/` | 1,297 | 178 | 37 | 14.9% |
+| `world/level/` | 1,297 | 179 | 39 | 15.0% |
 | `world/entity/` | 708 | 24 | 6 | 3.8% |
 | `world/item/` | 313 | 11 | 6 | 4.5% |
 | `world/phys/` | 27 | 20 | 2 | 78.0% |
@@ -109,7 +109,7 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 1. **`net/minecraft/world/entity/`** (708 files, 3.8% done) — all mob classes, AI goals, attributes, effects
 2. **`net/minecraft/client/`** (1,813 files, 2.0% done) — rendering pipeline, GUI screens, input handling, sound
-3. **`net/minecraft/world/level/`** (1,297 files, 14.9% done) — remaining worldgen: structures, light engine, chunk loading
+3. **`net/minecraft/world/level/`** (1,297 files, 15.0% done) — remaining worldgen: structures, light engine, chunk loading
 4. **`net/minecraft/world/item/`** (313 files, 4.5% done) — all item types, use behaviours
 5. **`net/minecraft/server/`** (418 files, 0.1% done) — integrated server, commands
 6. **`net/minecraft/util/`** (713 files, 13.1% of actionable) — utilities, most are n/a candidates
@@ -117,6 +117,13 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 ---
 
 ## Devlog
+
+### 2026-06-20 21:52 UTC — Structure parity infra restored for local-root checkout
+
+- Fixed the Windows parity scripts to resolve the repo root when the checkout itself is `minecraftcpp/` rather than an older parent `mcpp/` layout. `tools/provision_parity_runtime.ps1` now bootstraps the Mojang version manifest, `client.jar`, `server.jar`, `26.1.2/data/minecraft`, libraries, and JDK 25 into the repo-local ignored `26.1.2/`.
+- Restored the build resource surface dropped from the clone: `src/assets/resource_ids.h` and `src/assets/assets.rc`, and anchored `.gitignore`'s `/assets/` rule so those source resources are tracked while downloaded assets remain ignored.
+- Verified the structure placement gate end-to-end on Windows/MSVC: Java GT `StructurePlacementParity` generated 29,027 rows, CMake configured with Visual Studio 18, target `structure_placement_parity` built, and C++ reported `StructurePlacement seeds=4 set-checks=76 positives=28947 mismatches=0`.
+- Read `ScatteredFeaturePiece.java` and `DesertPyramidPiece.java` for the next concrete structure port. Desert pyramid is still not claimed ported: ctor/box math is covered by existing scattered-feature parity, but `postProcess`, cellar/suspicious-sand metadata, chest loot, and collapsed-roof positional RNG remain open.
 
 Newest entries first. Every agent adds an entry. Format: `### YYYY-MM-DD HH:MM UTC — Session name`.
 Short is fine — one bullet per finding, no walls of text.

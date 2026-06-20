@@ -15,7 +15,13 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+function Resolve-RepoRoot {
+    $direct = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    if (Test-Path (Join-Path $direct "CMakeLists.txt")) { return $direct }
+    return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+}
+
+$repo = Resolve-RepoRoot
 $src = Join-Path $PSScriptRoot "$Tool.java"
 $classes = Join-Path $repo "26.1.2\parity_classes_server"
 $serverJar = Join-Path $repo "26.1.2\server_run\versions\26.1.2\server-26.1.2.jar"

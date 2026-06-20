@@ -523,11 +523,11 @@ tools/run_groundtruth.sh
 
 For the Java harnesses to run you need the local `26.1.2/` dump:
 ```bash
-tools/provision_parity_runtime.ps1   # Windows
+tools/provision_parity_runtime.ps1   # Windows; bootstraps manifest, client/server jars, data, libs, and JDK 25
 # or manually: see AGENTS.md § FETCHING SOURCE MATERIAL
 ```
 
-Port coverage is tracked in `docs/PORT_COVERAGE.tsv` — 6,882 Java source files, currently 143 ported / 36 partial / 449 reasoned n/a.
+Port coverage is tracked in `docs/PORT_COVERAGE.tsv` — 6,882 Java source files, currently 503 ported / 97 partial / 449 reasoned n/a.
 
 ---
 

@@ -1,0 +1,16 @@
+#pragma once
+
+#define IDR_ASSETS_BIN 101
+#define IDR_BLOCK_ATLAS 102
+#define IDR_ATLAS_UV 103
+#define IDR_BLOCK_STATES 104
+#define IDR_ITEMS 105
+#define IDR_FONT_ASCII 106
+#define IDR_GUI_LOGO 107
+#define IDR_GUI_BUTTON 108
+#define IDR_GUI_BUTTON_HL 109
+#define IDR_GUI_DIRT 110
+#define IDR_GUI_EDITION 111
+#define IDR_SPLASHES 112
+#define IDR_GUI_LANG 113
+#define IDR_GUI_ACCESS 114

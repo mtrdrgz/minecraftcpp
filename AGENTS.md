@@ -352,6 +352,22 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
+**Last updated**: 2026-06-20 21:52 UTC — local-root parity/runtime setup restored; structure placement gate reverified.
+
+**Local-root parity/runtime setup FIXED (2026-06-20 21:52):** fresh clones whose repo
+root is `minecraftcpp/` (not the older parent `mcpp/` layout) can now provision and run
+Java parity tools in-place. `tools/provision_parity_runtime.ps1` resolves the real repo
+root, downloads the Mojang manifest/client/server jars, extracts `26.1.2/data/minecraft`,
+downloads libraries + JDK 25, and keeps everything under the git-ignored repo-local
+`26.1.2/`. `run_groundtruth.ps1`, `run_server_groundtruth.ps1`, and
+`run_server_gen_structures.ps1` use the same root detection. Build resource files
+`src/assets/resource_ids.h` and `src/assets/assets.rc` were restored and `.gitignore`
+now anchors `/assets/` so those source files are tracked. Verified:
+`StructurePlacementParity` Java GT (29,027 rows) + MSVC `structure_placement_parity`
+=> `StructurePlacement seeds=4 set-checks=76 positives=28947 mismatches=0`.
+
+**Last updated prior**: 2026-06-20 03:00 UTC â€” carver gate restored to **0 mismatches**.
+
 **Last updated**: 2026-06-20 03:00 UTC — carver gate restored to **0 mismatches**.
 
 **Carver root cause FIXED (2026-06-20 03:00):** the long-standing 7,673 carver

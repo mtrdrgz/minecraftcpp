@@ -28,7 +28,7 @@ assets.txt
 test_align.cpp
 
 # Runtime assets — regenerated from Mojang CDN, never committed
-assets/
+/assets/
 src/assets/*
 !src/assets/assets.rc
 !src/assets/resource_ids.h

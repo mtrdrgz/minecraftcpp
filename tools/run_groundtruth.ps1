@@ -19,8 +19,13 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-# Repo root = parent of mcpp/ (this script lives in mcpp/tools/).
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+function Resolve-RepoRoot {
+    $direct = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    if (Test-Path (Join-Path $direct "CMakeLists.txt")) { return $direct }
+    return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+}
+
+$repo = Resolve-RepoRoot
 $jar  = Join-Path $repo "26.1.2\client.jar"
 $libs = Join-Path $repo "26.1.2\libs"
 $src  = Join-Path $PSScriptRoot "$Tool.java"

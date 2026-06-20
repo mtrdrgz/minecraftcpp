@@ -12,7 +12,13 @@ param(
     [int]$GenSeconds = 150
 )
 $ErrorActionPreference = 'Stop'
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+function Resolve-RepoRoot {
+    $direct = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    if (Test-Path (Join-Path $direct 'CMakeLists.txt')) { return $direct }
+    return (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+}
+
+$repo = Resolve-RepoRoot
 $java = Get-ChildItem (Join-Path $repo '26.1.2\jdk25') -Recurse -Filter java.exe | Select-Object -First 1 -ExpandProperty FullName
 $run  = Join-Path $repo '26.1.2\server_run'
 $props = Join-Path $run 'server.properties'

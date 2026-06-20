@@ -6445,7 +6445,7 @@ net/minecraft/world/level/levelgen/structure/BuiltinStructureSets.java	unvisited
 net/minecraft/world/level/levelgen/structure/BuiltinStructures.java	unvisited	
 net/minecraft/world/level/levelgen/structure/PoolElementStructurePiece.java	unvisited	
 net/minecraft/world/level/levelgen/structure/PostPlacementProcessor.java	unvisited	
-net/minecraft/world/level/levelgen/structure/ScatteredFeaturePiece.java	unvisited	
+net/minecraft/world/level/levelgen/structure/ScatteredFeaturePiece.java	partial	C++ src/world/level/levelgen/structure/StructurePieceBase.h ports average-ground helpers and shared piece placement surface; ScatteredFeaturePiece ctor geometry is covered through scattered_feature_box_parity, but updateHeightPositionToLowestGroundHeight and full scattered-piece save/runtime semantics are not fully certified.
 net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/Structure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureCheck.java	unvisited	
@@ -6469,7 +6469,7 @@ net/minecraft/world/level/levelgen/structure/pieces/package-info.java	unvisited
 net/minecraft/world/level/levelgen/structure/placement/ConcentricRingsStructurePlacement.java	unvisited	
 net/minecraft/world/level/levelgen/structure/placement/RandomSpreadStructurePlacement.java	unvisited	
 net/minecraft/world/level/levelgen/structure/placement/RandomSpreadType.java	unvisited	
-net/minecraft/world/level/levelgen/structure/placement/StructurePlacement.java	unvisited	
+net/minecraft/world/level/levelgen/structure/placement/StructurePlacement.java	ported	C++ src/world/level/levelgen/structure/placement/StructurePlacement.{h,cpp}; verified 2026-06-20 via StructurePlacementParity.java + structure_placement_parity: seeds=4 set-checks=76 positives=28947 mismatches=0.
 net/minecraft/world/level/levelgen/structure/placement/StructurePlacementType.java	unvisited	
 net/minecraft/world/level/levelgen/structure/placement/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/DimensionPadding.java	unvisited	
@@ -6493,7 +6493,7 @@ net/minecraft/world/level/levelgen/structure/pools/alias/package-info.java	unvis
 net/minecraft/world/level/levelgen/structure/pools/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/BuriedTreasurePieces.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/BuriedTreasureStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/structures/DesertPyramidPiece.java	unvisited	
+net/minecraft/world/level/levelgen/structure/structures/DesertPyramidPiece.java	partial	Visited 2026-06-20. Ctor bounding-box/orientation path is covered indirectly by scattered_feature_box_parity for DesertPyramid; DesertPyramidPiece.postProcess, cellar/suspicious-sand metadata, chest loot, and collapsed-roof positional RNG are not ported.
 net/minecraft/world/level/levelgen/structure/structures/DesertPyramidStructure.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/EndCityPieces.java	unvisited	
 net/minecraft/world/level/levelgen/structure/structures/EndCityStructure.java	unvisited	

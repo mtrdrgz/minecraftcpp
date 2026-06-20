@@ -9,16 +9,75 @@
 #   pwsh mcpp/tools/provision_parity_runtime.ps1 [-Force]
 param([switch]$Force)
 $ErrorActionPreference = 'Stop'
-$repo  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+
+function Resolve-RepoRoot {
+    $direct = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    if (Test-Path (Join-Path $direct 'CMakeLists.txt')) { return $direct }
+    return (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+}
+
+$repo  = Resolve-RepoRoot
 $mc    = Join-Path $repo '26.1.2'
 $vjson = Join-Path $mc '26.1.2.json'
-if (-not (Test-Path $vjson)) { throw "Missing version manifest: $vjson" }
-$meta = Get-Content $vjson -Raw | ConvertFrom-Json
 
 function Get-File($url, $dest) {
     Write-Host "GET $url"
     & curl.exe -L --fail --retry 3 --retry-delay 2 -o $dest $url
     if ($LASTEXITCODE -ne 0) { throw "download failed ($LASTEXITCODE): $url" }
+}
+
+New-Item -ItemType Directory -Force $mc | Out-Null
+
+# 0. version manifest + client.jar/data ---------------------------------------
+if ((-not (Test-Path $vjson)) -or $Force) {
+    $manifest = Join-Path $mc 'version_manifest_v2.json'
+    Get-File 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json' $manifest
+    $vm = Get-Content $manifest -Raw | ConvertFrom-Json
+    $entry = $vm.versions | Where-Object { $_.id -eq '26.1.2' } | Select-Object -First 1
+    if (-not $entry) { throw 'Minecraft version 26.1.2 not found in Mojang manifest' }
+    Get-File $entry.url $vjson
+}
+$meta = Get-Content $vjson -Raw | ConvertFrom-Json
+
+$client = Join-Path $mc 'client.jar'
+$clientSha = $meta.downloads.client.sha1
+$needClient = $true
+if ((Test-Path $client) -and -not $Force) {
+    $h = (Get-FileHash $client -Algorithm SHA1).Hash.ToLower()
+    if ($h -eq $clientSha) { $needClient = $false; Write-Host "client.jar present (sha1 ok)" }
+    else { Write-Host "client.jar sha1 mismatch ($h); re-downloading" }
+}
+if ($needClient) {
+    Get-File $meta.downloads.client.url $client
+    $h = (Get-FileHash $client -Algorithm SHA1).Hash.ToLower()
+    if ($h -ne $clientSha) { throw "client.jar sha1 mismatch after download: $h != $clientSha" }
+    Write-Host "client.jar OK (sha1 verified: $h)"
+}
+
+$dataDir = Join-Path $mc 'data'
+if ((-not (Test-Path (Join-Path $dataDir 'minecraft\worldgen'))) -or
+    (-not (Test-Path (Join-Path $dataDir 'minecraft\tags\block'))) -or
+    $Force) {
+    if (Test-Path $dataDir) { Remove-Item $dataDir -Recurse -Force }
+    New-Item -ItemType Directory -Force $dataDir | Out-Null
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($client)
+    try {
+        foreach ($entry in $zip.Entries) {
+            if (-not ($entry.FullName -like 'data/minecraft/*')) { continue }
+            $dest = Join-Path $mc ($entry.FullName -replace '/', [IO.Path]::DirectorySeparatorChar)
+            if ($entry.FullName.EndsWith('/')) {
+                New-Item -ItemType Directory -Force $dest | Out-Null
+                continue
+            }
+            $parent = Split-Path -Parent $dest
+            if ($parent) { New-Item -ItemType Directory -Force $parent | Out-Null }
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+        }
+    } finally {
+        $zip.Dispose()
+    }
+    Write-Host "client data extracted: $dataDir"
 }
 
 # 1. server.jar (sha1-verified) ------------------------------------------------
