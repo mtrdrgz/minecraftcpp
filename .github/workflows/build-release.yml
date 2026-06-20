@@ -47,12 +47,22 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $dir = 'src/assets'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          @('assets.bin','block_atlas.png','block_atlas.json','block_states.json','items.json','ascii.png','gui_logo.png','gui_button.png','gui_button_hl.png','gui_dirt.png','gui_edition.png','splashes.txt','gui_lang.png','gui_access.png') | ForEach-Object {
+          # These files are needed for the asset_packer to run; the real
+          # content is produced by PrepareRuntimeAssets.cmake which downloads
+          # client.jar from the Mojang CDN and extracts worldgen data +
+          # textures into src/assets/. The placeholders here are fallbacks
+          # ONLY if MCPP_SKIP_ASSET_PACK=ON is set; otherwise the asset_packer
+          # overwrites them with real packed content.
+          @('block_atlas.png','block_atlas.json','block_states.json','items.json','ascii.png','gui_logo.png','gui_button.png','gui_button_hl.png','gui_dirt.png','gui_edition.png','splashes.txt','gui_lang.png','gui_access.png') | ForEach-Object {
             if (!(Test-Path (Join-Path $dir $_))) { Set-Content -Path (Join-Path $dir $_) -Encoding ASCII -Value 'ci' }
           }
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>' -DMCPP_SKIP_ASSET_PACK=ON
+        # MCPP_SKIP_ASSET_PACK=OFF (default) runs PrepareRuntimeAssets.cmake,
+        # which downloads client.jar from the Mojang CDN, extracts worldgen
+        # data + textures, then runs asset_packer to bundle everything into
+        # src/assets/assets.bin. The .rc embeds assets.bin into mcpp.exe.
+        run: cmake -S . -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
 
       - name: Build mcpp only
         run: |
@@ -98,3 +108,37 @@ jobs:
           $tag = 'ci-latest'
           gh release delete $tag --cleanup-tag -y 2>$null
           gh release create $tag dist/*.zip --target '${{ github.sha }}' --title 'Latest CI build' --notes 'Automated Windows build from CI.' --prerelease
+
+      - name: Publish alpha release
+        # Also publish under the 'alpha' tag so users have a stable URL to
+        # grab the latest playable build. Updated on every successful CI run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'alpha'
+          gh release delete $tag --cleanup-tag -y 2>$null
+          $short = '${{ github.sha }}'.Substring(0, 7)
+          gh release create $tag dist/*.zip --target '${{ github.sha }}' `
+            --title "Alpha build ($short)" `
+            --notes "Automated Windows alpha build from commit $short.
+
+          This is an in-development port of Minecraft 26.1.2's world generation engine to C++.
+          The executable is a standalone Windows x64 binary with all assets (textures, worldgen data) embedded.
+
+          **Known issues:**
+          - Performance still rough (~50 ms/chunk terrain + mesh)
+          - Race conditions can corrupt chunks when moving fast
+          - Many structures only partially ported (SwampHut 1:1, DesertPyramid visible surface 1:1, others pending)
+          - Many biomes/features still missing or visually broken (see TASKLIST.md)
+
+          **What works:**
+          - Terrain generation byte-exact to Java (12.3M cells verified, 0 mismatches)
+          - All 65 overworld biomes registered
+          - All 199 overworld placed features certified
+          - 42/42 structure parity tests pass (SwampHutPiece 144k placements / 0 mismatches)
+          - OpenGL/Vulkan/D3D12 render backends
+          - Single-player world creation + exploration
+
+          To run: extract mcpp.exe and double-click. No installation required." `
+            --prerelease
