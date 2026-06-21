@@ -82,7 +82,12 @@
 - [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente. (Estado real: NO portados — solo `RuinedPortalYSelector`. Falta `RuinedPortalPiece` + procesador de envejecimiento/lava + placement por tipo. Ver roadmap #6.)
 - [ ] La estructura de los portales arruinados no coincide con la original: lava/magma, cofre. (Bloqueado por lo anterior + soporte de block-entity/loot para el cofre.)
 - [ ] Adaptación de terreno (Beardifier): `terrain_adaptation` (beard_thin/beard_box/bury/encapsulate) no está portado; causa que las estructuras jigsaw se expongan/floten. Ver roadmap #3–#4.
-- [ ] Procesadores de estructura: `placeTemplate` escribe bloques crudos e ignora `processors` (gravity, rule, block_rot, final_state...). Ver roadmap #5.
+- [~] Procesadores de estructura (incremento #1 de aldeas HECHO): portado el pipeline
+      `RuleProcessor` + semántica `legacy_single_pool_element` en `placeTemplate`.
+      Legacy ya no coloca AIR (las aldeas dejan de carvar terreno: ~12k→~3.8k bloques/aldea);
+      los RuleProcessor aplican (verificado: mossify→mossy_cobblestone, farm→carrots).
+      Pendiente: GravityProcessor/ProtectedBlockProcessor + procesadores de proyección
+      TERRAIN_MATCHING (caminos siguiendo el terreno) → fase de adaptación de terreno.
 - [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 

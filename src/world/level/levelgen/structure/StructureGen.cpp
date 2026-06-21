@@ -16,6 +16,7 @@
 #include "world/level/block/Blocks.h"
 #include "world/level/block/JigsawAttach.h"
 #include "world/level/levelgen/RandomSource.h"
+#include "world/level/levelgen/Mth.h"
 #include "world/phys/AABB.h"
 #include "world/phys/shapes/Shapes.h"
 
@@ -506,6 +507,34 @@ HeightProvider parseHeightProvider(const json& j) {
     return hp;
 }
 
+// --- Structure processor pipeline (StructureTemplate.processBlockInfos) ---------
+// Port of the RuleProcessor family used by every jigsaw structure's pool elements
+// (villages: street/farm/mossify/zombie; outpost: outpost_rot; trial chambers:
+// copper_bulb_degradation). Each processor list referenced by a SinglePoolElement
+// is a list of `minecraft:rule` processors; each rule is input_predicate +
+// location_predicate + output_state. Per block a fresh LegacyRandomSource is seeded
+// from the WORLD position via Mth.getSeed (RuleProcessor.processBlock). The RuleTest
+// arms are the certified set (StructureProcessorParityTest): always_true,
+// block_match, blockstate_match, tag_match, random_block_match. tag_match needs
+// block tags (only zombie villages) and is deferred: it never fires (hard no-op).
+struct RuleTest {
+    enum Kind { ALWAYS_TRUE, BLOCK_MATCH, BLOCKSTATE_MATCH, TAG_MATCH, RANDOM_BLOCK_MATCH, UNSUPPORTED };
+    Kind kind = ALWAYS_TRUE;
+    std::string blockShort;       // block_match / random_block_match (ns-stripped)
+    std::uint32_t stateId = 0;    // blockstate_match (resolved state id)
+    std::string tag;              // tag_match (full id)
+    float probability = 1.0f;     // random_block_match
+};
+
+struct ProcRule {
+    RuleTest input;
+    RuleTest loc;
+    std::uint32_t outputState = 0;
+    std::string outputShortName;  // ns-stripped name of output_state (for legacy AIR ignore)
+};
+
+using ProcList = std::vector<ProcRule>;
+
 struct Runtime {
     fs::path dataDir;
     int64_t seed = 0;
@@ -514,6 +543,8 @@ struct Runtime {
     std::vector<StructureSetDef> structureSets;
     std::map<std::string, JigsawConfig> structures;
     std::map<std::string, pools::StructureTemplatePool> poolMap;
+    std::map<std::string, ProcList> processorLists;   // cache by list id
+    bool warnedUnsupportedProc = false;
     std::map<std::string, stl::LoadedTemplate> jigsawTemplates;
     std::map<std::string, PlaceTemplate> placeTemplates;
     std::unordered_map<std::string, std::string> oracleTemplateB64;
@@ -565,7 +596,18 @@ struct Runtime {
     std::size_t placeElement(const pools::StructurePoolElement& e, const BlockPos& pos,
                              Rotation rot, const StructureWorld& world);
     std::size_t placeTemplate(const std::string& location, const BlockPos& pos,
-                              Rotation rot, const StructureWorld& world);
+                              Rotation rot, const StructureWorld& world,
+                              bool legacy = false,
+                              const std::string& processorsId = "minecraft:empty");
+    // Processor pipeline.
+    RuleTest parseRuleTest(const json& j);
+    std::uint32_t parseStateObject(const json& j, std::string& outShortName);
+    const ProcList* loadProcessorList(const std::string& id);
+    bool testRule(const RuleTest& t, std::uint32_t stateId, const std::string& shortName,
+                  mc::levelgen::RandomSource& random);
+    std::uint32_t applyRules(const ProcList& rules, std::uint32_t inputState,
+                             const std::string& inputShortName,
+                             int wx, int wy, int wz, const StructureWorld& world);
     bool tryGenerateAndPlace(const std::string& structureId, ChunkPos active, const StructureWorld& world,
                              const std::function<std::string(int, int, int)>& biomeGetter);
     bool tryPlaceSwampHut(ChunkPos active, const StructureWorld& world);
@@ -1157,16 +1199,163 @@ bool Runtime::assembleJigsaw(const JigsawConfig& cfg, ChunkPos active, const Str
     return !pieces.empty();
 }
 
+// Parse a {"Name":..,"Properties":{..}} block-state object (BlockState.CODEC) into a
+// resolved state id; also returns the namespace-stripped block name.
+std::uint32_t Runtime::parseStateObject(const json& j, std::string& outShortName) {
+    std::string name = normalizeId(j.value("Name", std::string("minecraft:air")));
+    std::string props;
+    if (j.contains("Properties") && j.at("Properties").is_object()) {
+        std::map<std::string, std::string> sorted;
+        for (const auto& [k, v] : j.at("Properties").items()) {
+            if (v.is_string()) sorted[k] = v.get<std::string>();
+        }
+        for (const auto& [k, v] : sorted) {
+            if (!props.empty()) props += ',';
+            props += k;
+            props += '=';
+            props += v;
+        }
+    }
+    outShortName = stripMinecraft(name);
+    return resolver.resolve(name, props);
+}
+
+RuleTest Runtime::parseRuleTest(const json& j) {
+    RuleTest t;
+    std::string pt = stripMinecraft(normalizeId(j.value("predicate_type", std::string("minecraft:always_true"))));
+    if (pt == "always_true") {
+        t.kind = RuleTest::ALWAYS_TRUE;
+    } else if (pt == "block_match") {
+        t.kind = RuleTest::BLOCK_MATCH;
+        t.blockShort = stripMinecraft(normalizeId(j.at("block").get<std::string>()));
+    } else if (pt == "random_block_match") {
+        t.kind = RuleTest::RANDOM_BLOCK_MATCH;
+        t.blockShort = stripMinecraft(normalizeId(j.at("block").get<std::string>()));
+        t.probability = j.value("probability", 1.0f);
+    } else if (pt == "blockstate_match") {
+        t.kind = RuleTest::BLOCKSTATE_MATCH;
+        std::string ignored;
+        t.stateId = parseStateObject(j.at("block_state"), ignored);
+    } else if (pt == "tag_match") {
+        t.kind = RuleTest::TAG_MATCH;  // deferred: needs block tags (zombie villages only)
+        t.tag = normalizeId(j.at("tag").get<std::string>());
+    } else {
+        t.kind = RuleTest::UNSUPPORTED;
+    }
+    return t;
+}
+
+const ProcList* Runtime::loadProcessorList(const std::string& id) {
+    std::string key = normalizeId(id);
+    if (key == "minecraft:empty") return nullptr;
+    auto cached = processorLists.find(key);
+    if (cached != processorLists.end()) return cached->second.empty() ? nullptr : &cached->second;
+
+    ProcList& out = processorLists[key];  // inserts empty; cached even if it stays empty
+    fs::path file = pathForId(dataDir / "worldgen" / "processor_list", key, ".json");
+    std::string text = file.empty() ? std::string() : readFile(file);
+    if (text.empty()) return nullptr;
+
+    try {
+        json j = json::parse(text);
+        for (const auto& proc : j.at("processors")) {
+            std::string ptype = stripMinecraft(normalizeId(proc.value("processor_type", std::string())));
+            if (ptype != "rule") {
+                // gravity / protected_blocks / block_age / block_rot / ... belong to
+                // the terrain-adaptation phase or non-village structures. Hard no-op
+                // here (the list's rule processors still apply); logged once.
+                if (!warnedUnsupportedProc) {
+                    MC_LOG_INFO("Structures: processor_type {} not yet ported (skipped) in {}", ptype, key);
+                    warnedUnsupportedProc = true;
+                }
+                continue;
+            }
+            for (const auto& ruleJson : proc.at("rules")) {
+                ProcRule r;
+                r.input = parseRuleTest(ruleJson.at("input_predicate"));
+                r.loc = parseRuleTest(ruleJson.at("location_predicate"));
+                r.outputState = parseStateObject(ruleJson.at("output_state"), r.outputShortName);
+                out.push_back(std::move(r));
+            }
+        }
+    } catch (const std::exception& e) {
+        MC_LOG_DEBUG("Structures: failed to parse processor_list {}: {}", key, e.what());
+        out.clear();
+    }
+    return out.empty() ? nullptr : &out;
+}
+
+bool Runtime::testRule(const RuleTest& t, std::uint32_t stateId, const std::string& shortName,
+                       mc::levelgen::RandomSource& random) {
+    switch (t.kind) {
+        case RuleTest::ALWAYS_TRUE:        return true;
+        case RuleTest::BLOCK_MATCH:        return shortName == t.blockShort;
+        case RuleTest::BLOCKSTATE_MATCH:   return stateId == t.stateId;
+        // RandomBlockMatchTest.test: state.is(block) && random.nextFloat() < prob —
+        // the nextFloat draw is short-circuited away when the block does NOT match.
+        case RuleTest::RANDOM_BLOCK_MATCH: return shortName == t.blockShort && random.nextFloat() < t.probability;
+        case RuleTest::TAG_MATCH:          return false;  // deferred (zombie villages)
+        case RuleTest::UNSUPPORTED:
+        default:                           return false;
+    }
+}
+
+// RuleProcessor.processBlock: per-block fresh LegacyRandomSource seeded from the
+// WORLD position; first matching rule wins (input && location, short-circuit).
+std::uint32_t Runtime::applyRules(const ProcList& rules, std::uint32_t inputState,
+                                  const std::string& inputShortName,
+                                  int wx, int wy, int wz, const StructureWorld& world) {
+    auto random = mc::levelgen::RandomSource::create(mc::levelgen::mth::getSeed(wx, wy, wz));
+    std::uint32_t locState = world.getBlock ? world.getBlock(wx, wy, wz) : 0u;
+    const std::string& locName = (locState < resolver.states.size()) ? resolver.states[locState].name
+                                                                     : resolver.states[0].name;
+    for (const ProcRule& r : rules) {
+        if (testRule(r.input, inputState, inputShortName, *random) &&
+            testRule(r.loc, locState, locName, *random)) {
+            return r.outputState;
+        }
+    }
+    return inputState;
+}
+
+// SinglePoolElement/LegacySinglePoolElement placement = StructureTemplate
+// processBlockInfos + placeInWorld for the rule-based processor chain:
+//   single chain: BlockIgnore(STRUCTURE_BLOCK), JigsawReplacement, <rules>
+//   legacy chain: JigsawReplacement, <rules>, BlockIgnore(STRUCTURE_AND_AIR)
+// JigsawReplacement (jigsaw -> final_state) and structure_void drop are baked at
+// template load (loadPlaceTemplate). The processed state is rotated at place time.
+// NOT yet ported (terrain-adaptation phase): GravityProcessor / ProtectedBlockProcessor
+// and the TERRAIN_MATCHING projection processors (street terrain following).
 std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& pos,
-                                   Rotation rot, const StructureWorld& world) {
+                                   Rotation rot, const StructureWorld& world,
+                                   bool legacy, const std::string& processorsId) {
     if (!ensureTemplate(location)) return 0;
     const PlaceTemplate& tpl = placeTemplates.at(location);
+    const ProcList* rules = loadProcessorList(processorsId);
     std::size_t placed = 0;
     for (const PlaceBlock& block : tpl.blocks) {
         BlockPos rp = structureTransform(block.pos, Mirror::NONE, rot, kBlockPosZero);
-        std::uint32_t state = resolver.rotateState(block.state, rot);
+        int wx = pos.x + rp.x, wy = pos.y + rp.y, wz = pos.z + rp.z;
+
+        std::uint32_t state = block.state;  // un-rotated, resolved
+        const std::string& name = (state < resolver.states.size()) ? resolver.states[state].name
+                                                                   : resolver.states[0].name;
+        // single: BlockIgnore(STRUCTURE_BLOCK) runs first.
+        if (!legacy && name == "structure_block") continue;
+
+        // Element processor list (RuleProcessor chain).
+        if (rules) state = applyRules(*rules, state, name, wx, wy, wz, world);
+
+        // legacy: BlockIgnore(STRUCTURE_AND_AIR) runs last (after rules).
+        if (legacy) {
+            const std::string& sname = (state < resolver.states.size()) ? resolver.states[state].name
+                                                                       : resolver.states[0].name;
+            if (sname == "air" || sname == "structure_block") continue;
+        }
+
+        std::uint32_t finalState = resolver.rotateState(state, rot);
         if (world.setBlock) {
-            world.setBlock(pos.x + rp.x, pos.y + rp.y, pos.z + rp.z, state);
+            world.setBlock(wx, wy, wz, finalState);
             ++placed;
         }
     }
@@ -1177,8 +1366,9 @@ std::size_t Runtime::placeElement(const pools::StructurePoolElement& e, const Bl
                                   Rotation rot, const StructureWorld& world) {
     switch (e.type) {
         case pools::ElementType::SINGLE:
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ false, e.processors);
         case pools::ElementType::LEGACY:
-            return placeTemplate(e.location, pos, rot, world);
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ true, e.processors);
         case pools::ElementType::LIST: {
             std::size_t placed = 0;
             for (const auto& child : e.elements) placed += placeElement(child, pos, rot, world);

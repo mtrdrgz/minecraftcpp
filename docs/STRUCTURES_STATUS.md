@@ -9,7 +9,38 @@
 > single place that says, per structure, what is real and what is not.
 >
 > Last updated: 2026-06-21 (session: structures audit + honesty pass + biome gate +
-> village root-cause + Linux verification harness).
+> village root-cause + Linux verification harness + processor pipeline increment #1).
+
+---
+
+## UPDATE 2026-06-21 (c) — village increment #1: processor pipeline + legacy element
+
+Ported the structure **processor pipeline** into the placement path
+(`StructureGen.cpp`), the first of the three village layers. This is
+`StructureTemplate.processBlockInfos` for the rule-based processors that every
+jigsaw pool element references:
+
+- **`legacy_single_pool_element` semantics** — `BlockIgnoreProcessor.STRUCTURE_AND_AIR`:
+  legacy elements (all village buildings) no longer place template AIR, so they stop
+  carving holes in the terrain. Verified: plains village block writes dropped from
+  ~12k to ~3.8k per village (the spurious air carving is gone). Single elements keep
+  `BlockIgnoreProcessor.STRUCTURE_BLOCK` (air still carves — vanilla-correct).
+- **`RuleProcessor`** — per block a fresh `LegacyRandomSource(Mth.getSeed(worldPos))`,
+  first matching rule wins via the certified short-circuit `input && location`
+  RuleTests (always_true / block_match / blockstate_match / random_block_match;
+  tag_match deferred → only zombie villages). Output state rotated at place time.
+  Verified end-to-end with the probe: blocks that can ONLY exist via a processor
+  appear — mossify→`mossy_cobblestone` (720), farm→`carrots` (105) over a 60×60 scan.
+- **Pool element** now carries its `processors` list id (`StructureTemplatePool.h`).
+
+This also improves the already-enabled jigsaw structures (pillager_outpost
+`outpost_rot`, trial_chambers `copper_bulb_degradation`) — they now apply their rule
+processors and drop structure-block markers.
+
+**Still deferred for villages (kept gated):** GravityProcessor / ProtectedBlockProcessor
+and the TERRAIN_MATCHING projection processors (street terrain-following) →
+terrain-adaptation phase; `feature_pool_element` pieces (increment #2);
+`beard_thin` Beardifier (increment #3). Villages stay disabled until 1:1.
 
 ---
 

@@ -126,6 +126,11 @@ struct StructurePoolElement {
     // SINGLE / LEGACY: the template location (Identifier string).
     std::string location;
 
+    // SINGLE / LEGACY: the StructureProcessorList id ("processors" field). A string
+    // ref (e.g. "minecraft:street_plains") or "minecraft:empty" for the inline empty
+    // list. Consumed by the placement processor pipeline; pure-identity here.
+    std::string processors = "minecraft:empty";
+
     // LIST: the encapsulated sub-elements (each carries the list's projection).
     std::vector<StructurePoolElement> elements;
 
@@ -378,6 +383,20 @@ inline StructurePoolElement parseElement(const nlohmann::json& j) {
     std::string loc = j.at("location").get<std::string>();
     if (loc.find(':') == std::string::npos) loc = "minecraft:" + loc;
     e.location = loc;
+    // processorsCodec(): "processors" is a StructureProcessorList holder — either a
+    // string ref to a registry list, or an inline object {"processors":[...]}. In the
+    // shipped data every inline list is empty, so an inline object resolves to
+    // "minecraft:empty"; a string is the list id (normalized).
+    if (j.contains("processors")) {
+        const auto& pj = j.at("processors");
+        if (pj.is_string()) {
+            std::string pid = pj.get<std::string>();
+            if (pid.find(':') == std::string::npos) pid = "minecraft:" + pid;
+            e.processors = pid;
+        } else {
+            e.processors = "minecraft:empty";
+        }
+    }
     return e;
 }
 

@@ -352,7 +352,22 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 — structure biome gate + Linux verification harness + village root cause.
+**Last updated**: 2026-06-21 — village increment #1: structure processor pipeline + legacy element.
+
+**Village processor pipeline (2026-06-21 c):** ported `StructureTemplate.processBlockInfos`
+rule-processor path into `StructureGen.cpp::placeTemplate` — the first of three
+village layers. `legacy_single_pool_element` now applies `BlockIgnoreProcessor.STRUCTURE_AND_AIR`
+(village buildings stop placing template AIR / carving terrain: plains village writes
+~12k→~3.8k blocks), and the `RuleProcessor` family applies per block via a fresh
+`LegacyRandomSource(Mth.getSeed(worldPos))` with the certified RuleTests (always_true/
+block_match/blockstate_match/random_block_match; tag_match deferred). Pool elements now
+carry their `processors` list id. Verified with `structure_gen_probe`: processor-only
+blocks appear (mossify→mossy_cobblestone 720, farm→carrots 105 over 60×60). Also
+improves enabled jigsaw structures (outpost_rot, copper_bulb_degradation). Villages
+stay gated pending increment #2 (`feature_pool_element`) and #3 (Beardifier +
+Gravity/Protected/TERRAIN_MATCHING projection processors). Plan: `docs/STRUCTURES_STATUS.md`.
+
+**Last updated prior**: 2026-06-21 — structure biome gate + Linux verification harness + village root cause.
 
 **Structure biome gate + verification harness (2026-06-21 b):** added
 `structure_gen_probe` (CMake target + `tools/structure_gen_probe/main.cpp`), a
