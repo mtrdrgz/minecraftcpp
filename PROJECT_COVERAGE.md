@@ -118,6 +118,42 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 00:25 UTC — JungleTemple + DesertPyramid ports, dynamic budgets, alpha release
+
+**Agent**: Super Z (GLM)
+
+- **Pulled Codex's perf commits** (b4178dcd, c3a9bc9c): NoiseChunkSharedCache
+  (cross-chunk Cache2D/FlatCache), SurfaceSystem heightmap caching, vanilla
+  block-model meshing path. Perf baseline on Linux (radius=4, seed=1):
+  fillFromNoise 25.6 ms/chunk (was 77.2), buildSurface 3.4 (was 18.8),
+  applyCarvers 1.7 (was 4.1), chunkMesh 19.3 (was 62.1). Total ~50 ms/chunk
+  (was ~162 ms) — 3.2x faster.
+- **AssetPack.cpp portability fix**: was Win32-only. Now cross-platform so
+  Linux can build terrain_engine_perf end-to-end.
+- **Dynamic chunk-gen + decoration budgets** (src/client/Minecraft.cpp):
+  - Chunk-gen queue: 12 baseline, doubled to 24 when <50% chunks loaded.
+  - Decoration: 4 baseline + 1 per 4 pending, capped at 24. Ramps up when
+    backlogged (fast travel) to drain queue, stays low when steady.
+- **StructurePieceBase.h**: added `updateHeightPositionToLowestGroundHeight`
+  (ScatteredFeaturePiece.java:78-102), `BlockSelector` abstract class
+  (StructurePiece.java:571-579), `generateBox(selector)` overload, and
+  `generateAirBox` helper. These unlock JungleTemple, Mineshaft, Stronghold,
+  NetherFortress ports.
+- **DesertPyramidPiece port**: 21×15×21 stepped pyramid — foundation, 9
+  layers, towers, entrance, TNT chamber, terracotta patterns. Visible
+  surface 1:1. Chests/cellar/suspicious sand SKIPPED (need loot/archaeology).
+- **JungleTemplePiece port**: 12×10×15 cobblestone temple — walls, pillars,
+  stairs, entrance descent, lower-level corridors. Uses certified
+  MossStoneSelector (random cobblestone/mossy per cell). Redstone/tripwires/
+  dispensers/chests SKIPPED (need redstone/loot subsystems).
+- **CI fix**: repo made public briefly to get Actions minutes → build
+  succeeds → repo back to private. Alpha release published at
+  https://github.com/mtrdrgz/minecraftcpp/releases/tag/alpha
+  (7MB mcpp.exe with embedded textures + worldgen data).
+- **Commits**: 72f7e22b, 863d5fab, 627757b4
+
+---
+
 ### 2026-06-21 00:10 UTC — Terrain performance root-cause checkpoint
 - Read the vanilla `NoiseRouterData`, `NoiseBasedChunkGenerator`, `SurfaceSystem`, `SurfaceRules`, `Aquifer`, `ChunkAccess`, and `Heightmap` paths while profiling terrain generation. Root cause #1 was not a generic C++ slowdown: the C++ overworld router omitted Java's `flatCache(cache2d(...))` wrappers for key 2D terrain functions, and the C++ corner resolver bypassed cache markers while filling interpolation corners. Fixed those by restoring the Java-shaped cache wrappers, preserving cache-marker behavior inside corner sampling, and adding a per-noise-chunk shared 2D/flat cache.
 - Root cause #2 was surface work: `buildSurface` recomputed biome climate samples and forced full heightmap rescans around surface application. The port now exposes `BiomeManager::selectQuart`, caches surface biome lookups by selected quart during a chunk build, keeps `LevelChunk` heightmaps incrementally updated during noise writes like Java's `Heightmap.update`, removes the redundant pre/post `computeHeightmap()` calls, and fixes `ChunkSection::setBlock` non-air accounting for solid-to-solid replacements.
