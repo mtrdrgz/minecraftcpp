@@ -598,7 +598,8 @@ struct Runtime {
     std::size_t placeTemplate(const std::string& location, const BlockPos& pos,
                               Rotation rot, const StructureWorld& world,
                               bool legacy = false,
-                              const std::string& processorsId = "minecraft:empty");
+                              const std::string& processorsId = "minecraft:empty",
+                              bool terrainMatching = false);
     // Processor pipeline.
     RuleTest parseRuleTest(const json& j);
     std::uint32_t parseStateObject(const json& j, std::string& outShortName);
@@ -1328,7 +1329,8 @@ std::uint32_t Runtime::applyRules(const ProcList& rules, std::uint32_t inputStat
 // and the TERRAIN_MATCHING projection processors (street terrain following).
 std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& pos,
                                    Rotation rot, const StructureWorld& world,
-                                   bool legacy, const std::string& processorsId) {
+                                   bool legacy, const std::string& processorsId,
+                                   bool terrainMatching) {
     if (!ensureTemplate(location)) return 0;
     const PlaceTemplate& tpl = placeTemplates.at(location);
     const ProcList* rules = loadProcessorList(processorsId);
@@ -1343,10 +1345,19 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
         // single: BlockIgnore(STRUCTURE_BLOCK) runs first.
         if (!legacy && name == "structure_block") continue;
 
-        // Element processor list (RuleProcessor chain).
+        // Element processor list (RuleProcessor chain) — uses the PRE-gravity world
+        // position for the per-block seed + location predicate.
         if (rules) state = applyRules(*rules, state, name, wx, wy, wz, world);
 
-        // legacy: BlockIgnore(STRUCTURE_AND_AIR) runs last (after rules).
+        // TERRAIN_MATCHING projection -> GravityProcessor(WORLD_SURFACE_WG, -1):
+        // re-base the column to the surface so streets/paths follow the terrain.
+        //   newY = getHeight(WORLD_SURFACE_WG) + offset + localY
+        //        = (heightAt + 1) + (-1) + block.pos.y = heightAt + block.pos.y
+        if (terrainMatching && world.heightAt) {
+            wy = world.heightAt(wx, wz) + block.pos.y;
+        }
+
+        // legacy: BlockIgnore(STRUCTURE_AND_AIR) runs last (after rules + gravity).
         if (legacy) {
             const std::string& sname = (state < resolver.states.size()) ? resolver.states[state].name
                                                                        : resolver.states[0].name;
@@ -1364,11 +1375,12 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
 
 std::size_t Runtime::placeElement(const pools::StructurePoolElement& e, const BlockPos& pos,
                                   Rotation rot, const StructureWorld& world) {
+    bool terrainMatching = e.projection == pools::Projection::TERRAIN_MATCHING;
     switch (e.type) {
         case pools::ElementType::SINGLE:
-            return placeTemplate(e.location, pos, rot, world, /*legacy*/ false, e.processors);
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ false, e.processors, terrainMatching);
         case pools::ElementType::LEGACY:
-            return placeTemplate(e.location, pos, rot, world, /*legacy*/ true, e.processors);
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ true, e.processors, terrainMatching);
         case pools::ElementType::LIST: {
             std::size_t placed = 0;
             for (const auto& child : e.elements) placed += placeElement(child, pos, rot, world);
