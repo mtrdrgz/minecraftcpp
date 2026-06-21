@@ -118,7 +118,7 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
-### 2026-06-21 15:00 UTC — Shipwreck port, ore investigation, lagback fix
+### 2026-06-21 15:00 UTC — Shipwreck + Igloo + NetherFossil ports, ore investigation, lagback fix
 
 **Agent**: Super Z (GLM)
 
@@ -154,9 +154,22 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
   templates. Two variants: shipwreck (ocean, 20 templates) and shipwreck_beached
   (beach, 11 templates). tryPlaceShipwreck picks a random template + rotation
   and places it at y=90 via placeTemplate. Matches ShipwreckStructure.findGenerationPoint.
+- **Igloo port** (commit `82adb414`): template-based structure with 50% chance
+  of underground lab + ladder segments. tryPlaceIgloo places igloo/top always,
+  and 50% of the time adds igloo/bottom (lab) + igloo/middle (ladder) segments
+  at depth = nextInt(8)+4. Matches IglooPieces.addPieces exactly.
+- **NetherFossil port** (commit `4f4c64e8`): template-based nether structure
+  with 14 fossil variants. Simplified Y=32 (full version samples UniformHeight
+  + column scan). tryPlaceNetherFossil picks random XZ within chunk, random
+  rotation, random fossil template. Matches NetherFossilPieces.addPieces.
 - **Structure templates extracted**: extracted data/minecraft/structure/* from
-  client.jar (shipwreck, ruined_portal, pillager_outpost, igloo, etc.) — needed
-  for template-based structure placement.
+  client.jar (shipwreck, ruined_portal, pillager_outpost, igloo, nether_fossils,
+  etc.) — needed for template-based structure placement.
+- **Structures ported this session**: Shipwreck, Igloo, NetherFossil (3 new)
+- **Total non-jigsaw structures ported**: 7 (SwampHut, DesertPyramid,
+  JungleTemple, Shipwreck, Igloo, NetherFossil + existing jigsaw path for
+  villages/outposts/bastions/trial_chambers)
+- **Commits**: 65afa204, 81bc1432, 8da40d51, 82adb414, 4f4c64e8, c4b7ec8d
 
 ---
 
