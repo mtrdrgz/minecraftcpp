@@ -139,7 +139,7 @@ int main() {
         }
         escWasDown = escDown;
 
-        // Debug overlay: F1 toggle, F2 tab cycle, F3 = structures tab
+        // Debug overlay: F1 toggle, F2 tab cycle, number keys for tabs
         const bool f1Down = window.isKeyDown(VK_F1);
         if (f1Down && !f1WasDown) {
             debugOverlay.visible = !debugOverlay.visible;
@@ -151,15 +151,26 @@ int main() {
         }
         f1WasDown = f1Down;
 
-        const bool f2Down = window.isKeyDown(VK_F2);
-        if (f2Down && !f2WasDown) {
-            debugOverlay.currentTab = (debugOverlay.currentTab + 1) % 3;
+        if (debugOverlay.visible) {
+            // Number keys 1/2/3 to switch tabs
+            if (window.isKeyDown('1')) debugOverlay.currentTab = 0;
+            else if (window.isKeyDown('2')) debugOverlay.currentTab = 1;
+            else if (window.isKeyDown('3')) debugOverlay.currentTab = 2;
+            // F2 also cycles
+            const bool f2Down = window.isKeyDown(VK_F2);
+            if (f2Down && !f2WasDown) {
+                debugOverlay.currentTab = (debugOverlay.currentTab + 1) % 3;
+            }
+            f2WasDown = f2Down;
         }
-        f2WasDown = f2Down;
 
-        if (window.consumeLButtonClicked()) {
+        // Click handling: if overlay is visible, pass the click to it; otherwise
+        // route to the screen or the game as before.
+        const bool lButtonClick = window.consumeLButtonClicked();
+        if (lButtonClick) {
             if (debugOverlay.visible) {
-                // Debug overlay captures clicks — don't route to screen or game
+                // Store click for the overlay to consume during its render pass
+                debugOverlay.pendingClick = true;
             } else if (mc.screen()) {
                 // A menu is open: route the click to its widgets, cursor stays visible.
                 mc.screen()->mouseClicked(mc.guiMouseX(), mc.guiMouseY(), 0);
@@ -227,7 +238,7 @@ int main() {
                     // Debug overlay (development tool, not part of 1:1 port)
                     if (debugOverlay.visible && mc.font()) {
                         debugOverlay.render(*mc.guiGraphics(), *mc.font(), mc, window,
-                                             std::chrono::duration<float>(now - lastTick).count());
+                                             (float)(dtMs / 1000.0));
                     }
                     mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
                 }

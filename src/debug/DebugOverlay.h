@@ -1,15 +1,12 @@
 #pragma once
 // DebugOverlay — in-game debug overlay (F1 to toggle).
-// This is a DEVELOPMENT TOOL, NOT part of the 1:1 port. It is guarded by
-// MCPP_DEBUG_OVERLAY and should be stripped for release builds.
+// This is a DEVELOPMENT TOOL, NOT part of the 1:1 port. It should be stripped
+// for release builds.
 //
-// Tabs:
+// Tabs (switch with number keys 1/2/3 or F2):
 //   1. Info    — FPS, position, chunk count, seed, loaded chunk stats
 //   2. Structures — find + teleport to nearby structure spawn chunks
-//                   (villages, pillager_outposts, swamp_huts, etc.)
-//                   Tracks visited locations so re-clicking goes to a new one.
 //   3. Biomes  — list all 65 overworld biomes with teleport buttons
-//                (scans outward from current position for the target biome)
 
 #include "../core/Math.h"
 #include "../client/Minecraft.h"
@@ -33,11 +30,13 @@ namespace mc {
 struct DebugOverlay {
     bool visible = false;
     int currentTab = 0;  // 0=Info, 1=Structures, 2=Biomes
+    bool pendingClick = false;  // set by main loop when overlay should consume a click
 
     // FPS tracking
     int frameCount = 0;
     double fpsTimer = 0.0;
     int currentFps = 0;
+    Clock::time_point lastFrameTime = Clock::now();
 
     // Structure search
     struct StructureLoc {
@@ -56,28 +55,18 @@ struct DebugOverlay {
     std::string biomeSearchStatus;
 
     // Simple button helper: returns true if clicked
-    struct ButtonResult {
-        bool clicked = false;
-        bool hovered = false;
-    };
-
-    ButtonResult button(render::GuiGraphics& g, render::Font& font,
-                        int x, int y, int w, int h,
-                        const std::string& text, int mouseX, int mouseY,
-                        bool clicked);
-
-    // Tab bar
-    void drawTabBar(render::GuiGraphics& g, render::Font& font,
-                    int mouseX, int mouseY, bool clicked, int screenW);
+    bool button(render::GuiGraphics& g, render::Font& font,
+                int x, int y, int w, int h,
+                const std::string& text, int mouseX, int mouseY);
 
     // Main render
     void render(render::GuiGraphics& g, render::Font& font, Minecraft& mc,
                 Window& window, float dtSec);
 
     // Tab content
-    void renderInfoTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY, bool clicked);
-    void renderStructuresTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY, bool clicked);
-    void renderBiomesTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY, bool clicked);
+    void renderInfoTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY);
+    void renderStructuresTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY);
+    void renderBiomesTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY);
 
     // Search for structure chunks within a radius of the player
     void searchStructures(Minecraft& mc);
@@ -87,6 +76,10 @@ struct DebugOverlay {
 
     // Scan for a specific biome within a radius
     bool findBiome(Minecraft& mc, const std::string& targetBiome, int& outX, int& outZ);
+
+    // Draw a text line, returns the next Y
+    int drawText(render::GuiGraphics& g, render::Font& font, const std::string& text,
+                 int x, int y, const glm::vec4& color);
 };
 
 } // namespace mc
