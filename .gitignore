@@ -82,3 +82,6 @@ Desktop.ini
 
 # Log4j output from Bootstrap-based parity generators
 logs/
+
+# Linux parity-only build dir
+/build-linux/

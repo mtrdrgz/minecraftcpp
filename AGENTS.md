@@ -352,7 +352,32 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 18:28 UTC - menu button screen-transition crash hotfix.
+**Last updated**: 2026-06-21 — structures subsystem audit + RULE #0 honesty pass.
+
+**Structures audit + honesty (2026-06-21):** the user reported structures as the
+worst part of worldgen (no villages, things exposing). Audited the whole subsystem
+against the Java source + provisioned data and wrote the certification ledger
+`docs/STRUCTURES_STATUS.md`. Findings: terrain is gated 1:1 but structures are not.
+Only swamp_hut, desert_pyramid, jungle_pyramid, igloo, shipwreck and nether_fossil
+are actually placed (hand-ported pieces, dispatched in `StructureGen.cpp::
+tryGenerateAndPlace`). The jigsaw family (villages, pillager_outpost, ancient_city,
+bastion, trail_ruins, trial_chambers) *assembles* but with **no structure
+processors and no terrain adaptation**, so it is not trustworthy (this is why
+villages look absent/exposed). Three root architectural gaps remain unported:
+(1) structures run as a post-decoration pass instead of at STRUCTURE_STARTS before
+NOISE; (2) the **Beardifier**/`terrain_adaptation` density slot (beard_thin/
+beard_box/bury/encapsulate) — `grep -ri beard src/` is empty; (3) the structure
+**processor** pipeline is not wired into `placeTemplate` (raw blocks only).
+RULE #0 fix landed: `ocean_ruin`/`ruined_portal`/`buried_treasure` were marked
+`supported` but actually no-op'd (jigsaw assembly with an empty `start_pool`); they
+are now honest no-ops and logged as UNPORTED at load. `StructureGen.cpp` compiles
+clean (`g++ -std=c++23 -DGLM_ENABLE_EXPERIMENTAL -Isrc -Ivendor -fsyntax-only`).
+Parity-only build confirmed to configure+build+run structure gates on Linux GCC.
+Prioritised roadmap (buried_treasure → structure-starts-before-noise → Beardifier →
+processors → ruined_portal → remaining hand-built → whole-structure server gate) is
+in `docs/STRUCTURES_STATUS.md`.
+
+**Last updated prior**: 2026-06-21 18:28 UTC - menu button screen-transition crash hotfix.
 
 **Menu button screen-transition HOTFIX (2026-06-21 18:28):** user reported that
 clicking Singleplayer from the title menu crashed after the streaming changes. Root

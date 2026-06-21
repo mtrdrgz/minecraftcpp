@@ -56,9 +56,25 @@
 
 ## Estructuras
 
-- [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente (es posible que este comportamiento sea original, no estoy totalmente seguro de marcar esto como un bug).
-- [ ] La estructura de los portales arruinados no coincide con la original: la original tiene bloques de lava, magma... este no lo tiene. La textura de un bloque al lado del portal arruinado (imagino que del cofre que siempre spawnea al lado) está completamente rota y deja ver una mayor parte del atlas de texturas.
-- [ ] Hay que acabar completamente el plan de implementación de estructuras.
+> AUDITORÍA 2026-06-21: estado real del subsistema certificado en
+> `docs/STRUCTURES_STATUS.md` (ledger por estructura + 3 huecos arquitectónicos
+> de raíz: orden de generación, Beardifier/terrain_adaptation, y procesadores).
+> Resumen: solo se colocan de verdad swamp_hut, desert_pyramid, jungle_pyramid,
+> igloo, shipwreck y nether_fossil (piezas hand-port); la familia jigsaw (aldeas,
+> outpost, ancient_city, bastion, trail_ruins, trial_chambers) se ensambla pero
+> SIN procesadores ni adaptación de terreno (por eso las aldeas no se ven / se
+> exponen); ocean_ruin, ruined_portal, buried_treasure, ocean_monument, mansion,
+> mineshaft, stronghold, fortress y end_city NO se colocan (solo helpers).
+
+- [x] RULE #0: dejar de marcar `ocean_ruin`/`ruined_portal`/`buried_treasure` como
+      "supported" cuando en realidad hacían no-op (assembly jigsaw con start_pool
+      vacío). Ahora son no-ops honestos y se loguean como UNPORTED al cargar.
+- [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente. (Estado real: NO portados — solo `RuinedPortalYSelector`. Falta `RuinedPortalPiece` + procesador de envejecimiento/lava + placement por tipo. Ver roadmap #6.)
+- [ ] La estructura de los portales arruinados no coincide con la original: lava/magma, cofre. (Bloqueado por lo anterior + soporte de block-entity/loot para el cofre.)
+- [ ] Adaptación de terreno (Beardifier): `terrain_adaptation` (beard_thin/beard_box/bury/encapsulate) no está portado; causa que las estructuras jigsaw se expongan/floten. Ver roadmap #3–#4.
+- [ ] Procesadores de estructura: `placeTemplate` escribe bloques crudos e ignora `processors` (gravity, rule, block_rot, final_state...). Ver roadmap #5.
+- [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
+- [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 
 ## Texturas / coloreado
 

@@ -528,8 +528,19 @@ struct Runtime {
         loadStructureSets();
         loadStructures();
         poolMap["minecraft:empty"] = pools::StructureTemplatePool{};
+
+        // RULE #0 visibility: report exactly which structures are NOT placed so an
+        // unported family is never silently mistaken for a working one.
+        std::map<std::string, int> unportedByType;
+        for (const auto& [sid, cfg] : structures) {
+            if (!cfg.supported) ++unportedByType[cfg.structureType];
+        }
         MC_LOG_INFO("Structures: loaded {} structure_sets, {} structures from {}",
                     structureSets.size(), structures.size(), dataDir.generic_string());
+        for (const auto& [type, count] : unportedByType) {
+            MC_LOG_INFO("Structures: UNPORTED type {} ({} structures) — hard no-op, not placed",
+                        type, count);
+        }
     }
 
     void loadStructureSets();
@@ -775,7 +786,14 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     std::string type = normalizeId(j.value("type", std::string()));
     cfg.structureType = type;
     
-    // Non-jigsaw structure types: supported with procedural piece placement
+    // RULE #0 HONESTY: a structure type is listed here ONLY if it has a real,
+    // dispatched piece-placement path in tryGenerateAndPlace(). A type that is
+    // recognised but NOT actually placed must NOT be marked supported — otherwise
+    // it silently no-ops (failed jigsaw assembly with an empty start_pool) while
+    // pretending to be ported. Types deliberately NOT here yet (helpers only, no
+    // in-game placement): ocean_ruin, ruined_portal, buried_treasure,
+    // ocean_monument, woodland_mansion, mineshaft, stronghold, fortress, end_city.
+    // See docs/STRUCTURES_STATUS.md for the per-structure port ledger.
     static const std::set<std::string> supportedTypes = {
         "minecraft:jigsaw",
         "minecraft:swamp_hut",
@@ -783,18 +801,15 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:igloo",
         "minecraft:jungle_temple",
         "minecraft:shipwreck",
-        "minecraft:ocean_ruin",
-        "minecraft:ruined_portal",
-        "minecraft:buried_treasure",
         "minecraft:nether_fossil",
     };
-    
+
     if (supportedTypes.count(type) == 0) {
         cfg.supported = false;
-        cfg.reason = "unsupported type " + type;
+        cfg.reason = "type " + type + " not yet ported (no piece placement) — hard no-op";
         return cfg;
     }
-    
+
     if (type != "minecraft:jigsaw") {
         // Non-jigsaw structures don't need jigsaw config fields
         cfg.supported = true;
