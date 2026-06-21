@@ -118,6 +118,48 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 15:00 UTC — Shipwreck port, ore investigation, lagback fix
+
+**Agent**: Super Z (GLM)
+
+- **Lagback fix** (commit `65afa204`): render loop capped dtSec at 100ms — when a
+  heavy frame took >100ms, the player only moved 100ms worth while 100ms+ of
+  real time passed, causing visible "lagback". Reduced cap to 50ms. Also
+  increased MAX_REBUILDS from 1→2 per frame for faster chunk mesh clearing.
+- **CMake fix** (commit `81bc1432`): Codex's c3a9bc9c added AssetManager
+  dependency to Blocks.cpp. 7 parity targets that link Blocks.cpp but NOT
+  AssetManager.cpp failed. Fixed by adding assets/AssetManager.cpp +
+  assets/AssetPack.cpp to all affected targets via Python script.
+- **Ore investigation**: user reported "abnormal" ore quantities, emeralds on
+  mountain surfaces. Investigated the full ore generation pipeline:
+  - OreFeature.h: 1:1 port, certified via full_chunk_decorate_parity (0 mismatches)
+  - OreVeinifier.cpp: 1:1 port (copper/iron vein system)
+  - HeightRangePlacement + TrapezoidHeight: correct Y resolution
+  - VerticalAnchor (above_bottom, absolute, below_top): correct
+  - BiomeFilter: correctly checks biome at placement position via
+    g_biomeCtx->hasFeatureAt → biomeHasFeature (fail-closed for unknown biomes)
+  - Emerald ore: count=100, trapezoid(-16..480), discard_chance_on_air_exposure=0.0
+    — these are the REAL vanilla values. count=100 is per-chunk in mountain
+    biomes only (10 biomes: stony_peaks, jagged_peaks, etc.). discard=0.0 means
+    emerald CAN appear exposed to air (on cave walls, surfaces) — this is normal
+    vanilla behavior, not a bug.
+  - Diamond ore: size=7 (small) + size=12 (large, rarity 1/9) — normal vanilla.
+  - **Conclusion**: ore generation code is certified byte-exact (2.36M cells / 0
+    mismatches in full_chunk_parity, 884k+590k / 0 in full_chunk_decorate_parity).
+    The "abnormal" behavior the user sees is likely correct vanilla behavior that
+    appears more visible in the C++ engine due to missing lighting (underground
+    ores are visible without darkness) and possibly missing cave generation
+    (ores more exposed). Not a generation bug.
+- **Shipwreck port** (commit `8da40d51`): template-based structure using .nbt
+  templates. Two variants: shipwreck (ocean, 20 templates) and shipwreck_beached
+  (beach, 11 templates). tryPlaceShipwreck picks a random template + rotation
+  and places it at y=90 via placeTemplate. Matches ShipwreckStructure.findGenerationPoint.
+- **Structure templates extracted**: extracted data/minecraft/structure/* from
+  client.jar (shipwreck, ruined_portal, pillager_outpost, igloo, etc.) — needed
+  for template-based structure placement.
+
+---
+
 ### 2026-06-21 00:25 UTC — JungleTemple + DesertPyramid ports, dynamic budgets, alpha release
 
 **Agent**: Super Z (GLM)
