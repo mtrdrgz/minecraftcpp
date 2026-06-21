@@ -17,6 +17,7 @@
 #include "world/level/block/JigsawAttach.h"
 #include "world/level/levelgen/RandomSource.h"
 #include "world/level/levelgen/Mth.h"
+#include "world/level/levelgen/Beardifier.h"
 #include "world/phys/AABB.h"
 #include "world/phys/shapes/Shapes.h"
 
@@ -405,6 +406,8 @@ struct Placed {
     Rotation rotation = Rotation::NONE;
     BoundingBox box{0, 0, 0, 0, 0, 0};
     int numJunctions = 0;
+    bool rigid = false;  // element projection == RIGID (only RIGID pieces beard)
+    std::vector<mc::levelgen::Beardifier::Junction> junctions;  // PoolElementStructurePiece.getJunctions
 
     void move(int dx, int dy, int dz) {
         box.move(dx, dy, dz);
@@ -449,6 +452,9 @@ struct JigsawConfig {
 
     // Shipwreck-specific (is_beached in the structure JSON)
     bool isBeached = false;
+
+    // terrain_adaptation (TerrainAdjustment) — drives the Beardifier.
+    mc::levelgen::TerrainAdjustment terrainAdjustment = mc::levelgen::TerrainAdjustment::NONE;
 
     std::set<std::string> biomes;
     std::string startPool;
@@ -619,6 +625,20 @@ struct Runtime {
     bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
+
+    // Beardifier integration: assemble (cached) the terrain-adapting structures whose
+    // pieces reach `active`, then collect their RIGID pieces + junctions per
+    // Beardifier.forStructuresInChunk. `columnHeight(x,z)` is the noise-column surface
+    // (WORLD_SURFACE_WG topmost solid) sampled before the chunk's terrain exists.
+    const std::vector<Placed>* assembledFor(const std::string& structureId, ChunkPos start,
+                                            const StructureWorld& world,
+                                            const std::function<std::string(int, int, int)>& biomeGetter);
+    mc::levelgen::Beardifier buildBeardifier(ChunkPos active,
+                                             const std::function<int(int, int)>& columnHeight,
+                                             const std::function<std::string(int, int, int)>& biomeGetter);
+
+    // assembled-structure cache (keyed by structureId + start chunk).
+    std::map<std::string, std::vector<Placed>> assembledCache;
 };
 
 struct Placer {
@@ -773,6 +793,27 @@ struct Placer {
                             tp.groundLevelDelta = targetGroundLevelDelta;
                             tp.rotation = targetRotation;
                             tp.box = targetBB;
+                            tp.rigid = targetRigid;
+
+                            // JigsawJunction recording (JigsawPlacement.java:439-472) —
+                            // needed by the Beardifier. junctionY depends on which
+                            // side is rigid.
+                            int junctionY;
+                            if (sourceRigid) {
+                                junctionY = sourceBoxY + sourceJigsawLocalY;
+                            } else if (targetRigid) {
+                                junctionY = targetBoxY + targetJigsawLocalY;
+                            } else {
+                                if (sourceJigsawBaseHeight == kUnsetHeight) {
+                                    sourceJigsawBaseHeight = firstFreeHeight(sourceJigsawPos.x, sourceJigsawPos.z);
+                                }
+                                junctionY = sourceJigsawBaseHeight + deltaY / 2;
+                            }
+                            (*pieces)[sourceIdx].junctions.push_back(
+                                {targetJigsawPos.x, junctionY - sourceJigsawLocalY + sourceGroundLevelDelta, targetJigsawPos.z});
+                            tp.junctions.push_back(
+                                {sourceJigsawPos.x, junctionY - targetJigsawLocalY + targetGroundLevelDelta, sourceJigsawPos.z});
+
                             (*pieces)[sourceIdx].numJunctions += 1;
                             tp.numJunctions += 1;
                             pieces->push_back(tp);
@@ -828,6 +869,9 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     cfg.id = id;
     std::string type = normalizeId(j.value("type", std::string()));
     cfg.structureType = type;
+    // terrain_adaptation (default none) — feeds the Beardifier.
+    cfg.terrainAdjustment = mc::levelgen::terrainAdjustmentByName(
+        j.value("terrain_adaptation", std::string("none")));
     
     // RULE #0 HONESTY: a structure type is listed here ONLY if it has a real,
     // dispatched piece-placement path in tryGenerateAndPlace(). A type that is
@@ -1145,6 +1189,7 @@ bool Runtime::assembleJigsaw(const JigsawConfig& cfg, ChunkPos active, const Str
     center.groundLevelDelta = centerElement.getGroundLevelDelta();
     center.rotation = centerRotation;
     center.box = box;
+    center.rigid = centerElement.getProjection() == pools::Projection::RIGID;
 
     int centerX = (box.maxX + box.minX) / 2;
     int centerZ = (box.maxZ + box.minZ) / 2;
@@ -1723,6 +1768,143 @@ void Runtime::generate(ChunkPos active, const StructureWorld& world,
     }
 }
 
+const std::vector<Placed>* Runtime::assembledFor(const std::string& structureId, ChunkPos start,
+                                                 const StructureWorld& world,
+                                                 const std::function<std::string(int, int, int)>& biomeGetter) {
+    std::string key = structureId + ":" + std::to_string(start.x) + "," + std::to_string(start.z);
+    auto it = assembledCache.find(key);
+    if (it != assembledCache.end()) return it->second.empty() ? nullptr : &it->second;
+
+    std::vector<Placed>& pieces = assembledCache[key];  // cached even if assembly fails (stays empty)
+    auto cfgIt = structures.find(structureId);
+    if (cfgIt == structures.end() || !cfgIt->second.supported) return nullptr;
+    const JigsawConfig& cfg = cfgIt->second;
+    if (cfg.structureType != "minecraft:jigsaw") return nullptr;  // only jigsaw structures beard in the overworld
+    BlockPos stub{};
+    try {
+        if (!assembleJigsaw(cfg, start, world, biomeGetter, pieces, stub)) { pieces.clear(); return nullptr; }
+    } catch (const std::exception&) {
+        pieces.clear();
+        return nullptr;
+    }
+    return pieces.empty() ? nullptr : &pieces;
+}
+
+mc::levelgen::Beardifier Runtime::buildBeardifier(
+        ChunkPos active,
+        const std::function<int(int, int)>& columnHeight,
+        const std::function<std::string(int, int, int)>& biomeGetter) {
+    using mc::levelgen::Beardifier;
+    using mc::levelgen::TerrainAdjustment;
+
+    StructureWorld world;
+    world.heightAt = columnHeight;
+    world.getBlock = [](int, int, int) { return 0u; };
+    world.setBlock = [](int, int, int, std::uint32_t) {};
+
+    std::vector<Beardifier::Rigid> rigids;
+    std::vector<Beardifier::Junction> junctions;
+    std::optional<mc::levelgen::BeardBox> any;
+
+    const int chunkStartX = active.x * 16;
+    const int chunkStartZ = active.z * 16;
+    auto toBeardBox = [](const BoundingBox& b) {
+        return mc::levelgen::BeardBox{b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ};
+    };
+
+    // Mirror generate()'s structure selection (without placing) to find the structure
+    // that actually starts at `start`, and its assembled pieces + terrain_adaptation.
+    auto selectAssembled = [&](const StructureSetDef& set, ChunkPos start)
+            -> std::pair<const std::vector<Placed>*, TerrainAdjustment> {
+        if (set.structures.size() == 1) {
+            const std::string& sid = set.structures[0].structureId;
+            auto cfgIt = structures.find(sid);
+            TerrainAdjustment adj = cfgIt != structures.end() ? cfgIt->second.terrainAdjustment
+                                                              : TerrainAdjustment::NONE;
+            return {assembledFor(sid, start, world, biomeGetter), adj};
+        }
+        std::vector<StructureSelection> options = set.structures;
+        auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+            std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+        random->setLargeFeatureSeed(seed, start.x, start.z);
+        int total = 0;
+        for (const StructureSelection& o : options) total += o.weight;
+        while (!options.empty() && total > 0) {
+            int choice = random->nextInt(total);
+            std::size_t index = 0;
+            for (; index < options.size(); ++index) {
+                choice -= options[index].weight;
+                if (choice < 0) break;
+            }
+            if (index >= options.size()) index = options.size() - 1;
+            StructureSelection selected = options[index];
+            if (const std::vector<Placed>* pieces = assembledFor(selected.structureId, start, world, biomeGetter)) {
+                auto cfgIt = structures.find(selected.structureId);
+                TerrainAdjustment adj = cfgIt != structures.end() ? cfgIt->second.terrainAdjustment
+                                                                  : TerrainAdjustment::NONE;
+                return {pieces, adj};
+            }
+            total -= selected.weight;
+            options.erase(options.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+        return {nullptr, TerrainAdjustment::NONE};
+    };
+
+    for (const StructureSetDef& set : structureSets) {
+        auto pit = placementState.sets.find(set.id);
+        if (pit == placementState.sets.end()) continue;
+        const StructurePlacement& placement = pit->second;
+        if (!StructureState::isSupported(placement)) continue;
+
+        // Only sets with a terrain-adapting jigsaw structure matter; bound the scan
+        // window by the largest piece extent (maxDistH) among them.
+        int maxDistH = 0;
+        bool anyBeard = false;
+        for (const StructureSelection& s : set.structures) {
+            auto c = structures.find(s.structureId);
+            if (c != structures.end() && c->second.structureType == "minecraft:jigsaw"
+                && c->second.terrainAdjustment != TerrainAdjustment::NONE) {
+                anyBeard = true;
+                maxDistH = std::max(maxDistH, c->second.maxDistH);
+            }
+        }
+        if (!anyBeard) continue;
+        const int R = (maxDistH + 12 + 15) / 16 + 1;
+
+        for (int sx = active.x - R; sx <= active.x + R; ++sx) {
+            for (int sz = active.z - R; sz <= active.z + R; ++sz) {
+                if (!placementState.isStructureChunk(placement, sx, sz)) continue;
+                auto [pieces, adj] = selectAssembled(set, {sx, sz});
+                if (!pieces || adj == TerrainAdjustment::NONE) continue;
+
+                for (const Placed& piece : *pieces) {
+                    // isCloseToChunk(active, 12): piece box (XZ) intersects the chunk inflated by 12.
+                    if (!piece.box.intersects(chunkStartX - 12, chunkStartZ - 12,
+                                              chunkStartX + 15 + 12, chunkStartZ + 15 + 12))
+                        continue;
+                    if (piece.rigid) {
+                        mc::levelgen::BeardBox bb = toBeardBox(piece.box);
+                        rigids.push_back({bb, adj, piece.groundLevelDelta});
+                        any = any ? mc::levelgen::BeardBox::encapsulating(*any, bb) : bb;
+                    }
+                    for (const Beardifier::Junction& jn : piece.junctions) {
+                        if (jn.sourceX > chunkStartX - 12 && jn.sourceZ > chunkStartZ - 12
+                            && jn.sourceX < chunkStartX + 15 + 12 && jn.sourceZ < chunkStartZ + 15 + 12) {
+                            junctions.push_back(jn);
+                            mc::levelgen::BeardBox jb{jn.sourceX, jn.sourceGroundY, jn.sourceZ,
+                                                      jn.sourceX, jn.sourceGroundY, jn.sourceZ};
+                            any = any ? mc::levelgen::BeardBox::encapsulating(*any, jb) : jb;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!any) return Beardifier();
+    return Beardifier(std::move(rigids), std::move(junctions), any->inflatedBy(24));
+}
+
 Runtime* runtimeFor(const std::string& dataMinecraftDir, int64_t seed) {
     static std::unique_ptr<Runtime> runtime;
     static std::string cachedDir;
@@ -1749,6 +1931,18 @@ void generateStructures(ChunkPos active, uint64_t worldSeed,
     if (!fs::exists(dataDir / "worldgen" / "structure_set")) return;
     Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
     runtime->generate(active, world, biomeGetter);
+}
+
+mc::levelgen::Beardifier generateBeardifier(
+        ChunkPos active, uint64_t worldSeed,
+        const std::function<int(int, int)>& columnHeight,
+        const std::function<std::string(int, int, int)>& biomeGetter,
+        const std::string& dataMinecraftDir) {
+    if (dataMinecraftDir.empty()) return {};
+    fs::path dataDir(dataMinecraftDir);
+    if (!fs::exists(dataDir / "worldgen" / "structure_set")) return {};
+    Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
+    return runtime->buildBeardifier(active, columnHeight, biomeGetter);
 }
 
 } // namespace mc::levelgen::structure

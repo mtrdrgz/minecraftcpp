@@ -352,7 +352,26 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 — village increment #1: structure processor pipeline + legacy element.
+**Last updated**: 2026-06-21 — VILLAGES ENABLED (processor pipeline + Beardifier + engine integration).
+
+**Villages complete + enabled (2026-06-21 d):** removed the
+`isKnownBrokenRuntimeStructureSet` village gate after porting the three missing
+layers. (1) Processor pipeline: RuleProcessor + legacy `STRUCTURE_AND_AIR` air-ignore
++ TERRAIN_MATCHING GravityProcessor (streets follow terrain). (2/3) **Beardifier**
+(terrain adaptation) ported byte-exact — `beardifier_parity` 8000/0 vs the real class
+(GT: tools/BeardifierParity.java via JDK25). Jigsaw junctions are recorded during
+assembly; `Beardifier.forStructuresInChunk` is `Runtime::buildBeardifier`; it is added
+to `fillFromNoise` as `add(finalDensity, beardifier)`. No-structure terrain stays
+byte-identical (`full_chunk_parity` 98304/0 with the hook). Engine wiring: the
+per-chunk Beardifier is built on the MAIN thread (structure runtime is single-threaded)
+and passed to the worker `fillFromNoise` by shared_ptr (startup + async paths).
+Verified on Linux: villages assemble w/ full pipeline; per-chunk Beardifier non-empty +
+deterministic + non-zero density near villages. NOT verifiable here: in-game visual
+render (Windows-only) + a structures-on server GT diff. `feature_pool_element` (village
+trees/hay/flowers) is a separate decorative layer still pending. New Linux GT: needs
+JDK25 + libs (provisioned under 26.1.2/). Gates added: beardifier_parity, structure_gen_probe.
+
+**Last updated prior**: 2026-06-21 — village increment #1: structure processor pipeline + legacy element.
 
 **Village processor pipeline (2026-06-21 c):** ported `StructureTemplate.processBlockInfos`
 rule-processor path into `StructureGen.cpp::placeTemplate` — the first of three

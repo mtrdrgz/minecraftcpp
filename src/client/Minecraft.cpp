@@ -493,6 +493,22 @@ void Minecraft::runStructures(ChunkPos active) {
     }
 }
 
+mc::levelgen::Beardifier Minecraft::buildChunkBeardifier(ChunkPos pos) {
+    if (!m_localGenerator || m_dataMinecraftDir.empty()) return {};
+    // WORLD_SURFACE_WG topmost-solid column height (getBaseHeight returns first-free).
+    auto columnHeight = [this](int x, int z) { return m_localGenerator->getBaseHeight(x, z) - 1; };
+    auto biomeGetter = [this](int x, int y, int z) {
+        return m_localGenerator->getNoiseBiome(x >> 2, y >> 2, z >> 2);
+    };
+    try {
+        return levelgen::structure::generateBeardifier(pos, m_worldSeed, columnHeight, biomeGetter,
+                                                       m_dataMinecraftDir);
+    } catch (const std::exception& e) {
+        MC_LOG_WARN("buildChunkBeardifier failed at ({},{}): {}", pos.x, pos.z, e.what());
+        return {};
+    }
+}
+
 void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optional<int> spawnY) {
     MC_LOG_INFO("Starting local singleplayer prototype world, seed={}, spawn=({}, {}, {})",
                 seed, spawnX, spawnY ? std::to_string(*spawnY) : std::string("surface"), spawnZ);
@@ -536,7 +552,8 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
                 const int cz = spawnChunk.z + dz;
                 LevelChunk* chunk = getOrCreateChunk({cx, cz});
                 std::vector<BlockPos> genMarks;
-                m_localGenerator->fillFromNoise(*chunk, &genMarks);
+                levelgen::Beardifier beard = buildChunkBeardifier({cx, cz});
+                m_localGenerator->fillFromNoise(*chunk, &genMarks, beard.isEmpty() ? nullptr : &beard);
                 m_localGenerator->buildSurface(*chunk);
                 m_localGenerator->applyCarvers(*chunk, &genMarks);
                 levelgen::feature::freezeWorldgenHeights(*chunk, &genMarks);
@@ -1031,9 +1048,13 @@ void Minecraft::updateLocalChunks() {
         if (!m_threadPool) break;
         
         m_queuedChunks.insert(chunkKey(cand.pos));
+        // Build the per-chunk Beardifier on THIS (main) thread — the structure
+        // runtime is single-threaded — and hand it to the worker by shared_ptr.
+        // compute() is const, so the worker can read it concurrently.
+        auto beard = std::make_shared<levelgen::Beardifier>(buildChunkBeardifier(cand.pos));
         m_generationTasks.push_back({
             cand.pos,
-            m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed]() -> GeneratedChunk {
+            m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed, beard]() -> GeneratedChunk {
                 GeneratedChunk out;
                 out.chunk = std::make_unique<LevelChunk>(pos);
                 struct ThreadGeneratorCache {
@@ -1049,7 +1070,8 @@ void Minecraft::updateLocalChunks() {
                 levelgen::NoiseBasedChunkGenerator& generator = *cache.generator;
                 {
                     PROFILE_SCOPE_CHUNK("fillFromNoise", pos.x, pos.z);
-                    generator.fillFromNoise(*out.chunk, &out.genMarks);
+                    generator.fillFromNoise(*out.chunk, &out.genMarks,
+                                            beard->isEmpty() ? nullptr : beard.get());
                 }
                 {
                     PROFILE_SCOPE_CHUNK("buildSurface", pos.x, pos.z);

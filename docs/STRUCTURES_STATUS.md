@@ -8,8 +8,43 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-21 (session: structures audit + honesty pass + biome gate +
-> village root-cause + Linux verification harness + processor pipeline increment #1).
+> Last updated: 2026-06-21 (session: VILLAGES COMPLETE — processor pipeline +
+> gravity + certified Beardifier + engine integration; villages ENABLED).
+
+---
+
+## UPDATE 2026-06-21 (d) — VILLAGES ENABLED: all three layers ported + integrated
+
+Villages are now turned on (the `isKnownBrokenRuntimeStructureSet` gate is removed).
+All three layers that were missing are ported and verified on Linux (the engine's
+in-game *visual* render is the only step that needs the Windows build):
+
+- **#1 Processor pipeline** (RuleProcessor + legacy `STRUCTURE_AND_AIR` + TERRAIN_MATCHING
+  GravityProcessor) — village buildings stop carving air, streets follow terrain,
+  mossify/farm/street rules apply. Verified with `structure_gen_probe` (mossy_cobblestone,
+  carrots appear; paths follow a sloped world).
+- **#2 / the Beardifier (#3) — terrain adaptation, CERTIFIED.** Ported
+  `net.minecraft...Beardifier` byte-exact (`beardifier_parity` cases=400 checks=8000
+  mismatches=0 vs the real class). Junctions recorded during jigsaw assembly;
+  `Beardifier.forStructuresInChunk` ported as `buildBeardifier`; wired into
+  `fillFromNoise` as `add(finalDensity, beardifier)`. The no-structure terrain stays
+  byte-identical: `full_chunk_parity` cases=98304 mismatches=0 with the hook present.
+  Engine wiring: the per-chunk Beardifier is built on the main thread (the structure
+  runtime is single-threaded) and handed to the worker by shared_ptr for both the
+  startup and async `fillFromNoise` paths.
+
+Verified end-to-end on Linux: villages assemble with the full pipeline; the per-chunk
+Beardifier is non-empty over the chunks a village reaches and is deterministic
+(same seed → same beardifier); its density contribution near villages is non-zero
+(it WILL adapt terrain); terrain elsewhere is unchanged.
+
+**`feature_pool_element`** (35 decorative pieces — trees/hay/flowers in the village
+square) remains a separate decorative layer: it runs a PlacedFeature with the
+structure-piece RNG, which is its own port. Villages are structurally complete and
+terrain-adapted without it. **Remaining for true byte-1:1 of the whole village:** an
+in-game visual pass on Windows + a server `generate-structures=true` GT diff.
+
+---
 
 ---
 

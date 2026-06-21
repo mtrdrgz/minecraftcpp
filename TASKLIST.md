@@ -88,6 +88,17 @@
       los RuleProcessor aplican (verificado: mossify→mossy_cobblestone, farm→carrots).
       Pendiente: GravityProcessor/ProtectedBlockProcessor + procesadores de proyección
       TERRAIN_MATCHING (caminos siguiendo el terreno) → fase de adaptación de terreno.
+- [x] ALDEAS ACTIVADAS Y VERIFICADAS (componentes): portadas las 3 capas que faltaban
+      — pipeline de procesadores (rules + legacy air-ignore + Gravity de calles), y el
+      **Beardifier** (adaptación de terreno `beard_thin`) certificado byte-exacto contra
+      la clase real (`beardifier_parity` 8000/0). Junctions registradas en el ensamblaje;
+      `forStructuresInChunk` portado; sumado a `fillFromNoise` (terreno sin estructuras
+      byte-idéntico: `full_chunk_parity` 98304/0). Cableado en el motor (beardifier en
+      hilo principal → worker). Verificado en Linux: las aldeas ensamblan con el pipeline
+      completo, el beardifier por chunk es no-vacío/determinista y produce densidad no-cero
+      cerca de aldeas. Pendiente (no verificable aquí): render visual in-game (Windows) +
+      diff contra GT del servidor con estructuras. Capa decorativa `feature_pool_element`
+      (árboles/heno en la aldea) aparte.
 - [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 

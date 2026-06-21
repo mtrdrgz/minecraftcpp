@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../chunk/LevelChunk.h"
+#include "../Beardifier.h"
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -27,5 +28,18 @@ void generateStructures(ChunkPos active, uint64_t worldSeed,
                         const StructureWorld& world,
                         const std::function<std::string(int, int, int)>& biomeGetter,
                         const std::string& dataMinecraftDir = {});
+
+// Build the per-chunk Beardifier (Beardifier.forStructuresInChunk): assembles the
+// terrain-adapting structures whose RIGID pieces/junctions reach `active` and returns
+// a Beardifier whose compute() must be ADDED to the final density during fillFromNoise
+// (NoiseChunk: add(finalDensity, BeardifierMarker)). `columnHeight(x,z)` is the
+// noise-column surface (WORLD_SURFACE_WG topmost solid), sampled before the chunk's
+// terrain exists. Returns an EMPTY beardifier (compute()==0) when no structure beards
+// near the chunk, so terrain elsewhere is byte-unchanged.
+mc::levelgen::Beardifier generateBeardifier(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<int(int, int)>& columnHeight,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::string& dataMinecraftDir);
 
 } // namespace mc::levelgen::structure

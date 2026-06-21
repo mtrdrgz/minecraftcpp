@@ -16,16 +16,33 @@
 // byte-unchanged (the certified no-structure terrain parity is preserved).
 
 #include "Mth.h"
-#include "structure/BoundingBox.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace mc::levelgen {
+
+// Minimal axis-aligned box (the only BoundingBox surface the Beardifier needs).
+// Self-contained so this header pulls no structure-system types (those carry a
+// clashing structure::Vec3i). Callers convert their own box into this.
+struct BeardBox {
+    std::int32_t minX = 0, minY = 0, minZ = 0, maxX = 0, maxY = 0, maxZ = 0;
+    bool isInside(int x, int y, int z) const {
+        return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
+    }
+    BeardBox inflatedBy(int a) const {
+        return {minX - a, minY - a, minZ - a, maxX + a, maxY + a, maxZ + a};
+    }
+    static BeardBox encapsulating(const BeardBox& a, const BeardBox& b) {
+        return {std::min(a.minX, b.minX), std::min(a.minY, b.minY), std::min(a.minZ, b.minZ),
+                std::max(a.maxX, b.maxX), std::max(a.maxY, b.maxY), std::max(a.maxZ, b.maxZ)};
+    }
+};
 
 // TerrainAdjustment.java — structure terrain adaptation kinds.
 enum class TerrainAdjustment { NONE, BURY, BEARD_THIN, BEARD_BOX, ENCAPSULATE };
@@ -44,7 +61,7 @@ public:
 
     // Beardifier.Rigid(box, terrainAdjustment, groundLevelDelta).
     struct Rigid {
-        mc::levelgen::structure::BoundingBox box{};
+        BeardBox box{};
         TerrainAdjustment terrainAdjustment = TerrainAdjustment::NONE;
         int groundLevelDelta = 0;
     };
@@ -58,7 +75,7 @@ public:
 
     Beardifier() = default;  // EMPTY
     Beardifier(std::vector<Rigid> pieces, std::vector<Junction> junctions,
-               std::optional<mc::levelgen::structure::BoundingBox> affectedBox)
+               std::optional<BeardBox> affectedBox)
         : m_pieces(std::move(pieces)), m_junctions(std::move(junctions)),
           m_affectedBox(affectedBox) {}
 
@@ -113,7 +130,7 @@ public:
 private:
     std::vector<Rigid> m_pieces;
     std::vector<Junction> m_junctions;
-    std::optional<mc::levelgen::structure::BoundingBox> m_affectedBox;
+    std::optional<BeardBox> m_affectedBox;
 
     static double getBuryContribution(double dx, double dy, double dz) {
         double distance = mc::levelgen::mth::length(dx, dy, dz);

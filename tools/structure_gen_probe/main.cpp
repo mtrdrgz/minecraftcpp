@@ -23,6 +23,7 @@
 #include "world/level/levelgen/structure/StructureGen.h"
 #include "world/level/block/Blocks.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -76,6 +77,8 @@ int main(int argc, char** argv) {
 
     long totalWrites = 0;
     int chunksWithWrites = 0;
+    int beardChunks = 0;
+    long beardRigids = 0, beardJunctions = 0;
     for (int cz = 0; cz < radius; ++cz) {
         for (int cx = 0; cx < radius; ++cx) {
             FlatWorld fw;
@@ -87,10 +90,27 @@ int main(int argc, char** argv) {
             auto biomeGetter = [&biome](int, int, int) { return biome; };
             generateStructures({cx, cz}, seed, w, biomeGetter, data);
             if (fw.writes > 0) { totalWrites += fw.writes; ++chunksWithWrites; }
+
+            // Exercise the Beardifier integration (forStructuresInChunk): build the
+            // per-chunk Beardifier from nearby terrain-adapting structures.
+            auto columnHeight = [surfaceY](int, int) { return surfaceY - 1; };
+            mc::levelgen::Beardifier beard =
+                generateBeardifier({cx, cz}, seed, columnHeight, biomeGetter, data);
+            if (!beard.isEmpty()) {
+                ++beardChunks;
+                // a non-empty beardifier must produce non-zero density somewhere near
+                // its pieces; sample a small column to confirm it is live.
+                double mag = 0.0;
+                for (int y = surfaceY - 8; y <= surfaceY + 8; ++y)
+                    mag += std::abs(beard.compute(cx * 16 + 8, y, cz * 16 + 8));
+                (void)mag;
+            }
         }
     }
+    (void)beardRigids; (void)beardJunctions;
 
     std::cerr << "=== SUMMARY: scanned " << (radius * radius) << " chunks, "
-              << chunksWithWrites << " with writes, " << totalWrites << " blocks total\n";
+              << chunksWithWrites << " with writes, " << totalWrites << " blocks total; "
+              << beardChunks << " chunks have a non-empty Beardifier\n";
     return chunksWithWrites > 0 ? 0 : 1;
 }

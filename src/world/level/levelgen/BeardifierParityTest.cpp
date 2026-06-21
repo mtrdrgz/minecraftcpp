@@ -63,13 +63,13 @@ int main(int argc, char** argv) {
             // multiple side-effecting reads in one argument list).
             auto next = [&] { return std::stoi(f[i++]); };
             int aMinX = next(), aMinY = next(), aMinZ = next(), aMaxX = next(), aMaxY = next(), aMaxZ = next();
-            structure::BoundingBox affected(aMinX, aMinY, aMinZ, aMaxX, aMaxY, aMaxZ);
+            BeardBox affected{aMinX, aMinY, aMinZ, aMaxX, aMaxY, aMaxZ};
             int nP = next();
             std::vector<Beardifier::Rigid> pieces;
             for (int p = 0; p < nP; ++p) {
                 int x0 = next(), y0 = next(), z0 = next(), x1 = next(), y1 = next(), z1 = next();
                 Beardifier::Rigid r;
-                r.box = structure::BoundingBox(x0, y0, z0, x1, y1, z1);
+                r.box = BeardBox{x0, y0, z0, x1, y1, z1};
                 r.terrainAdjustment = static_cast<TerrainAdjustment>(next());
                 r.groundLevelDelta = next();
                 pieces.push_back(r);
