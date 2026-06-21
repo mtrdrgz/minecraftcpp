@@ -31,6 +31,23 @@ struct StructureWorldAccess {
     int minY = -64;
 };
 
+// Port of net.minecraft.world.level.levelgen.structure.StructurePiece.BlockSelector
+// (StructurePiece.java:571-579). Subclasses pick a block state per-cell based
+// on the random + position + isEdge flag, storing it in m_next for the caller
+// to read via getNext(). Used by generateBox(random, selector) — the random-
+// driven box variant used by JungleTemple (MossStoneSelector), Mineshaft,
+// Stronghold (SmoothStoneSelector), etc.
+class BlockSelector {
+public:
+    virtual ~BlockSelector() = default;
+    // Pick the next block state. Called BEFORE placeBlock so the selector can
+    // draw from `random`. `isEdge` is true for cells on the box's boundary.
+    virtual void next(mc::levelgen::RandomSource& random, int worldX, int worldY, int worldZ, bool isEdge) = 0;
+    uint32_t getNext() const { return m_next; }
+protected:
+    uint32_t m_next = 0;  // AIR by default (state id 0)
+};
+
 // Use the types from whatever namespace they're defined in.
 // In StructureGen.cpp context, they come from StructureTransforms.h in namespace mc::levelgen::structure.
 // We use a helper to access them.
@@ -109,6 +126,44 @@ public:
                     else
                         placeBlock(world, edgeBlock, x, y, z);
                 }
+    }
+
+    // Java StructurePiece.generateBox(level, chunkBB, x0..z1, skipAir, random, selector)
+    // variant: instead of fixed edge/fill blocks, a BlockSelector picks the block
+    // per-cell (random-driven). Used by JungleTemple (MossStoneSelector),
+    // Mineshaft, Stronghold, NetherFortress. The selector's `next` is called
+    // BEFORE placeBlock so it can draw from the random; isEdge flags whether the
+    // cell is on the box's boundary (selectors use this to vary edge vs interior).
+    void generateBox(StructureWorldAccess& world, int x0, int y0, int z0,
+                     int x1, int y1, int z1,
+                     bool skipAir, mc::levelgen::RandomSource& random,
+                     BlockSelector& selector) const {
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                for (int z = z0; z <= z1; z++) {
+                    if (skipAir) {
+                        auto pos = getWorldPos(x, y, z);
+                        if (world.getBlock) {
+                            uint32_t existing = world.getBlock(pos.x, pos.y, pos.z);
+                            const mc::BlockState* bs = mc::getBlockState(existing);
+                            if (bs && bs->block && bs->block->isAir()) continue;
+                        }
+                    }
+                    bool isEdge = (y == y0 || y == y1 || x == x0 || x == x1 || z == z0 || z == z1);
+                    selector.next(random, x, y, z, isEdge);
+                    placeBlock(world, selector.getNext(), x, y, z);
+                }
+    }
+
+    // Java StructurePiece.generateAirBox: places AIR in a box (used to carve
+    // interior spaces). skipAir is always false for air boxes in Java.
+    void generateAirBox(StructureWorldAccess& world, int x0, int y0, int z0,
+                        int x1, int y1, int z1) const {
+        const uint32_t air = mc::getDefaultBlockStateId("air", 0);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                for (int z = z0; z <= z1; z++)
+                    placeBlock(world, air, x, y, z);
     }
 
     void fillColumnDown(StructureWorldAccess& world, uint32_t blockState, int x, int startY, int z) const {

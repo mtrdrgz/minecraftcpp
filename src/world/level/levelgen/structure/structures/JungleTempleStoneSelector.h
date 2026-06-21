@@ -46,6 +46,8 @@
 // RandomSource.create(seed) used in production.
 
 #include "world/level/levelgen/RandomSource.h"
+#include "world/level/levelgen/structure/StructurePieceBase.h"
+#include "world/level/block/Blocks.h"
 
 namespace mc::levelgen::structure::structures {
 
@@ -57,10 +59,11 @@ enum class JungleTempleBlock : int {
     MossyCobblestone = 1,  // Blocks.MOSSY_COBBLESTONE
 };
 
+// Parity-test selector: returns opaque JungleTempleBlock codes for
+// certification against the Java ground truth. The RNG logic (one nextFloat()
+// < 0.4F per cell) is IDENTICAL to Java's MossStoneSelector.
 class JungleTempleStoneSelector {
 public:
-    // 1:1 with MossStoneSelector.next(...). worldX/worldY/worldZ/isEdge are
-    // accepted for signature fidelity but, exactly as in the Java, are unused.
     void next(mc::levelgen::RandomSource& random, int /*worldX*/, int /*worldY*/,
               int /*worldZ*/, bool /*isEdge*/) {
         if (random.nextFloat() < 0.4F) {
@@ -69,16 +72,26 @@ public:
             m_next = JungleTempleBlock::MossyCobblestone;
         }
     }
-
-    // 1:1 with StructurePiece.BlockSelector.getNext().
     JungleTempleBlock getNext() const { return m_next; }
-
 private:
-    // StructurePiece.BlockSelector.next defaults to Blocks.AIR.defaultBlockState()
-    // before any next() call; we never observe that default here because the
-    // gate always calls next() first, mirroring generateBox's usage. The
-    // production code path always assigns one of the two cobblestone variants.
     JungleTempleBlock m_next = JungleTempleBlock::Cobblestone;
+};
+
+// Engine-integrated selector: inherits from StructurePieceBase::BlockSelector
+// and resolves to REAL block state IDs via getDefaultBlockStateId. Used by
+// JungleTemplePiece.postProcess via generateBox(skipAir, random, selector).
+// The RNG logic is IDENTICAL to the parity version (one nextFloat() < 0.4F
+// per cell), certified by jungle_temple_stone_selector_parity.
+class JungleTempleStoneSelectorEngine : public mc::levelgen::structure::BlockSelector {
+public:
+    void next(mc::levelgen::RandomSource& random, int /*worldX*/, int /*worldY*/,
+              int /*worldZ*/, bool /*isEdge*/) override {
+        if (random.nextFloat() < 0.4F) {
+            m_next = mc::getDefaultBlockStateId("cobblestone", 0);
+        } else {
+            m_next = mc::getDefaultBlockStateId("mossy_cobblestone", 0);
+        }
+    }
 };
 
 }  // namespace mc::levelgen::structure::structures
