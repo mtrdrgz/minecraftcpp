@@ -18,6 +18,8 @@ set(MC_SOURCES
     nbt/NbtIo.cpp
     # World — Block / Chunk
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/chunk/LevelChunk.cpp
     # World — Levelgen
@@ -563,6 +565,8 @@ add_executable(base_terrain_column_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(base_terrain_column_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(base_terrain_column_parity PRIVATE glm nlohmann_json)
@@ -603,6 +607,8 @@ add_executable(full_chunk_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(full_chunk_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(full_chunk_parity PRIVATE glm nlohmann_json)
@@ -640,6 +646,8 @@ add_executable(biome_surface_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(biome_surface_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(biome_surface_parity PRIVATE glm nlohmann_json)
@@ -678,6 +686,8 @@ add_executable(biome_scout
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(biome_scout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(biome_scout PRIVATE glm nlohmann_json)
@@ -702,6 +712,8 @@ add_executable(biome_decoration_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
     world/level/block/BlockTags.cpp
 )
 target_include_directories(biome_decoration_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -744,6 +756,8 @@ add_executable(full_chunk_decorate_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
     world/level/block/BlockTags.cpp
     nbt/Tag.cpp
     nbt/NbtIo.cpp
@@ -6881,6 +6895,8 @@ add_executable(full_chunk_noise_only_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(full_chunk_noise_only_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(full_chunk_noise_only_parity PRIVATE glm nlohmann_json)
@@ -6918,6 +6934,8 @@ add_executable(full_chunk_surface_only_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(full_chunk_surface_only_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(full_chunk_surface_only_parity PRIVATE glm nlohmann_json)
@@ -6954,6 +6972,8 @@ add_executable(carver_diff_parity
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
 )
 target_include_directories(carver_diff_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(carver_diff_parity PRIVATE glm nlohmann_json)
@@ -6997,6 +7017,8 @@ add_executable(terrain_engine_perf
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
     render/level/ChunkMesh.cpp
 )
 target_include_directories(terrain_engine_perf PRIVATE
