@@ -352,7 +352,26 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 — structures subsystem audit + RULE #0 honesty pass.
+**Last updated**: 2026-06-21 — structure biome gate + Linux verification harness + village root cause.
+
+**Structure biome gate + verification harness (2026-06-21 b):** added
+`structure_gen_probe` (CMake target + `tools/structure_gen_probe/main.cpp`), a
+headless driver of the real `generateStructures` over a flat world against real
+worldgen data — the cross-platform way to verify structure work without Windows
+(builds+runs on the parity-only GCC build). Used it to find + fix a real 1:1 bug:
+the hand-built non-jigsaw structures skipped `Structure.isValidBiome`, so they
+placed in any biome (the probe placed **400 nether fossils in 1600 overworld plains
+chunks**, plus desert pyramids/igloos in plains). Fixed by parsing each non-jigsaw
+structure's `biomes` and validating at the chunk-centre surface (`onTopOfChunkCenter`
+→ `isValidBiome`); the probe now shows each structure only in its biomes and zero
+overworld nether fossils. Also root-caused **villages**: they assemble fully (12 in
+120×120, ~100 pieces, ~12k blocks) but are deliberately gated off by
+`isKnownBrokenRuntimeStructureSet` pending the processor/legacy-element/`feature_pool_element`/
+`beard_thin` polish layers. Owner decision: build all layers to 1:1 (incl. the real
+Beardifier, structure-starts-before-NOISE) before flipping the village gate. Full
+ledger + plan: `docs/STRUCTURES_STATUS.md`.
+
+**Last updated prior**: 2026-06-21 — structures subsystem audit + RULE #0 honesty pass.
 
 **Structures audit + honesty (2026-06-21):** the user reported structures as the
 worst part of worldgen (no villages, things exposing). Audited the whole subsystem

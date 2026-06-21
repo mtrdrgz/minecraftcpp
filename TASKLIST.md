@@ -69,6 +69,16 @@
 - [x] RULE #0: dejar de marcar `ocean_ruin`/`ruined_portal`/`buried_treasure` como
       "supported" cuando en realidad hacían no-op (assembly jigsaw con start_pool
       vacío). Ahora son no-ops honestos y se loguean como UNPORTED al cargar.
+- [x] Gate de bioma para estructuras hand-coded (`Structure.isValidBiome`): el
+      dispatch no-jigsaw colocaba en cualquier bioma (¡400 nether_fossil en 1600
+      chunks de plains overworld, pirámides en plains, iglús en plains!). Portado el
+      check de bioma en el centro del chunk; verificado con `structure_gen_probe`
+      que cada estructura aparece solo en su bioma (swamp→hut, snowy→iglú,
+      desert→pirámide, jungle→templo, beach→naufragio) y 0 nether_fossil en overworld.
+- [x] Arnés de verificación headless `structure_gen_probe` (target CMake +
+      `tools/structure_gen_probe/`): ejecuta el generador real contra los datos
+      reales y reporta qué se coloca. Permite verificar estructuras en Linux/CI sin
+      Windows. Aldeas confirmadas: ensamblan 12/120² con ~100 piezas y ~12k bloques.
 - [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente. (Estado real: NO portados — solo `RuinedPortalYSelector`. Falta `RuinedPortalPiece` + procesador de envejecimiento/lava + placement por tipo. Ver roadmap #6.)
 - [ ] La estructura de los portales arruinados no coincide con la original: lava/magma, cofre. (Bloqueado por lo anterior + soporte de block-entity/loot para el cofre.)
 - [ ] Adaptación de terreno (Beardifier): `terrain_adaptation` (beard_thin/beard_box/bury/encapsulate) no está portado; causa que las estructuras jigsaw se expongan/floten. Ver roadmap #3–#4.

@@ -811,8 +811,12 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     }
 
     if (type != "minecraft:jigsaw") {
-        // Non-jigsaw structures don't need jigsaw config fields
+        // Non-jigsaw structures don't need jigsaw config fields, but they DO carry
+        // a `biomes` set that gates placement (Structure.isValidBiome). Parse it so
+        // the dispatch can reject e.g. a desert pyramid in plains or a nether fossil
+        // in the overworld.
         cfg.supported = true;
+        if (j.contains("biomes")) resolveBiomeSpec(j.at("biomes"), cfg.biomes);
         // Shipwreck: parse is_beached flag
         if (type == "minecraft:shipwreck") {
             cfg.isBeached = j.value("is_beached", false);
@@ -1202,6 +1206,19 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (it == structures.end() || !it->second.supported) return false;
 
     const JigsawConfig& cfg = it->second;
+
+    // Biome gate for the non-jigsaw families (Structure.isValidBiome). Vanilla's
+    // onTopOfChunkCenter validates the structure's biome at the chunk-centre
+    // surface column before placing; the jigsaw path validates inside
+    // assembleJigsaw. Without this, hand-built structures place in any biome —
+    // desert pyramids in plains, igloos in deserts, nether fossils all over the
+    // overworld. Sample at (midX, surfaceY, midZ); the biomeGetter quart-resolves.
+    if (cfg.structureType != "minecraft:jigsaw") {
+        int midX = active.x * 16 + 8;
+        int midZ = active.z * 16 + 8;
+        int surfaceY = world.heightAt ? world.heightAt(midX, midZ) : 0;
+        if (!validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) return false;
+    }
 
     // Non-jigsaw structure dispatch
     if (cfg.structureType == "minecraft:swamp_hut") {

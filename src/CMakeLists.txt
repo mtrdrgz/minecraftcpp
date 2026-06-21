@@ -291,6 +291,34 @@ set_target_properties(structure_placement_parity PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# structure_gen_probe — headless end-to-end driver of the real structure generator
+# over a flat world against real worldgen data. The cross-platform verification
+# tool for structure work (villages etc.); see tools/structure_gen_probe/main.cpp.
+add_executable(structure_gen_probe
+    ${CMAKE_SOURCE_DIR}/tools/structure_gen_probe/main.cpp
+    world/level/levelgen/structure/StructureGen.cpp
+    world/level/levelgen/structure/placement/StructurePlacement.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/block/Blocks.cpp
+    world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/phys/AABB.cpp
+    nbt/NbtIo.cpp
+    nbt/Tag.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
+)
+target_include_directories(structure_gen_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_gen_probe PRIVATE glm nlohmann_json miniz)
+if(WIN32)
+    target_link_libraries(structure_gen_probe PRIVATE bcrypt)
+endif()
+set_target_properties(structure_gen_probe PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Structure TRANSFORM parity vs the real Rotation/Mirror/BoundingBox +
 # StructureTemplate static transforms (the pure math under all template/jigsaw
 # placement). Header-only; ground truth: tools/StructureTransformsParity.java.
