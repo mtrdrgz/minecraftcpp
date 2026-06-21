@@ -4,6 +4,7 @@
 #include "StructurePieceBase.h"
 #include "structures/SwampHutPiece.h"
 #include "structures/DesertPyramidPiece.h"
+#include "structures/JungleTemplePiece.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -555,6 +556,7 @@ struct Runtime {
                              const std::function<std::string(int, int, int)>& biomeGetter);
     bool tryPlaceSwampHut(ChunkPos active, const StructureWorld& world);
     bool tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 };
@@ -1182,6 +1184,9 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:desert_pyramid") {
         return tryPlaceDesertPyramid(active, world);
     }
+    if (cfg.structureType == "minecraft:jungle_temple") {
+        return tryPlaceJungleTemple(active, world);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly (existing path)
@@ -1254,6 +1259,31 @@ bool Runtime::tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world
 
     pyramid.postProcess(access, *random);
     MC_LOG_INFO("Structure desert_pyramid placed at chunk ({},{})", active.x, active.z);
+    return true;
+}
+
+bool Runtime::tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world) {
+    // JungleTempleStructure.findGenerationPoint:
+    //   onTopOfChunkCenter(context, WORLD_SURFACE_WG, builder -> generatePieces(builder, context))
+    //   generatePieces: builder.addPiece(new JungleTemplePiece(context.random(), chunkPos.getMinBlockX(), chunkPos.getMinBlockZ()))
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    int west = active.x * 16;
+    int north = active.z * 16;
+
+    piece::JungleTemplePiece temple(*random, west, north);
+
+    StructureWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.minY = -64;
+    access.isInsideBoundingBox = nullptr;
+
+    temple.postProcess(access, *random);
+    MC_LOG_INFO("Structure jungle_temple placed at chunk ({},{})", active.x, active.z);
     return true;
 }
 
