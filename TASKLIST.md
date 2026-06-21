@@ -37,6 +37,7 @@
 ## Menú / UI
 
 - [ ] El menú principal tiene un montón de cosas que faltan, problemas de funcionamiento y cosas que no son como en el juego original:
+  - [x] Hacer click en Singleplayer crasheaba tras los cambios de streaming. Arreglado evitando que callbacks de botones destruyan la pantalla/vector de widgets mientras `mouseClicked` sigue ejecutándose: las pantallas copian la acción seleccionada y la invocan después de dejar de tocar sus botones.
   - [x] Los sliders solo reaccionan al click, no a la acción de deslizar el mouse con el click presionado. (Arreglado portando la semántica de `AbstractSliderButton`: click inicia drag, `mouseDragged` actualiza con `(mouseX - (x + 4)) / (width - 8)`, `mouseReleased` suelta el handle; eventos propagados desde Win32 -> Screen -> widget.)
   - [ ] El indicador de dónde está el slider (que es como un rectángulo) no tiene texturas o parece un placeholder.
   - [ ] Faltan muchas opciones dentro de todos los submenús.

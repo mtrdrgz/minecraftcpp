@@ -355,6 +355,7 @@ The entity system mirrors Java's inheritance hierarchy: `Entity` → `LivingEnti
 | Title screen | ✅ Functional | — |
 | Pause menu | ✅ Functional | — |
 | Options screen | ✅ Functional | — |
+| Screen-transition button callbacks | ✅ Functional | Singleplayer click smoke |
 | GUI scale (1x–4x) | ✅ Functional | — |
 | HUD — health bar | ✅ Functional | — |
 | HUD — hotbar | ✅ Functional | — |

@@ -352,7 +352,21 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 18:22 UTC - async meshing iterator/cache assert hotfix.
+**Last updated**: 2026-06-21 18:28 UTC - menu button screen-transition crash hotfix.
+
+**Menu button screen-transition HOTFIX (2026-06-21 18:28):** user reported that
+clicking Singleplayer from the title menu crashed after the streaming changes. Root
+cause was UI lifetime, not worldgen: button callbacks such as Singleplayer,
+Options, Back to Game, and Disconnect can call `Minecraft::setScreen` /
+`startLocalGameFast`, destroying the current screen and its button vector while
+`Button::mouseClicked` or the screen's button loop is still executing. Fixed by
+adding `clickAction()` to `Button`/`WidgetButton`; title, pause, and options
+screens now copy the selected callback first, stop touching widget storage, then
+invoke the callback. Rebuilt `build/mcpp.exe` and ran a scripted title-menu
+Singleplayer click smoke under `tools/run_with_timeout.ps1` without an immediate
+crash or leftover `mcpp.exe` process.
+
+**Last updated prior**: 2026-06-21 18:22 UTC - async meshing iterator/cache assert hotfix.
 
 **Async meshing debug assert HOTFIX (2026-06-21 18:22):** user reported an MSVC
 debug assertion from `std::vector` ("can't dereference value-initialized vector

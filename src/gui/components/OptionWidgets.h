@@ -15,6 +15,9 @@ public:
 
     virtual void render(render::GuiGraphics& g, render::Font& font, int mouseX, int mouseY) = 0;
     virtual bool mouseClicked(double x, double y, int button) = 0;
+    virtual std::function<void()> clickAction(double x, double y, int button) const {
+        (void)x; (void)y; (void)button; return {};
+    }
     virtual bool mouseReleased(double x, double y, int button) { (void)x; (void)y; (void)button; return false; }
     virtual bool mouseDragged(double x, double y, int button, double dx, double dy) {
         (void)x; (void)y; (void)button; (void)dx; (void)dy; return false;
@@ -43,6 +46,7 @@ public:
         : AbstractWidget(x, y, w, h), m_label(std::move(label)), m_onClick(std::move(onClick)) {}
     void render(render::GuiGraphics& g, render::Font& font, int mx, int my) override;
     bool mouseClicked(double x, double y, int button) override;
+    std::function<void()> clickAction(double x, double y, int button) const override;
     void setActive(bool a) { m_active = a; }
 private:
     std::string m_label;

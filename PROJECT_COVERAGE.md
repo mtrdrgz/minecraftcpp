@@ -118,6 +118,25 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 18:28 UTC — Menu button screen-transition crash hotfix
+
+**Agent**: Codex
+
+- User reported that clicking Singleplayer now crashed. The quickplay smoke did
+  not cover this route because the title menu button executes from inside
+  `TitleScreen::mouseClicked`.
+- Root cause was UI lifetime: callbacks for Singleplayer, Pause menu buttons,
+  and Options buttons can replace/destroy the active screen while the clicked
+  button method or the screen's widget loop is still on the stack.
+- Added `clickAction()` to `Button` and `WidgetButton`, then changed Title,
+  Pause, and Options screens to copy the selected callback first and invoke it
+  after they stop touching their widget vectors. This preserves visible behavior
+  while avoiding use-after-free during screen transitions.
+- Verified build: `tools/run_with_timeout.ps1` + VS dev environment rebuilt
+  `build/mcpp.exe`. Runtime smoke: scripted launch of the title menu, click at
+  the Singleplayer button position, wait, and forced shutdown completed with no
+  immediate crash and no leftover `mcpp.exe` process.
+
 ### 2026-06-21 18:22 UTC — Async meshing iterator/cache assert hotfix
 
 **Agent**: Codex

@@ -69,7 +69,13 @@ void OptionsSubScreen::render(render::GuiGraphics& g, int mx, int my, float pt) 
 }
 
 void OptionsSubScreen::mouseClicked(double x, double y, int button) {
-    for (auto& widget : m_widgets) if (widget->mouseClicked(x, y, button)) break;
+    std::function<void()> action;
+    for (auto& widget : m_widgets) {
+        action = widget->clickAction(x, y, button);
+        if (action) break;
+        if (widget->mouseClicked(x, y, button)) return;
+    }
+    if (action) action();
 }
 
 void OptionsSubScreen::mouseReleased(double x, double y, int button) {
@@ -141,7 +147,13 @@ void OptionsScreen::render(render::GuiGraphics& g, int mx, int my, float pt) {
 }
 
 void OptionsScreen::mouseClicked(double x, double y, int button) {
-    for (auto& widget : m_widgets) if (widget->mouseClicked(x, y, button)) break;
+    std::function<void()> action;
+    for (auto& widget : m_widgets) {
+        action = widget->clickAction(x, y, button);
+        if (action) break;
+        if (widget->mouseClicked(x, y, button)) return;
+    }
+    if (action) action();
 }
 
 void OptionsScreen::mouseReleased(double x, double y, int button) {

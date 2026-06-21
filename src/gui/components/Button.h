@@ -14,6 +14,7 @@ public:
 
     void render(render::GuiGraphics& g, render::Font& font, int mouseX, int mouseY);
     bool mouseClicked(double x, double y, int button);
+    std::function<void()> clickAction(double x, double y, int button) const;
 
     void setTextures(render::ITexture* normal, render::ITexture* highlight) {
         m_texNormal = normal;

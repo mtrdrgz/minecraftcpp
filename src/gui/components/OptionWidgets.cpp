@@ -23,8 +23,14 @@ void WidgetButton::render(render::GuiGraphics& g, render::Font& font, int mx, in
     drawLabel(g, font, m_label);
 }
 bool WidgetButton::mouseClicked(double x, double y, int button) {
-    if (button == 0 && m_active && hovered((int)x, (int)y)) { if (m_onClick) m_onClick(); return true; }
+    std::function<void()> action = clickAction(x, y, button);
+    if (action) { action(); return true; }
     return false;
+}
+
+std::function<void()> WidgetButton::clickAction(double x, double y, int button) const {
+    if (button == 0 && m_active && hovered((int)x, (int)y)) return m_onClick;
+    return {};
 }
 
 // ── Slider ───────────────────────────────────────────────────────────────────

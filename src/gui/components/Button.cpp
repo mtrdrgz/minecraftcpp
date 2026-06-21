@@ -25,11 +25,19 @@ void Button::render(render::GuiGraphics& g, render::Font& font, int mouseX, int 
 }
 
 bool Button::mouseClicked(double x, double y, int button) {
-    if (button == 0 && x >= m_x && x < m_x + m_w && y >= m_y && y < m_y + m_h) {
-        if (m_onClick) m_onClick();
+    std::function<void()> action = clickAction(x, y, button);
+    if (action) {
+        action();
         return true;
     }
     return false;
+}
+
+std::function<void()> Button::clickAction(double x, double y, int button) const {
+    if (button == 0 && x >= m_x && x < m_x + m_w && y >= m_y && y < m_y + m_h) {
+        return m_onClick;
+    }
+    return {};
 }
 
 } // namespace mc::gui::components

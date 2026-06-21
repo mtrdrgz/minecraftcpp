@@ -125,9 +125,12 @@ void TitleScreen::render(render::GuiGraphics& g, int mx, int my, float pt) {
 }
 
 void TitleScreen::mouseClicked(double x, double y, int button) {
+    std::function<void()> action;
     for (auto& b : m_buttons) {
-        if (b->mouseClicked(x, y, button)) break;
+        action = b->clickAction(x, y, button);
+        if (action) break;
     }
+    if (action) action();
 }
 
 } // namespace mc::gui::screens
