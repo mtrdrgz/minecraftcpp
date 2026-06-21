@@ -946,9 +946,14 @@ void Minecraft::updateLocalChunks() {
 
     // 2b. Deferred decoration: decorate loaded, undecorated chunks whose 8
     // neighbours are present (so trees/ores/structures get full cross-chunk context,
-    // no border clipping). BUDGETED to a few per tick: decoration is heavy and runs
+    // no border clipping). BUDGETED per tick: decoration is heavy and runs
     // on the main thread, so doing every eligible chunk at once causes the movement
     // stutter. Nearest-first so the area around the player fills in before the rim.
+    //
+    // The budget is DYNAMIC: when many chunks are pending decoration (player moved
+    // fast, just spawned, or decoration fell behind), allow more per tick to catch
+    // up. When the queue is short, keep it low so individual frames stay responsive.
+    // Target: keep total decorate work ~10 ms/frame max.
     {
         std::vector<ChunkPos> ready;
         for (const auto& [key, chunk] : m_chunks)
@@ -957,13 +962,17 @@ void Minecraft::updateLocalChunks() {
             return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
                  < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
         });
-        constexpr int MAX_DECORATE_PER_TICK = 8;  // Increased from 2: allows 4× faster decoration
+        // Dynamic budget: 4 baseline + 1 per 4 pending (capped at 24).
+        // At 60 FPS this allows up to 24*60 = 1440 decorations/sec when backlogged.
+        int maxDecorate = 4 + static_cast<int>(ready.size()) / 4;
+        if (maxDecorate > 24) maxDecorate = 24;
+        if (maxDecorate < 2)  maxDecorate = 2;
         int done = 0;
         for (ChunkPos cp : ready) {
             LevelChunk* c = getChunk(cp);
             if (!c || c->decorated) continue;
             tryDecorate(cp);
-            if (c->decorated && ++done >= MAX_DECORATE_PER_TICK) break;
+            if (c->decorated && ++done >= maxDecorate) break;
         }
     }
 
@@ -1005,7 +1014,14 @@ void Minecraft::updateLocalChunks() {
     });
     
     int queued = 0;
-    constexpr int MAX_QUEUE_PER_TICK = 8;  // Increased from 4: allows more parallel generation
+    // Dynamic queue budget: queue more when few chunks are loaded (startup / fast
+    // travel), fewer once the area is mostly filled. Helps the engine catch up
+    // quickly after a teleport or fast sprint without over-queuing at steady state.
+    constexpr int MAX_QUEUE_PER_TICK = 12;
+    int queueBudget = MAX_QUEUE_PER_TICK;
+    const size_t loadedCount = m_chunks.size();
+    const size_t targetCount = static_cast<size_t>((2 * RADIUS + 1) * (2 * RADIUS + 1));
+    if (loadedCount < targetCount / 2) queueBudget = MAX_QUEUE_PER_TICK * 2;  // 24 when <50% loaded
     for (const auto& cand : candidates) {
         if (!m_threadPool) break;
         
@@ -1041,7 +1057,7 @@ void Minecraft::updateLocalChunks() {
             })
         });
         
-        if (++queued >= MAX_QUEUE_PER_TICK) {
+        if (++queued >= queueBudget) {
             break;
         }
     }
