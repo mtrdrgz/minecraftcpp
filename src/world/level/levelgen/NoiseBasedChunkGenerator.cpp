@@ -450,7 +450,9 @@ int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
     return m_settings.noiseSettings.minY;
 }
 
-void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks) const {
+void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks,
+                                             const Beardifier* beardifier) const {
+    const bool hasBeard = beardifier != nullptr && !beardifier->isEmpty();
     const uint32_t air = stateIdFor("air", 0);
     const uint32_t solid = m_settings.defaultBlock ? m_settings.defaultBlock : stateIdFor("stone", air);
     const uint32_t waterId = stateIdFor("water", UINT32_MAX);
@@ -509,7 +511,12 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::
                         for (int zInCell = 0; zInCell < cellWidth; ++zInCell) {
                             const int blockZ = z0 + zInCell;
                             DensityFunctionContext blockContext{ blockX, blockY, blockZ, &interpolationResolver };
-                            const double density = m_router.finalDensity->compute(blockContext);
+                            // NoiseChunk: add(finalDensity, BeardifierMarker). The
+                            // beardifier sits OUTSIDE the interpolated() noise, so it
+                            // is computed per block and added. Guarded so a null/empty
+                            // beardifier leaves the density bit-identical.
+                            double density = m_router.finalDensity->compute(blockContext);
+                            if (hasBeard) density += beardifier->compute(blockX, blockY, blockZ);
                             std::optional<uint32_t> aquiferState = aquifer->computeSubstance(
                                 blockContext,
                                 density);

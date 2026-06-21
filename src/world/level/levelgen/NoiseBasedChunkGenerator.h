@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../chunk/LevelChunk.h"
+#include "Beardifier.h"
 #include "BiomeManager.h"
 #include "BiomeSource.h"
 #include "NoiseGeneratorSettings.h"
@@ -35,7 +36,12 @@ public:
     // `fluidUpdateMarks`, when non-null, collects the postprocess marks vanilla
     // records during the NOISE step (NoiseBasedChunkGenerator.java:442-446: every
     // placed state with a non-empty fluid where aquifer.shouldScheduleFluidUpdate()).
-    void fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr) const;
+    // `beardifier`, when non-null and non-empty, is added per block to the final
+    // density (NoiseChunk: add(finalDensity, BeardifierMarker)), adapting terrain to
+    // nearby structure pieces (villages: beard_thin). nullptr leaves the density
+    // bit-identical, so the certified no-structure terrain parity is preserved.
+    void fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr,
+                       const Beardifier* beardifier = nullptr) const;
     void buildSurface(LevelChunk& chunk) const;
     // Surface build with an explicit biome getter, overriding the BiomeManager
     // zoomer. Used to certify the per-biome surface rules in isolation (force one

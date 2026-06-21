@@ -92,12 +92,13 @@ FrequencyReductionMethod parseFrm(const std::string& s) {
     return FrequencyReductionMethod::DEFAULT; // "default"
 }
 
-bool isKnownBrokenRuntimeStructureSet(const std::string& id) {
-    // Villages are jigsaw structures, but the in-game result is currently broken
-    // because the remaining feature_pool_element / legacy pool / template
-    // processor layer is not complete. Keep their placement loaded for other
-    // structures' exclusion zones, but do not generate the village set yet.
-    return id == "minecraft:villages";
+bool isKnownBrokenRuntimeStructureSet(const std::string& /*id*/) {
+    // Villages were gated off here while the jigsaw polish layer was incomplete.
+    // That layer is now ported: legacy_single_pool_element air-ignore + the
+    // RuleProcessor family (street/farm/mossify) + the TERRAIN_MATCHING
+    // GravityProcessor (streets follow terrain) + the Beardifier (beard_thin terrain
+    // adaptation, certified byte-exact). Villages are enabled.
+    return false;
 }
 
 } // namespace

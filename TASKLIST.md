@@ -56,9 +56,51 @@
 
 ## Estructuras
 
-- [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente (es posible que este comportamiento sea original, no estoy totalmente seguro de marcar esto como un bug).
-- [ ] La estructura de los portales arruinados no coincide con la original: la original tiene bloques de lava, magma... este no lo tiene. La textura de un bloque al lado del portal arruinado (imagino que del cofre que siempre spawnea al lado) está completamente rota y deja ver una mayor parte del atlas de texturas.
-- [ ] Hay que acabar completamente el plan de implementación de estructuras.
+> AUDITORÍA 2026-06-21: estado real del subsistema certificado en
+> `docs/STRUCTURES_STATUS.md` (ledger por estructura + 3 huecos arquitectónicos
+> de raíz: orden de generación, Beardifier/terrain_adaptation, y procesadores).
+> Resumen: solo se colocan de verdad swamp_hut, desert_pyramid, jungle_pyramid,
+> igloo, shipwreck y nether_fossil (piezas hand-port); la familia jigsaw (aldeas,
+> outpost, ancient_city, bastion, trail_ruins, trial_chambers) se ensambla pero
+> SIN procesadores ni adaptación de terreno (por eso las aldeas no se ven / se
+> exponen); ocean_ruin, ruined_portal, buried_treasure, ocean_monument, mansion,
+> mineshaft, stronghold, fortress y end_city NO se colocan (solo helpers).
+
+- [x] RULE #0: dejar de marcar `ocean_ruin`/`ruined_portal`/`buried_treasure` como
+      "supported" cuando en realidad hacían no-op (assembly jigsaw con start_pool
+      vacío). Ahora son no-ops honestos y se loguean como UNPORTED al cargar.
+- [x] Gate de bioma para estructuras hand-coded (`Structure.isValidBiome`): el
+      dispatch no-jigsaw colocaba en cualquier bioma (¡400 nether_fossil en 1600
+      chunks de plains overworld, pirámides en plains, iglús en plains!). Portado el
+      check de bioma en el centro del chunk; verificado con `structure_gen_probe`
+      que cada estructura aparece solo en su bioma (swamp→hut, snowy→iglú,
+      desert→pirámide, jungle→templo, beach→naufragio) y 0 nether_fossil en overworld.
+- [x] Arnés de verificación headless `structure_gen_probe` (target CMake +
+      `tools/structure_gen_probe/`): ejecuta el generador real contra los datos
+      reales y reporta qué se coloca. Permite verificar estructuras en Linux/CI sin
+      Windows. Aldeas confirmadas: ensamblan 12/120² con ~100 piezas y ~12k bloques.
+- [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente. (Estado real: NO portados — solo `RuinedPortalYSelector`. Falta `RuinedPortalPiece` + procesador de envejecimiento/lava + placement por tipo. Ver roadmap #6.)
+- [ ] La estructura de los portales arruinados no coincide con la original: lava/magma, cofre. (Bloqueado por lo anterior + soporte de block-entity/loot para el cofre.)
+- [ ] Adaptación de terreno (Beardifier): `terrain_adaptation` (beard_thin/beard_box/bury/encapsulate) no está portado; causa que las estructuras jigsaw se expongan/floten. Ver roadmap #3–#4.
+- [~] Procesadores de estructura (incremento #1 de aldeas HECHO): portado el pipeline
+      `RuleProcessor` + semántica `legacy_single_pool_element` en `placeTemplate`.
+      Legacy ya no coloca AIR (las aldeas dejan de carvar terreno: ~12k→~3.8k bloques/aldea);
+      los RuleProcessor aplican (verificado: mossify→mossy_cobblestone, farm→carrots).
+      Pendiente: GravityProcessor/ProtectedBlockProcessor + procesadores de proyección
+      TERRAIN_MATCHING (caminos siguiendo el terreno) → fase de adaptación de terreno.
+- [x] ALDEAS ACTIVADAS Y VERIFICADAS (componentes): portadas las 3 capas que faltaban
+      — pipeline de procesadores (rules + legacy air-ignore + Gravity de calles), y el
+      **Beardifier** (adaptación de terreno `beard_thin`) certificado byte-exacto contra
+      la clase real (`beardifier_parity` 8000/0). Junctions registradas en el ensamblaje;
+      `forStructuresInChunk` portado; sumado a `fillFromNoise` (terreno sin estructuras
+      byte-idéntico: `full_chunk_parity` 98304/0). Cableado en el motor (beardifier en
+      hilo principal → worker). Verificado en Linux: las aldeas ensamblan con el pipeline
+      completo, el beardifier por chunk es no-vacío/determinista y produce densidad no-cero
+      cerca de aldeas. Pendiente (no verificable aquí): render visual in-game (Windows) +
+      diff contra GT del servidor con estructuras. Capa decorativa `feature_pool_element`
+      (árboles/heno en la aldea) aparte.
+- [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
+- [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 
 ## Texturas / coloreado
 

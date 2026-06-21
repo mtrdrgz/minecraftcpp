@@ -3,6 +3,7 @@
 #include "../render/IRenderDevice.h"
 #include "../network/Connection.h"
 #include "../world/level/chunk/LevelChunk.h"
+#include "../world/level/levelgen/Beardifier.h"
 #include "../world/entity/Entity.h"
 #include "player/LocalPlayer.h"
 #include "../render/gui/GuiGraphics.h"
@@ -108,6 +109,10 @@ private:
     void decorateChunk(LevelChunk& chunk);
     void tryDecorate(ChunkPos cp);
     void runStructures(ChunkPos active);
+    // Build the per-chunk Beardifier on the MAIN thread (the structure runtime is
+    // single-threaded) so it can be passed to fillFromNoise on any worker. Empty
+    // when no terrain-adapting structure is near `pos`.
+    mc::levelgen::Beardifier buildChunkBeardifier(ChunkPos pos);
 
     Window*                m_window  = nullptr;
     render::IRenderDevice* m_device  = nullptr;

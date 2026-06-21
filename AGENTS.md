@@ -352,7 +352,85 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 18:28 UTC - menu button screen-transition crash hotfix.
+**Last updated**: 2026-06-21 — VILLAGES ENABLED (processor pipeline + Beardifier + engine integration).
+
+**Villages complete + enabled (2026-06-21 d):** removed the
+`isKnownBrokenRuntimeStructureSet` village gate after porting the three missing
+layers. (1) Processor pipeline: RuleProcessor + legacy `STRUCTURE_AND_AIR` air-ignore
++ TERRAIN_MATCHING GravityProcessor (streets follow terrain). (2/3) **Beardifier**
+(terrain adaptation) ported byte-exact — `beardifier_parity` 8000/0 vs the real class
+(GT: tools/BeardifierParity.java via JDK25). Jigsaw junctions are recorded during
+assembly; `Beardifier.forStructuresInChunk` is `Runtime::buildBeardifier`; it is added
+to `fillFromNoise` as `add(finalDensity, beardifier)`. No-structure terrain stays
+byte-identical (`full_chunk_parity` 98304/0 with the hook). Engine wiring: the
+per-chunk Beardifier is built on the MAIN thread (structure runtime is single-threaded)
+and passed to the worker `fillFromNoise` by shared_ptr (startup + async paths).
+Verified on Linux: villages assemble w/ full pipeline; per-chunk Beardifier non-empty +
+deterministic + non-zero density near villages. NOT verifiable here: in-game visual
+render (Windows-only) + a structures-on server GT diff. `feature_pool_element` (village
+trees/hay/flowers) is a separate decorative layer still pending. New Linux GT: needs
+JDK25 + libs (provisioned under 26.1.2/). Gates added: beardifier_parity, structure_gen_probe.
+
+**Last updated prior**: 2026-06-21 — village increment #1: structure processor pipeline + legacy element.
+
+**Village processor pipeline (2026-06-21 c):** ported `StructureTemplate.processBlockInfos`
+rule-processor path into `StructureGen.cpp::placeTemplate` — the first of three
+village layers. `legacy_single_pool_element` now applies `BlockIgnoreProcessor.STRUCTURE_AND_AIR`
+(village buildings stop placing template AIR / carving terrain: plains village writes
+~12k→~3.8k blocks), and the `RuleProcessor` family applies per block via a fresh
+`LegacyRandomSource(Mth.getSeed(worldPos))` with the certified RuleTests (always_true/
+block_match/blockstate_match/random_block_match; tag_match deferred). Pool elements now
+carry their `processors` list id. Verified with `structure_gen_probe`: processor-only
+blocks appear (mossify→mossy_cobblestone 720, farm→carrots 105 over 60×60). Also
+improves enabled jigsaw structures (outpost_rot, copper_bulb_degradation). Villages
+stay gated pending increment #2 (`feature_pool_element`) and #3 (Beardifier +
+Gravity/Protected/TERRAIN_MATCHING projection processors). Plan: `docs/STRUCTURES_STATUS.md`.
+
+**Last updated prior**: 2026-06-21 — structure biome gate + Linux verification harness + village root cause.
+
+**Structure biome gate + verification harness (2026-06-21 b):** added
+`structure_gen_probe` (CMake target + `tools/structure_gen_probe/main.cpp`), a
+headless driver of the real `generateStructures` over a flat world against real
+worldgen data — the cross-platform way to verify structure work without Windows
+(builds+runs on the parity-only GCC build). Used it to find + fix a real 1:1 bug:
+the hand-built non-jigsaw structures skipped `Structure.isValidBiome`, so they
+placed in any biome (the probe placed **400 nether fossils in 1600 overworld plains
+chunks**, plus desert pyramids/igloos in plains). Fixed by parsing each non-jigsaw
+structure's `biomes` and validating at the chunk-centre surface (`onTopOfChunkCenter`
+→ `isValidBiome`); the probe now shows each structure only in its biomes and zero
+overworld nether fossils. Also root-caused **villages**: they assemble fully (12 in
+120×120, ~100 pieces, ~12k blocks) but are deliberately gated off by
+`isKnownBrokenRuntimeStructureSet` pending the processor/legacy-element/`feature_pool_element`/
+`beard_thin` polish layers. Owner decision: build all layers to 1:1 (incl. the real
+Beardifier, structure-starts-before-NOISE) before flipping the village gate. Full
+ledger + plan: `docs/STRUCTURES_STATUS.md`.
+
+**Last updated prior**: 2026-06-21 — structures subsystem audit + RULE #0 honesty pass.
+
+**Structures audit + honesty (2026-06-21):** the user reported structures as the
+worst part of worldgen (no villages, things exposing). Audited the whole subsystem
+against the Java source + provisioned data and wrote the certification ledger
+`docs/STRUCTURES_STATUS.md`. Findings: terrain is gated 1:1 but structures are not.
+Only swamp_hut, desert_pyramid, jungle_pyramid, igloo, shipwreck and nether_fossil
+are actually placed (hand-ported pieces, dispatched in `StructureGen.cpp::
+tryGenerateAndPlace`). The jigsaw family (villages, pillager_outpost, ancient_city,
+bastion, trail_ruins, trial_chambers) *assembles* but with **no structure
+processors and no terrain adaptation**, so it is not trustworthy (this is why
+villages look absent/exposed). Three root architectural gaps remain unported:
+(1) structures run as a post-decoration pass instead of at STRUCTURE_STARTS before
+NOISE; (2) the **Beardifier**/`terrain_adaptation` density slot (beard_thin/
+beard_box/bury/encapsulate) — `grep -ri beard src/` is empty; (3) the structure
+**processor** pipeline is not wired into `placeTemplate` (raw blocks only).
+RULE #0 fix landed: `ocean_ruin`/`ruined_portal`/`buried_treasure` were marked
+`supported` but actually no-op'd (jigsaw assembly with an empty `start_pool`); they
+are now honest no-ops and logged as UNPORTED at load. `StructureGen.cpp` compiles
+clean (`g++ -std=c++23 -DGLM_ENABLE_EXPERIMENTAL -Isrc -Ivendor -fsyntax-only`).
+Parity-only build confirmed to configure+build+run structure gates on Linux GCC.
+Prioritised roadmap (buried_treasure → structure-starts-before-noise → Beardifier →
+processors → ruined_portal → remaining hand-built → whole-structure server gate) is
+in `docs/STRUCTURES_STATUS.md`.
+
+**Last updated prior**: 2026-06-21 18:28 UTC - menu button screen-transition crash hotfix.
 
 **Menu button screen-transition HOTFIX (2026-06-21 18:28):** user reported that
 clicking Singleplayer from the title menu crashed after the streaming changes. Root

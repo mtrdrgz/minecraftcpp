@@ -16,6 +16,8 @@
 #include "world/level/block/Blocks.h"
 #include "world/level/block/JigsawAttach.h"
 #include "world/level/levelgen/RandomSource.h"
+#include "world/level/levelgen/Mth.h"
+#include "world/level/levelgen/Beardifier.h"
 #include "world/phys/AABB.h"
 #include "world/phys/shapes/Shapes.h"
 
@@ -404,6 +406,8 @@ struct Placed {
     Rotation rotation = Rotation::NONE;
     BoundingBox box{0, 0, 0, 0, 0, 0};
     int numJunctions = 0;
+    bool rigid = false;  // element projection == RIGID (only RIGID pieces beard)
+    std::vector<mc::levelgen::Beardifier::Junction> junctions;  // PoolElementStructurePiece.getJunctions
 
     void move(int dx, int dy, int dz) {
         box.move(dx, dy, dz);
@@ -448,6 +452,9 @@ struct JigsawConfig {
 
     // Shipwreck-specific (is_beached in the structure JSON)
     bool isBeached = false;
+
+    // terrain_adaptation (TerrainAdjustment) — drives the Beardifier.
+    mc::levelgen::TerrainAdjustment terrainAdjustment = mc::levelgen::TerrainAdjustment::NONE;
 
     std::set<std::string> biomes;
     std::string startPool;
@@ -506,6 +513,34 @@ HeightProvider parseHeightProvider(const json& j) {
     return hp;
 }
 
+// --- Structure processor pipeline (StructureTemplate.processBlockInfos) ---------
+// Port of the RuleProcessor family used by every jigsaw structure's pool elements
+// (villages: street/farm/mossify/zombie; outpost: outpost_rot; trial chambers:
+// copper_bulb_degradation). Each processor list referenced by a SinglePoolElement
+// is a list of `minecraft:rule` processors; each rule is input_predicate +
+// location_predicate + output_state. Per block a fresh LegacyRandomSource is seeded
+// from the WORLD position via Mth.getSeed (RuleProcessor.processBlock). The RuleTest
+// arms are the certified set (StructureProcessorParityTest): always_true,
+// block_match, blockstate_match, tag_match, random_block_match. tag_match needs
+// block tags (only zombie villages) and is deferred: it never fires (hard no-op).
+struct RuleTest {
+    enum Kind { ALWAYS_TRUE, BLOCK_MATCH, BLOCKSTATE_MATCH, TAG_MATCH, RANDOM_BLOCK_MATCH, UNSUPPORTED };
+    Kind kind = ALWAYS_TRUE;
+    std::string blockShort;       // block_match / random_block_match (ns-stripped)
+    std::uint32_t stateId = 0;    // blockstate_match (resolved state id)
+    std::string tag;              // tag_match (full id)
+    float probability = 1.0f;     // random_block_match
+};
+
+struct ProcRule {
+    RuleTest input;
+    RuleTest loc;
+    std::uint32_t outputState = 0;
+    std::string outputShortName;  // ns-stripped name of output_state (for legacy AIR ignore)
+};
+
+using ProcList = std::vector<ProcRule>;
+
 struct Runtime {
     fs::path dataDir;
     int64_t seed = 0;
@@ -514,6 +549,8 @@ struct Runtime {
     std::vector<StructureSetDef> structureSets;
     std::map<std::string, JigsawConfig> structures;
     std::map<std::string, pools::StructureTemplatePool> poolMap;
+    std::map<std::string, ProcList> processorLists;   // cache by list id
+    bool warnedUnsupportedProc = false;
     std::map<std::string, stl::LoadedTemplate> jigsawTemplates;
     std::map<std::string, PlaceTemplate> placeTemplates;
     std::unordered_map<std::string, std::string> oracleTemplateB64;
@@ -528,8 +565,19 @@ struct Runtime {
         loadStructureSets();
         loadStructures();
         poolMap["minecraft:empty"] = pools::StructureTemplatePool{};
+
+        // RULE #0 visibility: report exactly which structures are NOT placed so an
+        // unported family is never silently mistaken for a working one.
+        std::map<std::string, int> unportedByType;
+        for (const auto& [sid, cfg] : structures) {
+            if (!cfg.supported) ++unportedByType[cfg.structureType];
+        }
         MC_LOG_INFO("Structures: loaded {} structure_sets, {} structures from {}",
                     structureSets.size(), structures.size(), dataDir.generic_string());
+        for (const auto& [type, count] : unportedByType) {
+            MC_LOG_INFO("Structures: UNPORTED type {} ({} structures) — hard no-op, not placed",
+                        type, count);
+        }
     }
 
     void loadStructureSets();
@@ -554,7 +602,19 @@ struct Runtime {
     std::size_t placeElement(const pools::StructurePoolElement& e, const BlockPos& pos,
                              Rotation rot, const StructureWorld& world);
     std::size_t placeTemplate(const std::string& location, const BlockPos& pos,
-                              Rotation rot, const StructureWorld& world);
+                              Rotation rot, const StructureWorld& world,
+                              bool legacy = false,
+                              const std::string& processorsId = "minecraft:empty",
+                              bool terrainMatching = false);
+    // Processor pipeline.
+    RuleTest parseRuleTest(const json& j);
+    std::uint32_t parseStateObject(const json& j, std::string& outShortName);
+    const ProcList* loadProcessorList(const std::string& id);
+    bool testRule(const RuleTest& t, std::uint32_t stateId, const std::string& shortName,
+                  mc::levelgen::RandomSource& random);
+    std::uint32_t applyRules(const ProcList& rules, std::uint32_t inputState,
+                             const std::string& inputShortName,
+                             int wx, int wy, int wz, const StructureWorld& world);
     bool tryGenerateAndPlace(const std::string& structureId, ChunkPos active, const StructureWorld& world,
                              const std::function<std::string(int, int, int)>& biomeGetter);
     bool tryPlaceSwampHut(ChunkPos active, const StructureWorld& world);
@@ -565,6 +625,20 @@ struct Runtime {
     bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
+
+    // Beardifier integration: assemble (cached) the terrain-adapting structures whose
+    // pieces reach `active`, then collect their RIGID pieces + junctions per
+    // Beardifier.forStructuresInChunk. `columnHeight(x,z)` is the noise-column surface
+    // (WORLD_SURFACE_WG topmost solid) sampled before the chunk's terrain exists.
+    const std::vector<Placed>* assembledFor(const std::string& structureId, ChunkPos start,
+                                            const StructureWorld& world,
+                                            const std::function<std::string(int, int, int)>& biomeGetter);
+    mc::levelgen::Beardifier buildBeardifier(ChunkPos active,
+                                             const std::function<int(int, int)>& columnHeight,
+                                             const std::function<std::string(int, int, int)>& biomeGetter);
+
+    // assembled-structure cache (keyed by structureId + start chunk).
+    std::map<std::string, std::vector<Placed>> assembledCache;
 };
 
 struct Placer {
@@ -719,6 +793,27 @@ struct Placer {
                             tp.groundLevelDelta = targetGroundLevelDelta;
                             tp.rotation = targetRotation;
                             tp.box = targetBB;
+                            tp.rigid = targetRigid;
+
+                            // JigsawJunction recording (JigsawPlacement.java:439-472) —
+                            // needed by the Beardifier. junctionY depends on which
+                            // side is rigid.
+                            int junctionY;
+                            if (sourceRigid) {
+                                junctionY = sourceBoxY + sourceJigsawLocalY;
+                            } else if (targetRigid) {
+                                junctionY = targetBoxY + targetJigsawLocalY;
+                            } else {
+                                if (sourceJigsawBaseHeight == kUnsetHeight) {
+                                    sourceJigsawBaseHeight = firstFreeHeight(sourceJigsawPos.x, sourceJigsawPos.z);
+                                }
+                                junctionY = sourceJigsawBaseHeight + deltaY / 2;
+                            }
+                            (*pieces)[sourceIdx].junctions.push_back(
+                                {targetJigsawPos.x, junctionY - sourceJigsawLocalY + sourceGroundLevelDelta, targetJigsawPos.z});
+                            tp.junctions.push_back(
+                                {sourceJigsawPos.x, junctionY - targetJigsawLocalY + targetGroundLevelDelta, sourceJigsawPos.z});
+
                             (*pieces)[sourceIdx].numJunctions += 1;
                             tp.numJunctions += 1;
                             pieces->push_back(tp);
@@ -774,8 +869,18 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     cfg.id = id;
     std::string type = normalizeId(j.value("type", std::string()));
     cfg.structureType = type;
+    // terrain_adaptation (default none) — feeds the Beardifier.
+    cfg.terrainAdjustment = mc::levelgen::terrainAdjustmentByName(
+        j.value("terrain_adaptation", std::string("none")));
     
-    // Non-jigsaw structure types: supported with procedural piece placement
+    // RULE #0 HONESTY: a structure type is listed here ONLY if it has a real,
+    // dispatched piece-placement path in tryGenerateAndPlace(). A type that is
+    // recognised but NOT actually placed must NOT be marked supported — otherwise
+    // it silently no-ops (failed jigsaw assembly with an empty start_pool) while
+    // pretending to be ported. Types deliberately NOT here yet (helpers only, no
+    // in-game placement): ocean_ruin, ruined_portal, buried_treasure,
+    // ocean_monument, woodland_mansion, mineshaft, stronghold, fortress, end_city.
+    // See docs/STRUCTURES_STATUS.md for the per-structure port ledger.
     static const std::set<std::string> supportedTypes = {
         "minecraft:jigsaw",
         "minecraft:swamp_hut",
@@ -783,21 +888,22 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:igloo",
         "minecraft:jungle_temple",
         "minecraft:shipwreck",
-        "minecraft:ocean_ruin",
-        "minecraft:ruined_portal",
-        "minecraft:buried_treasure",
         "minecraft:nether_fossil",
     };
-    
+
     if (supportedTypes.count(type) == 0) {
         cfg.supported = false;
-        cfg.reason = "unsupported type " + type;
+        cfg.reason = "type " + type + " not yet ported (no piece placement) — hard no-op";
         return cfg;
     }
-    
+
     if (type != "minecraft:jigsaw") {
-        // Non-jigsaw structures don't need jigsaw config fields
+        // Non-jigsaw structures don't need jigsaw config fields, but they DO carry
+        // a `biomes` set that gates placement (Structure.isValidBiome). Parse it so
+        // the dispatch can reject e.g. a desert pyramid in plains or a nether fossil
+        // in the overworld.
         cfg.supported = true;
+        if (j.contains("biomes")) resolveBiomeSpec(j.at("biomes"), cfg.biomes);
         // Shipwreck: parse is_beached flag
         if (type == "minecraft:shipwreck") {
             cfg.isBeached = j.value("is_beached", false);
@@ -1083,6 +1189,7 @@ bool Runtime::assembleJigsaw(const JigsawConfig& cfg, ChunkPos active, const Str
     center.groundLevelDelta = centerElement.getGroundLevelDelta();
     center.rotation = centerRotation;
     center.box = box;
+    center.rigid = centerElement.getProjection() == pools::Projection::RIGID;
 
     int centerX = (box.maxX + box.minX) / 2;
     int centerZ = (box.maxZ + box.minZ) / 2;
@@ -1138,16 +1245,173 @@ bool Runtime::assembleJigsaw(const JigsawConfig& cfg, ChunkPos active, const Str
     return !pieces.empty();
 }
 
+// Parse a {"Name":..,"Properties":{..}} block-state object (BlockState.CODEC) into a
+// resolved state id; also returns the namespace-stripped block name.
+std::uint32_t Runtime::parseStateObject(const json& j, std::string& outShortName) {
+    std::string name = normalizeId(j.value("Name", std::string("minecraft:air")));
+    std::string props;
+    if (j.contains("Properties") && j.at("Properties").is_object()) {
+        std::map<std::string, std::string> sorted;
+        for (const auto& [k, v] : j.at("Properties").items()) {
+            if (v.is_string()) sorted[k] = v.get<std::string>();
+        }
+        for (const auto& [k, v] : sorted) {
+            if (!props.empty()) props += ',';
+            props += k;
+            props += '=';
+            props += v;
+        }
+    }
+    outShortName = stripMinecraft(name);
+    return resolver.resolve(name, props);
+}
+
+RuleTest Runtime::parseRuleTest(const json& j) {
+    RuleTest t;
+    std::string pt = stripMinecraft(normalizeId(j.value("predicate_type", std::string("minecraft:always_true"))));
+    if (pt == "always_true") {
+        t.kind = RuleTest::ALWAYS_TRUE;
+    } else if (pt == "block_match") {
+        t.kind = RuleTest::BLOCK_MATCH;
+        t.blockShort = stripMinecraft(normalizeId(j.at("block").get<std::string>()));
+    } else if (pt == "random_block_match") {
+        t.kind = RuleTest::RANDOM_BLOCK_MATCH;
+        t.blockShort = stripMinecraft(normalizeId(j.at("block").get<std::string>()));
+        t.probability = j.value("probability", 1.0f);
+    } else if (pt == "blockstate_match") {
+        t.kind = RuleTest::BLOCKSTATE_MATCH;
+        std::string ignored;
+        t.stateId = parseStateObject(j.at("block_state"), ignored);
+    } else if (pt == "tag_match") {
+        t.kind = RuleTest::TAG_MATCH;  // deferred: needs block tags (zombie villages only)
+        t.tag = normalizeId(j.at("tag").get<std::string>());
+    } else {
+        t.kind = RuleTest::UNSUPPORTED;
+    }
+    return t;
+}
+
+const ProcList* Runtime::loadProcessorList(const std::string& id) {
+    std::string key = normalizeId(id);
+    if (key == "minecraft:empty") return nullptr;
+    auto cached = processorLists.find(key);
+    if (cached != processorLists.end()) return cached->second.empty() ? nullptr : &cached->second;
+
+    ProcList& out = processorLists[key];  // inserts empty; cached even if it stays empty
+    fs::path file = pathForId(dataDir / "worldgen" / "processor_list", key, ".json");
+    std::string text = file.empty() ? std::string() : readFile(file);
+    if (text.empty()) return nullptr;
+
+    try {
+        json j = json::parse(text);
+        for (const auto& proc : j.at("processors")) {
+            std::string ptype = stripMinecraft(normalizeId(proc.value("processor_type", std::string())));
+            if (ptype != "rule") {
+                // gravity / protected_blocks / block_age / block_rot / ... belong to
+                // the terrain-adaptation phase or non-village structures. Hard no-op
+                // here (the list's rule processors still apply); logged once.
+                if (!warnedUnsupportedProc) {
+                    MC_LOG_INFO("Structures: processor_type {} not yet ported (skipped) in {}", ptype, key);
+                    warnedUnsupportedProc = true;
+                }
+                continue;
+            }
+            for (const auto& ruleJson : proc.at("rules")) {
+                ProcRule r;
+                r.input = parseRuleTest(ruleJson.at("input_predicate"));
+                r.loc = parseRuleTest(ruleJson.at("location_predicate"));
+                r.outputState = parseStateObject(ruleJson.at("output_state"), r.outputShortName);
+                out.push_back(std::move(r));
+            }
+        }
+    } catch (const std::exception& e) {
+        MC_LOG_DEBUG("Structures: failed to parse processor_list {}: {}", key, e.what());
+        out.clear();
+    }
+    return out.empty() ? nullptr : &out;
+}
+
+bool Runtime::testRule(const RuleTest& t, std::uint32_t stateId, const std::string& shortName,
+                       mc::levelgen::RandomSource& random) {
+    switch (t.kind) {
+        case RuleTest::ALWAYS_TRUE:        return true;
+        case RuleTest::BLOCK_MATCH:        return shortName == t.blockShort;
+        case RuleTest::BLOCKSTATE_MATCH:   return stateId == t.stateId;
+        // RandomBlockMatchTest.test: state.is(block) && random.nextFloat() < prob —
+        // the nextFloat draw is short-circuited away when the block does NOT match.
+        case RuleTest::RANDOM_BLOCK_MATCH: return shortName == t.blockShort && random.nextFloat() < t.probability;
+        case RuleTest::TAG_MATCH:          return false;  // deferred (zombie villages)
+        case RuleTest::UNSUPPORTED:
+        default:                           return false;
+    }
+}
+
+// RuleProcessor.processBlock: per-block fresh LegacyRandomSource seeded from the
+// WORLD position; first matching rule wins (input && location, short-circuit).
+std::uint32_t Runtime::applyRules(const ProcList& rules, std::uint32_t inputState,
+                                  const std::string& inputShortName,
+                                  int wx, int wy, int wz, const StructureWorld& world) {
+    auto random = mc::levelgen::RandomSource::create(mc::levelgen::mth::getSeed(wx, wy, wz));
+    std::uint32_t locState = world.getBlock ? world.getBlock(wx, wy, wz) : 0u;
+    const std::string& locName = (locState < resolver.states.size()) ? resolver.states[locState].name
+                                                                     : resolver.states[0].name;
+    for (const ProcRule& r : rules) {
+        if (testRule(r.input, inputState, inputShortName, *random) &&
+            testRule(r.loc, locState, locName, *random)) {
+            return r.outputState;
+        }
+    }
+    return inputState;
+}
+
+// SinglePoolElement/LegacySinglePoolElement placement = StructureTemplate
+// processBlockInfos + placeInWorld for the rule-based processor chain:
+//   single chain: BlockIgnore(STRUCTURE_BLOCK), JigsawReplacement, <rules>
+//   legacy chain: JigsawReplacement, <rules>, BlockIgnore(STRUCTURE_AND_AIR)
+// JigsawReplacement (jigsaw -> final_state) and structure_void drop are baked at
+// template load (loadPlaceTemplate). The processed state is rotated at place time.
+// NOT yet ported (terrain-adaptation phase): GravityProcessor / ProtectedBlockProcessor
+// and the TERRAIN_MATCHING projection processors (street terrain following).
 std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& pos,
-                                   Rotation rot, const StructureWorld& world) {
+                                   Rotation rot, const StructureWorld& world,
+                                   bool legacy, const std::string& processorsId,
+                                   bool terrainMatching) {
     if (!ensureTemplate(location)) return 0;
     const PlaceTemplate& tpl = placeTemplates.at(location);
+    const ProcList* rules = loadProcessorList(processorsId);
     std::size_t placed = 0;
     for (const PlaceBlock& block : tpl.blocks) {
         BlockPos rp = structureTransform(block.pos, Mirror::NONE, rot, kBlockPosZero);
-        std::uint32_t state = resolver.rotateState(block.state, rot);
+        int wx = pos.x + rp.x, wy = pos.y + rp.y, wz = pos.z + rp.z;
+
+        std::uint32_t state = block.state;  // un-rotated, resolved
+        const std::string& name = (state < resolver.states.size()) ? resolver.states[state].name
+                                                                   : resolver.states[0].name;
+        // single: BlockIgnore(STRUCTURE_BLOCK) runs first.
+        if (!legacy && name == "structure_block") continue;
+
+        // Element processor list (RuleProcessor chain) — uses the PRE-gravity world
+        // position for the per-block seed + location predicate.
+        if (rules) state = applyRules(*rules, state, name, wx, wy, wz, world);
+
+        // TERRAIN_MATCHING projection -> GravityProcessor(WORLD_SURFACE_WG, -1):
+        // re-base the column to the surface so streets/paths follow the terrain.
+        //   newY = getHeight(WORLD_SURFACE_WG) + offset + localY
+        //        = (heightAt + 1) + (-1) + block.pos.y = heightAt + block.pos.y
+        if (terrainMatching && world.heightAt) {
+            wy = world.heightAt(wx, wz) + block.pos.y;
+        }
+
+        // legacy: BlockIgnore(STRUCTURE_AND_AIR) runs last (after rules + gravity).
+        if (legacy) {
+            const std::string& sname = (state < resolver.states.size()) ? resolver.states[state].name
+                                                                       : resolver.states[0].name;
+            if (sname == "air" || sname == "structure_block") continue;
+        }
+
+        std::uint32_t finalState = resolver.rotateState(state, rot);
         if (world.setBlock) {
-            world.setBlock(pos.x + rp.x, pos.y + rp.y, pos.z + rp.z, state);
+            world.setBlock(wx, wy, wz, finalState);
             ++placed;
         }
     }
@@ -1156,10 +1420,12 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
 
 std::size_t Runtime::placeElement(const pools::StructurePoolElement& e, const BlockPos& pos,
                                   Rotation rot, const StructureWorld& world) {
+    bool terrainMatching = e.projection == pools::Projection::TERRAIN_MATCHING;
     switch (e.type) {
         case pools::ElementType::SINGLE:
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ false, e.processors, terrainMatching);
         case pools::ElementType::LEGACY:
-            return placeTemplate(e.location, pos, rot, world);
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ true, e.processors, terrainMatching);
         case pools::ElementType::LIST: {
             std::size_t placed = 0;
             for (const auto& child : e.elements) placed += placeElement(child, pos, rot, world);
@@ -1188,6 +1454,19 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
 
     const JigsawConfig& cfg = it->second;
 
+    // Biome gate for the non-jigsaw families (Structure.isValidBiome). Vanilla's
+    // onTopOfChunkCenter validates the structure's biome at the chunk-centre
+    // surface column before placing; the jigsaw path validates inside
+    // assembleJigsaw. Without this, hand-built structures place in any biome —
+    // desert pyramids in plains, igloos in deserts, nether fossils all over the
+    // overworld. Sample at (midX, surfaceY, midZ); the biomeGetter quart-resolves.
+    if (cfg.structureType != "minecraft:jigsaw") {
+        int midX = active.x * 16 + 8;
+        int midZ = active.z * 16 + 8;
+        int surfaceY = world.heightAt ? world.heightAt(midX, midZ) : 0;
+        if (!validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) return false;
+    }
+
     // Non-jigsaw structure dispatch
     if (cfg.structureType == "minecraft:swamp_hut") {
         return tryPlaceSwampHut(active, world);
@@ -1209,7 +1488,22 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     }
     // TODO: add more non-jigsaw structure types
 
-    // Jigsaw structure assembly (existing path)
+    // Jigsaw structure assembly. Prefer the COLUMN-based assembly the Beardifier
+    // already computed for this start chunk (assembledCache, keyed structureId:x,z):
+    // vanilla computes the start ONCE at STRUCTURE_STARTS from the base column height
+    // and reuses it at NOISE (beardifier) + FEATURES (block placement). Reusing it here
+    // makes the placed blocks align with the beardified terrain and match the certified
+    // jigsaw assembly. Fall back to assembling with the caller's world when no
+    // beardifier ran for this chunk (e.g. standalone tests; on flat terrain identical).
+    std::string cacheKey = structureId + ":" + std::to_string(active.x) + "," + std::to_string(active.z);
+    auto cachedIt = assembledCache.find(cacheKey);
+    if (cachedIt != assembledCache.end() && !cachedIt->second.empty()) {
+        std::size_t blocks = placePieces(cachedIt->second, world);
+        MC_LOG_INFO("Structure {} placed (cached column assembly) at chunk ({},{}), pieces={}, blocks={}",
+                    structureId, active.x, active.z, cachedIt->second.size(), blocks);
+        return true;
+    }
+
     std::vector<Placed> pieces;
     BlockPos stubPos{};
     try {
@@ -1489,6 +1783,143 @@ void Runtime::generate(ChunkPos active, const StructureWorld& world,
     }
 }
 
+const std::vector<Placed>* Runtime::assembledFor(const std::string& structureId, ChunkPos start,
+                                                 const StructureWorld& world,
+                                                 const std::function<std::string(int, int, int)>& biomeGetter) {
+    std::string key = structureId + ":" + std::to_string(start.x) + "," + std::to_string(start.z);
+    auto it = assembledCache.find(key);
+    if (it != assembledCache.end()) return it->second.empty() ? nullptr : &it->second;
+
+    std::vector<Placed>& pieces = assembledCache[key];  // cached even if assembly fails (stays empty)
+    auto cfgIt = structures.find(structureId);
+    if (cfgIt == structures.end() || !cfgIt->second.supported) return nullptr;
+    const JigsawConfig& cfg = cfgIt->second;
+    if (cfg.structureType != "minecraft:jigsaw") return nullptr;  // only jigsaw structures beard in the overworld
+    BlockPos stub{};
+    try {
+        if (!assembleJigsaw(cfg, start, world, biomeGetter, pieces, stub)) { pieces.clear(); return nullptr; }
+    } catch (const std::exception&) {
+        pieces.clear();
+        return nullptr;
+    }
+    return pieces.empty() ? nullptr : &pieces;
+}
+
+mc::levelgen::Beardifier Runtime::buildBeardifier(
+        ChunkPos active,
+        const std::function<int(int, int)>& columnHeight,
+        const std::function<std::string(int, int, int)>& biomeGetter) {
+    using mc::levelgen::Beardifier;
+    using mc::levelgen::TerrainAdjustment;
+
+    StructureWorld world;
+    world.heightAt = columnHeight;
+    world.getBlock = [](int, int, int) { return 0u; };
+    world.setBlock = [](int, int, int, std::uint32_t) {};
+
+    std::vector<Beardifier::Rigid> rigids;
+    std::vector<Beardifier::Junction> junctions;
+    std::optional<mc::levelgen::BeardBox> any;
+
+    const int chunkStartX = active.x * 16;
+    const int chunkStartZ = active.z * 16;
+    auto toBeardBox = [](const BoundingBox& b) {
+        return mc::levelgen::BeardBox{b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ};
+    };
+
+    // Mirror generate()'s structure selection (without placing) to find the structure
+    // that actually starts at `start`, and its assembled pieces + terrain_adaptation.
+    auto selectAssembled = [&](const StructureSetDef& set, ChunkPos start)
+            -> std::pair<const std::vector<Placed>*, TerrainAdjustment> {
+        if (set.structures.size() == 1) {
+            const std::string& sid = set.structures[0].structureId;
+            auto cfgIt = structures.find(sid);
+            TerrainAdjustment adj = cfgIt != structures.end() ? cfgIt->second.terrainAdjustment
+                                                              : TerrainAdjustment::NONE;
+            return {assembledFor(sid, start, world, biomeGetter), adj};
+        }
+        std::vector<StructureSelection> options = set.structures;
+        auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+            std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+        random->setLargeFeatureSeed(seed, start.x, start.z);
+        int total = 0;
+        for (const StructureSelection& o : options) total += o.weight;
+        while (!options.empty() && total > 0) {
+            int choice = random->nextInt(total);
+            std::size_t index = 0;
+            for (; index < options.size(); ++index) {
+                choice -= options[index].weight;
+                if (choice < 0) break;
+            }
+            if (index >= options.size()) index = options.size() - 1;
+            StructureSelection selected = options[index];
+            if (const std::vector<Placed>* pieces = assembledFor(selected.structureId, start, world, biomeGetter)) {
+                auto cfgIt = structures.find(selected.structureId);
+                TerrainAdjustment adj = cfgIt != structures.end() ? cfgIt->second.terrainAdjustment
+                                                                  : TerrainAdjustment::NONE;
+                return {pieces, adj};
+            }
+            total -= selected.weight;
+            options.erase(options.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+        return {nullptr, TerrainAdjustment::NONE};
+    };
+
+    for (const StructureSetDef& set : structureSets) {
+        auto pit = placementState.sets.find(set.id);
+        if (pit == placementState.sets.end()) continue;
+        const StructurePlacement& placement = pit->second;
+        if (!StructureState::isSupported(placement)) continue;
+
+        // Only sets with a terrain-adapting jigsaw structure matter; bound the scan
+        // window by the largest piece extent (maxDistH) among them.
+        int maxDistH = 0;
+        bool anyBeard = false;
+        for (const StructureSelection& s : set.structures) {
+            auto c = structures.find(s.structureId);
+            if (c != structures.end() && c->second.structureType == "minecraft:jigsaw"
+                && c->second.terrainAdjustment != TerrainAdjustment::NONE) {
+                anyBeard = true;
+                maxDistH = std::max(maxDistH, c->second.maxDistH);
+            }
+        }
+        if (!anyBeard) continue;
+        const int R = (maxDistH + 12 + 15) / 16 + 1;
+
+        for (int sx = active.x - R; sx <= active.x + R; ++sx) {
+            for (int sz = active.z - R; sz <= active.z + R; ++sz) {
+                if (!placementState.isStructureChunk(placement, sx, sz)) continue;
+                auto [pieces, adj] = selectAssembled(set, {sx, sz});
+                if (!pieces || adj == TerrainAdjustment::NONE) continue;
+
+                for (const Placed& piece : *pieces) {
+                    // isCloseToChunk(active, 12): piece box (XZ) intersects the chunk inflated by 12.
+                    if (!piece.box.intersects(chunkStartX - 12, chunkStartZ - 12,
+                                              chunkStartX + 15 + 12, chunkStartZ + 15 + 12))
+                        continue;
+                    if (piece.rigid) {
+                        mc::levelgen::BeardBox bb = toBeardBox(piece.box);
+                        rigids.push_back({bb, adj, piece.groundLevelDelta});
+                        any = any ? mc::levelgen::BeardBox::encapsulating(*any, bb) : bb;
+                    }
+                    for (const Beardifier::Junction& jn : piece.junctions) {
+                        if (jn.sourceX > chunkStartX - 12 && jn.sourceZ > chunkStartZ - 12
+                            && jn.sourceX < chunkStartX + 15 + 12 && jn.sourceZ < chunkStartZ + 15 + 12) {
+                            junctions.push_back(jn);
+                            mc::levelgen::BeardBox jb{jn.sourceX, jn.sourceGroundY, jn.sourceZ,
+                                                      jn.sourceX, jn.sourceGroundY, jn.sourceZ};
+                            any = any ? mc::levelgen::BeardBox::encapsulating(*any, jb) : jb;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!any) return Beardifier();
+    return Beardifier(std::move(rigids), std::move(junctions), any->inflatedBy(24));
+}
+
 Runtime* runtimeFor(const std::string& dataMinecraftDir, int64_t seed) {
     static std::unique_ptr<Runtime> runtime;
     static std::string cachedDir;
@@ -1515,6 +1946,18 @@ void generateStructures(ChunkPos active, uint64_t worldSeed,
     if (!fs::exists(dataDir / "worldgen" / "structure_set")) return;
     Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
     runtime->generate(active, world, biomeGetter);
+}
+
+mc::levelgen::Beardifier generateBeardifier(
+        ChunkPos active, uint64_t worldSeed,
+        const std::function<int(int, int)>& columnHeight,
+        const std::function<std::string(int, int, int)>& biomeGetter,
+        const std::string& dataMinecraftDir) {
+    if (dataMinecraftDir.empty()) return {};
+    fs::path dataDir(dataMinecraftDir);
+    if (!fs::exists(dataDir / "worldgen" / "structure_set")) return {};
+    Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
+    return runtime->buildBeardifier(active, columnHeight, biomeGetter);
 }
 
 } // namespace mc::levelgen::structure
