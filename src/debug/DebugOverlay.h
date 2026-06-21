@@ -36,7 +36,7 @@ struct DebugOverlay {
     int frameCount = 0;
     double fpsTimer = 0.0;
     int currentFps = 0;
-    Clock::time_point lastFrameTime = Clock::now();
+    std::chrono::steady_clock::time_point lastFrameTime = std::chrono::steady_clock::now();
 
     // Structure search
     struct StructureLoc {

@@ -271,7 +271,7 @@ void DebugOverlay::render(render::GuiGraphics& g, render::Font& font, Minecraft&
     if (!visible) return;
 
     // FPS tracking using real frame time
-    auto now = Clock::now();
+    auto now = std::chrono::steady_clock::now();
     float realDt = std::chrono::duration<float>(now - lastFrameTime).count();
     lastFrameTime = now;
 
