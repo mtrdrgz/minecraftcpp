@@ -562,6 +562,7 @@ struct Runtime {
     bool tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world);
     bool tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bool isBeached);
     bool tryPlaceIgloo(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 };
@@ -785,6 +786,7 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:ocean_ruin",
         "minecraft:ruined_portal",
         "minecraft:buried_treasure",
+        "minecraft:nether_fossil",
     };
     
     if (supportedTypes.count(type) == 0) {
@@ -1202,6 +1204,9 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:igloo") {
         return tryPlaceIgloo(active, world);
     }
+    if (cfg.structureType == "minecraft:nether_fossil") {
+        return tryPlaceNetherFossil(active, world);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly (existing path)
@@ -1401,6 +1406,50 @@ bool Runtime::tryPlaceIgloo(ChunkPos active, const StructureWorld& world) {
 
     MC_LOG_INFO("Structure igloo placed at chunk ({},{}), rot={}, blocks={}",
                 active.x, active.z, rotIdx, placed);
+    return placed > 0;
+}
+
+bool Runtime::tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world) {
+    // NetherFossilStructure.findGenerationPoint:
+    //   blockX = chunkX*16 + nextInt(16)
+    //   blockZ = chunkZ*16 + nextInt(16)
+    //   y = height.sample(random, context)  // uniform(32, belowTop:2)
+    //   (column scan for valid Y — SKIPPED for simplicity)
+    //   NetherFossilPieces.addPieces:
+    //     rotation = nextInt(4)
+    //     template = nextInt(14) from FOSSILS array
+    //     place template at (blockX, y, blockZ) with rotation
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    const int blockX = active.x * 16 + random->nextInt(16);
+    const int blockZ = active.z * 16 + random->nextInt(16);
+    // Simplified: use Y=32 (the min height). The full version samples a
+    // UniformHeight(absolute:32, belowTop:2) provider and walks down the
+    // noise column to find a valid placement. Since nether fossils are
+    // nether-only and the column scan needs getBaseColumn (not yet wired),
+    // we place at Y=32 as a reasonable approximation.
+    const int y = 32;
+
+    const int rotIdx = random->nextInt(4);
+    const Rotation rot = static_cast<Rotation>(rotIdx);
+
+    static const char* FOSSILS[] = {
+        "nether_fossils/fossil_1", "nether_fossils/fossil_2",
+        "nether_fossils/fossil_3", "nether_fossils/fossil_4",
+        "nether_fossils/fossil_5", "nether_fossils/fossil_6",
+        "nether_fossils/fossil_7", "nether_fossils/fossil_8",
+        "nether_fossils/fossil_9", "nether_fossils/fossil_10",
+        "nether_fossils/fossil_11", "nether_fossils/fossil_12",
+        "nether_fossils/fossil_13", "nether_fossils/fossil_14"
+    };
+    const std::string templateLocation = std::string("minecraft:") + FOSSILS[random->nextInt(14)];
+
+    BlockPos pos{ blockX, y, blockZ };
+    std::size_t placed = placeTemplate(templateLocation, pos, rot, world);
+    MC_LOG_INFO("Structure nether_fossil placed at chunk ({},{}), template={}, rot={}, blocks={}",
+                active.x, active.z, templateLocation, rotIdx, placed);
     return placed > 0;
 }
 
