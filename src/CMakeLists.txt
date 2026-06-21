@@ -5710,6 +5710,16 @@ endif()
 set_target_properties(pkt_recipe_book_settings_sb_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 # ===== structures: StructurePiece orientation/offset geometry (getWorldX/Y/Z, makeBoundingBox, isCloseToChunk) =====
+# Beardifier parity vs the real net.minecraft...Beardifier (the density-function
+# term that adapts terrain to structure pieces; villages use beard_thin). Ground
+# truth: tools/BeardifierParity.java drives the real class' @VisibleForTesting ctor.
+add_executable(beardifier_parity world/level/levelgen/BeardifierParityTest.cpp)
+target_include_directories(beardifier_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(beardifier_parity PRIVATE glm)
+set_target_properties(beardifier_parity PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 add_executable(structure_piece_math_parity world/level/levelgen/structure/StructurePieceMathParityTest.cpp)
 target_include_directories(structure_piece_math_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(structure_piece_math_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
