@@ -226,7 +226,11 @@ void LevelRenderer::rebuildDirtyChunks() {
         return a.distSq < b.distSq;
     });
 
-    constexpr int MAX_REBUILDS = 1;
+    // Allow 2 mesh rebuilds per frame (was 1). With the perf improvements
+    // (chunkMesh ~19ms), 2 rebuilds fit comfortably in a 16ms budget at 60fps
+    // for the occasional dirty chunk, and clear the backlog 2x faster after
+    // teleport/fast travel.
+    constexpr int MAX_REBUILDS = 2;
     int rebuilt = 0;
     for (const DirtyCandidate& cand : dirty) {
         auto chunkIt = m_mc->chunks().find(cand.key);
@@ -271,7 +275,12 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
     if (!atlasLoaded) { loadAtlas(cmd); atlasLoaded = true; }
 
     auto now = Clock::now();
-    float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.1f);
+    // Cap dt at 50ms (20 FPS minimum). The previous 100ms cap caused "lagback":
+    // when a heavy frame took >100ms, the player only moved 100ms worth while
+    // 100ms+ of real time passed, so they appeared to jump backwards relative
+    // to their expected position. 50ms is tight enough to prevent huge camera
+    // jumps but loose enough that a single 50ms frame doesn't lose movement.
+    float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.05f);
     m_lastFrame = now; updateCamera(dtSec); rebuildDirtyChunks();
 
     // Clean up render data for unloaded chunks to prevent memory leaks
