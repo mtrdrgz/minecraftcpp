@@ -118,6 +118,27 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 18:15 UTC — Async snapshot chunk meshing
+
+**Agent**: Codex
+
+- User playtested the 18:04 render-first mitigation and correctly called out that
+  pausing visual terrain catch-up while moving was a patch, not a fix. Replaced
+  the movement/input mesh defer with snapshot-based asynchronous meshing.
+- `LevelRenderer` now copies the dirty center chunk and loaded cardinal neighbours
+  into private `LevelChunk` snapshots, schedules `ChunkMesher::buildChunk` on a
+  dedicated mesh worker, polls ready futures on the render thread, and swaps GPU
+  render data only after the worker result is complete. First section uploads are
+  budgeted per frame (2 sections) instead of blocked by recent camera input, so
+  chunks can continue to appear while the player moves.
+- Added explicit deep-copy support to `LevelChunk` so mesh workers never read the
+  live chunk map or mutable chunk sections. This is a scheduling/ownership change
+  only; terrain/decorator algorithms and block data semantics are unchanged.
+- Verified build: `tools/run_with_timeout.ps1` + VS dev environment rebuilt
+  `build/mcpp.exe` successfully after asset packaging. Remaining work: decoration
+  still needs the same private snapshot/merge architecture or a thread-safe
+  generation context.
+
 ### 2026-06-21 18:04 UTC — Render-first chunk streaming
 
 **Agent**: Codex

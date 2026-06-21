@@ -352,7 +352,23 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 18:04 UTC - chunk streaming made render-first.
+**Last updated**: 2026-06-21 18:15 UTC - chunk meshing moved off the render thread.
+
+**Chunk streaming stutter architecture v3 (2026-06-21 18:15):** the render-first
+defer from 18:04 was rejected in playtesting because it made terrain visual catch-up
+stop while the player moved. Replaced that patch with the proper meshing architecture:
+`LevelRenderer` now deep-copies the dirty center chunk plus loaded cardinal neighbours
+into private `LevelChunk` snapshots on the main thread, schedules `ChunkMesher::buildChunk`
+on a dedicated mesh worker, polls ready futures, and only integrates/destroys GPU
+buffers on the render thread. First section uploads are budgeted (2/frame) instead
+of being suppressed by recent input, so chunk visuals can continue to appear while
+the camera moves. Added explicit `LevelChunk` deep-copy support for snapshot meshing.
+Release `build/mcpp.exe` rebuilt successfully via `tools/run_with_timeout.ps1` + VS
+dev environment. Still open: decoration is still the next synchronous worldgen hot
+path and should get the same snapshot/merge treatment or a real thread-safe
+generation context.
+
+**Last updated prior**: 2026-06-21 18:04 UTC - chunk streaming made render-first.
 
 **Chunk streaming stutter mitigation v2 (2026-06-21 18:04):** the previous
 main-thread decoration throttle was not enough; gameplay was still effectively

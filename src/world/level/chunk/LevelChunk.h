@@ -18,6 +18,10 @@ static constexpr int CHUNK_SECTION_COUNT = (CHUNK_MAX_Y - CHUNK_MIN_Y) / 16; // 
 class LevelChunk {
 public:
     explicit LevelChunk(ChunkPos pos);
+    LevelChunk(const LevelChunk& other);
+    LevelChunk& operator=(const LevelChunk& other);
+    LevelChunk(LevelChunk&&) noexcept = default;
+    LevelChunk& operator=(LevelChunk&&) noexcept = default;
     ~LevelChunk() = default;
 
     ChunkPos pos() const { return m_pos; }

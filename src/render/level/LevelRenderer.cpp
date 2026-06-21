@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -29,6 +30,7 @@ namespace {
 LevelRenderer::LevelRenderer(IRenderDevice* device, Minecraft* mc, Window* window)
     : m_device(device), m_mc(mc), m_window(window)
 {
+    m_meshPool = std::make_unique<ThreadPool>(1);
     setupChunkPipeline();
     setupSkyPipeline();
     setupHudPipeline();
@@ -37,6 +39,9 @@ LevelRenderer::LevelRenderer(IRenderDevice* device, Minecraft* mc, Window* windo
 }
 
 LevelRenderer::~LevelRenderer() {
+    m_pendingMeshBuilds.clear();
+    m_meshBuildQueued.clear();
+    m_meshPool.reset();
     for (auto& [key, rd] : m_renderData)
         for (auto& mesh : rd.sections)
             mesh.destroy(m_device);
@@ -178,14 +183,6 @@ void LevelRenderer::updateCamera(float dtSec) {
     }
     if (!m_window) return;
     int dx = 0, dy = 0; m_window->consumeMouseDelta(dx, dy);
-    const bool movementKeyDown =
-        m_window->isKeyDown('W') || m_window->isKeyDown('A') ||
-        m_window->isKeyDown('S') || m_window->isKeyDown('D') ||
-        m_window->isKeyDown(VK_SPACE) || m_window->isKeyDown(VK_CONTROL) ||
-        m_window->isKeyDown(VK_SHIFT);
-    if (dx || dy || movementKeyDown) {
-        m_lastCameraInput = Clock::now();
-    }
     if (dx || dy) {
         m_camYaw -= (float)dx * 0.15f; m_camPitch += (float)dy * 0.15f;
         m_camPitch = std::fmax(-89.f, std::fmin(89.f, m_camPitch));
@@ -211,9 +208,28 @@ void LevelRenderer::updateCamera(float dtSec) {
 
 void LevelRenderer::rebuildDirtyChunks() {
     PROFILE_SCOPE("level_renderer_rebuildDirtyChunks");
-    const auto now = Clock::now();
-    if (!m_renderData.empty() && now - m_lastCameraInput < std::chrono::milliseconds(250)) {
-        return;
+    for (auto it = m_pendingMeshBuilds.begin(); it != m_pendingMeshBuilds.end(); ) {
+        if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            ++it;
+            continue;
+        }
+
+        std::vector<SectionMesh> meshes = it->future.get();
+        const int64_t key = chunkKey(it->pos);
+        m_meshBuildQueued.erase(key);
+
+        auto chunkIt = m_mc->chunks().find(key);
+        if (chunkIt != m_mc->chunks().end()) {
+            LevelChunk* chunk = chunkIt->second.get();
+            if (chunk && chunk->isLoaded() && !chunk->meshDirty.load()) {
+                auto& rd = m_renderData[key];
+                for (auto& old : rd.sections) old.destroy(m_device);
+                rd.sections = std::move(meshes);
+                rd.built = true;
+            }
+        }
+
+        it = m_pendingMeshBuilds.erase(it);
     }
 
     struct DirtyCandidate {
@@ -239,43 +255,63 @@ void LevelRenderer::rebuildDirtyChunks() {
         return a.distSq < b.distSq;
     });
 
-    // One mesh rebuild per frame keeps frame time bounded (~20–60 ms each).
-    // Additional dirty chunks wait in the queue (nearest-first).
-    constexpr int maxRebuilds = 1;
-    int rebuilt = 0;
+    // Schedule mesh builds off-thread; ready results are integrated above and
+    // section uploads are budgeted during draw.
+    constexpr int maxPendingBuilds = 8;
+    constexpr int maxSchedulesPerFrame = 2;
+    int scheduled = 0;
     for (const DirtyCandidate& cand : dirty) {
+        if ((int)m_pendingMeshBuilds.size() >= maxPendingBuilds) break;
+        if (m_meshBuildQueued.find(cand.key) != m_meshBuildQueued.end()) continue;
+
         auto chunkIt = m_mc->chunks().find(cand.key);
         if (chunkIt == m_mc->chunks().end()) continue;
         LevelChunk* chunk = chunkIt->second.get();
         if (!chunk || !chunk->isLoaded() || !chunk->meshDirty) continue;
 
         ChunkPos cp = chunk->pos();
-        const LevelChunk* n[4] = {
-            m_mc->getChunk({cp.x + 1, cp.z}),
-            m_mc->getChunk({cp.x - 1, cp.z}),
-            m_mc->getChunk({cp.x, cp.z + 1}),
-            m_mc->getChunk({cp.x, cp.z - 1})
+        LevelChunk* east = m_mc->getChunk({cp.x + 1, cp.z});
+        LevelChunk* west = m_mc->getChunk({cp.x - 1, cp.z});
+        LevelChunk* south = m_mc->getChunk({cp.x, cp.z + 1});
+        LevelChunk* north = m_mc->getChunk({cp.x, cp.z - 1});
+        auto center = std::make_shared<LevelChunk>(*chunk);
+        std::array<std::shared_ptr<LevelChunk>, 4> neighbors = {
+            east ? std::make_shared<LevelChunk>(*east) : nullptr,
+            west ? std::make_shared<LevelChunk>(*west) : nullptr,
+            south ? std::make_shared<LevelChunk>(*south) : nullptr,
+            north ? std::make_shared<LevelChunk>(*north) : nullptr
         };
-        auto meshes = ChunkMesher::buildChunk(*chunk, n, m_atlas.isLoaded() ? &m_atlas : nullptr);
         chunk->meshDirty = false;
-        auto& rd = m_renderData[cand.key];
-        for (auto& old : rd.sections) old.destroy(m_device);
-        rd.sections = std::move(meshes);
-        rd.built = true;
-        if (++rebuilt >= maxRebuilds) break;
+        m_meshBuildQueued.insert(cand.key);
+        const TextureAtlas* atlas = m_atlas.isLoaded() ? &m_atlas : nullptr;
+        m_pendingMeshBuilds.push_back({
+            cp,
+            m_meshPool->enqueue([center = std::move(center), neighbors = std::move(neighbors), atlas]() {
+                const LevelChunk* n[4] = {
+                    neighbors[0].get(),
+                    neighbors[1].get(),
+                    neighbors[2].get(),
+                    neighbors[3].get()
+                };
+                return ChunkMesher::buildChunk(*center, n, atlas);
+            })
+        });
+
+        if (++scheduled >= maxSchedulesPerFrame) break;
     }
 }
 
 void LevelRenderer::uploadAndDrawSection(ICommandList* cmd, SectionMesh& mesh) {
     if (mesh.empty()) return;
     if (!mesh.uploaded) {
-        if (!m_allowChunkUploads) return;
+        if (m_sectionUploadsThisFrame <= 0) return;
         PROFILE_SCOPE("level_renderer_uploadSection");
         if (!mesh.vbo) mesh.vbo = m_device->createBuffer({mesh.vertices.size() * sizeof(ChunkVertex), BufferUsage::Vertex, false});
         if (!mesh.ibo) mesh.ibo = m_device->createBuffer({mesh.indices.size() * sizeof(uint32_t), BufferUsage::Index, false});
         cmd->uploadBuffer(mesh.vbo, mesh.vertices.data(), mesh.vertices.size() * sizeof(ChunkVertex));
         cmd->uploadBuffer(mesh.ibo, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
         mesh.uploaded = true;
+        --m_sectionUploadsThisFrame;
     }
     cmd->bindVertexBuffer(mesh.vbo, sizeof(ChunkVertex));
     cmd->bindIndexBuffer(mesh.ibo, false);
@@ -294,8 +330,8 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
     // jumps but loose enough that a single 50ms frame doesn't lose movement.
     float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.05f);
     m_lastFrame = now; updateCamera(dtSec);
-    m_allowChunkUploads = (Clock::now() - m_lastCameraInput) >= std::chrono::milliseconds(250);
     rebuildDirtyChunks();
+    m_sectionUploadsThisFrame = 2;
 
     // Clean up render data for unloaded chunks to prevent memory leaks
     {

@@ -7,6 +7,37 @@ LevelChunk::LevelChunk(ChunkPos pos) : m_pos(pos) {
     m_heightmap.fill(static_cast<int16_t>(CHUNK_MIN_Y - 1));
 }
 
+LevelChunk::LevelChunk(const LevelChunk& other)
+    : m_pos(other.m_pos),
+      m_heightmap(other.m_heightmap),
+      m_loaded(other.m_loaded) {
+    meshDirty.store(other.meshDirty.load());
+    decorated = other.decorated;
+    blockEntities = other.blockEntities;
+    for (int i = 0; i < CHUNK_SECTION_COUNT; ++i) {
+        if (other.m_sections[i]) {
+            m_sections[i] = std::make_unique<ChunkSection>(*other.m_sections[i]);
+        }
+    }
+}
+
+LevelChunk& LevelChunk::operator=(const LevelChunk& other) {
+    if (this == &other) return *this;
+    m_pos = other.m_pos;
+    m_heightmap = other.m_heightmap;
+    m_loaded = other.m_loaded;
+    meshDirty.store(other.meshDirty.load());
+    decorated = other.decorated;
+    blockEntities = other.blockEntities;
+    for (int i = 0; i < CHUNK_SECTION_COUNT; ++i) {
+        m_sections[i].reset();
+        if (other.m_sections[i]) {
+            m_sections[i] = std::make_unique<ChunkSection>(*other.m_sections[i]);
+        }
+    }
+    return *this;
+}
+
 ChunkSection* LevelChunk::getSection(int idx) {
     if (idx < 0 || idx >= CHUNK_SECTION_COUNT) return nullptr;
     if (!m_sections[idx]) m_sections[idx] = std::make_unique<ChunkSection>();

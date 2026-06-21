@@ -3,9 +3,12 @@
 #include "../../client/Minecraft.h"
 #include "../../platform/Window.h"
 #include "../../assets/TextureAtlas.h"
+#include "../../core/ThreadPool.h"
 #include "../entity/EntityRenderDispatcher.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
+#include <future>
 #include <chrono>
 #include <glm/glm.hpp>
 
@@ -61,14 +64,21 @@ private:
     // Frame timing for camera movement
     using Clock = std::chrono::steady_clock;
     Clock::time_point m_lastFrame = Clock::now();
-    Clock::time_point m_lastCameraInput = Clock::now();
-    bool m_allowChunkUploads = true;
+    int m_sectionUploadsThisFrame = 0;
 
     struct ChunkRenderData {
         std::vector<SectionMesh> sections;
         bool built = false;
     };
     std::unordered_map<int64_t, ChunkRenderData> m_renderData;
+
+    struct PendingMeshBuild {
+        ChunkPos pos{};
+        std::future<std::vector<SectionMesh>> future;
+    };
+    std::unique_ptr<ThreadPool> m_meshPool;
+    std::vector<PendingMeshBuild> m_pendingMeshBuilds;
+    std::unordered_set<int64_t> m_meshBuildQueued;
 
     static int64_t chunkKey(ChunkPos p) {
         return ((int64_t)(uint32_t)p.x << 32) | (uint32_t)p.z;
