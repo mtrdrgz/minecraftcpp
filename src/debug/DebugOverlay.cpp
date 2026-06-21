@@ -315,7 +315,7 @@ void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& fon
     for (auto& loc : foundStructures) {
         if (listCount >= maxList) {
             y = drawText(g, font, "... and " + std::to_string(foundStructures.size() - maxList) +
-                         " more (narrow search by moving closer)", 15, y, gray);
+                         " more (narrow search by moving closer)", 15, y, glm::vec4(0.6f, 0.6f, 0.6f, 1));
             break;
         }
 
