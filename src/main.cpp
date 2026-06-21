@@ -106,7 +106,7 @@ int main() {
     mc::render::LevelRenderer levelRenderer(device.get(), &mc, &window);
 
     if (quickPlaySingleplayer) {
-        mc.startLocalGame(singleplayerSeed, spawnX, spawnZ, spawnY);
+        mc.startLocalGameFast(singleplayerSeed, spawnX, spawnZ, spawnY);
     } else if (!host.empty()) {
         mc.connectToServer(host, port, user);
     }
@@ -158,9 +158,16 @@ int main() {
         lastTick = now;
         tickAccum += dtMs;
 
-        while (tickAccum >= TICK_MS) {
+        // Cap tick catch-up so a single slow frame (decoration/meshing) does not
+        // run many ticks back-to-back and amplify main-thread worldgen work.
+        constexpr int MAX_TICKS_PER_FRAME = 2;
+        constexpr double MAX_TICK_ACCUM_MS = TICK_MS * 5.0;
+        if (tickAccum > MAX_TICK_ACCUM_MS) tickAccum = MAX_TICK_ACCUM_MS;
+        int ticksThisFrame = 0;
+        while (tickAccum >= TICK_MS && ticksThisFrame < MAX_TICKS_PER_FRAME) {
             mc.tick();
             tickAccum -= TICK_MS;
+            ++ticksThisFrame;
         }
 
         float partialTick = (float)(tickAccum / TICK_MS);

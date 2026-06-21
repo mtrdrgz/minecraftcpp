@@ -118,6 +118,30 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 17:56 UTC — Chunk streaming stutter mitigation
+
+**Agent**: Codex
+
+- Investigated the in-game stall path after terrain workers had already been
+  optimized. The remaining multi-second freezes were caused by main-thread work:
+  completed chunk integration could arrive in bursts, `tryDecorate()` ran the
+  certified whole-chunk `applyBiomeDecoration` + structures turn synchronously,
+  and dirty meshing was also synchronous.
+- Mitigation landed without changing the terrain/decorator algorithms:
+  `--quickPlaySingleplayer` now enters through `startLocalGameFast`, the blocking
+  `startLocalGame` path no longer decorates the spawn chunk before handing control
+  to the player, completed terrain integration is capped at 2 chunks/tick,
+  `m_queuedChunks` is used to avoid duplicate queued work, and main-thread
+  decoration is suppressed while movement/input happened in the last 750 ms.
+  Existing dirty mesh throttling remains at one rebuild/frame.
+- Verified build: `tools/run_with_timeout.ps1` running the VS dev environment and
+  CMake rebuilt `build/mcpp.exe` successfully. Note: the target still reruns asset
+  packaging and needs network access for `PrepareRuntimeAssets.cmake`.
+- Follow-up: decoration is still synchronous during idle frames because
+  `EngineDecoration` is explicitly main-thread-only. The robust fix is a private
+  3x3 chunk snapshot + merge worker, or making the decoration context truly
+  thread-safe without touching the live `m_chunks` map.
+
 ### 2026-06-21 15:00 UTC — Shipwreck + Igloo + NetherFossil ports, ore investigation, lagback fix
 
 **Agent**: Super Z (GLM)

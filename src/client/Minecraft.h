@@ -20,6 +20,7 @@
 #include <thread>
 #include <future>
 #include <optional>
+#include <chrono>
 
 
 namespace mc {
@@ -161,6 +162,14 @@ private:
     std::unique_ptr<gui::Gui>           m_gui;
     std::unique_ptr<audio::SoundManager> m_soundManager;
     std::unique_ptr<gui::Screen>        m_currentScreen;
+
+    // Throttle main-thread decoration — each chunk is hundreds of ms of CPU.
+    std::chrono::steady_clock::time_point m_lastDecorateStart{};
+    std::chrono::steady_clock::time_point m_lastLocalMovement{};
+    double m_lastStreamPlayerX = 0.0;
+    double m_lastStreamPlayerY = 0.0;
+    double m_lastStreamPlayerZ = 0.0;
+    bool   m_haveLastStreamPlayerPos = false;
 
     static int64_t chunkKey(ChunkPos p) {
         return ((int64_t)(uint32_t)p.x << 32) | (uint32_t)p.z;

@@ -505,9 +505,13 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
     clearEntities();
     m_playerInfo.clear();
     m_chunks.clear();
+    m_generationTasks.clear();
+    m_queuedChunks.clear();
     m_localPlayer.reset();
 
     m_worldSeed = seed;
+    m_haveLastStreamPlayerPos = false;
+    m_lastLocalMovement = std::chrono::steady_clock::now();
     m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
     ensureWorldgenData();
     // Fresh world: drop any previous decoration context (its per-chunk state is
@@ -540,11 +544,6 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
             }
         }
     }
-
-    // Decorate only the spawn chunk synchronously (so trees/structures appear
-    // around the player immediately). Neighbours decorate async via updateLocalChunks.
-    tryDecorate(spawnChunk);
-
 
     PlayerState& state = m_localPlayer.state();
     state.entityId = 0;
@@ -877,6 +876,32 @@ void Minecraft::resumeGame() {
 void Minecraft::updateLocalChunks() {
     int px = (int)std::floor(m_localPlayer.state().x / 16.0);
     int pz = (int)std::floor(m_localPlayer.state().z / 16.0);
+    const auto now = std::chrono::steady_clock::now();
+
+    const PlayerState& playerState = m_localPlayer.state();
+    const double mdx = playerState.x - m_lastStreamPlayerX;
+    const double mdy = playerState.y - m_lastStreamPlayerY;
+    const double mdz = playerState.z - m_lastStreamPlayerZ;
+    if (!m_haveLastStreamPlayerPos || (mdx * mdx + mdy * mdy + mdz * mdz) > 0.0001) {
+        if (m_haveLastStreamPlayerPos) {
+            m_lastLocalMovement = now;
+        }
+        m_lastStreamPlayerX = playerState.x;
+        m_lastStreamPlayerY = playerState.y;
+        m_lastStreamPlayerZ = playerState.z;
+        m_haveLastStreamPlayerPos = true;
+    }
+
+    const bool movementKeyDown = m_window && !m_currentScreen && (
+        m_window->isKeyDown('W') || m_window->isKeyDown('A') ||
+        m_window->isKeyDown('S') || m_window->isKeyDown('D') ||
+        m_window->isKeyDown(VK_SPACE) || m_window->isKeyDown(VK_CONTROL) ||
+        m_window->isKeyDown(VK_SHIFT));
+    if (movementKeyDown) {
+        m_lastLocalMovement = now;
+    }
+    const bool allowMainThreadDecoration =
+        (now - m_lastLocalMovement) >= std::chrono::milliseconds(750);
     
     constexpr int RADIUS = 6;
     
@@ -894,8 +919,12 @@ void Minecraft::updateLocalChunks() {
         unloadChunk(cp);
     }
 
-    // 2. Poll completed generation tasks
+    // 2. Poll completed generation tasks (bounded — integrating many at once
+    // marks huge mesh-dirty regions and stalls the frame).
+    int integrated = 0;
+    constexpr int MAX_INTEGRATE_PER_TICK = 2;
     for (auto it = m_generationTasks.begin(); it != m_generationTasks.end(); ) {
+        if (integrated >= MAX_INTEGRATE_PER_TICK) break;
         if (it->future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             GeneratedChunk generated = it->future.get();
             std::unique_ptr<LevelChunk> chunk = std::move(generated.chunk);
@@ -915,53 +944,49 @@ void Minecraft::updateLocalChunks() {
                         // integration time (post-carvers, pre-decoration).
                         levelgen::feature::freezeWorldgenHeights(*ptr, &generated.genMarks);
                         ptr->meshDirty = true;
-                        // Mark neighboring chunks dirty so seams are updated
-                        for (int dz = -1; dz <= 1; ++dz) {
-                            for (int dx = -1; dx <= 1; ++dx) {
-                                if (dx == 0 && dz == 0) continue;
-                                if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz })) {
-                                    n->meshDirty = true;
-                                }
+                        // Cardinal neighbours only: seam faces update without
+                        // marking the full 3×3 (which flooded the mesh queue).
+                        static constexpr int kCardinal[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+                        for (const auto& d : kCardinal) {
+                            if (LevelChunk* n = getChunk({ cp.x + d[0], cp.z + d[1] })) {
+                                n->meshDirty = true;
                             }
                         }
+                        ++integrated;
                     }
                 }
             }
+            m_queuedChunks.erase(chunkKey(it->pos));
             it = m_generationTasks.erase(it);
         } else {
             ++it;
         }
     }
 
-    // 2b. Deferred decoration: decorate loaded, undecorated chunks whose 8
-    // neighbours are present (so trees/ores/structures get full cross-chunk context,
-    // no border clipping). BUDGETED per tick: decoration is heavy and runs
-    // on the main thread, so doing every eligible chunk at once causes the movement
-    // stutter. Nearest-first so the area around the player fills in before the rim.
-    //
-    // The budget is DYNAMIC: when many chunks are pending decoration (player moved
-    // fast, just spawned, or decoration fell behind), allow more per tick to catch
-    // up. When the queue is short, keep it low so individual frames stay responsive.
-    // Target: keep total decorate work ~10 ms/frame max.
+    // 2b. Deferred decoration: one chunk at a time, with a minimum interval.
+    // Full biome decoration + structures can take hundreds of ms; the old dynamic
+    // budget (up to 24/tick) caused multi-second main-thread stalls when the
+    // player moved and many chunks became eligible at once.
     {
-        std::vector<ChunkPos> ready;
-        for (const auto& [key, chunk] : m_chunks)
-            if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
-        std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
-            return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
-                 < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
-        });
-        // Dynamic budget: 4 baseline + 1 per 4 pending (capped at 24).
-        // At 60 FPS this allows up to 24*60 = 1440 decorations/sec when backlogged.
-        int maxDecorate = 4 + static_cast<int>(ready.size()) / 4;
-        if (maxDecorate > 24) maxDecorate = 24;
-        if (maxDecorate < 2)  maxDecorate = 2;
-        int done = 0;
-        for (ChunkPos cp : ready) {
-            LevelChunk* c = getChunk(cp);
-            if (!c || c->decorated) continue;
-            tryDecorate(cp);
-            if (c->decorated && ++done >= maxDecorate) break;
+        constexpr auto kMinDecorateInterval = std::chrono::milliseconds(150);
+        if (allowMainThreadDecoration && now - m_lastDecorateStart >= kMinDecorateInterval) {
+            std::vector<ChunkPos> ready;
+            ready.reserve(m_chunks.size());
+            for (const auto& [key, chunk] : m_chunks)
+                if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
+            std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
+                return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
+                     < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
+            });
+            for (ChunkPos cp : ready) {
+                LevelChunk* c = getChunk(cp);
+                if (!c || c->decorated) continue;
+                tryDecorate(cp);
+                if (c->decorated) {
+                    m_lastDecorateStart = now;
+                    break;
+                }
+            }
         }
     }
 
@@ -980,15 +1005,7 @@ void Minecraft::updateLocalChunks() {
                 continue;
             }
             
-            // Check if already in queue
-            bool alreadyQueued = false;
-            for (const auto& task : m_generationTasks) {
-                if (task.pos.x == posKey.x && task.pos.z == posKey.z) {
-                    alreadyQueued = true;
-                    break;
-                }
-            }
-            if (alreadyQueued) {
+            if (m_queuedChunks.find(chunkKey(posKey)) != m_queuedChunks.end()) {
                 continue;
             }
             
@@ -1003,17 +1020,17 @@ void Minecraft::updateLocalChunks() {
     });
     
     int queued = 0;
-    // Dynamic queue budget: queue more when few chunks are loaded (startup / fast
-    // travel), fewer once the area is mostly filled. Helps the engine catch up
-    // quickly after a teleport or fast sprint without over-queuing at steady state.
-    constexpr int MAX_QUEUE_PER_TICK = 12;
+    // Keep the async queue shallow so completed chunks do not arrive in huge
+    // bursts that stall integration + decoration on the main thread.
+    constexpr int MAX_QUEUE_PER_TICK = 4;
     int queueBudget = MAX_QUEUE_PER_TICK;
     const size_t loadedCount = m_chunks.size();
     const size_t targetCount = static_cast<size_t>((2 * RADIUS + 1) * (2 * RADIUS + 1));
-    if (loadedCount < targetCount / 2) queueBudget = MAX_QUEUE_PER_TICK * 2;  // 24 when <50% loaded
+    if (loadedCount < targetCount / 2) queueBudget = MAX_QUEUE_PER_TICK * 2;
     for (const auto& cand : candidates) {
         if (!m_threadPool) break;
         
+        m_queuedChunks.insert(chunkKey(cand.pos));
         m_generationTasks.push_back({
             cand.pos,
             m_threadPool->enqueue([pos = cand.pos, seed = m_worldSeed]() -> GeneratedChunk {

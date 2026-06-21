@@ -226,14 +226,9 @@ void LevelRenderer::rebuildDirtyChunks() {
         return a.distSq < b.distSq;
     });
 
-    // DYNAMIC mesh rebuild budget: scale with the dirty backlog so startup /
-    // fast-travel pop-in clears quickly. When few chunks are dirty (steady state),
-    // keep it at 3 so individual frames stay responsive. When many are dirty
-    // (startup / sprint), ramp up to 8 to drain the queue.
-    // At ~19ms/chunk on the perf benchmark, 3 rebuilds ≈ 57ms (OK for 30fps
-    // catch-up frames); 8 rebuilds ≈ 152ms (acceptable during the initial load
-    // burst when the player is standing still anyway).
-    const int maxRebuilds = dirty.size() > 16 ? 8 : (dirty.size() > 6 ? 5 : 3);
+    // One mesh rebuild per frame keeps frame time bounded (~20–60 ms each).
+    // Additional dirty chunks wait in the queue (nearest-first).
+    constexpr int maxRebuilds = 1;
     int rebuilt = 0;
     for (const DirtyCandidate& cand : dirty) {
         auto chunkIt = m_mc->chunks().find(cand.key);

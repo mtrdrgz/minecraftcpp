@@ -32,6 +32,8 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     m_blockTags.reset();
     m_worldgenDir.clear();
     m_dataMinecraftDir.clear();
+    m_haveLastStreamPlayerPos = false;
+    m_lastLocalMovement = std::chrono::steady_clock::now();
 
     // Keep one main-thread generator for biome/height queries. Terrain chunks are
     // still produced by the existing async chunk queue, using the same generator

@@ -352,7 +352,24 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 00:10 UTC - terrain performance cache/heightmap checkpoint.
+**Last updated**: 2026-06-21 17:56 UTC - chunk streaming stutter mitigation.
+
+**Chunk streaming stutter MITIGATED (2026-06-21 17:56):** the terrain generator
+workers were not the only problem. Runtime decoration and chunk meshing still ran
+on the main thread, and decoration could execute a large whole-chunk
+`applyBiomeDecoration` + structures turn exactly when movement made a new 3x3
+neighbourhood eligible. Fixed the worst stalls without changing worldgen output:
+`--quickPlaySingleplayer` now uses `startLocalGameFast`, the blocking
+`startLocalGame` path no longer decorates the spawn chunk synchronously, completed
+terrain integration is capped to 2 chunks/tick, queued chunks are tracked by
+`m_queuedChunks`, main-thread decoration is limited to one eligible chunk and is
+suppressed while movement/input happened in the last 750 ms, and dirty mesh rebuilds
+remain capped to one per frame. Release `build/mcpp.exe` rebuilt successfully via
+`tools/run_with_timeout.ps1` + VS dev environment. Still not final: decoration is
+still synchronous when the player is idle; the correct long-term fix is a private
+snapshot/merge decoration worker or a thread-safe engine decoration context.
+
+**Last updated prior**: 2026-06-21 00:10 UTC - terrain performance cache/heightmap checkpoint.
 
 **Terrain/engine performance PARTIAL (2026-06-21 00:10):** found a real base
 problem in the Java cache model, not just a need for generic tuning. The C++ router
