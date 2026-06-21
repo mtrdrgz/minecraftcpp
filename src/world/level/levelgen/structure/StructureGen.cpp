@@ -561,6 +561,7 @@ struct Runtime {
     bool tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world);
     bool tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world);
     bool tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bool isBeached);
+    bool tryPlaceIgloo(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 };
@@ -1198,6 +1199,9 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:shipwreck") {
         return tryPlaceShipwreck(active, world, cfg.isBeached);
     }
+    if (cfg.structureType == "minecraft:igloo") {
+        return tryPlaceIgloo(active, world);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly (existing path)
@@ -1345,6 +1349,58 @@ bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bo
     std::size_t placed = placeTemplate(templateLocation, pos, rot, world);
     MC_LOG_INFO("Structure shipwreck{} placed at chunk ({},{}), template={}, rot={}, blocks={}",
                 isBeached ? "_beached" : "", active.x, active.z, templateLocation, rotIdx, placed);
+    return placed > 0;
+}
+
+bool Runtime::tryPlaceIgloo(ChunkPos active, const StructureWorld& world) {
+    // IglooStructure.findGenerationPoint:
+    //   onTopOfChunkCenter(context, WORLD_SURFACE_WG, ...)
+    //   generatePieces:
+    //     startPos = (chunkX*16, 90, chunkZ*16)
+    //     rotation = Rotation.getRandom(random)  // nextInt(4)
+    //     IglooPieces.addPieces(manager, startPos, rotation, builder, random)
+    //
+    // IglooPieces.addPieces:
+    //   if (random.nextDouble() < 0.5) {       // 50% chance of underground
+    //     depth = random.nextInt(8) + 4;       // 4..11
+    //     place lab at startPos + offset(0,-3,-2) - (0, depth*3, 0)
+    //     for i in 0..depth-2:
+    //       place ladder at startPos + offset(2,-3,4) - (0, i*3, 0)
+    //   }
+    //   place top at startPos + offset(0,0,0)
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // Rotation.getRandom(random) = Rotation.values()[random.nextInt(4)]
+    const int rotIdx = random->nextInt(4);
+    const Rotation rot = static_cast<Rotation>(rotIdx);
+
+    BlockPos startPos{ active.x * 16, 90, active.z * 16 };
+    std::size_t placed = 0;
+
+    // 50% chance of underground lab + ladders
+    if (random->nextDouble() < 0.5) {
+        const int depth = random->nextInt(8) + 4;  // 4..11
+
+        // Lab (igloo/bottom): startPos + (0, -3, -2) - (0, depth*3, 0)
+        // = startPos + (0, -3 - depth*3, -2)
+        BlockPos labPos{ startPos.x + 0, startPos.y - 3 - depth * 3, startPos.z + (-2) };
+        placed += placeTemplate("minecraft:igloo/bottom", labPos, rot, world);
+
+        // Ladder segments (igloo/middle): startPos + (2, -3, 4) - (0, i*3, 0)
+        // = startPos + (2, -3 - i*3, 4) for i = 0..depth-2
+        for (int i = 0; i < depth - 1; ++i) {
+            BlockPos ladPos{ startPos.x + 2, startPos.y - 3 - i * 3, startPos.z + 4 };
+            placed += placeTemplate("minecraft:igloo/middle", ladPos, rot, world);
+        }
+    }
+
+    // Top (igloo/top): startPos + (0, 0, 0)
+    placed += placeTemplate("minecraft:igloo/top", startPos, rot, world);
+
+    MC_LOG_INFO("Structure igloo placed at chunk ({},{}), rot={}, blocks={}",
+                active.x, active.z, rotIdx, placed);
     return placed > 0;
 }
 
