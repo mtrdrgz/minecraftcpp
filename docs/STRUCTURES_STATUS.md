@@ -38,6 +38,29 @@ Beardifier is non-empty over the chunks a village reaches and is deterministic
 (same seed → same beardifier); its density contribution near villages is non-zero
 (it WILL adapt terrain); terrain elsewhere is unchanged.
 
+**Verification suite (all green, Linux GCC + JDK25 GT):**
+- `jigsaw_placement_parity` — 5 structures × 1055 seeds, **0 piece mismatches** (the
+  junction recording added for the Beardifier does NOT move any piece).
+- `beardifier_parity` — 400 cases / 8000 checks, **0 mismatches** vs the real class.
+- `full_chunk_parity` — 98304 cells, **0 mismatches** (no-structure terrain byte-identical
+  with the beardifier hook present).
+- `structure_gen_probe` — villages enabled, per-chunk Beardifier non-empty + deterministic
+  + non-zero density near villages.
+
+**KNOWN 1:1 consistency item (slope-only, documented not faked):** vanilla computes the
+structure start (piece positions) ONCE at STRUCTURE_STARTS from the *base column* height
+(`getFirstFreeHeight` via `getBaseColumn`, no beardifier) and reuses it at NOISE
+(beardifier) and FEATURES (block placement). This port has TWO assemblies:
+`buildChunkBeardifier` uses the column height (`getBaseHeight-1` — correct, matches
+vanilla), but the post-pass `runStructures` still projects via the *chunk* heightmap
+(`c->heightmap`, which is post-beardifier). On flat terrain (where villages mostly are)
+the two agree exactly; on slopes they can differ by a block or two, so the placed blocks
+may be slightly offset from the adapted terrain. The faithful fix is to make
+`runStructures` assemble from the same column height (or reuse the cached
+`buildBeardifier` assembly) so both match vanilla's compute-once start. Left as a
+follow-up because it changes ALL structure positioning and needs the Windows engine +
+a structures-on server GT to verify (and `getBaseHeight` per query is a perf concern).
+
 **`feature_pool_element`** (35 decorative pieces — trees/hay/flowers in the village
 square) remains a separate decorative layer: it runs a PlacedFeature with the
 structure-piece RNG, which is its own port. Villages are structurally complete and
