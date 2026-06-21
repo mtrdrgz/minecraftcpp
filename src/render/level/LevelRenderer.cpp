@@ -208,14 +208,20 @@ void LevelRenderer::updateCamera(float dtSec) {
 
 void LevelRenderer::rebuildDirtyChunks() {
     PROFILE_SCOPE("level_renderer_rebuildDirtyChunks");
-    for (auto it = m_pendingMeshBuilds.begin(); it != m_pendingMeshBuilds.end(); ) {
-        if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-            ++it;
+    for (size_t i = 0; i < m_pendingMeshBuilds.size(); ) {
+        if (m_pendingMeshBuilds[i].future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            ++i;
             continue;
         }
 
-        std::vector<SectionMesh> meshes = it->future.get();
-        const int64_t key = chunkKey(it->pos);
+        PendingMeshBuild ready = std::move(m_pendingMeshBuilds[i]);
+        if (i + 1 < m_pendingMeshBuilds.size()) {
+            m_pendingMeshBuilds[i] = std::move(m_pendingMeshBuilds.back());
+        }
+        m_pendingMeshBuilds.pop_back();
+
+        std::vector<SectionMesh> meshes = ready.future.get();
+        const int64_t key = chunkKey(ready.pos);
         m_meshBuildQueued.erase(key);
 
         auto chunkIt = m_mc->chunks().find(key);
@@ -228,8 +234,6 @@ void LevelRenderer::rebuildDirtyChunks() {
                 rd.built = true;
             }
         }
-
-        it = m_pendingMeshBuilds.erase(it);
     }
 
     struct DirtyCandidate {

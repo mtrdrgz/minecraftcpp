@@ -118,6 +118,26 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 18:22 UTC — Async meshing iterator/cache assert hotfix
+
+**Agent**: Codex
+
+- User reported a Microsoft Visual C++ debug assertion from `std::vector`
+  ("can't dereference value-initialized vector iterator") after the snapshot
+  meshing change. The likely regression surface was the new async meshing path:
+  `LevelRenderer` erased pending futures from a vector while iterating, and
+  `ChunkMesh.cpp` returned references/pointers into static model caches that can
+  be invalidated as worker-side cache population continues.
+- Hardened both areas without changing terrain or model semantics: pending mesh
+  builds are now removed by index plus swap-pop, and vanilla model cache access
+  returns stable value copies for model-id vectors and loaded models instead of
+  borrowed storage.
+- Verified build: `tools/run_with_timeout.ps1` + VS dev environment rebuilt
+  `build/mcpp.exe` successfully. Runtime smoke: `build/mcpp.exe
+  --quickPlaySingleplayer` ran for 20s under the timeout wrapper, reached local
+  world startup/decor context init, then was killed by timeout with no `mcpp.exe`
+  process left alive.
+
 ### 2026-06-21 18:15 UTC — Async snapshot chunk meshing
 
 **Agent**: Codex

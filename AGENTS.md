@@ -352,7 +352,20 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 18:15 UTC - chunk meshing moved off the render thread.
+**Last updated**: 2026-06-21 18:22 UTC - async meshing iterator/cache assert hotfix.
+
+**Async meshing debug assert HOTFIX (2026-06-21 18:22):** user reported an MSVC
+debug assertion from `std::vector` ("can't dereference value-initialized vector
+iterator") shortly after the snapshot meshing change. Hardened the async meshing
+path: pending mesh futures are removed by index/swap-pop instead of iterator erase,
+and the vanilla model mesher cache now returns stable value copies for model-id
+vectors and loaded models instead of references/pointers into mutable static
+containers. This keeps worker mesh builds from holding invalidated cache storage.
+Verified `build/mcpp.exe` rebuild and a 20s `--quickPlaySingleplayer` smoke via
+`tools/run_with_timeout.ps1`; the smoke timed out normally and left no `mcpp.exe`
+process alive.
+
+**Last updated prior**: 2026-06-21 18:15 UTC - chunk meshing moved off the render thread.
 
 **Chunk streaming stutter architecture v3 (2026-06-21 18:15):** the render-first
 defer from 18:04 was rejected in playtesting because it made terrain visual catch-up

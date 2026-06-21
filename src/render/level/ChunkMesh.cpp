@@ -624,11 +624,11 @@ Model loadModel(const std::string& id, std::unordered_set<std::string>& visiting
     return result;
 }
 
-const Model* loadModelCached(const std::string& id) {
+std::optional<Model> loadModelCached(const std::string& id) {
     {
         std::lock_guard<std::mutex> lock(cacheMutex());
         auto it = modelCache().find(id);
-        if (it != modelCache().end()) return it->second.loaded ? &it->second : nullptr;
+        if (it != modelCache().end()) return it->second.loaded ? std::optional<Model>(it->second) : std::nullopt;
     }
 
     std::unordered_set<std::string> visiting;
@@ -636,8 +636,8 @@ const Model* loadModelCached(const std::string& id) {
 
     std::lock_guard<std::mutex> lock(cacheMutex());
     auto it = modelCache().find(id);
-    if (it == modelCache().end() || !it->second.loaded) return nullptr;
-    return &it->second;
+    if (it == modelCache().end() || !it->second.loaded) return std::nullopt;
+    return it->second;
 }
 
 std::string resolveTextureRef(const Model& model, std::string ref) {
@@ -749,7 +749,7 @@ std::vector<std::string> modelsForState(const mc::BlockState& state) {
     return out;
 }
 
-const std::vector<std::string>& cachedModelsForState(uint32_t stateId, const mc::BlockState& state) {
+std::vector<std::string> cachedModelsForState(uint32_t stateId, const mc::BlockState& state) {
     static std::mutex stateMutex;
     static std::vector<std::vector<std::string>> cache;
     static std::vector<uint8_t> resolved;
@@ -780,8 +780,7 @@ const std::vector<std::string>& cachedModelsForState(uint32_t stateId, const mc:
         return cache[stateId];
     }
 
-    static const std::vector<std::string> empty;
-    return empty;
+    return {};
 }
 
 int faceIndex(const std::string& name) {
@@ -862,12 +861,12 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                               uint32_t stateId,
                               uint8_t light,
                               const TextureAtlas* atlas) {
-    const std::vector<std::string>& modelIds = cachedModelsForState(stateId, state);
+    const std::vector<std::string> modelIds = cachedModelsForState(stateId, state);
     if (modelIds.empty()) return false;
 
     bool emitted = false;
     for (const std::string& modelId : modelIds) {
-        const Model* model = loadModelCached(modelId);
+        std::optional<Model> model = loadModelCached(modelId);
         if (!model) continue;
         for (const Element& e : model->elements) {
             for (const auto& [faceName, face] : e.faces) {
