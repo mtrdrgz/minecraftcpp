@@ -323,9 +323,33 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
 
     if (m_atlas.isLoaded()) cmd->bindTexture(m_atlas.texture(), 0);
 
+    // Frustum cull at chunk level: skip chunks whose center is behind the camera
+    // or outside the far plane. A full frustum test (6 planes) is ideal but even
+    // a simple dot-product check against the camera forward vector eliminates
+    // ~half the draw calls (everything behind the player).
+    const glm::vec3 camForward = vanillaViewVector(m_camPitch, m_camYaw);
+    const float farPlane = 512.0f;
+    int drawCalls = 0;
     for (auto& [key, rd] : m_renderData) {
         if (!rd.built) continue;
-        for (auto& m : rd.sections) uploadAndDrawSection(cmd, m);
+        // Reconstruct chunk world position from key
+        const ChunkPos cp{ (int)(key >> 32), (int)(key & 0xFFFFFFFF) };
+        const glm::vec3 chunkCenter(cp.x * 16 + 8.0f, m_camPos.y, cp.z * 16 + 8.0f);
+        const glm::vec3 toChunk = chunkCenter - m_camPos;
+        const float dist = glm::length(toChunk);
+        // Skip if beyond far plane
+        if (dist > farPlane) continue;
+        // Skip if behind camera (dot < 0 means more than 90° off-axis)
+        // Use a slightly relaxed threshold (dot < -0.2) so chunks at the edge
+        // of the FOV are still drawn.
+        if (dist > 16.0f) {  // Don't cull chunks right next to the player
+            const float dot = glm::dot(toChunk / dist, camForward);
+            if (dot < -0.3f) continue;
+        }
+        for (auto& m : rd.sections) {
+            uploadAndDrawSection(cmd, m);
+            ++drawCalls;
+        }
     }
     if (m_entityRenderer) {
         m_entityRenderer->renderEntities(cmd, vp);
