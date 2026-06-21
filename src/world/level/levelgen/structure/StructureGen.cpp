@@ -1488,7 +1488,22 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     }
     // TODO: add more non-jigsaw structure types
 
-    // Jigsaw structure assembly (existing path)
+    // Jigsaw structure assembly. Prefer the COLUMN-based assembly the Beardifier
+    // already computed for this start chunk (assembledCache, keyed structureId:x,z):
+    // vanilla computes the start ONCE at STRUCTURE_STARTS from the base column height
+    // and reuses it at NOISE (beardifier) + FEATURES (block placement). Reusing it here
+    // makes the placed blocks align with the beardified terrain and match the certified
+    // jigsaw assembly. Fall back to assembling with the caller's world when no
+    // beardifier ran for this chunk (e.g. standalone tests; on flat terrain identical).
+    std::string cacheKey = structureId + ":" + std::to_string(active.x) + "," + std::to_string(active.z);
+    auto cachedIt = assembledCache.find(cacheKey);
+    if (cachedIt != assembledCache.end() && !cachedIt->second.empty()) {
+        std::size_t blocks = placePieces(cachedIt->second, world);
+        MC_LOG_INFO("Structure {} placed (cached column assembly) at chunk ({},{}), pieces={}, blocks={}",
+                    structureId, active.x, active.z, cachedIt->second.size(), blocks);
+        return true;
+    }
+
     std::vector<Placed> pieces;
     BlockPos stubPos{};
     try {

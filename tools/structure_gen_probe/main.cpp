@@ -88,14 +88,17 @@ int main(int argc, char** argv) {
             w.setBlock  = [&fw](int x, int y, int z, std::uint32_t id) { fw.set(x, y, z, id); };
             w.heightAt  = [&fw](int, int) { return fw.surface - 1; };
             auto biomeGetter = [&biome](int, int, int) { return biome; };
-            generateStructures({cx, cz}, seed, w, biomeGetter, data);
-            if (fw.writes > 0) { totalWrites += fw.writes; ++chunksWithWrites; }
 
-            // Exercise the Beardifier integration (forStructuresInChunk): build the
-            // per-chunk Beardifier from nearby terrain-adapting structures.
+            // Engine order: build the per-chunk Beardifier (assembles + caches the
+            // column-based structures) BEFORE generating structure blocks, so the
+            // block placement reuses the same cached assembly.
             auto columnHeight = [surfaceY](int, int) { return surfaceY - 1; };
             mc::levelgen::Beardifier beard =
                 generateBeardifier({cx, cz}, seed, columnHeight, biomeGetter, data);
+
+            generateStructures({cx, cz}, seed, w, biomeGetter, data);
+            if (fw.writes > 0) { totalWrites += fw.writes; ++chunksWithWrites; }
+
             if (!beard.isEmpty()) {
                 ++beardChunks;
                 // a non-empty beardifier must produce non-zero density somewhere near
