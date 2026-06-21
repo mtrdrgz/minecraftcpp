@@ -446,6 +446,9 @@ struct JigsawConfig {
     bool supported = false;
     std::string reason;
 
+    // Shipwreck-specific (is_beached in the structure JSON)
+    bool isBeached = false;
+
     std::set<std::string> biomes;
     std::string startPool;
     bool hasStartJigsaw = false;
@@ -557,6 +560,7 @@ struct Runtime {
     bool tryPlaceSwampHut(ChunkPos active, const StructureWorld& world);
     bool tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world);
     bool tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bool isBeached);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 };
@@ -791,6 +795,10 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     if (type != "minecraft:jigsaw") {
         // Non-jigsaw structures don't need jigsaw config fields
         cfg.supported = true;
+        // Shipwreck: parse is_beached flag
+        if (type == "minecraft:shipwreck") {
+            cfg.isBeached = j.value("is_beached", false);
+        }
         return cfg;
     }
 
@@ -1187,6 +1195,9 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:jungle_temple") {
         return tryPlaceJungleTemple(active, world);
     }
+    if (cfg.structureType == "minecraft:shipwreck") {
+        return tryPlaceShipwreck(active, world, cfg.isBeached);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly (existing path)
@@ -1285,6 +1296,56 @@ bool Runtime::tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world)
     temple.postProcess(access, *random);
     MC_LOG_INFO("Structure jungle_temple placed at chunk ({},{})", active.x, active.z);
     return true;
+}
+
+bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bool isBeached) {
+    // ShipwreckStructure.findGenerationPoint:
+    //   onTopOfChunkCenter(context, isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG, ...)
+    //   generatePieces:
+    //     rotation = Rotation.getRandom(context.random())  // nextInt(4)
+    //     offset = (chunkX*16, 90, chunkZ*16)
+    //     template = Util.getRandom(isBeached ? BEACHED : OCEAN, random)  // nextInt(len)
+    //     place template at offset with rotation
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // Rotation.getRandom(random) = Rotation.values()[random.nextInt(4)]
+    const int rotIdx = random->nextInt(4);
+    const Rotation rot = static_cast<Rotation>(rotIdx);
+
+    // Template lists (ShipwreckPieces.java:34-68)
+    static const char* BEACHED[] = {
+        "shipwreck/with_mast", "shipwreck/sideways_full",
+        "shipwreck/sideways_fronthalf", "shipwreck/sideways_backhalf",
+        "shipwreck/rightsideup_full", "shipwreck/rightsideup_fronthalf",
+        "shipwreck/rightsideup_backhalf", "shipwreck/with_mast_degraded",
+        "shipwreck/rightsideup_full_degraded", "shipwreck/rightsideup_fronthalf_degraded",
+        "shipwreck/rightsideup_backhalf_degraded"
+    };
+    static const char* OCEAN[] = {
+        "shipwreck/with_mast", "shipwreck/upsidedown_full",
+        "shipwreck/upsidedown_fronthalf", "shipwreck/upsidedown_backhalf",
+        "shipwreck/sideways_full", "shipwreck/sideways_fronthalf",
+        "shipwreck/sideways_backhalf", "shipwreck/rightsideup_full",
+        "shipwreck/rightsideup_fronthalf", "shipwreck/rightsideup_backhalf",
+        "shipwreck/with_mast_degraded", "shipwreck/upsidedown_full_degraded",
+        "shipwreck/upsidedown_fronthalf_degraded", "shipwreck/upsidedown_backhalf_degraded",
+        "shipwreck/sideways_full_degraded", "shipwreck/sideways_fronthalf_degraded",
+        "shipwreck/sideways_backhalf_degraded", "shipwreck/rightsideup_full_degraded",
+        "shipwreck/rightsideup_fronthalf_degraded", "shipwreck/rightsideup_backhalf_degraded"
+    };
+
+    const char** list = isBeached ? BEACHED : OCEAN;
+    const int listLen = isBeached ? 11 : 20;
+    const std::string templateLocation = std::string("minecraft:") + list[random->nextInt(listLen)];
+
+    // Place at (chunkX*16, 90, chunkZ*16) — Java uses y=90 as the base
+    BlockPos pos{ active.x * 16, 90, active.z * 16 };
+    std::size_t placed = placeTemplate(templateLocation, pos, rot, world);
+    MC_LOG_INFO("Structure shipwreck{} placed at chunk ({},{}), template={}, rot={}, blocks={}",
+                isBeached ? "_beached" : "", active.x, active.z, templateLocation, rotIdx, placed);
+    return placed > 0;
 }
 
 void Runtime::generate(ChunkPos active, const StructureWorld& world,
