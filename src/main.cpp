@@ -8,6 +8,7 @@
 #include "client/Minecraft.h"
 #include "world/level/block/Blocks.h"
 #include "world/item/Items.h"
+#include "debug/DebugOverlay.h"
 #include <string>
 #include <chrono>
 #include <vector>
@@ -118,6 +119,12 @@ int main() {
     constexpr double TICK_MS = 1000.0 / 20.0;
     double tickAccum = 0.0;
 
+    // Debug overlay (F1 to toggle — development tool, not part of 1:1 port)
+    mc::DebugOverlay debugOverlay;
+    bool f1WasDown = false;
+    bool f2WasDown = false;
+    bool f3WasDown = false;
+
     constexpr float SKY_R = 0.529f, SKY_G = 0.808f, SKY_B = 0.980f;
     bool escWasDown = false;
 
@@ -132,8 +139,28 @@ int main() {
         }
         escWasDown = escDown;
 
+        // Debug overlay: F1 toggle, F2 tab cycle, F3 = structures tab
+        const bool f1Down = window.isKeyDown(VK_F1);
+        if (f1Down && !f1WasDown) {
+            debugOverlay.visible = !debugOverlay.visible;
+            if (debugOverlay.visible) {
+                window.captureMouse(false);
+            } else if (mc.isInGame()) {
+                window.captureMouse(true);
+            }
+        }
+        f1WasDown = f1Down;
+
+        const bool f2Down = window.isKeyDown(VK_F2);
+        if (f2Down && !f2WasDown) {
+            debugOverlay.currentTab = (debugOverlay.currentTab + 1) % 3;
+        }
+        f2WasDown = f2Down;
+
         if (window.consumeLButtonClicked()) {
-            if (mc.screen()) {
+            if (debugOverlay.visible) {
+                // Debug overlay captures clicks — don't route to screen or game
+            } else if (mc.screen()) {
                 // A menu is open: route the click to its widgets, cursor stays visible.
                 mc.screen()->mouseClicked(mc.guiMouseX(), mc.guiMouseY(), 0);
             } else if (mc.isInGame() && !window.isMouseCaptured()) {
@@ -196,6 +223,11 @@ int main() {
                         mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
                     } else {
                         mc.gui()->render(*mc.guiGraphics(), partialTick);
+                    }
+                    // Debug overlay (development tool, not part of 1:1 port)
+                    if (debugOverlay.visible && mc.font()) {
+                        debugOverlay.render(*mc.guiGraphics(), *mc.font(), mc, window,
+                                             std::chrono::duration<float>(now - lastTick).count());
                     }
                     mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
                 }

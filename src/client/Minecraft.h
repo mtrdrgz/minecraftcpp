@@ -97,6 +97,7 @@ public:
     bool panoramaLoaded() const;
 
 private:
+    friend struct DebugOverlay;  // Development tool — not part of 1:1 port
     void handlePackets();
     void handlePlayPacket(int32_t id, net::PacketBuffer& buf);
     void sendLoginSequence(std::string_view username);

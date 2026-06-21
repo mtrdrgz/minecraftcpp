@@ -10,6 +10,8 @@ set(MC_SOURCES
     # Core
     core/StbImpl.cpp
     core/ThreadPool.cpp
+    # Debug overlay (development tool, not part of 1:1 port)
+    debug/DebugOverlay.cpp
     # Profiling
     ../profiling/src/Profiler.cpp
 
