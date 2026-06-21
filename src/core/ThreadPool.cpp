@@ -2,16 +2,24 @@
 
 #include <algorithm>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 namespace mc {
 
 ThreadPool::ThreadPool(size_t threads) : stop(false) {
-    // Terrain generation is CPU-heavy. Using hardware_concurrency()-1 workers can
-    // still starve the render/input thread on typical desktop CPUs. Cap workers so
-    // local chunk generation stays asynchronous without making the whole game feel
-    // frozen while the queue drains.
-    const size_t workerCount = std::max<size_t>(1, std::min<size_t>(threads, 4));
+    // Terrain generation is CPU-heavy and currently competes with render/input.
+    // Keep the streaming pool deliberately small; correctness is unchanged, only
+    // how aggressively we spend spare CPU while chunks stream in.
+    const size_t workerCap = threads >= 7 ? 2 : 1;
+    const size_t workerCount = std::max<size_t>(1, std::min<size_t>(threads, workerCap));
     for (size_t i = 0; i < workerCount; ++i) {
         workers.emplace_back([this]() {
+#ifdef _WIN32
+            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+#endif
             for (;;) {
                 std::function<void()> task;
                 {

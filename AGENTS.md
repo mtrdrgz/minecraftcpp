@@ -352,7 +352,21 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 17:56 UTC - chunk streaming stutter mitigation.
+**Last updated**: 2026-06-21 18:04 UTC - chunk streaming made render-first.
+
+**Chunk streaming stutter mitigation v2 (2026-06-21 18:04):** the previous
+main-thread decoration throttle was not enough; gameplay was still effectively
+2 FPS while chunks were generating. Root cause now treated as CPU/render-thread
+contention: terrain workers were normal-priority CPU hogs, and the renderer still
+rebuilt/uploaded chunk meshes synchronously during camera movement. Fixed by
+making the streaming `ThreadPool` tiny (1 worker on typical CPUs, 2 only on
+larger CPUs) and putting its Windows worker threads into background mode, plus
+deferring dirty chunk mesh rebuilds and first GPU uploads while camera/input
+happened in the last 250 ms. This intentionally prefers responsive movement over
+immediate chunk visual catch-up; some chunks may appear late while moving, which
+is acceptable compared to freezing input. Release `build/mcpp.exe` rebuilt.
+
+**Last updated prior**: 2026-06-21 17:56 UTC - chunk streaming stutter mitigation.
 
 **Chunk streaming stutter MITIGATED (2026-06-21 17:56):** the terrain generator
 workers were not the only problem. Runtime decoration and chunk meshing still ran

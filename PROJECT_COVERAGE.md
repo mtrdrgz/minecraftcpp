@@ -118,6 +118,25 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-21 18:04 UTC — Render-first chunk streaming
+
+**Agent**: Codex
+
+- User tested the previous mitigation and reported the game was still effectively
+  unplayable, around 2 FPS while chunks generated. Follow-up diagnosis: even if
+  terrain generation is on worker futures, those workers were normal-priority CPU
+  work, and the render path still performed synchronous dirty chunk mesh rebuilds
+  plus first GPU uploads during movement.
+- Changed scheduling only, not worldgen algorithms: the shared `ThreadPool` now
+  uses a deliberately small streaming pool (1 worker on typical CPUs, 2 only when
+  the requested worker count indicates a larger CPU) and Windows worker threads
+  enter background mode. `LevelRenderer` now records camera/input activity and
+  defers dirty chunk mesh rebuilds and first section uploads while movement/input
+  happened in the last 250 ms.
+- Verified build: `tools/run_with_timeout.ps1` + VS dev environment rebuilt
+  `build/mcpp.exe` successfully after asset packaging. This fix prioritizes
+  responsive input/render; visual chunk catch-up may lag until the player pauses.
+
 ### 2026-06-21 17:56 UTC — Chunk streaming stutter mitigation
 
 **Agent**: Codex

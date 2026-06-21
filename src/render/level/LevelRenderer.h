@@ -61,6 +61,8 @@ private:
     // Frame timing for camera movement
     using Clock = std::chrono::steady_clock;
     Clock::time_point m_lastFrame = Clock::now();
+    Clock::time_point m_lastCameraInput = Clock::now();
+    bool m_allowChunkUploads = true;
 
     struct ChunkRenderData {
         std::vector<SectionMesh> sections;

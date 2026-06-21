@@ -178,6 +178,14 @@ void LevelRenderer::updateCamera(float dtSec) {
     }
     if (!m_window) return;
     int dx = 0, dy = 0; m_window->consumeMouseDelta(dx, dy);
+    const bool movementKeyDown =
+        m_window->isKeyDown('W') || m_window->isKeyDown('A') ||
+        m_window->isKeyDown('S') || m_window->isKeyDown('D') ||
+        m_window->isKeyDown(VK_SPACE) || m_window->isKeyDown(VK_CONTROL) ||
+        m_window->isKeyDown(VK_SHIFT);
+    if (dx || dy || movementKeyDown) {
+        m_lastCameraInput = Clock::now();
+    }
     if (dx || dy) {
         m_camYaw -= (float)dx * 0.15f; m_camPitch += (float)dy * 0.15f;
         m_camPitch = std::fmax(-89.f, std::fmin(89.f, m_camPitch));
@@ -203,6 +211,11 @@ void LevelRenderer::updateCamera(float dtSec) {
 
 void LevelRenderer::rebuildDirtyChunks() {
     PROFILE_SCOPE("level_renderer_rebuildDirtyChunks");
+    const auto now = Clock::now();
+    if (!m_renderData.empty() && now - m_lastCameraInput < std::chrono::milliseconds(250)) {
+        return;
+    }
+
     struct DirtyCandidate {
         int64_t key;
         int distSq;
@@ -256,6 +269,7 @@ void LevelRenderer::rebuildDirtyChunks() {
 void LevelRenderer::uploadAndDrawSection(ICommandList* cmd, SectionMesh& mesh) {
     if (mesh.empty()) return;
     if (!mesh.uploaded) {
+        if (!m_allowChunkUploads) return;
         PROFILE_SCOPE("level_renderer_uploadSection");
         if (!mesh.vbo) mesh.vbo = m_device->createBuffer({mesh.vertices.size() * sizeof(ChunkVertex), BufferUsage::Vertex, false});
         if (!mesh.ibo) mesh.ibo = m_device->createBuffer({mesh.indices.size() * sizeof(uint32_t), BufferUsage::Index, false});
@@ -279,7 +293,9 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
     // to their expected position. 50ms is tight enough to prevent huge camera
     // jumps but loose enough that a single 50ms frame doesn't lose movement.
     float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.05f);
-    m_lastFrame = now; updateCamera(dtSec); rebuildDirtyChunks();
+    m_lastFrame = now; updateCamera(dtSec);
+    m_allowChunkUploads = (Clock::now() - m_lastCameraInput) >= std::chrono::milliseconds(250);
+    rebuildDirtyChunks();
 
     // Clean up render data for unloaded chunks to prevent memory leaks
     {

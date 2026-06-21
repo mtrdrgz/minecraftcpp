@@ -14,7 +14,7 @@ The motivation is performance and portability: a native C++ client targeting 500
 
 **The ironclad rule**: every value, formula, and algorithm must come from `26.1.2/src/` (decompiled Java) or `26.1.2/data/` (worldgen JSON). If the Java does X, the C++ does X. See [CLAUDE.md](CLAUDE.md).
 
-**Runtime streaming note (2026-06-21)**: local singleplayer now avoids the worst main-thread chunk-streaming stalls by using the fast async start path for quickplay, limiting completed chunk integration, pausing synchronous decoration while the player is moving, and rebuilding at most one dirty chunk mesh per frame. Decoration still uses the certified Java-shaped code; the remaining architectural TODO is to move decoration/meshing to private worker snapshots.
+**Runtime streaming note (2026-06-21)**: local singleplayer now prioritizes render/input over chunk catch-up. Quickplay uses the async start path, terrain workers run as a tiny background pool, completed chunk integration is bounded, synchronous decoration pauses while the player is moving, and dirty mesh rebuild/upload is deferred during recent camera input. Decoration still uses the certified Java-shaped code; the remaining architectural TODO is to move decoration/meshing to private worker snapshots.
 
 ---
 
