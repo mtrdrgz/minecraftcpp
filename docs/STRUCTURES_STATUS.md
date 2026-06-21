@@ -62,10 +62,23 @@ follow-up because it changes ALL structure positioning and needs the Windows eng
 a structures-on server GT to verify (and `getBaseHeight` per query is a perf concern).
 
 **`feature_pool_element`** (35 decorative pieces — trees/hay/flowers in the village
-square) remains a separate decorative layer: it runs a PlacedFeature with the
-structure-piece RNG, which is its own port. Villages are structurally complete and
-terrain-adapted without it. **Remaining for true byte-1:1 of the whole village:** an
-in-game visual pass on Windows + a server `generate-structures=true` GT diff.
+square) is the one remaining village layer, and it is blocked by an architectural
+mismatch, NOT a missing value. `FeaturePoolElement.place` runs a PlacedFeature at the
+jigsaw position with the structure's FEATURES-step random. Vanilla
+(`ChunkGenerator.applyFeaturesAndStructures`) places structures **per chunk**: for the
+section being decorated it seeds `random.setFeatureSeed(setDecorationSeed(level.getSeed(),
+sectionOriginX, sectionOriginZ), structureIndexInStep, stepIndex)` and reuses that one
+random across every piece of the structure that intersects the chunk, in piece order
+(features consume RNG; the order matters). This port places a whole structure at once
+via the cross-chunk writer (runStructures), with no per-chunk FEATURES random. So a
+1:1 `feature_pool_element` requires restructuring structure placement into a per-chunk
+FEATURES pass driven by that exact seed — a separate sub-project. Per RULE #0 the
+trees are NOT placed with a guessed RNG (a wrong-but-plausible tree is worse than an
+absent one). Villages are structurally complete and terrain-adapted without it.
+
+**What still needs the Windows engine (cannot be done in this Linux session):** the
+in-game visual pass and a server `generate-structures=true` `.mca` GT diff. Everything
+else is ported and gated above.
 
 ---
 
