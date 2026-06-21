@@ -450,11 +450,16 @@ void Minecraft::tryDecorate(ChunkPos cp) {
             if ((dx || dz) && !getChunk({ cp.x + dx, cp.z + dz })) return;
 
     c->decorated = true;
-    decorateChunk(*c);
+    // Java ChunkGenerator.applyFeaturesAndStructures starts the FEATURES turn by
+    // priming non-WG heightmaps, then runs structures for each step before the
+    // biome features in that same step. Villages need this for feature_pool_element
+    // RNG/order, so begin the turn before structure placement.
+    levelgen::feature::beginFeatureTurn(*c);
     {
         PROFILE_SCOPE_CHUNK("runStructures", cp.x, cp.z);
         runStructures(cp);
     }
+    decorateChunk(*c);
     // Cross-chunk writes can touch the neighbours — re-mesh the 3x3.
     {
         PROFILE_SCOPE("remesh_9chunk_neighborhood");
@@ -482,6 +487,9 @@ void Minecraft::runStructures(ChunkPos active) {
         LevelChunk* c = getChunk(worldToChunk(x, z));
         if (!c) return 0;
         return c->heightmap(((x % 16) + 16) % 16, ((z % 16) + 16) % 16);
+    };
+    world.placeFeature = [active](const std::string& featureId, levelgen::RandomSource& random, BlockPos origin) {
+        return levelgen::feature::placeStructurePoolFeature(featureId, random, origin, active);
     };
     auto biomeGetter = [this](int x, int y, int z) {
         return m_localGenerator->getNoiseBiome(x >> 2, y >> 2, z >> 2);

@@ -26,6 +26,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace mc::levelgen { class RandomSource; }
+
 namespace mc::levelgen::feature {
 
 using JsonAssetReader = std::function<std::optional<std::string>(std::string_view path)>;
@@ -54,5 +56,15 @@ void freezeWorldgenHeights(LevelChunk& chunk, const std::vector<BlockPos>* genMa
 // frozen) and run its FULL-promotion postprocess. No-op when the context is
 // unavailable. The caller manages the chunk.decorated flag and remeshing.
 void applyBiomeDecoration(LevelChunk& chunk);
+
+// Begin the Java FEATURES turn for a chunk before structure placement. This primes
+// non-WG heightmaps exactly once; applyBiomeDecoration continues the same turn.
+void beginFeatureTurn(LevelChunk& chunk);
+
+// Called by FeaturePoolElement.place during structure placement. The random is
+// already seeded by ChunkGenerator.applyFeaturesAndStructures for the structure
+// step/index, so this function must not reseed it.
+bool placeStructurePoolFeature(const std::string& featureId, mc::levelgen::RandomSource& random,
+                               BlockPos origin, ChunkPos decoratingChunk);
 
 } // namespace mc::levelgen::feature

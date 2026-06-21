@@ -45,19 +45,19 @@ The TSV has three columns: `path  status  proof`. The proof field must be non-em
 
 ## Progress Dashboard
 
-*Last updated: 2026-06-20*
+*Last updated: 2026-06-22*
 
 ### Overall
 
 ```
 Total Java files tracked : 6,882
-Ported (full)            : 503   ( 7.3%)
-Partial                  : 99    ( 1.4%)
+Ported (full)            : 504   ( 7.3%)
+Partial                  : 108   ( 1.6%)
 Reasoned N/A             : 449   ( 6.5%)
-Unvisited                : 5,831 (84.7%)
+Unvisited                : 5,821 (84.6%)
 
 Actionable files (excl. N/A): 6,433
-Weighted progress            : 552.5 / 6,433
+Weighted progress            : 558.0 / 6,433
 
 [████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 8.6%
 ```
@@ -66,7 +66,7 @@ Weighted progress            : 552.5 / 6,433
 
 | Package | Total | Ported | Partial | N/A | Progress |
 |---|---|---|---|---|---|
-| `net/minecraft/world/` | 2,559 | 243 | 56 | 0 | `[██░░░░░░░░]` 10.6% |
+| `net/minecraft/world/` | 2,559 | 244 | 65 | 0 | `[██░░░░░░░░]` 10.8% |
 | `net/minecraft/client/` | 1,813 | 28 | 17 | 0 | `[░░░░░░░░░░]` 2.0% |
 | `net/minecraft/util/` | 713 | 43 | 0 | 386 | `[█░░░░░░░░░]` 13.1% of actionable |
 | `net/minecraft/server/` | 418 | 0 | 1 | 0 | `[░░░░░░░░░░]` 0.1% |
@@ -117,6 +117,40 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 ---
 
 ## Devlog
+
+### 2026-06-22 — Village feature_pool_element + Windows build recovery
+
+**Agent**: OpenCode
+
+- Wired the missing village `feature_pool_element` path without inventing a second
+  feature system: `FeaturePoolElement.place` now delegates into the certified
+  `PlacedFeature` engine through `enginePlaceStructurePoolFeature`, using the
+  structure FEATURES random supplied by the caller. The feature random is not
+  reseeded inside the callback.
+- Reordered runtime chunk decoration to match the Java FEATURES turn shape:
+  `beginFeatureTurn` primes non-WG heightmaps first, then structures run, then
+  biome decoration continues the same turn. `StructureGen` now places jigsaw starts
+  per decorating chunk, clips template blocks to that chunk's placement box, and
+  seeds the structure random with `setDecorationSeed(chunk origin)` followed by
+  `setFeatureSeed(structureIndexInStep, stepIndex)`.
+- Windows/MSVC build was recovered on this machine. The working invocation is to
+  run CMake/Ninja from one `cmd /c` chain after `call "C:\Program Files\Microsoft
+  Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"`; calling the batch
+  file directly from PowerShell does not persist `LIB`/`INCLUDE` and fails at
+  `kernel32.lib`. The VS-bundled CMake/Ninja paths under
+  `Common7\IDE\CommonExtensions\Microsoft\CMake\...` work.
+- MSVC portability fixes landed: GCC-only `__builtin_trap()` calls now have MSVC
+  `__assume(0)` guards, `_USE_MATH_DEFINES` is a global compile definition for
+  `M_E`, `StructureWorld::placeFeature` uses `::mc::BlockPos` to avoid the
+  structure namespace `BlockPos=Vec3i` alias, and `SortedArraySet.h` explicitly
+  includes `<string>` for `std::to_string`.
+- Verification completed on Windows: `build-vs\mcpp.exe` links successfully;
+  `build-vs\structure_gen_probe.exe --radius 4 --seed 1` runs without crashing;
+  `build-vs\mcpp.exe --quickPlaySingleplayer` starts, loads embedded worldgen
+  assets, enters the main loop, generates/decorates chunks, and was terminated by
+  the intentional 30s timeout. Remaining proof gap: run a structures-on server GT
+  diff for villages and an in-game visual village inspection once suitable seeds /
+  template data are available.
 
 ### 2026-06-21 18:28 UTC — Menu button screen-transition crash hotfix
 

@@ -352,7 +352,29 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-21 — VILLAGES ENABLED (processor pipeline + Beardifier + engine integration).
+**Last updated**: 2026-06-22 — village feature_pool_element wired + Windows MSVC build recovered.
+
+**Village feature_pool_element + build handoff (2026-06-22):** completed the next
+village integration layer by reshaping runtime jigsaw placement closer to Java's
+`ChunkGenerator.applyFeaturesAndStructures` FEATURES turn. `Minecraft::tryDecorate`
+now begins the FEATURES turn before structures, structures place jigsaw starts per
+decorating chunk with `setDecorationSeed(chunk origin)` + `setFeatureSeed(structureIndex,
+stepIndex)`, template blocks are clipped to the decorating chunk's placement box, and
+`FeaturePoolElement` delegates to the certified `PlacedFeature` runtime via
+`enginePlaceStructurePoolFeature` using the already-seeded structure random (no guessed
+RNG). `FullChunkDecorateParityTest.cpp`'s engine context now exposes `engineBeginFeatureTurn`
+and a structure-pool feature callback so biome features continue the same turn after
+structures. Windows build recovery also landed: MSVC/Ninja builds on this machine only
+when CMake/Ninja are invoked inside one `cmd /c` after `call "C:\Program Files\Microsoft
+Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"`; PowerShell does not keep
+the batch-set `LIB`/`INCLUDE` env. Portability fixes: guarded `__builtin_trap()` for MSVC,
+global `_USE_MATH_DEFINES`, `::mc::BlockPos` in the structure feature callback, and
+`SortedArraySet.h` includes `<string>`. Verified: `build-vs\mcpp.exe` links;
+`structure_gen_probe --radius 4 --seed 1` runs; `mcpp.exe --quickPlaySingleplayer` loads
+embedded worldgen, enters the main loop, places/decorates chunks, then times out normally.
+Still pending: structures-on server GT diff and visual village inspection.
+
+**Last updated prior**: 2026-06-21 — VILLAGES ENABLED (processor pipeline + Beardifier + engine integration).
 
 **Villages complete + enabled (2026-06-21 d):** removed the
 `isKnownBrokenRuntimeStructureSet` village gate after porting the three missing

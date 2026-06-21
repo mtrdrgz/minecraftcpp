@@ -124,7 +124,11 @@ struct Matrix4f {
             return setPerspective(fovy, aspect, zNear, zFar, zZeroToOne);
         }
         // perspectiveGeneric: unported (not reached by the Minecraft pipeline).
+#if defined(_MSC_VER)
+        __assume(0);
+#else
         __builtin_trap();
+#endif
     }
 };
 

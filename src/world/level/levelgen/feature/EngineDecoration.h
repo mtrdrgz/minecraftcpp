@@ -41,6 +41,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace mc::levelgen { class RandomSource; }
+
 namespace mc::levelgen::feature {
 
 struct EngineDecorationContext;   // opaque (defined in the decoration TU)
@@ -60,5 +62,16 @@ void engineFreezeWgHeights(EngineDecorationContext* ctx, mc::LevelChunk* chunk, 
 // Decorate chunk (cx,cz) of the engine chunk map (8 neighbours MUST exist and be
 // frozen), then run its FULL-promotion postprocess pass.
 void engineDecorateChunk(EngineDecorationContext* ctx, int cx, int cz);
+
+// Start the chunk's FEATURES turn without running biome features yet. This mirrors
+// ChunkStatusTasks.generateFeatures heightmap priming before ChunkGenerator places
+// structures for each step. Safe to call more than once for the same chunk.
+void engineBeginFeatureTurn(EngineDecorationContext* ctx, int cx, int cz);
+
+// FeaturePoolElement.place: run one placed_feature at the exact jigsaw position
+// using the caller's already-seeded structure FEATURES random.
+bool enginePlaceStructurePoolFeature(EngineDecorationContext* ctx, const std::string& featureId,
+                                     mc::levelgen::RandomSource& random, mc::BlockPos origin,
+                                     int decoratingCx, int decoratingCz);
 
 } // namespace mc::levelgen::feature

@@ -78,7 +78,7 @@ Minecraft 1.18+ replaced old noise sampling with a composable "density function"
 | `Cache2D` / `CacheAllInCell` / `CacheOnce` / `FlatCache` | Caching layers to avoid redundant evaluation | ✅ Byte-exact | 2,359,296/0 |
 | `Interpolated` | Tri-linear interpolation across 4x4x4 cell | ✅ Byte-exact | 2,359,296/0 |
 | `BlendDensity` / `BlendAlpha` / `BlendOffset` | Chunk-border blending | ✅ Byte-exact | 2,359,296/0 |
-| `BeardifierOrMarker` | Adds structure influence (structures pull terrain) | 🔄 Partial | Integrated (returns 0 — no structure markers ported yet) |
+| `BeardifierOrMarker` | Adds structure influence (structures pull terrain) | ✅ Integrated for villages | `beardifier_parity` 8,000/0 + no-structure `full_chunk_parity` 98,304/0 |
 
 ### Biome System
 
@@ -189,9 +189,9 @@ Minecraft builds chunks in stages. Each status adds data on top of the previous.
 | Ocean Ruin cluster geometry | Cluster layout | ✅ Byte-exact | 504/0 |
 | Ruined Portal Y-selector | Y-position RNG | ✅ Byte-exact | 348/0 |
 | Jungle Temple stone selector | BlockSelector RNG (mossy/cobble maze) | ✅ Byte-exact | self-check/0 |
-| BeardifierOrMarker | Adds structure influence (structures pull terrain) | 🔄 Partial | Integrated (no structure markers yet) |
-| Jigsaw assembler (engine integration) | Full Village/Pillager Outpost/etc. assembly via the engine | 🔄 Partial | Components certified, integration pending |
-| Village | Houses, paths, lampposts | 🔄 Partial | JigsawPlacement certified, piece assembly pending |
+| BeardifierOrMarker | Adds structure influence (structures pull terrain) | ✅ Integrated for villages | `beardifier_parity` 8,000/0; no-structure terrain remains 98,304/0 |
+| Jigsaw assembler (engine integration) | Full Village/Pillager Outpost/etc. assembly via the engine | 🔄 Partial | Per-chunk FEATURES pass + FeaturePoolElement wired; server-GT diff pending |
+| Village | Houses, paths, lampposts, decorative feature_pool_element | 🔄 Partial | Processor pipeline + Beardifier + per-chunk FeaturePoolElement wired; visual/server-GT proof pending |
 | Pillager Outpost | Tower + patrol cage | 🔄 Partial | StructureTemplate.placeInWorld certified, integration pending |
 | Desert Temple | TNT + hidden chamber | ❌ Not started | DesertPyramidPiece ctor certified via scattered_feature_box |
 | Bastion Remnant | Piglin structure | 🔄 Partial | JigsawPlacement certified (211 seeds/0) |

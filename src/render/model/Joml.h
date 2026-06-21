@@ -533,7 +533,11 @@ struct Matrix4f {
         if ((properties & PROPERTY_IDENTITY) != 0) return rotation(q);
         if ((properties & PROPERTY_TRANSLATION) != 0) return rotateTranslation(q);
         if ((properties & PROPERTY_AFFINE) != 0) return rotateAffine(q);
-        __builtin_trap(); // rotateGeneric: unported (not reached by PoseStack)
+#if defined(_MSC_VER)
+        __assume(0);
+#else
+        __builtin_trap();
+#endif
     }
 
     // ── mul ─────────────────────────────────────────────────────────────────
@@ -545,7 +549,11 @@ struct Matrix4f {
         if ((properties & PROPERTY_AFFINE) != 0 && (right.properties & PROPERTY_AFFINE) != 0)
             return mulAffine(right);
         if ((properties & PROPERTY_PERSPECTIVE) != 0 && (right.properties & PROPERTY_AFFINE) != 0)
-            __builtin_trap(); // mulPerspectiveAffine: unreachable in this pipeline
+#if defined(_MSC_VER)
+            __assume(0);
+#else
+            __builtin_trap();
+#endif
         if ((right.properties & PROPERTY_AFFINE) != 0)
             return mulAffineR(right);
         return mul0(right);

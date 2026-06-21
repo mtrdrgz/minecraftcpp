@@ -96,9 +96,10 @@
       byte-idéntico: `full_chunk_parity` 98304/0). Cableado en el motor (beardifier en
       hilo principal → worker). Verificado en Linux: las aldeas ensamblan con el pipeline
       completo, el beardifier por chunk es no-vacío/determinista y produce densidad no-cero
-      cerca de aldeas. Pendiente (no verificable aquí): render visual in-game (Windows) +
-      diff contra GT del servidor con estructuras. Capa decorativa `feature_pool_element`
-      (árboles/heno en la aldea) aparte.
+      cerca de aldeas. 2026-06-22: `feature_pool_element` ya está cableado a través del
+      pase FEATURES por chunk y usa el runtime certificado de `PlacedFeature` con el RNG
+      de estructura ya sembrado. Pendiente: diff contra GT del servidor con estructuras
+      y revisión visual in-game de una aldea que ejercite esas piezas decorativas.
 - [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 

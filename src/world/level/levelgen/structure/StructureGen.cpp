@@ -18,6 +18,7 @@
 #include "world/level/levelgen/RandomSource.h"
 #include "world/level/levelgen/Mth.h"
 #include "world/level/levelgen/Beardifier.h"
+#include "world/level/levelgen/feature/GenerationStep.h"
 #include "world/phys/AABB.h"
 #include "world/phys/shapes/Shapes.h"
 
@@ -455,6 +456,7 @@ struct JigsawConfig {
 
     // terrain_adaptation (TerrainAdjustment) — drives the Beardifier.
     mc::levelgen::TerrainAdjustment terrainAdjustment = mc::levelgen::TerrainAdjustment::NONE;
+    int stepIndex = static_cast<int>(mc::levelgen::feature::GenerationStep::SURFACE_STRUCTURES);
 
     std::set<std::string> biomes;
     std::string startPool;
@@ -494,6 +496,22 @@ int verticalAnchor(const json& j, bool& ok) {
     }
     ok = false;
     return 0;
+}
+
+int decorationStepIndex(const std::string& step) {
+    using D = mc::levelgen::feature::GenerationStep::Decoration;
+    if (step == "raw_generation") return static_cast<int>(D::RAW_GENERATION);
+    if (step == "lakes") return static_cast<int>(D::LAKES);
+    if (step == "local_modifications") return static_cast<int>(D::LOCAL_MODIFICATIONS);
+    if (step == "underground_structures") return static_cast<int>(D::UNDERGROUND_STRUCTURES);
+    if (step == "surface_structures") return static_cast<int>(D::SURFACE_STRUCTURES);
+    if (step == "strongholds") return static_cast<int>(D::STRONGHOLDS);
+    if (step == "underground_ores") return static_cast<int>(D::UNDERGROUND_ORES);
+    if (step == "underground_decoration") return static_cast<int>(D::UNDERGROUND_DECORATION);
+    if (step == "fluid_springs") return static_cast<int>(D::FLUID_SPRINGS);
+    if (step == "vegetal_decoration") return static_cast<int>(D::VEGETAL_DECORATION);
+    if (step == "top_layer_modification") return static_cast<int>(D::TOP_LAYER_MODIFICATION);
+    return static_cast<int>(D::SURFACE_STRUCTURES);
 }
 
 HeightProvider parseHeightProvider(const json& j) {
@@ -598,14 +616,19 @@ struct Runtime {
     bool assembleJigsaw(const JigsawConfig& cfg, ChunkPos active, const StructureWorld& world,
                         const std::function<std::string(int, int, int)>& biomeGetter,
                         std::vector<Placed>& pieces, BlockPos& stubPos);
-    std::size_t placePieces(const std::vector<Placed>& pieces, const StructureWorld& world);
+    std::size_t placePieces(const std::vector<Placed>& pieces, const StructureWorld& world,
+                            mc::levelgen::RandomSource* random = nullptr,
+                            const BoundingBox* chunkBB = nullptr);
     std::size_t placeElement(const pools::StructurePoolElement& e, const BlockPos& pos,
-                             Rotation rot, const StructureWorld& world);
+                             Rotation rot, const StructureWorld& world,
+                             mc::levelgen::RandomSource* random = nullptr,
+                             const BoundingBox* chunkBB = nullptr);
     std::size_t placeTemplate(const std::string& location, const BlockPos& pos,
                               Rotation rot, const StructureWorld& world,
                               bool legacy = false,
                               const std::string& processorsId = "minecraft:empty",
-                              bool terrainMatching = false);
+                              bool terrainMatching = false,
+                              const BoundingBox* chunkBB = nullptr);
     // Processor pipeline.
     RuleTest parseRuleTest(const json& j);
     std::uint32_t parseStateObject(const json& j, std::string& outShortName);
@@ -617,6 +640,14 @@ struct Runtime {
                              int wx, int wy, int wz, const StructureWorld& world);
     bool tryGenerateAndPlace(const std::string& structureId, ChunkPos active, const StructureWorld& world,
                              const std::function<std::string(int, int, int)>& biomeGetter);
+    const JigsawConfig* selectJigsawStructure(const StructureSetDef& set, ChunkPos start,
+                                             const StructureWorld& world,
+                                             const std::function<std::string(int, int, int)>& biomeGetter,
+                                             const std::vector<Placed>*& outPieces);
+    std::size_t placeJigsawStartInChunk(const JigsawConfig& cfg, ChunkPos start, ChunkPos decorating,
+                                        const std::vector<Placed>& pieces,
+                                        const StructureWorld& world,
+                                        mc::levelgen::RandomSource& random);
     bool tryPlaceSwampHut(ChunkPos active, const StructureWorld& world);
     bool tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world);
     bool tryPlaceJungleTemple(ChunkPos active, const StructureWorld& world);
@@ -872,6 +903,7 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     // terrain_adaptation (default none) — feeds the Beardifier.
     cfg.terrainAdjustment = mc::levelgen::terrainAdjustmentByName(
         j.value("terrain_adaptation", std::string("none")));
+    cfg.stepIndex = decorationStepIndex(j.value("step", std::string("surface_structures")));
     
     // RULE #0 HONESTY: a structure type is listed here ONLY if it has a real,
     // dispatched piece-placement path in tryGenerateAndPlace(). A type that is
@@ -1375,7 +1407,8 @@ std::uint32_t Runtime::applyRules(const ProcList& rules, std::uint32_t inputStat
 std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& pos,
                                    Rotation rot, const StructureWorld& world,
                                    bool legacy, const std::string& processorsId,
-                                   bool terrainMatching) {
+                                   bool terrainMatching,
+                                   const BoundingBox* chunkBB) {
     if (!ensureTemplate(location)) return 0;
     const PlaceTemplate& tpl = placeTemplates.at(location);
     const ProcList* rules = loadProcessorList(processorsId);
@@ -1411,6 +1444,7 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
 
         std::uint32_t finalState = resolver.rotateState(state, rot);
         if (world.setBlock) {
+            if (chunkBB && !chunkBB->isInside(BlockPos{wx, wy, wz})) continue;
             world.setBlock(wx, wy, wz, finalState);
             ++placed;
         }
@@ -1419,30 +1453,40 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
 }
 
 std::size_t Runtime::placeElement(const pools::StructurePoolElement& e, const BlockPos& pos,
-                                  Rotation rot, const StructureWorld& world) {
+                                  Rotation rot, const StructureWorld& world,
+                                  mc::levelgen::RandomSource* random,
+                                  const BoundingBox* chunkBB) {
     bool terrainMatching = e.projection == pools::Projection::TERRAIN_MATCHING;
     switch (e.type) {
         case pools::ElementType::SINGLE:
-            return placeTemplate(e.location, pos, rot, world, /*legacy*/ false, e.processors, terrainMatching);
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ false, e.processors, terrainMatching, chunkBB);
         case pools::ElementType::LEGACY:
-            return placeTemplate(e.location, pos, rot, world, /*legacy*/ true, e.processors, terrainMatching);
+            return placeTemplate(e.location, pos, rot, world, /*legacy*/ true, e.processors, terrainMatching, chunkBB);
         case pools::ElementType::LIST: {
             std::size_t placed = 0;
-            for (const auto& child : e.elements) placed += placeElement(child, pos, rot, world);
+            for (const auto& child : e.elements) placed += placeElement(child, pos, rot, world, random, chunkBB);
             return placed;
         }
         case pools::ElementType::FEATURE:
+            // FeaturePoolElement.place delegates straight to PlacedFeature.place and
+            // does NOT receive/use chunkBB. The piece bbox only gates whether this
+            // point-feature executes during this chunk's StructureStart.placeInChunk.
+            if (random && world.placeFeature) return world.placeFeature(e.location, *random, ::mc::BlockPos{pos.x, pos.y, pos.z}) ? 1u : 0u;
+            return 0;
         case pools::ElementType::EMPTY:
         default:
             return 0;
     }
 }
 
-std::size_t Runtime::placePieces(const std::vector<Placed>& pieces, const StructureWorld& world) {
+std::size_t Runtime::placePieces(const std::vector<Placed>& pieces, const StructureWorld& world,
+                                 mc::levelgen::RandomSource* random,
+                                 const BoundingBox* chunkBB) {
     std::size_t blocks = 0;
     for (const Placed& piece : pieces) {
         if (!piece.element) continue;
-        blocks += placeElement(*piece.element, piece.position, piece.rotation, world);
+        if (chunkBB && !piece.box.intersects(*chunkBB)) continue;
+        blocks += placeElement(*piece.element, piece.position, piece.rotation, world, random, chunkBB);
     }
     return blocks;
 }
@@ -1747,13 +1791,111 @@ bool Runtime::tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world)
     return placed > 0;
 }
 
+const JigsawConfig* Runtime::selectJigsawStructure(const StructureSetDef& set, ChunkPos start,
+        const StructureWorld& world,
+        const std::function<std::string(int, int, int)>& biomeGetter,
+        const std::vector<Placed>*& outPieces) {
+    outPieces = nullptr;
+    auto tryOne = [&](const std::string& sid) -> const JigsawConfig* {
+        auto cfgIt = structures.find(sid);
+        if (cfgIt == structures.end() || !cfgIt->second.supported) return nullptr;
+        if (cfgIt->second.structureType != "minecraft:jigsaw") return nullptr;
+        const std::vector<Placed>* pieces = assembledFor(sid, start, world, biomeGetter);
+        if (!pieces || pieces->empty()) return nullptr;
+        outPieces = pieces;
+        return &cfgIt->second;
+    };
+
+    if (set.structures.size() == 1) return tryOne(set.structures[0].structureId);
+
+    std::vector<StructureSelection> options = set.structures;
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, start.x, start.z);
+    int total = 0;
+    for (const StructureSelection& o : options) total += o.weight;
+    while (!options.empty() && total > 0) {
+        int choice = random->nextInt(total);
+        std::size_t index = 0;
+        for (; index < options.size(); ++index) {
+            choice -= options[index].weight;
+            if (choice < 0) break;
+        }
+        if (index >= options.size()) index = options.size() - 1;
+        StructureSelection selected = options[index];
+        if (const JigsawConfig* cfg = tryOne(selected.structureId)) return cfg;
+        total -= selected.weight;
+        options.erase(options.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+    return nullptr;
+}
+
+std::size_t Runtime::placeJigsawStartInChunk(const JigsawConfig& cfg, ChunkPos start, ChunkPos decorating,
+                                             const std::vector<Placed>& pieces,
+                                             const StructureWorld& world,
+                                             mc::levelgen::RandomSource& random) {
+    const int minX = decorating.x * 16;
+    const int minZ = decorating.z * 16;
+    BoundingBox chunkBB(minX, kMinBuildY, minZ, minX + 15, kMaxBuildYInclusive, minZ + 15);
+
+    const std::size_t blocks = placePieces(pieces, world, &random, &chunkBB);
+    if (blocks > 0) {
+        MC_LOG_INFO("Structure {} placed in chunk ({},{}), start=({},{}), pieces={}, blocks={}",
+                    cfg.id, decorating.x, decorating.z, start.x, start.z, pieces.size(), blocks);
+    }
+    return blocks;
+}
+
 void Runtime::generate(ChunkPos active, const StructureWorld& world,
                        const std::function<std::string(int, int, int)>& biomeGetter) {
+    auto structureIndexInStep = [&](const JigsawConfig& cfg) {
+        int index = 0;
+        for (const auto& [id, other] : structures) {
+            if (other.stepIndex != cfg.stepIndex) continue;
+            if (id == cfg.id) return index;
+            ++index;
+        }
+        return 0;
+    };
+
     for (const StructureSetDef& set : structureSets) {
         auto pit = placementState.sets.find(set.id);
         if (pit == placementState.sets.end()) continue;
         const StructurePlacement& placement = pit->second;
         if (!StructureState::isSupported(placement)) continue;
+
+        bool anyJigsaw = false;
+        int maxDistH = 0;
+        for (const StructureSelection& s : set.structures) {
+            auto cfgIt = structures.find(s.structureId);
+            if (cfgIt != structures.end() && cfgIt->second.supported
+                && cfgIt->second.structureType == "minecraft:jigsaw") {
+                anyJigsaw = true;
+                maxDistH = std::max(maxDistH, cfgIt->second.maxDistH);
+            }
+        }
+
+        if (anyJigsaw) {
+            // StructureStart.placeInChunk runs for starts referenced by this chunk,
+            // not only starts whose origin is this chunk. The largest jigsaw radius
+            // bounds the scan; piece boxes are clipped by chunkBB during placement.
+            const int R = (maxDistH + 15) / 16 + 1;
+            for (int sx = active.x - R; sx <= active.x + R; ++sx) {
+                for (int sz = active.z - R; sz <= active.z + R; ++sz) {
+                    if (!placementState.isStructureChunk(placement, sx, sz)) continue;
+                    const std::vector<Placed>* pieces = nullptr;
+                    const JigsawConfig* cfg = selectJigsawStructure(set, {sx, sz}, world, biomeGetter, pieces);
+                    if (!cfg || !pieces) continue;
+                    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                        std::make_shared<mc::levelgen::XoroshiroRandomSource>(seed));
+                    const std::int64_t deco = random->setDecorationSeed(seed, active.x * 16, active.z * 16);
+                    random->setFeatureSeed(deco, structureIndexInStep(*cfg), cfg->stepIndex);
+                    (void)placeJigsawStartInChunk(*cfg, {sx, sz}, active, *pieces, world, *random);
+                }
+            }
+            continue;
+        }
+
         if (!placementState.isStructureChunk(placement, active.x, active.z)) continue;
 
         if (set.structures.size() == 1) {

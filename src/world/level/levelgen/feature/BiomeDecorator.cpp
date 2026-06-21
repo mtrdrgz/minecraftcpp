@@ -67,4 +67,16 @@ void applyBiomeDecoration(LevelChunk& chunk) {
         MC_LOG_INFO("Decorated {} chunks", g_decoratedChunks);
 }
 
+void beginFeatureTurn(LevelChunk& chunk) {
+    if (!g_ctx) return;
+    engineBeginFeatureTurn(g_ctx, chunk.pos().x, chunk.pos().z);
+}
+
+bool placeStructurePoolFeature(const std::string& featureId, mc::levelgen::RandomSource& random,
+                               BlockPos origin, ChunkPos decoratingChunk) {
+    if (!g_ctx) return false;
+    return enginePlaceStructurePoolFeature(g_ctx, featureId, random, origin,
+                                           decoratingChunk.x, decoratingChunk.z);
+}
+
 } // namespace mc::levelgen::feature

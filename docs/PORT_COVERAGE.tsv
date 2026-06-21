@@ -6052,7 +6052,7 @@ net/minecraft/world/level/chunk/BlockColumn.java	unvisited
 net/minecraft/world/level/chunk/BulkSectionAccess.java	unvisited	
 net/minecraft/world/level/chunk/CarvingMask.java	unvisited	
 net/minecraft/world/level/chunk/ChunkAccess.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; 2026-06-21 LevelChunk now keeps heightmap incrementally during noise/surface writes; full chunk API partial
-net/minecraft/world/level/chunk/ChunkGenerator.java	unvisited	
+net/minecraft/world/level/chunk/ChunkGenerator.java	partial	FEATURES-turn structure/decoration ordering partially ported: Minecraft::tryDecorate + StructureGen::generate + engineBeginFeatureTurn mirror applyFeaturesAndStructures structure-before-biome-feature order for runtime chunks; full chunk status scheduler/reference system still partial.
 net/minecraft/world/level/chunk/ChunkGeneratorStructureState.java	unvisited	
 net/minecraft/world/level/chunk/ChunkGenerators.java	unvisited	
 net/minecraft/world/level/chunk/ChunkSource.java	unvisited	
@@ -6447,14 +6447,14 @@ net/minecraft/world/level/levelgen/structure/PoolElementStructurePiece.java	unvi
 net/minecraft/world/level/levelgen/structure/PostPlacementProcessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/ScatteredFeaturePiece.java	partial	C++ src/world/level/levelgen/structure/StructurePieceBase.h ports average-ground helpers and shared piece placement surface; ScatteredFeaturePiece ctor geometry is covered through scattered_feature_box_parity, but updateHeightPositionToLowestGroundHeight and full scattered-piece save/runtime semantics are not fully certified.
 net/minecraft/world/level/levelgen/structure/SinglePieceStructure.java	unvisited	
-net/minecraft/world/level/levelgen/structure/Structure.java	unvisited	
+net/minecraft/world/level/levelgen/structure/Structure.java	partial	Structure biome gate and terrain_adaptation are ported for supported runtime structures in StructureGen.cpp/JigsawConfig; many structure types remain hard no-op and full Structure API is not ported.
 net/minecraft/world/level/levelgen/structure/StructureCheck.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureCheckResult.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructurePiece.java	partial	C++ parity gate structure_piece_math_parity (byte-exact, full-suite reconcile 2026-06-11): StructurePieceMath checks=1191532 mismatches=0
 net/minecraft/world/level/levelgen/structure/StructurePieceAccessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureSet.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureSpawnOverride.java	unvisited	
-net/minecraft/world/level/levelgen/structure/StructureStart.java	unvisited	
+net/minecraft/world/level/levelgen/structure/StructureStart.java	partial	StructureStart.placeInChunk semantics partially ported as StructureGen.cpp::placeJigsawStartInChunk: per-decorating-chunk box clipping and piece-order placement; references/save lifecycle/server-GT still pending.
 net/minecraft/world/level/levelgen/structure/StructureType.java	unvisited	
 net/minecraft/world/level/levelgen/structure/TemplateStructurePiece.java	unvisited	
 net/minecraft/world/level/levelgen/structure/TerrainAdjustment.java	unvisited	
@@ -6474,15 +6474,15 @@ net/minecraft/world/level/levelgen/structure/placement/StructurePlacementType.ja
 net/minecraft/world/level/levelgen/structure/placement/package-info.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/DimensionPadding.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/EmptyPoolElement.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/FeaturePoolElement.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/JigsawJunction.java	unvisited	
+net/minecraft/world/level/levelgen/structure/pools/FeaturePoolElement.java	ported	FeaturePoolElement.place -> StructureGen.cpp::placeElement(ElementType::FEATURE) + EngineDecoration.h::enginePlaceStructurePoolFeature; uses caller-seeded structure random and certified PlacedFeature runtime; Windows build+quickplay smoke 2026-06-22.
+net/minecraft/world/level/levelgen/structure/pools/JigsawJunction.java	partial	Fields used by Beardifier are ported as Beardifier::Junction and recorded during jigsaw assembly; verified by beardifier_parity 8000/0, but full Java record/API surface is not modeled.
 net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java	partial	C++ parity gate jigsaw_height_limit_parity (byte-exact, full-suite reconcile 2026-06-11): JigsawHeightLimit checks=280 mismatches=0
-net/minecraft/world/level/levelgen/structure/pools/LegacySinglePoolElement.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/ListPoolElement.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/StructurePoolElement.java	unvisited	
+net/minecraft/world/level/levelgen/structure/pools/LegacySinglePoolElement.java	partial	Legacy STRUCTURE_AND_AIR ignore semantics + processors wired in StructureGen.cpp::placeTemplate; verified by structure_gen_probe mossify/farm output, but full pool element API partial.
+net/minecraft/world/level/levelgen/structure/pools/ListPoolElement.java	partial	List child dispatch ported in StructureGen.cpp::placeElement(ElementType::LIST), preserving child order and random propagation for feature children; full codec/API not ported.
+net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java	partial	Single template placement, processors id, projection/TERRAIN_MATCHING and chunk clipping wired in StructureGen.cpp::placeElement/placeTemplate; full codec/API partial.
+net/minecraft/world/level/levelgen/structure/pools/StructurePoolElement.java	partial	Runtime element dispatch for single/legacy/list/feature/empty ported in StructureGen.cpp::placeElement; bounding boxes/assembly certified by jigsaw gates but full abstract API partial.
 net/minecraft/world/level/levelgen/structure/pools/StructurePoolElementType.java	unvisited	
-net/minecraft/world/level/levelgen/structure/pools/StructureTemplatePool.java	unvisited	
+net/minecraft/world/level/levelgen/structure/pools/StructureTemplatePool.java	partial	Pool loading/selection/bounding boxes are ported in StructureTemplatePool.h and used by StructureGen.cpp; gates include structure_template_pool_parity and jigsaw placement parity, but full registry/alias lifecycle partial.
 net/minecraft/world/level/levelgen/structure/pools/alias/DirectPoolAlias.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/alias/PoolAliasBinding.java	unvisited	
 net/minecraft/world/level/levelgen/structure/pools/alias/PoolAliasBindings.java	unvisited	

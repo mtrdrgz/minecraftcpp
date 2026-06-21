@@ -6,6 +6,8 @@
 #include <functional>
 #include <string>
 
+namespace mc::levelgen { class RandomSource; }
+
 namespace mc::levelgen::structure {
 
 // World view used by structure placement. Unlike a single LevelChunk, this lets a
@@ -19,6 +21,7 @@ struct StructureWorld {
     std::function<uint32_t(int, int, int)>      getBlock;
     std::function<void(int, int, int, uint32_t)> setBlock;
     std::function<int(int, int)>                 heightAt;
+    std::function<bool(const std::string&, mc::levelgen::RandomSource&, ::mc::BlockPos)> placeFeature;
 };
 
 // Generates vanilla data-driven jigsaw structures whose structure_set grid resolves

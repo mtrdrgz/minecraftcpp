@@ -3255,7 +3255,8 @@ std::string storeNoiseBiomeLookup(const NoiseBasedChunkGenerator& gen,
 void decorateOneChunk(MultiChunkLevel& level, int nx, int nz, long long seed,
                       DecorationResolver& resolver,
                       const std::function<std::string(int, int, int)>& storeNoiseBiome,
-                      PositionalRandomFactory& regionRandomFactory) {
+                      PositionalRandomFactory& regionRandomFactory,
+                      bool primeHeightmaps = true) {
     const int minY = mc::CHUNK_MIN_Y, maxY = mc::CHUNK_MAX_Y;
     level.setDecorating(nx, nz);
     // Fresh per-region random for this chunk's FEATURES turn at the chunk's
@@ -3271,7 +3272,7 @@ void decorateOneChunk(MultiChunkLevel& level, int nx, int nz, long long seed,
     // ChunkStatusTasks.generateFeatures / the Java GT decorate() (:533-536):
     // prime (overwrite) THIS chunk's four non-WG heightmaps at its turn start
     // — the snapshot includes spill already written by earlier turns.
-    level.primeNonWgHeightmaps(nx, nz);
+    if (primeHeightmaps) level.primeNonWgHeightmaps(nx, nz);
 
     // possibleBiomes for chunk N = distinct section biomes over the 3x3 around N
     // (ChunkPos.rangeClosed(N,1)) intersected with the overworld possible set.
@@ -3604,6 +3605,7 @@ struct EngineDecorationContext {
     DecoBiomeContext biomeCtx;
     MultiChunkLevel level;           // long-lived region view over the engine chunk map
     std::shared_ptr<PositionalRandomFactory> regionRandomFactory;
+    std::set<std::int64_t> begunTurns;
 
     EngineDecorationContext(const std::string& dataDir, std::uint64_t seed,
                             std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>>* chunks)
@@ -3627,6 +3629,29 @@ struct EngineDecorationContext {
         g_level = &level;
     }
 };
+
+static void prepareFeatureTurn(EngineDecorationContext* ctx, int cx, int cz) {
+    if (!ctx) return;
+    // PASS-A store for the 3x3 around the decorated chunk (possibleBiomes scan +
+    // every zoomed biome read of this turn stays inside it), filled on demand.
+    for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
+        const std::int64_t key = packChunk(cx + dx, cz + dz);
+        if (ctx->biomeStore.find(key) == ctx->biomeStore.end())
+            fillBiomeStoreChunk(ctx->gen, ctx->biomeStore, cx + dx, cz + dz);
+    }
+    g_biomeCtx = &ctx->biomeCtx;
+    g_level = &ctx->level;
+    g_curLevelSeed = static_cast<long long>(ctx->worldSeed);
+    g_regionRandom = ctx->regionRandomFactory->at(cx * 16, 0, cz * 16);
+    ctx->level.setDecorating(cx, cz);
+
+    const std::int64_t turnKey = packChunk(cx, cz);
+    if (ctx->begunTurns.insert(turnKey).second) {
+        // ChunkStatusTasks.generateFeatures primes the non-WG heightmaps once at
+        // the start of the FEATURES turn, before structures and biome features.
+        ctx->level.primeNonWgHeightmaps(cx, cz);
+    }
+}
 
 EngineDecorationContext* engineDecorationCreate(const std::string& dataDir, std::uint64_t worldSeed,
         std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>>* chunks) {
@@ -3681,21 +3706,31 @@ void engineFreezeWgHeights(EngineDecorationContext* ctx, mc::LevelChunk* chunk, 
 
 void engineDecorateChunk(EngineDecorationContext* ctx, int cx, int cz) {
     if (!ctx) return;
-    // PASS-A store for the 3x3 around the decorated chunk (possibleBiomes scan +
-    // every zoomed biome read of this turn stays inside it), filled on demand.
-    for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
-        const std::int64_t key = packChunk(cx + dx, cz + dz);
-        if (ctx->biomeStore.find(key) == ctx->biomeStore.end())
-            fillBiomeStoreChunk(ctx->gen, ctx->biomeStore, cx + dx, cz + dz);
-    }
-    g_biomeCtx = &ctx->biomeCtx;
-    g_level = &ctx->level;
-    g_curLevelSeed = static_cast<long long>(ctx->worldSeed);
+    prepareFeatureTurn(ctx, cx, cz);
     decorateOneChunk(ctx->level, cx, cz, static_cast<long long>(ctx->worldSeed),
-                     ctx->resolver, ctx->storeNoiseBiome, *ctx->regionRandomFactory);
+                     ctx->resolver, ctx->storeNoiseBiome, *ctx->regionRandomFactory,
+                     false);
     // FULL-promotion post-processing for this chunk — the same postProcessChunk the
     // server byte-match certifies (fluid SPREAD ticks stay counted hard no-ops).
     (void)postProcessChunk(ctx->level, cx, cz);
+}
+
+void engineBeginFeatureTurn(EngineDecorationContext* ctx, int cx, int cz) {
+    prepareFeatureTurn(ctx, cx, cz);
+}
+
+bool enginePlaceStructurePoolFeature(EngineDecorationContext* ctx, const std::string& featureId,
+                                     mc::levelgen::RandomSource& random, mc::BlockPos origin,
+                                     int decoratingCx, int decoratingCz) {
+    if (!ctx) return false;
+    prepareFeatureTurn(ctx, decoratingCx, decoratingCz);
+    const std::string normKey = "minecraft:" + stripNs(featureId);
+    std::shared_ptr<PlacedFeature> placed = ctx->resolver.resolveFeature(normKey);
+    if (!placed) return false;
+    g_curFeatureKey = normKey;
+    g_curTurnCx = decoratingCx;
+    g_curTurnCz = decoratingCz;
+    return placed->place(ctx->level, random, origin, genMinY, genDepth);
 }
 
 } // namespace mc::levelgen::feature

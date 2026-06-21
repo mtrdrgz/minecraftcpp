@@ -1,5 +1,7 @@
 #pragma once
 
+#define _USE_MATH_DEFINES
+
 // 1:1 port of net.minecraft.world.level.levelgen.Beardifier — the density-function
 // term that adapts terrain to structure pieces (the `minecraft:beardifier` slot the
 // noise router adds via DensityFunctions.add(finalDensity, BeardifierMarker)).

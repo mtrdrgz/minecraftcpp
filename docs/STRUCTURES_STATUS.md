@@ -8,8 +8,37 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-21 (session: VILLAGES COMPLETE — processor pipeline +
-> gravity + certified Beardifier + engine integration; villages ENABLED).
+> Last updated: 2026-06-22 (session: FeaturePoolElement wired through the per-chunk
+> FEATURES turn; Windows MSVC build recovered; villages still need server-GT visual proof).
+
+---
+
+## UPDATE 2026-06-22 — FeaturePoolElement wired + per-chunk FEATURES structure pass
+
+The previous status correctly said `feature_pool_element` could not be guessed: it
+needed Java's per-decorating-chunk FEATURES random and ordering. That architecture
+is now wired instead of faked.
+
+- `Minecraft::tryDecorate` now begins the Java FEATURES turn before structures,
+  then runs structures, then runs biome features in the same turn. The engine
+  decoration context primes non-WG heightmaps once at turn start.
+- Jigsaw structures now place per decorating chunk: starts within the maximum
+  jigsaw reach are assembled, intersecting pieces are visited in piece order,
+  template block writes are clipped to the decorating chunk box, and the random is
+  seeded as Java does with `setDecorationSeed(seed, chunkMinX, chunkMinZ)` then
+  `setFeatureSeed(decorationSeed, structureIndexInStep, stepIndex)`.
+- `FeaturePoolElement` is now a real delegated call to the already-certified
+  `PlacedFeature` runtime (`enginePlaceStructurePoolFeature`). It receives the
+  caller's seeded structure random and must not reseed it.
+- Windows verification: MSVC/Ninja build links `build-vs\mcpp.exe`; headless
+  `structure_gen_probe --radius 4 --seed 1` runs; `mcpp.exe --quickPlaySingleplayer`
+  loads embedded worldgen, enters the main loop, and generates/decorates chunks
+  until the intentional timeout.
+
+Remaining proof gaps: run a structures-on server `.mca` diff for village chunks,
+find/use a seed that visibly exercises village `feature_pool_element`, and inspect
+the in-game result. Do not mark whole-village structure output fully certified until
+that server GT exists.
 
 ---
 
@@ -61,20 +90,9 @@ may be slightly offset from the adapted terrain. The faithful fix is to make
 follow-up because it changes ALL structure positioning and needs the Windows engine +
 a structures-on server GT to verify (and `getBaseHeight` per query is a perf concern).
 
-**`feature_pool_element`** (35 decorative pieces — trees/hay/flowers in the village
-square) is the one remaining village layer, and it is blocked by an architectural
-mismatch, NOT a missing value. `FeaturePoolElement.place` runs a PlacedFeature at the
-jigsaw position with the structure's FEATURES-step random. Vanilla
-(`ChunkGenerator.applyFeaturesAndStructures`) places structures **per chunk**: for the
-section being decorated it seeds `random.setFeatureSeed(setDecorationSeed(level.getSeed(),
-sectionOriginX, sectionOriginZ), structureIndexInStep, stepIndex)` and reuses that one
-random across every piece of the structure that intersects the chunk, in piece order
-(features consume RNG; the order matters). This port places a whole structure at once
-via the cross-chunk writer (runStructures), with no per-chunk FEATURES random. So a
-1:1 `feature_pool_element` requires restructuring structure placement into a per-chunk
-FEATURES pass driven by that exact seed — a separate sub-project. Per RULE #0 the
-trees are NOT placed with a guessed RNG (a wrong-but-plausible tree is worse than an
-absent one). Villages are structurally complete and terrain-adapted without it.
+**Superseded 2026-06-22:** `feature_pool_element` is no longer an omitted layer; it is
+wired through the per-chunk FEATURES pass described above. It still needs a
+structures-on server GT diff before the full village output can be called certified.
 
 **What still needs the Windows engine (cannot be done in this Linux session):** the
 in-game visual pass and a server `generate-structures=true` `.mca` GT diff. Everything
