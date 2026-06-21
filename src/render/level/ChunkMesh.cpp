@@ -930,6 +930,13 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
         return s && s->block && s->block->isSolid();
     };
 
+    // Precompute neighbor state for the 6 faces of each block. For blocks in
+    // the interior of the section (lx 1..14, ly 1..14, lz 1..14), the neighbor
+    // is in the SAME section — use sec->getBlock directly (no lambda overhead).
+    // Boundary blocks fall back to stateAt (which may touch neighbor chunks).
+    // This is the hottest loop in the mesher: 16³ = 4096 iterations × 6 face
+    // checks. Eliminating the lambda + chunk-coord recomputation for the
+    // common interior case is a significant win.
     for (int ly = 0; ly < 16; ++ly) {
         int wy = baseY + ly;
         for (int lz = 0; lz < 16; ++lz) {
@@ -948,9 +955,6 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                 uint8_t light = sec->getSkyLight(lx, ly, lz);
                 if (light == 0) light = sec->getBlockLight(lx, ly, lz);
                 if (light == 0) {
-                    // Server didn't send light — synthesize from heightmap:
-                    // blocks at-or-above the heightmap top get full skylight,
-                    // blocks deeper fall off linearly to a cave floor of 3.
                     int16_t topY = chunk.heightmap(lx, lz);
                     int depth = topY - wy;
                     if      (depth <= 0)  light = 15;
@@ -1025,12 +1029,65 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                     }
                     emitCross(out, bx, by, bz, stateId, light, atlas, texOverride);
                 } else {
+                    // Fast path: for interior blocks (lx/lz 1..14, ly 0..14
+                    // with same-section vertical neighbor), check neighbors
+                    // via sec->getBlock directly. Only boundary blocks use
+                    // the slower stateAt/shouldCull path.
+                    const bool interiorX = (lx >= 1 && lx <= 14);
+                    const bool interiorZ = (lz >= 1 && lz <= 14);
+
+                    // Face 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z
+                    // DX/DY/DZ arrays (defined earlier in the file)
                     for (int face = 0; face < 6; ++face) {
-                        int nwx = wx + DX[face];
-                        int nwy = wy + DY[face];
-                        int nwz = wz + DZ[face];
-                        if (!shouldCull(chunk, neighbors, nwx, nwy, nwz, stateId))
+                        uint32_t neighborState = 0;
+                        bool fastPath = false;
+
+                        if (face == 0) { // +X
+                            if (interiorX) { neighborState = sec->getBlock(lx+1, ly, lz); fastPath = true; }
+                        } else if (face == 1) { // -X
+                            if (interiorX) { neighborState = sec->getBlock(lx-1, ly, lz); fastPath = true; }
+                        } else if (face == 2) { // +Y
+                            if (ly < 15) {
+                                neighborState = sec->getBlock(lx, ly+1, lz); fastPath = true;
+                            } else {
+                                // Top of section — check section above if exists
+                                const ChunkSection* above = chunk.getSection(sectionIndex + 1);
+                                if (above) { neighborState = above->getBlock(lx, 0, lz); fastPath = true; }
+                            }
+                        } else if (face == 3) { // -Y
+                            if (ly > 0) {
+                                neighborState = sec->getBlock(lx, ly-1, lz); fastPath = true;
+                            } else {
+                                const ChunkSection* below = chunk.getSection(sectionIndex - 1);
+                                if (below) { neighborState = below->getBlock(lx, 15, lz); fastPath = true; }
+                            }
+                        } else if (face == 4) { // +Z
+                            if (interiorZ) { neighborState = sec->getBlock(lx, ly, lz+1); fastPath = true; }
+                        } else { // -Z (face == 5)
+                            if (interiorZ) { neighborState = sec->getBlock(lx, ly, lz-1); fastPath = true; }
+                        }
+
+                        bool cull;
+                        if (fastPath) {
+                            // Inline shouldCull logic for the fast path
+                            if (neighborState == 0) { cull = false; }
+                            else {
+                                const mc::BlockState* nb = mc::getBlockState(neighborState);
+                                if (!nb || !nb->block) cull = false;
+                                else if (nb->isFluid() && bs->isFluid()) {
+                                    // Same fluid type: cull
+                                    cull = (nb->block->name == bs->block->name);
+                                } else {
+                                    cull = nb->block->isOpaque();
+                                }
+                            }
+                        } else {
+                            cull = shouldCull(chunk, neighbors, wx + DX[face], wy + DY[face], wz + DZ[face], stateId);
+                        }
+
+                        if (!cull) {
                             emitFace(out, bx, by, bz, face, stateId, light, atlas);
+                        }
                     }
                 }
             }

@@ -515,46 +515,35 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
     // worldgen data from disk; logs the data source + resolved feature count).
     levelgen::feature::resetEngineDecoration();
     levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
-    // Generate terrain for a 5x5 so the inner 3x3 can be decorated with all
-    // neighbours present. Explicit underground spawns are used for structure demos,
-    // so preload a wider 11x11 area to catch large jigsaw pieces around the start.
-    const int RADIUS = spawnY ? 5 : 2;
+    // Generate JUST the spawn chunk synchronously so the player has ground
+    // under their feet immediately. The async updateLocalChunks() fills the
+    // surrounding area gradually via the thread pool — no multi-second freeze.
+    // (Previously generated 11×11=121 chunks synchronously = ~6s freeze.)
     const ChunkPos spawnChunk = worldToChunk(spawnX, spawnZ);
 
     {
         PROFILE_SCOPE("startup_terrain_generation");
-        for (int dz = -RADIUS; dz <= RADIUS; ++dz) {
-            for (int dx = -RADIUS; dx <= RADIUS; ++dx) {
+        // Only generate the spawn chunk + its 8 immediate neighbours (3×3) so the
+        // player can see terrain in all directions. The rest streams in async.
+        constexpr int STARTUP_RADIUS = 1;
+        for (int dz = -STARTUP_RADIUS; dz <= STARTUP_RADIUS; ++dz) {
+            for (int dx = -STARTUP_RADIUS; dx <= STARTUP_RADIUS; ++dx) {
                 const int cx = spawnChunk.x + dx;
                 const int cz = spawnChunk.z + dz;
                 LevelChunk* chunk = getOrCreateChunk({cx, cz});
-                PROFILE_SCOPE_CHUNK("startup_fillFromNoise", cx, cz);
-                std::vector<BlockPos> genMarks;   // noise+carver postprocess marks
+                std::vector<BlockPos> genMarks;
                 m_localGenerator->fillFromNoise(*chunk, &genMarks);
                 m_localGenerator->buildSurface(*chunk);
                 m_localGenerator->applyCarvers(*chunk, &genMarks);
-                // Freeze the chunk's *_WG heightmaps + inject its generation marks
-                // (post-carvers, before any decoration can reach the chunk).
                 levelgen::feature::freezeWorldgenHeights(*chunk, &genMarks);
+                chunk->meshDirty = true;
             }
         }
     }
 
-    // Decoration + structures run on the main thread (feature caches aren't
-    // thread-safe). tryDecorate only fires for chunks whose 8 neighbours exist, so
-    // cross-chunk features (tree foliage, ore veins) write into real chunks.
-    // OPTIMIZATION: only decorate the central 3x3 area on startup to avoid long
-    // blocking stutter. The async updateLocalChunks() will handle the outer ring
-    // gradually as player plays.
-    {
-        PROFILE_SCOPE("startup_decoration_and_structures");
-        constexpr int DECORATE_RADIUS = 1;  // Only 3x3 on startup, not full 5x5
-        for (int dz = -DECORATE_RADIUS; dz <= DECORATE_RADIUS; ++dz) {
-            for (int dx = -DECORATE_RADIUS; dx <= DECORATE_RADIUS; ++dx) {
-                tryDecorate({spawnChunk.x + dx, spawnChunk.z + dz});
-            }
-        }
-    }
+    // Decorate only the spawn chunk synchronously (so trees/structures appear
+    // around the player immediately). Neighbours decorate async via updateLocalChunks.
+    tryDecorate(spawnChunk);
 
 
     PlayerState& state = m_localPlayer.state();

@@ -226,11 +226,14 @@ void LevelRenderer::rebuildDirtyChunks() {
         return a.distSq < b.distSq;
     });
 
-    // Allow 2 mesh rebuilds per frame (was 1). With the perf improvements
-    // (chunkMesh ~19ms), 2 rebuilds fit comfortably in a 16ms budget at 60fps
-    // for the occasional dirty chunk, and clear the backlog 2x faster after
-    // teleport/fast travel.
-    constexpr int MAX_REBUILDS = 2;
+    // DYNAMIC mesh rebuild budget: scale with the dirty backlog so startup /
+    // fast-travel pop-in clears quickly. When few chunks are dirty (steady state),
+    // keep it at 3 so individual frames stay responsive. When many are dirty
+    // (startup / sprint), ramp up to 8 to drain the queue.
+    // At ~19ms/chunk on the perf benchmark, 3 rebuilds ≈ 57ms (OK for 30fps
+    // catch-up frames); 8 rebuilds ≈ 152ms (acceptable during the initial load
+    // burst when the player is standing still anyway).
+    const int maxRebuilds = dirty.size() > 16 ? 8 : (dirty.size() > 6 ? 5 : 3);
     int rebuilt = 0;
     for (const DirtyCandidate& cand : dirty) {
         auto chunkIt = m_mc->chunks().find(cand.key);
@@ -251,7 +254,7 @@ void LevelRenderer::rebuildDirtyChunks() {
         for (auto& old : rd.sections) old.destroy(m_device);
         rd.sections = std::move(meshes);
         rd.built = true;
-        if (++rebuilt >= MAX_REBUILDS) break;
+        if (++rebuilt >= maxRebuilds) break;
     }
 }
 
