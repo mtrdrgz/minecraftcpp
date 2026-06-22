@@ -146,6 +146,22 @@
     forest→#79C05A (cross-verificados con un segundo decodificador PNG independiente), modifier
     dark_forest y swamp → OK. Falta solo la INTEGRACIÓN en el mesher (cargar pixeles del
     colormap + lookup de bioma por posición + blend de `BiomeColors`), descrita abajo.
+  - [~] RENDER-SIDE PORTADO Y VERIFICADO 2026-06-22: `render/level/BiomeTint.h` porta 1:1
+    `ClientLevel.calculateBlockTint` (blend de caja (2r+1)², radio por defecto 2) + los
+    resolvers `BiomeColors` GRASS/FOLIAGE/WATER + la clasificación textura→resolver de
+    `BlockColors`. Test runnable `biome_tint_parity` contra colormaps + JSON reales: plains
+    #91BD59 (r0 y r2), water=waterColor del bioma, no-tinteadas→none, blend plains|forest
+    intermedio → ALL OK. Con esto AMBAS mitades del cálculo de color están portadas y
+    verificadas headless.
+  - PENDIENTE (única parte que necesita cliente en ejecución): el snapshot de bioma
+    thread-safe. El mesher corre en un worker y el `getNoiseBiome` del generador pasa por un
+    cache (`BiomeManager`, NoiseBasedChunkGenerator.cpp:559) → llamarlo desde el worker es
+    una posible data race. La integración correcta: muestrear los biomas del chunk + margen
+    (radio 2) en el hilo principal (en `LevelRenderer::scheduleMeshBuild`), pasar ese snapshot
+    inmutable como `biomeAt` al worker, y reemplazar `getTextureTint` por `biometint::tint`
+    en las rutas de emisión (cube `emitFace`, `emitCross`, bake de modelo). No verificable sin
+    cliente (riesgo de race + coste en hilo principal), por eso se deja la integración aquí
+    con ambos núcleos ya probados.
   - GROUNDED 2026-06-22: el camino exacto está identificado y los datos verificados. El
     tinte de hierba actual en el mesher está HARDCODEADO a `#79C05A` (que en realidad es el
     color de *forest*, ¡ni siquiera el de plains!). Decodificando el colormap real
