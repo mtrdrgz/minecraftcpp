@@ -115,6 +115,20 @@
 
 ## Texturas / coloreado
 
+- [x] Formas de bloque / texturas boca abajo o mal puestas: el path de modelos JSON
+      del mesher (`tryEmitVanillaBlockModel`) leía los elementos del modelo pero
+      descartaba TODA la rotación — ignoraba la rotación `x`/`y`/`uvlock` del variant
+      del blockstate, la `rotation` por elemento y la `rotation` (UV) por cara. Por eso
+      escaleras/troncos/vallas/etc. miraban todos igual y las texturas salían boca
+      abajo o desplazadas. Arreglado cableando el pipeline ya certificado
+      `FaceBakery::bakeQuad`: nuevo `render/model/OctahedralGroup.h` (port 1:1 de
+      `com.mojang.math.OctahedralGroup` sobre el `SymmetricGroup3` certificado) para la
+      matriz de `BlockModelRotation`; rotación de elemento vía `CuboidRotation`; UV
+      rotation por cara; uvlock por cara vía `BlockMath::getFaceTransformation`; culling
+      de la cara rotada vía `Direction.rotate`; tinte solo en caras con `tintindex>=0`.
+      Verificado: el grupo octaédrico cumple cierre/identidad/determinante (48 elementos)
+      y la TU compila limpia. Pendiente de verificación visual en runtime (requiere
+      assets de cliente, no disponibles en el entorno Linux headless).
 - [ ] Hay que implementar las texturas animadas del agua, la lava, las algas...
 - [ ] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
 
