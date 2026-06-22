@@ -484,9 +484,9 @@ void Minecraft::runStructures(ChunkPos active) {
         if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
     };
     world.heightAt = [this](int x, int z) -> int {
-        LevelChunk* c = getChunk(worldToChunk(x, z));
-        if (!c) return 0;
-        return c->heightmap(((x % 16) + 16) % 16, ((z % 16) + 16) % 16);
+        // Structure starts are projected before NOISE with the base column height;
+        // reusing the post-Beardifier chunk heightmap shifts villages on slopes.
+        return m_localGenerator ? m_localGenerator->getBaseHeight(x, z) - 1 : 0;
     };
     world.placeFeature = [active](const std::string& featureId, levelgen::RandomSource& random, BlockPos origin) {
         return levelgen::feature::placeStructurePoolFeature(featureId, random, origin, active);

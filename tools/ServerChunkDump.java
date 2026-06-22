@@ -41,7 +41,7 @@ import net.minecraft.world.level.chunk.Strategy;
 public class ServerChunkDump {
     static final int MIN_Y = -64;
     static final int HEIGHT = 384;
-    static final String REGION_DIR = "26.1.2/server_run/world/dimensions/minecraft/overworld/region";
+    static String regionDir = "26.1.2/server_run/world/dimensions/minecraft/overworld/region";
 
     static int beInt(byte[] b, int off) {
         return ((b[off] & 0xFF) << 24) | ((b[off + 1] & 0xFF) << 16)
@@ -51,7 +51,7 @@ public class ServerChunkDump {
     // Returns the chunk root NBT, or null if the chunk is absent in this region.
     static CompoundTag readChunkNbt(int cx, int cz) throws IOException {
         int rx = cx >> 5, rz = cz >> 5;
-        Path mca = Path.of(REGION_DIR, "r." + rx + "." + rz + ".mca");
+        Path mca = Path.of(regionDir, "r." + rx + "." + rz + ".mca");
         if (!Files.exists(mca)) return null;
         byte[] file = Files.readAllBytes(mca);
         int idx = (cx & 31) + (cz & 31) * 32;
@@ -130,8 +130,11 @@ public class ServerChunkDump {
         long seed = 1L;
         boolean statusScan = false;
         List<int[]> chunks = new ArrayList<>();
-        for (String a : args) {
-            if (a.equals("--status")) {
+        for (int ai = 0; ai < args.length; ++ai) {
+            String a = args[ai];
+            if (a.equals("--region") && ai + 1 < args.length) {
+                regionDir = args[++ai];
+            } else if (a.equals("--status")) {
                 statusScan = true;
             } else if (a.contains(",")) {
                 String[] p = a.split(",");
@@ -145,7 +148,7 @@ public class ServerChunkDump {
             // file. Used to recover the server's exact decorated set (chunks whose
             // status reached at least minecraft:features) so the GT decoration perm
             // can mirror it without guessing the forceload rect.
-            Path dir = Path.of(REGION_DIR);
+            Path dir = Path.of(regionDir);
             try (var stream = Files.list(dir)) {
                 for (Path mca : stream.filter(p -> p.getFileName().toString().endsWith(".mca")).sorted().toList()) {
                     String[] parts = mca.getFileName().toString().split("\\.");

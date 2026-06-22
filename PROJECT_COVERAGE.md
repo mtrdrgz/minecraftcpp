@@ -118,6 +118,32 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-22 b — Village server-GT certification attempt stopped
+
+**Agent**: OpenCode
+
+- Per user request, stopped development after packaging the state. The full village
+  certification remains **not complete**; this is an explicit blocker, not a hidden pass.
+- Provisioned the real 26.1.2 server runtime locally and used vanilla
+  `locate structure minecraft:village_plains` on seed 1. The nearest real village is at
+  block `[640, ~, 816]`, chunk `(40,51)`.
+- Generated a structures-on server world for chunks `(32..47,43..58)` and dumped starts:
+  `StructureStartsDump` produced `S minecraft:village_plains 40 51 0 84`. This is the
+  current ground-truth target for the next agent.
+- Added `ServerChunkDump --region` so the same dumper can read
+  `26.1.2/server_run/world_structures/.../region` instead of only the terrain-only
+  `world/` directory.
+- Kept one runtime correctness fix: `Minecraft::runStructures` now projects structure
+  starts with `getBaseHeight(x,z)-1`, matching vanilla's STRUCTURE_STARTS pre-NOISE base
+  column instead of the post-Beardifier chunk heightmap. This resolves the previously
+  documented slope-only start-placement inconsistency.
+- Removed the temporary structure-enabled full-chunk harness before commit because it was
+  not stable. During debugging it exposed two blockers: the C++ path around the server
+  target assembled `village_plains` with 89 pieces vs server GT 84, and execution crashed
+  while exercising a `FeaturePoolElement` referencing `minecraft:oak`. Do not claim full
+  village certification until a dedicated start/piece-list gate and then a block-level
+  `.mca` diff both pass.
+
 ### 2026-06-22 — Village feature_pool_element + Windows build recovery
 
 **Agent**: OpenCode

@@ -98,8 +98,11 @@
       completo, el beardifier por chunk es no-vacío/determinista y produce densidad no-cero
       cerca de aldeas. 2026-06-22: `feature_pool_element` ya está cableado a través del
       pase FEATURES por chunk y usa el runtime certificado de `PlacedFeature` con el RNG
-      de estructura ya sembrado. Pendiente: diff contra GT del servidor con estructuras
-      y revisión visual in-game de una aldea que ejercite esas piezas decorativas.
+      de estructura ya sembrado. Intento de certificación 2026-06-22: el server real
+      localiza `village_plains` en `[640,~,816]` / chunk `(40,51)` y `StructureStartsDump`
+      guarda 84 piezas; la ruta C++ observada monta 89 y falla al ejercitar el
+      `FeaturePoolElement` `minecraft:oak`. Pendiente: gate de starts/piezas para ese
+      caso y después diff bloque-a-bloque contra `.mca` del server.
 - [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 

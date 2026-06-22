@@ -190,8 +190,8 @@ Minecraft builds chunks in stages. Each status adds data on top of the previous.
 | Ruined Portal Y-selector | Y-position RNG | ✅ Byte-exact | 348/0 |
 | Jungle Temple stone selector | BlockSelector RNG (mossy/cobble maze) | ✅ Byte-exact | self-check/0 |
 | BeardifierOrMarker | Adds structure influence (structures pull terrain) | ✅ Integrated for villages | `beardifier_parity` 8,000/0; no-structure terrain remains 98,304/0 |
-| Jigsaw assembler (engine integration) | Full Village/Pillager Outpost/etc. assembly via the engine | 🔄 Partial | Per-chunk FEATURES pass + FeaturePoolElement wired; server-GT diff pending |
-| Village | Houses, paths, lampposts, decorative feature_pool_element | 🔄 Partial | Processor pipeline + Beardifier + per-chunk FeaturePoolElement wired; visual/server-GT proof pending |
+| Jigsaw assembler (engine integration) | Full Village/Pillager Outpost/etc. assembly via the engine | 🔄 Partial | Per-chunk FEATURES pass wired; server-GT target found, piece delta pending |
+| Village | Houses, paths, lampposts, decorative feature_pool_element | 🔄 Partial | Implemented/integrated, but not certified: server GT chunk `(40,51)` has 84 pieces vs C++ observed 89; `minecraft:oak` feature_pool path pending |
 | Pillager Outpost | Tower + patrol cage | 🔄 Partial | StructureTemplate.placeInWorld certified, integration pending |
 | Desert Temple | TNT + hidden chamber | ❌ Not started | DesertPyramidPiece ctor certified via scattered_feature_box |
 | Bastion Remnant | Piglin structure | 🔄 Partial | JigsawPlacement certified (211 seeds/0) |

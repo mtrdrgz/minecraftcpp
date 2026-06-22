@@ -6052,7 +6052,7 @@ net/minecraft/world/level/chunk/BlockColumn.java	unvisited
 net/minecraft/world/level/chunk/BulkSectionAccess.java	unvisited	
 net/minecraft/world/level/chunk/CarvingMask.java	unvisited	
 net/minecraft/world/level/chunk/ChunkAccess.java	partial	setBlockState heightmap lifecycle, getNoiseBiome quartY clamp, postprocessing lists, fillBiomesFromNoise order ported+gated; 2026-06-21 LevelChunk now keeps heightmap incrementally during noise/surface writes; full chunk API partial
-net/minecraft/world/level/chunk/ChunkGenerator.java	partial	FEATURES-turn structure/decoration ordering partially ported: Minecraft::tryDecorate + StructureGen::generate + engineBeginFeatureTurn mirror applyFeaturesAndStructures structure-before-biome-feature order for runtime chunks; full chunk status scheduler/reference system still partial.
+net/minecraft/world/level/chunk/ChunkGenerator.java	partial	FEATURES-turn structure/decoration ordering partially ported: Minecraft::tryDecorate + StructureGen::generate + engineBeginFeatureTurn mirror applyFeaturesAndStructures structure-before-biome-feature order for runtime chunks; 2026-06-22 runStructures heightAt now uses pre-NOISE getBaseHeight-1 like STRUCTURE_STARTS; full chunk status scheduler/reference system still partial.
 net/minecraft/world/level/chunk/ChunkGeneratorStructureState.java	unvisited	
 net/minecraft/world/level/chunk/ChunkGenerators.java	unvisited	
 net/minecraft/world/level/chunk/ChunkSource.java	unvisited	
@@ -6454,7 +6454,7 @@ net/minecraft/world/level/levelgen/structure/StructurePiece.java	partial	C++ par
 net/minecraft/world/level/levelgen/structure/StructurePieceAccessor.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureSet.java	unvisited	
 net/minecraft/world/level/levelgen/structure/StructureSpawnOverride.java	unvisited	
-net/minecraft/world/level/levelgen/structure/StructureStart.java	partial	StructureStart.placeInChunk semantics partially ported as StructureGen.cpp::placeJigsawStartInChunk: per-decorating-chunk box clipping and piece-order placement; references/save lifecycle/server-GT still pending.
+net/minecraft/world/level/levelgen/structure/StructureStart.java	partial	StructureStart.placeInChunk semantics partially ported as StructureGen.cpp::placeJigsawStartInChunk: per-decorating-chunk box clipping and piece-order placement; 2026-06-22 server GT village target chunk 40,51 has 84 children vs C++ observed 89, so references/save lifecycle and full server-GT remain pending.
 net/minecraft/world/level/levelgen/structure/StructureType.java	unvisited	
 net/minecraft/world/level/levelgen/structure/TemplateStructurePiece.java	unvisited	
 net/minecraft/world/level/levelgen/structure/TerrainAdjustment.java	unvisited	

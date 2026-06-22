@@ -352,7 +352,28 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-22 — village feature_pool_element wired + Windows MSVC build recovered.
+**Last updated**: 2026-06-22 — village server-GT certification attempt paused, not certified.
+
+**Village certification attempt handoff (2026-06-22 b):** stopped further development per
+user request after attempting the full server-GT path. Provisioned the real 26.1.2 server
+runtime locally (`server.jar`, server_run, JDK25), ran `locate structure minecraft:village_plains`
+on seed 1, and found the nearest real server village at block `[640, ~, 816]` / chunk
+`(40,51)`. Generated a structures-on server world around chunks `(32..47,43..58)` and
+dumped starts: `StructureStartsDump` reports `S minecraft:village_plains 40 51 0 84`.
+Added `ServerChunkDump --region` so future agents can dump blocks from
+`world_structures`. The full block-diff certification is **not complete**: an experimental
+structure-enabled full-chunk harness was removed before commit because it was not stable;
+while debugging it, C++ assembled the same village start area but showed a piece-count
+delta (`village_plains` around `(40,51)` produced 89 pieces in the C++ path vs server GT
+84) and crashed when exercising a `FeaturePoolElement` for `minecraft:oak`. Therefore do
+NOT mark villages as fully certified. Useful fix kept: runtime `Minecraft::runStructures`
+now uses `NoiseBasedChunkGenerator::getBaseHeight(x,z)-1` for start projection, matching
+vanilla's pre-NOISE base-column projection and eliminating the documented post-Beardifier
+heightmap slope inconsistency. Next agent should resume with a dedicated structure-start /
+piece-list parity gate for `(seed=1, village_plains chunk 40,51)`, then handle bootstrap
+structure feature refs such as `minecraft:oak` before reattempting block-level `.mca` diff.
+
+**Last updated prior**: 2026-06-22 — village feature_pool_element wired + Windows MSVC build recovered.
 
 **Village feature_pool_element + build handoff (2026-06-22):** completed the next
 village integration layer by reshaping runtime jigsaw placement closer to Java's

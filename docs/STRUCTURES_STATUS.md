@@ -8,8 +8,36 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-22 (session: FeaturePoolElement wired through the per-chunk
-> FEATURES turn; Windows MSVC build recovered; villages still need server-GT visual proof).
+> Last updated: 2026-06-22 (session: server-GT certification attempt paused; villages
+> are implemented/integrated but NOT fully certified).
+
+---
+
+## UPDATE 2026-06-22 (b) — server-GT village certification attempt, blocked
+
+Full certification was attempted and deliberately stopped without marking success.
+Ground truth now exists for the next agent:
+
+- Real server seed: `1`.
+- Vanilla locate result: nearest `minecraft:village_plains` at block `[640, ~, 816]`,
+  chunk `(40,51)`.
+- Generated structures-on server world around chunks `(32..47,43..58)`.
+- `StructureStartsDump` result includes `S minecraft:village_plains 40 51 0 84`.
+- `ServerChunkDump` now supports `--region <dir>` so block dumps can target
+  `world_structures/dimensions/minecraft/overworld/region`.
+
+Important result: villages are **not** fully certified. During the attempted full block
+diff, the C++ structure path around `(40,51)` assembled `minecraft:village_plains` with
+89 pieces while server GT stores 84 children. The same attempt hit a crash while routing a
+`FeaturePoolElement` for `minecraft:oak`, which appears in village pool JSON but is not a
+plain `worldgen/placed_feature/oak.json` sidecar. Next work must first build a focused
+structure-start/piece-list parity gate for `(seed=1, structure=village_plains, chunk=40,51)`
+before any block-level `.mca` certification claim.
+
+One runtime fix is kept: structure block placement now projects starts from
+`getBaseHeight(x,z)-1`, the same pre-NOISE base-column height vanilla uses at
+STRUCTURE_STARTS. That removes the earlier documented post-Beardifier heightmap mismatch
+between Beardifier assembly and block placement.
 
 ---
 
@@ -35,10 +63,9 @@ is now wired instead of faked.
   loads embedded worldgen, enters the main loop, and generates/decorates chunks
   until the intentional timeout.
 
-Remaining proof gaps: run a structures-on server `.mca` diff for village chunks,
-find/use a seed that visibly exercises village `feature_pool_element`, and inspect
-the in-game result. Do not mark whole-village structure output fully certified until
-that server GT exists.
+Remaining proof gaps: use the server-GT target above to close the 89-vs-84 piece delta,
+fix/port the `minecraft:oak` structure feature reference path, then run a block-level
+`.mca` diff. Do not mark whole-village structure output fully certified until those pass.
 
 ---
 
@@ -76,19 +103,13 @@ Beardifier is non-empty over the chunks a village reaches and is deterministic
 - `structure_gen_probe` — villages enabled, per-chunk Beardifier non-empty + deterministic
   + non-zero density near villages.
 
-**KNOWN 1:1 consistency item (slope-only, documented not faked):** vanilla computes the
+**Resolved 2026-06-22 b:** vanilla computes the
 structure start (piece positions) ONCE at STRUCTURE_STARTS from the *base column* height
 (`getFirstFreeHeight` via `getBaseColumn`, no beardifier) and reuses it at NOISE
-(beardifier) and FEATURES (block placement). This port has TWO assemblies:
-`buildChunkBeardifier` uses the column height (`getBaseHeight-1` — correct, matches
-vanilla), but the post-pass `runStructures` still projects via the *chunk* heightmap
-(`c->heightmap`, which is post-beardifier). On flat terrain (where villages mostly are)
-the two agree exactly; on slopes they can differ by a block or two, so the placed blocks
-may be slightly offset from the adapted terrain. The faithful fix is to make
-`runStructures` assemble from the same column height (or reuse the cached
-`buildBeardifier` assembly) so both match vanilla's compute-once start. Left as a
-follow-up because it changes ALL structure positioning and needs the Windows engine +
-a structures-on server GT to verify (and `getBaseHeight` per query is a perf concern).
+(beardifier) and FEATURES (block placement). `runStructures` now uses
+`getBaseHeight(x,z)-1` for `StructureWorld.heightAt`, matching the Beardifier assembly
+height source instead of the post-Beardifier chunk heightmap. This is integrated but
+still needs the full server-GT piece/block parity gate above.
 
 **Superseded 2026-06-22:** `feature_pool_element` is no longer an omitted layer; it is
 wired through the per-chunk FEATURES pass described above. It still needs a
