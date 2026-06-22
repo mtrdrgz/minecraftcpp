@@ -516,6 +516,17 @@ void initBlocks() {
         }
     }
     if (!raw) {
+        // Final fallback: read from the packed MCAS archive (assets.bin).
+        // On Linux this is the primary path; on Windows it's a backup when
+        // the embedded RCDATA resource is unavailable.
+        auto bytes = AssetManager::instance().readRaw("block_states.json");
+        if (!bytes.empty()) {
+            fileData.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+            raw = fileData.data();
+            sz = fileData.size();
+        }
+    }
+    if (!raw) {
         MC_LOG_WARN("Blocks: block_states.json not available - using fallback registry");
         initFallback(byName);
         return;

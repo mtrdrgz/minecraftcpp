@@ -1,5 +1,6 @@
 #include "Items.h"
 #include "../../core/Log.h"
+#include "../../assets/AssetManager.h"
 #include <nlohmann/json.hpp>
 #include <cstdlib>
 #include <fstream>
@@ -122,6 +123,15 @@ void initItems() {
             if (!p) continue;
             std::ifstream in(p, std::ios::binary);
             if (in) { std::stringstream ss; ss << in.rdbuf(); fileData = ss.str(); raw = fileData.data(); sz = fileData.size(); break; }
+        }
+    }
+    if (!raw) {
+        // Final fallback: read from the packed MCAS archive (assets.bin).
+        auto bytes = AssetManager::instance().readRaw("items.json");
+        if (!bytes.empty()) {
+            fileData.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+            raw = fileData.data();
+            sz = fileData.size();
         }
     }
     if (!raw) {
