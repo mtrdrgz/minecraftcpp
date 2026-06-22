@@ -32,7 +32,11 @@ public:
     bool pollEvents();
 
     // Native window handle (HWND on Windows, GLFWwindow* on Linux)
-    void*   nativeHandle() const;
+#ifdef _WIN32
+    HWND    nativeHandle() const { return m_native; }
+#else
+    void*   nativeHandle() const { return m_native; }
+#endif
 #ifdef _WIN32
     HWND    hwnd() const { return m_native; }
 #else

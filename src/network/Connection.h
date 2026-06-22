@@ -17,7 +17,7 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
-typedef int SOCKET;
+// SOCKET is already defined by winsock2.h on Windows
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>

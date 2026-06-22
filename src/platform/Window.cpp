@@ -234,10 +234,6 @@ LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-void* Window::nativeHandle() const {
-    return m_native;
-}
-
 bool Window::isKeyDown(int vkey) const {
     if (vkey < 0 || vkey >= 512) return false;
     return m_keys[vkey & 0x1FF];
