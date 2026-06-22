@@ -101,8 +101,15 @@
       de estructura ya sembrado. Intento de certificación 2026-06-22: el server real
       localiza `village_plains` en `[640,~,816]` / chunk `(40,51)` y `StructureStartsDump`
       guarda 84 piezas; la ruta C++ observada monta 89 y falla al ejercitar el
-      `FeaturePoolElement` `minecraft:oak`. Pendiente: gate de starts/piezas para ese
-      caso y después diff bloque-a-bloque contra `.mca` del server.
+      `FeaturePoolElement` `minecraft:oak`. Actualizacion 2026-06-22 c: el probe limpio
+      `structure_gen_probe --seed 1 --radius 56 --biome minecraft:plains --surface 68`
+      ya reproduce `village_plains` `(40,51)` con 84 piezas, y el smoke in-game en
+      `--seed 1 --spawn 640 816` coloca una aldea en `(40,51)` sin `runStructures failed`
+      ni `decorateChunk failed` tras portar postprocesado de `dirt_path`, antorchas,
+      camas y escaleras. Ojo: en el contexto real del juego ese start resuelve como
+      `village_snowy` de 31 piezas, no como el caso plains forzado. Pendiente: gate de
+      starts/piezas en el contexto real del server y despues diff bloque-a-bloque contra
+      `.mca` del server.
 - [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 

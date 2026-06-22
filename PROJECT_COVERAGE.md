@@ -52,21 +52,21 @@ The TSV has three columns: `path  status  proof`. The proof field must be non-em
 ```
 Total Java files tracked : 6,882
 Ported (full)            : 504   ( 7.3%)
-Partial                  : 108   ( 1.6%)
+Partial                  : 115   ( 1.7%)
 Reasoned N/A             : 449   ( 6.5%)
-Unvisited                : 5,821 (84.6%)
+Unvisited                : 5,814 (84.5%)
 
 Actionable files (excl. N/A): 6,433
-Weighted progress            : 558.0 / 6,433
+Weighted progress            : 561.5 / 6,433
 
-[████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 8.6%
+[████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 8.7%
 ```
 
 ### By major package
 
 | Package | Total | Ported | Partial | N/A | Progress |
 |---|---|---|---|---|---|
-| `net/minecraft/world/` | 2,559 | 244 | 65 | 0 | `[██░░░░░░░░]` 10.8% |
+| `net/minecraft/world/` | 2,559 | 244 | 72 | 0 | `[██░░░░░░░░]` 10.9% |
 | `net/minecraft/client/` | 1,813 | 28 | 17 | 0 | `[░░░░░░░░░░]` 2.0% |
 | `net/minecraft/util/` | 713 | 43 | 0 | 386 | `[█░░░░░░░░░]` 13.1% of actionable |
 | `net/minecraft/server/` | 418 | 0 | 1 | 0 | `[░░░░░░░░░░]` 0.1% |
@@ -80,7 +80,7 @@ Weighted progress            : 558.0 / 6,433
 
 | Subpackage | Total | Ported | Partial | Progress |
 |---|---|---|---|---|
-| `world/level/` | 1,297 | 179 | 40 | 15.3% |
+| `world/level/` | 1,297 | 179 | 47 | 15.6% |
 | `world/entity/` | 708 | 24 | 6 | 3.8% |
 | `world/item/` | 313 | 11 | 6 | 4.5% |
 | `world/phys/` | 27 | 20 | 2 | 78.0% |
@@ -117,6 +117,35 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 ---
 
 ## Devlog
+
+### 2026-06-22 c — Village in-game verification + structure postprocess blockers cleared
+
+**Agent**: Codex
+
+- Updated the local repo and read the latest commits/docs before touching code. Existing
+  dirty Java source files, `src/CMakeLists.txt`, build directories, and helper scripts
+  were left untouched.
+- Re-ran the focused structure probe:
+  `build-vs7/structure_gen_probe --seed 1 --radius 56 --biome minecraft:plains --surface 68`.
+  It finished cleanly and reports the target `village_plains` start `(40,51)` with
+  `pieces=84`, matching the server GT start dump (`S minecraft:village_plains 40 51 0 84`).
+  The earlier 89-piece delta is not reproduced by this probe.
+- Re-ran the in-game path near the server target:
+  `build-vs7/mcpp.exe --quickPlaySingleplayer --seed 1 --spawn 640 816 --backend opengl`.
+  The engine reaches the main loop and places a jigsaw village start at `(40,51)` without
+  `runStructures failed`, `decorateChunk failed`, or `updateShape not ported` after this
+  session's fixes. In the real biome context this smoke resolves as `minecraft:village_snowy`
+  with 31 pieces, so it is not the same as the forced-plains `village_plains` server-GT case.
+- Ported the missing structure postprocess/updateShape surface hit by in-game villages and
+  nearby trial-chambers: `DirtPathBlock` tick-only update, `BaseTorchBlock` floor-torch
+  support removal, `BedBlock` neighbour-half validation using real state-id properties,
+  `StairBlock.getStairsShape` property recomputation, and Block/BlockBehaviour identity
+  handling for static blocks such as `stripped_spruce_wood`/`tuff_bricks`. These live in
+  `FullChunkDecorateParityTest.cpp` because that file is compiled into the engine decoration
+  runtime as well as the parity harness.
+- Not certified yet: no block-level `.mca` diff was run. Next agent should build a real
+  start/piece-list gate for seed 1 chunk `(40,51)` in the true server biome context, then
+  run the structures-on block dump diff.
 
 ### 2026-06-22 b — Village server-GT certification attempt stopped
 

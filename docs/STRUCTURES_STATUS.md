@@ -8,8 +8,34 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-22 (session: server-GT certification attempt paused; villages
-> are implemented/integrated but NOT fully certified).
+> Last updated: 2026-06-22 (session: in-game village smoke clean; villages are
+> implemented/integrated but NOT fully block-diff certified).
+
+---
+
+## UPDATE 2026-06-22 (c) — in-game village smoke + postprocess blockers cleared
+
+Follow-up verification narrowed the prior blockers:
+
+- `structure_gen_probe --seed 1 --radius 56 --biome minecraft:plains --surface 68`
+  now reports the target `minecraft:village_plains` start `(40,51)` with `pieces=84`,
+  matching the server GT start dump (`S minecraft:village_plains 40 51 0 84`). The
+  earlier observed 89-piece delta is not reproduced by this headless forced-plains probe.
+- `mcpp.exe --quickPlaySingleplayer --seed 1 --spawn 640 816 --backend opengl` reaches
+  the main loop and places a village start at `(40,51)` without `runStructures failed`,
+  `decorateChunk failed`, or `updateShape not ported` after this session's fixes.
+- Important distinction: the true in-game biome context at the smoke location resolves
+  the start as `minecraft:village_snowy` with 31 pieces, not the forced-plains
+  `minecraft:village_plains` server-GT target. Do not merge those two as one certificate.
+- Fixed postprocess/updateShape blockers found in the in-game path by porting only Java
+  behaviour: `DirtPathBlock` tick-only conversion, `BaseTorchBlock` floor-torch support,
+  `BedBlock` paired-half validation from real state-id properties, and
+  `StairBlock.getStairsShape` property recomputation. Static `BlockBehaviour` identity
+  cases such as `stripped_spruce_wood` and `tuff_bricks` are now explicit no-ops.
+
+Remaining proof gap: no structures-on block-level `.mca` diff has passed. Next work should
+add a dedicated structure start/piece-list parity gate for seed 1 chunk `(40,51)` in the
+true server biome context, then run the block dump diff against `world_structures`.
 
 ---
 

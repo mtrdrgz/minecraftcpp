@@ -352,7 +352,28 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-22 — village server-GT certification attempt paused, not certified.
+**Last updated**: 2026-06-22 — village in-game smoke clean; block-diff certification still pending.
+
+**Village in-game verification handoff (2026-06-22 c):** resumed from the paused
+server-GT certification state. The focused flat/plains probe now reproduces the
+server start child count: `build-vs7\structure_gen_probe --seed 1 --radius 56 --biome
+minecraft:plains --surface 68` reports `minecraft:village_plains` start `(40,51)` with
+`pieces=84`, matching `StructureStartsDump` (`S minecraft:village_plains 40 51 0 84`);
+the earlier 89-piece C++ delta was not reproduced there. The in-game runtime smoke
+`build-vs7\mcpp.exe --quickPlaySingleplayer --seed 1 --spawn 640 816 --backend opengl`
+now reaches the main loop and places a village start at `(40,51)` without
+`runStructures failed`, `decorateChunk failed`, or `updateShape not ported` after
+porting missing structure-postprocess updateShape cases. In the true biome context that
+start resolves as `minecraft:village_snowy` with 31 pieces, so do NOT confuse that smoke
+with the forced-plains `village_plains` GT target. Code added: `FullChunkDecorateParityTest.cpp`
+now handles `DirtPathBlock`, `BaseTorchBlock` floor torches, `BedBlock` neighbour-half
+validation from real state-id properties, `StairBlock.getStairsShape`, and identity
+postprocess for static blocks such as `stripped_spruce_wood`/`tuff_bricks`. Still pending:
+a dedicated start/piece-list parity gate in the true server biome context, then a
+structures-on block-level `.mca` diff. Existing dirty `26.1.2/src` files and build dirs
+were pre-existing and intentionally not touched.
+
+**Last updated prior**: 2026-06-22 — village server-GT certification attempt paused, not certified.
 
 **Village certification attempt handoff (2026-06-22 b):** stopped further development per
 user request after attempting the full server-GT path. Provisioned the real 26.1.2 server

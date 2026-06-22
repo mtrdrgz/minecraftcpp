@@ -5608,17 +5608,17 @@ net/minecraft/world/level/block/BaseEntityBlock.java	unvisited
 net/minecraft/world/level/block/BaseFireBlock.java	unvisited	
 net/minecraft/world/level/block/BasePressurePlateBlock.java	unvisited	
 net/minecraft/world/level/block/BaseRailBlock.java	unvisited	
-net/minecraft/world/level/block/BaseTorchBlock.java	unvisited	
+net/minecraft/world/level/block/BaseTorchBlock.java	partial	updateShape/canSurvive support for floor torches ported in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::updateShapeOnce from BaseTorchBlock.updateShape/canSurvive; wall/redstone torch variants and particles/interactions not ported here
 net/minecraft/world/level/block/BeaconBeamBlock.java	unvisited	
 net/minecraft/world/level/block/BeaconBlock.java	unvisited	
-net/minecraft/world/level/block/BedBlock.java	unvisited	
+net/minecraft/world/level/block/BedBlock.java	partial	BedBlock.updateShape/getNeighbourDirection ported for structure postprocess in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::updateShapeOnce/postUpdateFromNeighbourShapes using chunk BlockState PART/FACING/OCCUPIED; sleep/use/entity/render helpers not ported
 net/minecraft/world/level/block/BeehiveBlock.java	unvisited	
 net/minecraft/world/level/block/BeetrootBlock.java	unvisited	
 net/minecraft/world/level/block/BellBlock.java	unvisited	
 net/minecraft/world/level/block/BigDripleafBlock.java	unvisited	
 net/minecraft/world/level/block/BigDripleafStemBlock.java	unvisited	
 net/minecraft/world/level/block/BlastFurnaceBlock.java	unvisited	
-net/minecraft/world/level/block/Block.java	partial	registry order/flags/defaults proven via block_state_registry_parity; Block class behavior surface partial
+net/minecraft/world/level/block/Block.java	partial	registry order/flags/defaults proven via block_state_registry_parity; Block.updateFromNeighbourShapes order used by src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::postUpdateFromNeighbourShapes; remaining Block behavior surface partial
 net/minecraft/world/level/block/BlockTypes.java	unvisited	
 net/minecraft/world/level/block/Blocks.java	partial	registry order/flags/defaults proven via block_state_registry_parity; Block class behavior surface partial
 net/minecraft/world/level/block/BonemealableBlock.java	unvisited	
@@ -5677,7 +5677,7 @@ net/minecraft/world/level/block/DecoratedPotBlock.java	unvisited
 net/minecraft/world/level/block/DetectorRailBlock.java	unvisited	
 net/minecraft/world/level/block/DiodeBlock.java	unvisited	
 net/minecraft/world/level/block/DirectionalBlock.java	unvisited	
-net/minecraft/world/level/block/DirtPathBlock.java	unvisited	
+net/minecraft/world/level/block/DirtPathBlock.java	partial	DirtPathBlock.updateShape tick-only conversion behavior cited and handled as id-unchanged in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::updateShapeOnce/postUpdateFromNeighbourShapes; tick execution/shape methods not ported
 net/minecraft/world/level/block/DispenserBlock.java	unvisited	
 net/minecraft/world/level/block/DoorBlock.java	unvisited	
 net/minecraft/world/level/block/DoubleBlockCombiner.java	unvisited	
@@ -5798,7 +5798,7 @@ net/minecraft/world/level/block/RepeaterBlock.java	unvisited
 net/minecraft/world/level/block/RespawnAnchorBlock.java	unvisited	
 net/minecraft/world/level/block/RodBlock.java	unvisited	
 net/minecraft/world/level/block/RootedDirtBlock.java	unvisited	
-net/minecraft/world/level/block/RotatedPillarBlock.java	unvisited	
+net/minecraft/world/level/block/RotatedPillarBlock.java	partial	Confirmed no updateShape override, so BlockBehaviour identity is used for structure postprocess in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp static no-op tables; rotation/mirror/state placement surface remains elsewhere/partial
 net/minecraft/world/level/block/Rotation.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
 net/minecraft/world/level/block/SandBlock.java	unvisited	
 net/minecraft/world/level/block/SaplingBlock.java	unvisited	
@@ -5838,7 +5838,7 @@ net/minecraft/world/level/block/SporeBlossomBlock.java	unvisited
 net/minecraft/world/level/block/SpreadingSnowyBlock.java	unvisited	
 net/minecraft/world/level/block/StainedGlassBlock.java	unvisited	
 net/minecraft/world/level/block/StainedGlassPaneBlock.java	unvisited	
-net/minecraft/world/level/block/StairBlock.java	unvisited	
+net/minecraft/world/level/block/StairBlock.java	partial	StairBlock.updateShape/getStairsShape ported for structure postprocess in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::getStairsShape/updateShapeOnce/postUpdateFromNeighbourShapes; block_update_shape_parity already certifies StairBlock family, but placement/mirror/render shape surface remains partial
 net/minecraft/world/level/block/StandingSignBlock.java	unvisited	
 net/minecraft/world/level/block/StemBlock.java	unvisited	
 net/minecraft/world/level/block/StonecutterBlock.java	unvisited	
@@ -5858,7 +5858,7 @@ net/minecraft/world/level/block/TestInstanceBlock.java	unvisited
 net/minecraft/world/level/block/TintedGlassBlock.java	unvisited	
 net/minecraft/world/level/block/TintedParticleLeavesBlock.java	unvisited	
 net/minecraft/world/level/block/TntBlock.java	unvisited	
-net/minecraft/world/level/block/TorchBlock.java	unvisited	
+net/minecraft/world/level/block/TorchBlock.java	partial	Reviewed: TorchBlock does not override BaseTorchBlock.updateShape; floor torch worldgen postprocess is covered by BaseTorchBlock path in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::updateShapeOnce; particles/render not ported
 net/minecraft/world/level/block/TorchflowerCropBlock.java	unvisited	
 net/minecraft/world/level/block/TransparentBlock.java	unvisited	
 net/minecraft/world/level/block/TrapDoorBlock.java	unvisited	
@@ -6000,7 +6000,7 @@ net/minecraft/world/level/block/piston/PistonStructureResolver.java	unvisited
 net/minecraft/world/level/block/piston/package-info.java	unvisited	
 net/minecraft/world/level/block/sounds/AmbientDesertBlockSoundsPlayer.java	unvisited	
 net/minecraft/world/level/block/sounds/package-info.java	unvisited	
-net/minecraft/world/level/block/state/BlockBehaviour.java	unvisited	
+net/minecraft/world/level/block/state/BlockBehaviour.java	partial	BlockBehaviour.updateShape identity and UPDATE_SHAPE_ORDER are ported/cited in src/world/level/levelgen/feature/FullChunkDecorateParityTest.cpp::postUpdateFromNeighbourShapes; full state/property/cache behavior remains partial
 net/minecraft/world/level/block/state/BlockState.java	partial	state registry table + true defaults + canonical props now 1:1 (block_state_registry_parity 29873/29873 all-zero); block BEHAVIOR (classes) still per-feature tables
 net/minecraft/world/level/block/state/StateDefinition.java	partial	state registry table + true defaults + canonical props now 1:1 (block_state_registry_parity 29873/29873 all-zero); block BEHAVIOR (classes) still per-feature tables
 net/minecraft/world/level/block/state/StateHolder.java	partial	state registry table + true defaults + canonical props now 1:1 (block_state_registry_parity 29873/29873 all-zero); block BEHAVIOR (classes) still per-feature tables

@@ -133,6 +133,59 @@ int floorDiv(int x, int y) { int q = x / y, r = x % y; if (r != 0 && ((r < 0) !=
 std::string stripNs(const std::string& id) { auto c = id.find(':'); return c == std::string::npos ? id : id.substr(c + 1); }
 std::int64_t packChunk(int cx, int cz) { return (static_cast<std::int64_t>(static_cast<std::uint32_t>(cx)) << 32) | static_cast<std::uint32_t>(cz); }
 
+bool endsWith(std::string_view s, std::string_view suffix) {
+    return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
+}
+
+bool isBedBlockName(const std::string& blockOrState) {
+    const std::string block = mc::block::blockName(blockOrState);
+    return block.rfind("minecraft:", 0) == 0 && endsWith(block, "_bed");
+}
+
+bool isStairsBlockName(const std::string& blockOrState) {
+    const std::string block = mc::block::blockName(blockOrState);
+    return block.rfind("minecraft:", 0) == 0 && endsWith(block, "_stairs");
+}
+
+int horizontalDirFromName(const std::string& name) {
+    if (name == "north") return 2;
+    if (name == "south") return 3;
+    if (name == "west") return 4;
+    if (name == "east") return 5;
+    throw std::logic_error("unknown horizontal direction " + name);
+}
+
+int oppositeDir(int d) {
+    static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+    return OPP[d];
+}
+
+int counterClockWiseDir(int d) {
+    if (d == 2) return 4;  // NORTH -> WEST
+    if (d == 4) return 3;  // WEST -> SOUTH
+    if (d == 3) return 5;  // SOUTH -> EAST
+    if (d == 5) return 2;  // EAST -> NORTH
+    throw std::logic_error("counterClockWise on non-horizontal direction");
+}
+
+int axisOfDir(int d) {
+    return d <= 1 ? 1 : (d <= 3 ? 2 : 0);  // Y, Z, X
+}
+
+bool isHorizontalDir(int d) { return d >= 2 && d <= 5; }
+
+std::uint32_t stateIdWithProperty(std::uint32_t stateId, const std::string& key, const std::string& value) {
+    const mc::BlockState* state = mc::getBlockState(stateId);
+    if (!state || !state->block) throw std::logic_error("stateIdWithProperty on invalid state");
+    std::unordered_map<std::string, std::string> target = state->properties;
+    target[key] = value;
+    for (const mc::BlockState& candidate : mc::g_blockStates) {
+        if (!candidate.block || candidate.block->name != state->block->name) continue;
+        if (candidate.properties == target) return candidate.stateId;
+    }
+    throw std::logic_error("no block state id for " + state->block->name + "[" + key + "=" + value + "]");
+}
+
 [[maybe_unused]] void installBlockStatesEnv() {   // parity-main only (unused in MCPP_DECORATE_NO_MAIN builds)
     if (std::getenv("MCPP_BLOCK_STATES")) return;
     for (const char* p : { "src/assets/block_states.json", "src/assets/block_states.json" }) {
@@ -784,6 +837,8 @@ public:
                     int minY, int maxY)
         : m_chunks(chunks), m_minY(minY), m_maxY(maxY) { m_airId = mc::getDefaultBlockStateId("air", 0); }
 
+    struct BedState { bool head = false; bool occupied = false; int facing = 2; };
+
     void setDecorating(int cx, int cz) { m_dcx = cx; m_dcz = cz; }
 
     // ChunkStatusTasks.generateFeatures / the Java GT decorate() (FullChunkDecorate-
@@ -869,6 +924,11 @@ public:
         if (!c || p.y < m_minY || p.y >= m_maxY) return "minecraft:air";
         return name(c->getBlock(p.x, p.y, p.z));
     }
+    std::uint32_t stateIdAt(BlockPos p) const {
+        mc::LevelChunk* c = at(floorDiv(p.x, 16), floorDiv(p.z, 16));
+        if (!c || p.y < m_minY || p.y >= m_maxY) return m_airId;
+        return c->getBlock(p.x, p.y, p.z);
+    }
     // WorldGenRegion.setBlock (WorldGenRegion.java:264-301): false when
     // ensureCanWrite rejects; otherwise write and — unless flag 16 is set and not
     // during the FULL post-process pass — ask the new state for a post-process
@@ -912,6 +972,19 @@ public:
         // FACING side map (cocoa / coral wall fans): drop on overwrite; the placer
         // re-registers its own after a successful write.
         m_facing.erase(std::make_tuple(p.x, p.y, p.z));
+        // BedBlock PART/FACING/OCCUPIED live as properties. The id-grid drops them,
+        // so retain just enough side state for BedBlock.updateShape during
+        // structure post-processing.
+        if (isBedBlockName(block)) {
+            const auto props = mc::block::properties(state);
+            BedState bed;
+            if (auto it = props.find("part"); it != props.end()) bed.head = it->second == "head";
+            if (auto it = props.find("occupied"); it != props.end()) bed.occupied = it->second == "true";
+            if (auto it = props.find("facing"); it != props.end()) bed.facing = horizontalDirFromName(it->second);
+            m_beds[std::make_tuple(p.x, p.y, p.z)] = bed;
+        } else {
+            m_beds.erase(std::make_tuple(p.x, p.y, p.z));
+        }
         // ProtoChunk.setBlockState heightmap maintenance (ProtoChunk.java:147-165):
         // prime every missing FINAL heightmap of this chunk, then update the written
         // column — column recompute == Heightmap.update on the current state. Bulk
@@ -939,6 +1012,40 @@ public:
     }
     void setBlock(BlockPos p, const std::string& state, int flags) override {
         (void)setBlockChecked(p, state, flags);
+    }
+    bool setStateIdChecked(BlockPos p, std::uint32_t stateId, int flags) {
+        if (!ensureCanWrite(p)) return false;
+        mc::LevelChunk* c = at(floorDiv(p.x, 16), floorDiv(p.z, 16));
+        if (!c) return false;
+        const std::string block = name(stateId);
+        c->setBlock(p.x, p.y, p.z, stateId);
+        m_multiface.erase(std::make_tuple(p.x, p.y, p.z));
+        m_carpet.erase(std::make_tuple(p.x, p.y, p.z));
+        if (mc::block::isLeavesBlock(block)) m_leafDistance[std::make_tuple(p.x, p.y, p.z)] = 7;
+        else m_leafDistance.erase(std::make_tuple(p.x, p.y, p.z));
+        if (block != "minecraft:vine") m_vineFaces.erase(std::make_tuple(p.x, p.y, p.z));
+        m_facing.erase(std::make_tuple(p.x, p.y, p.z));
+        if (!isBedBlockName(block)) m_beds.erase(std::make_tuple(p.x, p.y, p.z));
+        if (!m_bulkWriting) {
+            const int cx = floorDiv(p.x, 16), cz = floorDiv(p.z, 16);
+            auto& maps = m_heightmaps[packChunk(cx, cz)];
+            const int idx = ((p.z - cz * 16) << 4) | (p.x - cx * 16);
+            for (int t = 0; t < 4; ++t) {
+                if (!maps[t].has_value()) {
+                    primeType(cx, cz, t);
+                } else {
+                    (*maps[t])[static_cast<std::size_t>(idx)] = scan(c, p.x, p.z, nonWgType(t));
+                }
+            }
+        }
+        if ((flags & 16) == 0 && !m_postprocessing) {
+            if (block == "minecraft:magma_block" || block == "minecraft:soul_sand") {
+                markPosForPostprocessing(BlockPos{ p.x, p.y + 1, p.z });
+            } else if (block == "minecraft:brown_mushroom" || block == "minecraft:red_mushroom") {
+                markPosForPostprocessing(p);
+            }
+        }
+        return true;
     }
     // BlockStateBase.isAir — cave_air (MonsterRoom interiors) and void_air count.
     bool isEmptyBlock(BlockPos p) const override { return mc::block::isAirBlock(getBlockState(p)); }
@@ -982,6 +1089,26 @@ public:
     }
     void putFacing(BlockPos p, int direction) {
         m_facing[std::make_tuple(p.x, p.y, p.z)] = direction;
+    }
+
+    // ---- BedBlock PART/FACING/OCCUPIED side map (structure template states) ----
+    BedState bedStateAt(BlockPos p) const {
+        auto it = m_beds.find(std::make_tuple(p.x, p.y, p.z));
+        if (it != m_beds.end()) return it->second;
+        mc::LevelChunk* c = at(floorDiv(p.x, 16), floorDiv(p.z, 16));
+        if (!c) throw std::logic_error("bed side-state lookup outside generated grid");
+        const mc::BlockState* state = mc::getBlockState(c->getBlock(p.x, p.y, p.z));
+        if (!state || !state->block || !isBedBlockName("minecraft:" + state->block->name))
+            throw std::logic_error("bed side-state lookup on a non-bed block");
+        const std::string part = state->getProperty("part");
+        const std::string facing = state->getProperty("facing");
+        const std::string occupied = state->getProperty("occupied");
+        if (part.empty() || facing.empty() || occupied.empty())
+            throw std::logic_error("bed state id missing PART/FACING/OCCUPIED properties");
+        return BedState{ part == "head", occupied == "true", horizontalDirFromName(facing) };
+    }
+    void putBedState(BlockPos p, const BedState& s) {
+        m_beds[std::make_tuple(p.x, p.y, p.z)] = s;
     }
 
     // ---- FULL-promotion post-processing marks ----
@@ -1384,9 +1511,53 @@ private:
     std::map<std::tuple<int, int, int>, int> m_leafDistance;
     std::map<std::tuple<int, int, int>, std::uint8_t> m_vineFaces;
     std::map<std::tuple<int, int, int>, int> m_facing;   // cocoa / coral wall fans
+    std::map<std::tuple<int, int, int>, BedState> m_beds;
     bool m_postprocessing = false;
     int m_minY, m_maxY, m_dcx = 0, m_dcz = 0; std::uint32_t m_airId{};
 };
+
+std::string requiredStateProp(const mc::BlockState* state, const std::string& key) {
+    if (!state) throw std::logic_error("missing block state while reading " + key);
+    const std::string value = state->getProperty(key);
+    if (value.empty()) throw std::logic_error("block state missing property " + key);
+    return value;
+}
+
+std::string getStairsShape(MultiChunkLevel& level, BlockPos pos, std::uint32_t stateId) {
+    const mc::BlockState* state = mc::getBlockState(stateId);
+    const int facing = horizontalDirFromName(requiredStateProp(state, "facing"));
+    const std::string half = requiredStateProp(state, "half");
+
+    auto sameHalfStairs = [&](BlockPos p) -> std::pair<bool, const mc::BlockState*> {
+        const mc::BlockState* s = mc::getBlockState(level.stateIdAt(p));
+        if (!s || !s->block || !isStairsBlockName("minecraft:" + s->block->name)) return { false, s };
+        return { s->getProperty("half") == half, s };
+    };
+    auto canTakeShape = [&](int nDir) {
+        const mc::BlockState* nb = mc::getBlockState(level.stateIdAt(mc::levelgen::feature::treeRelative(pos, nDir)));
+        if (!nb || !nb->block || !isStairsBlockName("minecraft:" + nb->block->name)) return true;
+        return horizontalDirFromName(requiredStateProp(nb, "facing")) != facing
+            || requiredStateProp(nb, "half") != half;
+    };
+
+    auto [behindOk, behindState] = sameHalfStairs(mc::levelgen::feature::treeRelative(pos, facing));
+    if (behindOk) {
+        const int behindFacing = horizontalDirFromName(requiredStateProp(behindState, "facing"));
+        if (axisOfDir(behindFacing) != axisOfDir(facing) && canTakeShape(oppositeDir(behindFacing))) {
+            return behindFacing == counterClockWiseDir(facing) ? "outer_left" : "outer_right";
+        }
+    }
+
+    auto [frontOk, frontState] = sameHalfStairs(mc::levelgen::feature::treeRelative(pos, oppositeDir(facing)));
+    if (frontOk) {
+        const int frontFacing = horizontalDirFromName(requiredStateProp(frontState, "facing"));
+        if (axisOfDir(frontFacing) != axisOfDir(facing) && canTakeShape(frontFacing)) {
+            return frontFacing == counterClockWiseDir(facing) ? "inner_left" : "inner_right";
+        }
+    }
+
+    return "straight";
+}
 
 // ============================ MossyCarpetBlock (pale_moss_carpet) ============================
 // 1:1 port of MossyCarpetBlock.placeAt + getUpdatedState + createTopperWithSideChance
@@ -1542,11 +1713,11 @@ void bubbleUpdateColumn(MultiChunkLevel& level, BlockPos occupyAt) {
 //     exactly the cell whose below holds the same block id
 //   - anything else: fail closed (throw) — port before passing
 std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, BlockPos pos,
-                            int direction, BlockPos /*neighborPos*/) {
+                            int direction, BlockPos neighborPos) {
     static const std::set<std::string> idNoOp = {
         "minecraft:air", "minecraft:cave_air", "minecraft:void_air",
         "minecraft:stone", "minecraft:granite", "minecraft:diorite",
-        "minecraft:andesite", "minecraft:tuff", "minecraft:deepslate", "minecraft:bedrock",
+        "minecraft:andesite", "minecraft:tuff", "minecraft:tuff_bricks", "minecraft:deepslate", "minecraft:bedrock",
         "minecraft:obsidian", "minecraft:gravel", "minecraft:sand", "minecraft:red_sand",
         "minecraft:sandstone", "minecraft:dirt", "minecraft:grass_block", "minecraft:coarse_dirt",
         "minecraft:podzol", "minecraft:clay", "minecraft:mud", "minecraft:magma_block",
@@ -1563,10 +1734,14 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
         "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:spruce_leaves",
         // RotatedPillarBlock/Block default updateShape: unchanged
         "minecraft:oak_log", "minecraft:birch_log", "minecraft:spruce_log",
+        "minecraft:stripped_spruce_wood",
         "minecraft:cobblestone", "minecraft:mossy_cobblestone",
         // ChestBlock.updateShape only reconnects the TYPE property; SpawnerBlock /
         // BeehiveBlock use the Block default
         "minecraft:chest", "minecraft:spawner", "minecraft:bee_nest",
+        // DirtPathBlock.updateShape (DirtPathBlock.java:44-58): UP && !canSurvive
+        // schedules a dirt-conversion tick, then returns super == unchanged.
+        "minecraft:dirt_path",
         // SnowyBlock.updateShape (SnowyBlock.java:32-45): UP -> SNOWY property only
         // (id unchanged); grass_block/podzol already in the static list above.
         "minecraft:mycelium",
@@ -1619,6 +1794,50 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
         "minecraft:powder_snow",
     };
     if (idNoOp.count(bs) != 0) return bs;
+    // BaseTorchBlock.updateShape (BaseTorchBlock.java:31-43): DOWN && lost
+    // centre support -> AIR; otherwise BlockBehaviour identity.
+    if (bs == "minecraft:torch" || bs == "minecraft:soul_torch" || bs == "minecraft:copper_torch") {
+        if (direction == 0) {
+            bool defaulted = false;
+            const bool sturdy = mc::block::isFaceSturdyFull(
+                level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z }), 1, &defaulted);
+            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z })));
+            if (!sturdy) return "minecraft:air";
+        }
+        return bs;
+    }
+    // StairBlock.updateShape (StairBlock.java:108-126): horizontal neighbour
+    // updates recompute SHAPE; waterlogged only schedules a fluid tick. The block
+    // id is unchanged, but the real state id changes, so write that exact id.
+    if (isStairsBlockName(bs)) {
+        if (isHorizontalDir(direction)) {
+            const std::uint32_t oldId = level.stateIdAt(pos);
+            const std::string shape = getStairsShape(level, pos, oldId);
+            const std::uint32_t newId = stateIdWithProperty(oldId, "shape", shape);
+            if (newId != oldId) level.setStateIdChecked(pos, newId, 2);
+        }
+        return bs;
+    }
+    // BedBlock.updateShape (BedBlock.java:154-176): only the direction toward
+    // the other half matters. Same-colour bed with opposite PART survives and
+    // copies OCCUPIED; otherwise the half becomes AIR.
+    if (isBedBlockName(bs)) {
+        static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+        const MultiChunkLevel::BedState st = level.bedStateAt(pos);
+        const int neighbourDir = st.head ? OPP[st.facing] : st.facing;
+        if (direction != neighbourDir) return bs;
+        const std::string neighbour = level.getBlockState(neighborPos);
+        if (neighbour == bs) {
+            const MultiChunkLevel::BedState nst = level.bedStateAt(neighborPos);
+            if (nst.head != st.head) {
+                MultiChunkLevel::BedState copied = st;
+                copied.occupied = nst.occupied;
+                level.putBedState(pos, copied);
+                return bs;
+            }
+        }
+        return "minecraft:air";
+    }
     // CocoaBlock.updateShape (CocoaBlock.java:91-104): direction == FACING &&
     // !canSurvive -> AIR; canSurvive = state at pos.relative(FACING) in
     // #supports_cocoa (CocoaBlock.java:62-65). FACING lives in the side map.
@@ -1872,7 +2091,7 @@ void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const st
         // Block/BlockBehaviour default updateShape returns the state unchanged.
         "minecraft:air", "minecraft:cave_air", "minecraft:void_air",
         "minecraft:stone", "minecraft:granite", "minecraft:diorite",
-        "minecraft:andesite", "minecraft:tuff", "minecraft:deepslate", "minecraft:bedrock",
+        "minecraft:andesite", "minecraft:tuff", "minecraft:tuff_bricks", "minecraft:deepslate", "minecraft:bedrock",
         "minecraft:obsidian", "minecraft:gravel", "minecraft:sand", "minecraft:red_sand",
         "minecraft:sandstone", "minecraft:dirt", "minecraft:grass_block", "minecraft:coarse_dirt",
         "minecraft:podzol", "minecraft:clay", "minecraft:mud", "minecraft:magma_block",
@@ -1888,11 +2107,12 @@ void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const st
         // LeavesBlock (tick-only), logs, dungeon shell, chest/spawner/bee_nest.
         "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:spruce_leaves",
         "minecraft:oak_log", "minecraft:birch_log", "minecraft:spruce_log",
+        "minecraft:stripped_spruce_wood",
         "minecraft:cobblestone", "minecraft:mossy_cobblestone",
         "minecraft:chest", "minecraft:spawner", "minecraft:bee_nest",
         // SnowyBlock UP -> SNOWY property only; cactus/sugar_cane/slab/brushable
         // updateShape are tick-only (see updateShapeOnce); geode shell = Block default.
-        "minecraft:mycelium", "minecraft:cactus", "minecraft:sugar_cane",
+        "minecraft:mycelium", "minecraft:dirt_path", "minecraft:cactus", "minecraft:sugar_cane",
         "minecraft:sandstone_slab", "minecraft:suspicious_sand",
         "minecraft:amethyst_block", "minecraft:budding_amethyst",
         "minecraft:calcite", "minecraft:smooth_basalt",
@@ -1961,6 +2181,38 @@ void postUpdateFromNeighbourShapes(MultiChunkLevel& level, BlockPos bp, const st
         std::string current = bs;
         for (int dir : order) {
             if (current != bs) break;   // once AIR, further updateShape is the air no-op
+            current = updateShapeOnce(level, current, bp, dir, mc::levelgen::feature::treeRelative(bp, dir));
+        }
+        if (current != bs) level.setBlockChecked(bp, current, 276);
+        return;
+    }
+    if (isStairsBlockName(bs)) {
+        // StairBlock.updateShape (StairBlock.java:108-126) recomputes SHAPE for
+        // horizontal neighbours; write the exact state id so the structure keeps
+        // its facing/half/waterlogged properties.
+        const std::uint32_t oldId = level.stateIdAt(bp);
+        const std::uint32_t newId = stateIdWithProperty(oldId, "shape", getStairsShape(level, bp, oldId));
+        if (newId != oldId) level.setStateIdChecked(bp, newId, 276);
+        return;
+    }
+    if (bs == "minecraft:torch" || bs == "minecraft:soul_torch" || bs == "minecraft:copper_torch") {
+        static const int order[6] = { 4, 5, 2, 3, 0, 1 };
+        std::string current = bs;
+        for (int dir : order) {
+            if (current != bs) break;
+            current = updateShapeOnce(level, current, bp, dir, mc::levelgen::feature::treeRelative(bp, dir));
+        }
+        if (current != bs) level.setBlockChecked(bp, current, 276);
+        return;
+    }
+    if (isBedBlockName(bs)) {
+        // Block.updateFromNeighbourShapes order is WEST,EAST,NORTH,SOUTH,DOWN,UP
+        // (BlockBehaviour.java:85-87); BedBlock can only change when this reaches
+        // its connected horizontal half.
+        static const int order[6] = { 4, 5, 2, 3, 0, 1 };
+        std::string current = bs;
+        for (int dir : order) {
+            if (current != bs) break;
             current = updateShapeOnce(level, current, bp, dir, mc::levelgen::feature::treeRelative(bp, dir));
         }
         if (current != bs) level.setBlockChecked(bp, current, 276);
