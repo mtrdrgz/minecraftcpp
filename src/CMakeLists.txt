@@ -40,6 +40,7 @@ set(MC_SOURCES
     world/level/levelgen/carver/WorldCarver.cpp
     world/level/levelgen/BiomeSource.cpp
     world/level/levelgen/BiomeManager.cpp
+    world/level/biome/BiomeRegistry.cpp
     world/level/levelgen/OverworldBiomeBuilder.cpp
     world/level/levelgen/NoiseBasedChunkGenerator.cpp
     # World — Levelgen / feature decoration

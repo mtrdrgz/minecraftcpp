@@ -142,9 +142,9 @@ static std::string textureForStateFace(const mc::BlockState& state, int face) {
 // the fixed (plains-default) getTextureTint. wx/wy/wz are world block coordinates.
 static TintRGB biomeOrDefaultTint(const std::string& name, int wx, int wy, int wz,
                                   const BiomeMeshContext* biome) {
-    if (biome && biome->biomeAt) {
+    if (biome && biome->biomeAt && biome->grassColormap && biome->foliageColormap) {
         if (auto c = mc::render::biometint::tint(name, biome->biomeAt, wx, wy, wz,
-                                                 biome->grassColormap, biome->foliageColormap,
+                                                 *biome->grassColormap, *biome->foliageColormap,
                                                  biome->blendRadius)) {
             return {c->r, c->g, c->b};
         }

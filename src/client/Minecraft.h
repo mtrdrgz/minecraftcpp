@@ -73,6 +73,13 @@ public:
     void        unloadChunk(ChunkPos pos);
     const auto& chunks() const { return m_chunks; }
 
+    // Biome id at QUART coordinates from the local generator's biome source. Empty
+    // if no local generator. Used on the main thread to build per-chunk biome
+    // snapshots for the mesher (the underlying noise router has mutable caches, so
+    // it must not be called concurrently from mesh workers).
+    std::string getNoiseBiomeName(int quartX, int quartY, int quartZ) const;
+    const std::string& dataMinecraftDir() const { return m_dataMinecraftDir; }
+
     render::GuiGraphics* guiGraphics() { return m_guiGraphics.get(); }
     render::Font*        font()        { return m_font.get(); }
     gui::Gui*           gui()         { return m_gui.get(); }

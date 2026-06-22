@@ -1,9 +1,14 @@
 #include "LevelRenderer.h"
 #include "../../world/level/block/Blocks.h"
+#include "../../world/level/biome/BiomeColor.h"
 #include "../../assets/resource_ids.h"
 #include "../../core/Log.h"
 #include "../../assets/AssetManager.h"
 #include "../../../profiling/include/Profiler.h"
+#include <stb_image.h>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
@@ -307,21 +312,99 @@ void LevelRenderer::rebuildDirtyChunks() {
         chunk->meshDirty = false;
         m_meshBuildQueued.insert(cand.key);
         const TextureAtlas* atlas = m_atlas.isLoaded() ? &m_atlas : nullptr;
+        // Build the per-biome colouring snapshot on THIS (main) thread — the biome
+        // source's noise router has mutable caches and must not be hit from the worker.
+        ensureBiomeData();
+        std::shared_ptr<BiomeMeshContext> biomeCtx = makeBiomeContext(cp);
         m_pendingMeshBuilds.push_back({
             cp,
-            m_meshPool->enqueue([center = std::move(center), neighbors = std::move(neighbors), atlas]() {
+            m_meshPool->enqueue([center = std::move(center), neighbors = std::move(neighbors), atlas, biomeCtx]() {
                 const LevelChunk* n[4] = {
                     neighbors[0].get(),
                     neighbors[1].get(),
                     neighbors[2].get(),
                     neighbors[3].get()
                 };
-                return ChunkMesher::buildChunk(*center, n, atlas);
+                return ChunkMesher::buildChunk(*center, n, atlas, biomeCtx.get());
             })
         });
 
         if (++scheduled >= maxSchedulesPerFrame) break;
     }
+}
+
+void LevelRenderer::ensureBiomeData() {
+    if (m_biomeDataLoaded) return;
+    m_biomeDataLoaded = true;  // attempt once; on failure leave data null -> fixed tint
+
+    auto loadColormap = [](const std::string& assetPath)
+        -> std::shared_ptr<const std::vector<std::int32_t>> {
+        std::vector<uint8_t> bytes = mc::AssetManager::instance().readRaw(assetPath);
+        if (bytes.empty()) {
+            std::ifstream in("assets/client-extract/assets/" + assetPath, std::ios::binary);
+            if (in) bytes.assign(std::istreambuf_iterator<char>(in), {});
+        }
+        if (bytes.empty()) return nullptr;
+        int w = 0, h = 0, ch = 0;
+        unsigned char* px = stbi_load_from_memory(bytes.data(), (int)bytes.size(), &w, &h, &ch, 3);
+        if (!px || w * h < 65536) { if (px) stbi_image_free(px); return nullptr; }
+        auto out = std::make_shared<std::vector<std::int32_t>>((size_t)w * h);
+        for (int i = 0; i < w * h; ++i)
+            (*out)[i] = std::int32_t(0xFF000000u) | (px[i*3] << 16) | (px[i*3+1] << 8) | px[i*3+2];
+        stbi_image_free(px);
+        return out;
+    };
+    m_grassColormap   = loadColormap("minecraft/textures/colormap/grass.png");
+    m_foliageColormap = loadColormap("minecraft/textures/colormap/foliage.png");
+
+    std::string dir = m_mc->dataMinecraftDir();
+    if (dir.empty()) dir = "26.1.2/data/minecraft";
+    try {
+        m_biomeRegistry = std::make_unique<mc::biome::BiomeRegistry>(
+            mc::biome::BiomeRegistry::loadFromDirectory(dir + "/worldgen/biome"));
+    } catch (...) { m_biomeRegistry.reset(); }
+
+    if (!m_grassColormap || !m_foliageColormap || !m_biomeRegistry || m_biomeRegistry->all().empty()) {
+        MC_LOG_WARN("Biome colouring: colormap/registry unavailable — using fixed plains-default tint");
+        m_biomeRegistry.reset();
+    } else {
+        MC_LOG_INFO("Biome colouring active ({} biomes)", (int)m_biomeRegistry->all().size());
+    }
+}
+
+// Build the immutable per-chunk biome snapshot (main thread). A 2D quart-resolution
+// grid over the chunk + blend margin at a representative surface Y; the worker reads
+// it through biomeAt without touching the (non-thread-safe) biome source.
+std::shared_ptr<BiomeMeshContext> LevelRenderer::makeBiomeContext(ChunkPos cp) {
+    if (!m_grassColormap || !m_foliageColormap || !m_biomeRegistry) return nullptr;
+    auto ctx = std::make_shared<BiomeMeshContext>();
+    ctx->grassColormap = m_grassColormap;
+    ctx->foliageColormap = m_foliageColormap;
+
+    const int r = ctx->blendRadius;
+    const int minQX = (cp.x * 16 - r) >> 2;
+    const int minQZ = (cp.z * 16 - r) >> 2;
+    const int maxQX = (cp.x * 16 + 15 + r) >> 2;
+    const int maxQZ = (cp.z * 16 + 15 + r) >> 2;
+    const int w = maxQX - minQX + 1;
+    const int d = maxQZ - minQZ + 1;
+    const int qy = 64 >> 2;  // representative surface quart-Y (2D snapshot)
+
+    auto grid = std::make_shared<std::vector<const mc::biome::Biome*>>((size_t)w * d, nullptr);
+    const mc::biome::BiomeRegistry* reg = m_biomeRegistry.get();
+    for (int qz = 0; qz < d; ++qz)
+        for (int qx = 0; qx < w; ++qx) {
+            const std::string name = m_mc->getNoiseBiomeName(minQX + qx, qy, minQZ + qz);
+            (*grid)[(size_t)qz * w + qx] = name.empty() ? nullptr : reg->find(name);
+        }
+
+    ctx->biomeAt = [grid, minQX, minQZ, w, d](int x, int, int z) -> const mc::biome::Biome* {
+        const int qx = (x >> 2) - minQX;
+        const int qz = (z >> 2) - minQZ;
+        if (qx < 0 || qx >= w || qz < 0 || qz >= d) return nullptr;
+        return (*grid)[(size_t)qz * w + qx];
+    };
+    return ctx;
 }
 
 void LevelRenderer::uploadAndDrawSection(ICommandList* cmd, SectionMesh& mesh) {

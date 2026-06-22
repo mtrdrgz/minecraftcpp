@@ -15,9 +15,10 @@ namespace mc::render {
 // biomeAt is a snapshot lookup, the colormaps are the decoded grass/foliage pixels.
 // When null, the mesher uses its fixed (plains-default) tint — no behaviour change.
 struct BiomeMeshContext {
-    biometint::BiomeAt biomeAt;             // snapshot: (x,y,z) -> const Biome*
-    std::vector<std::int32_t> grassColormap;
-    std::vector<std::int32_t> foliageColormap;
+    biometint::BiomeAt biomeAt;             // per-chunk snapshot: (x,y,z) -> const Biome*
+    // Shared (renderer-owned) decoded colormaps — cheap to copy into the worker job.
+    std::shared_ptr<const std::vector<std::int32_t>> grassColormap;
+    std::shared_ptr<const std::vector<std::int32_t>> foliageColormap;
     int blendRadius = biometint::DEFAULT_BLEND_RADIUS;
 };
 
