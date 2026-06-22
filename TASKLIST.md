@@ -138,6 +138,19 @@
       assets de cliente, no disponibles en el entorno Linux headless).
 - [ ] Hay que implementar las texturas animadas del agua, la lava, las algas...
 - [ ] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
+  - GROUNDED 2026-06-22: el camino exacto está identificado y los datos verificados. El
+    tinte de hierba actual en el mesher está HARDCODEADO a `#79C05A` (que en realidad es el
+    color de *forest*, ¡ni siquiera el de plains!). Decodificando el colormap real
+    `textures/colormap/grass.png` con la fórmula certificada `ColorMapColorUtil::get(temp,
+    downfall)` se obtiene: plains(0.8,0.4)→`#91BD59`, savanna(2.0→clamp 1.0,0.0)→color seco,
+    swamp→override por `grassColorModifier=SWAMP`, forest(0.7,0.8)→`#79C05A`. Piezas ya
+    disponibles: `ColorMapColorUtil`/`GrassColor`/`FoliageColor` (certificados),
+    `Biome.temperature/downfall/grassColor/grassColorModifier` (en `Biome.h`),
+    `ChunkSection::getBiome(x,y,z)` (acceso por posición en el mesher). Falta: (1) cargar los
+    colormaps grass/foliage (stb_image) al iniciar el atlas; (2) portar el blend de
+    `BiomeColors.getAverageColor` (radio 5×5 columnas) + `grassColorModifier`; (3) sustituir
+    `getTextureTint` por el lookup por-bioma en `ChunkMesh.cpp`. No verificable visualmente en
+    el entorno headless actual.
 
 ## Biomas / terreno
 
