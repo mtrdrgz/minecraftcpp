@@ -6572,6 +6572,20 @@ target_compile_definitions(biome_color_parity PRIVATE GLM_ENABLE_EXPERIMENTAL)
 target_link_libraries(biome_color_parity PRIVATE glm)
 set_target_properties(biome_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== mesher biome-tint blend (ClientLevel.calculateBlockTint + BiomeColors resolvers)
+# vs the real colormaps + biome JSON. Needs the provisioned runtime. =====
+add_executable(biome_tint_parity
+    render/level/BiomeTintParityTest.cpp
+    world/level/biome/BiomeRegistry.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(biome_tint_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/vendor/stb)
+target_compile_definitions(biome_tint_parity PRIVATE GLM_ENABLE_EXPERIMENTAL)
+target_link_libraries(biome_tint_parity PRIVATE glm)
+set_target_properties(biome_tint_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== item: MerchantOffer getModifiedCostCount/updateDemand/isOutOfStock/needsRestock (int wrap + Mth.floor float + clamp) =====
 add_executable(merchant_offer_parity world/item/trading/MerchantOfferParityTest.cpp)
 target_include_directories(merchant_offer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
