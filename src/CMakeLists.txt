@@ -203,8 +203,20 @@ else()
         add_subdirectory(../vendor/glfw glfw_build EXCLUDE_FROM_ALL)
         target_link_libraries(mcpp PRIVATE glfw)
     endif()
-    # OpenGL
-    target_link_libraries(mcpp PRIVATE /tmp/x11-dev/usr/lib/x86_64-linux-gnu/libGL.so)
+    # OpenGL — prefer system libGL, fall back to /tmp/x11-dev if needed
+    find_library(GL_LIB GL
+        HINTS /usr/lib/x86_64-linux-gnu /tmp/x11-dev/usr/lib/x86_64-linux-gnu)
+    if(GL_LIB)
+        target_link_libraries(mcpp PRIVATE ${GL_LIB})
+    else()
+        target_link_libraries(mcpp PRIVATE GL)
+    endif()
+    # OpenSSL (for AES encryption in Connection.cpp)
+    find_package(OpenSSL REQUIRED)
+    target_link_libraries(mcpp PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    # pthread for std::thread
+    find_package(Threads REQUIRED)
+    target_link_libraries(mcpp PRIVATE Threads::Threads)
 endif()
 
 target_compile_definitions(mcpp PRIVATE
@@ -217,11 +229,13 @@ set_target_properties(mcpp PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+if(WIN32)
 add_executable(debug_test WIN32 debug_main.cpp)
 set_target_properties(debug_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+endif()
 
 add_executable(biome_manager_parity
     world/level/levelgen/BiomeManagerParityTest.cpp

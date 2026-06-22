@@ -94,9 +94,9 @@ inline int scaleRGB(int color_, float sR, float sG, float sB) {
 inline int scaleRGB(int color_, float scale) { return scaleRGB(color_, scale, scale, scale); }
 inline int scaleRGB(int color_, int scale) {
     return color(alpha(color_),
-                 static_cast<int>(mth::clamp(static_cast<int64_t>(red(color_)) * scale / 255LL, 0LL, 255LL)),
-                 static_cast<int>(mth::clamp(static_cast<int64_t>(green(color_)) * scale / 255LL, 0LL, 255LL)),
-                 static_cast<int>(mth::clamp(static_cast<int64_t>(blue(color_)) * scale / 255LL, 0LL, 255LL)));
+                 static_cast<int>(mth::clamp(static_cast<int64_t>(red(color_)) * scale / 255LL, static_cast<int64_t>(0), static_cast<int64_t>(255))),
+                 static_cast<int>(mth::clamp(static_cast<int64_t>(green(color_)) * scale / 255LL, static_cast<int64_t>(0), static_cast<int64_t>(255))),
+                 static_cast<int>(mth::clamp(static_cast<int64_t>(blue(color_)) * scale / 255LL, static_cast<int64_t>(0), static_cast<int64_t>(255))));
 }
 inline int greyscale(int color_) {
     int g = static_cast<int>(red(color_) * 0.3F + green(color_) * 0.59F + blue(color_) * 0.11F);

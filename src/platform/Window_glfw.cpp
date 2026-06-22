@@ -108,14 +108,6 @@ bool Window::pollEvents() {
     return !m_shouldClose;
 }
 
-void* Window::nativeHandle() const {
-    return m_native;
-}
-
-HWND Window::hwnd() const {
-    return nullptr;  // No HWND on Linux
-}
-
 bool Window::isKeyDown(int vkey) const {
     if (vkey < 0 || vkey >= 512) return false;
     return m_keys[vkey & 0x1FF];

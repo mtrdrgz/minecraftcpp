@@ -3,10 +3,18 @@
 #include <miniz.h>
 #ifdef _WIN32
 #include <bcrypt.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "bcrypt.lib")
 #else
 #include <openssl/aes.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
 #endif
 #include <stdexcept>
 #include <cstring>

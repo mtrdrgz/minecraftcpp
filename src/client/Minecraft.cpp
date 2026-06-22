@@ -67,21 +67,7 @@ namespace {
 
     // Load a PNG embedded as an RCDATA resource (font / GUI textures from client.jar).
     render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
-    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
 #ifdef _WIN32
-        HMODULE hmod = GetModuleHandleW(nullptr);
-        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
-#endif // _WIN32
-        if (!hres) return nullptr;
-        HGLOBAL hg = LoadResource(hmod, hres);
-        const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
-        DWORD size = SizeofResource(hmod, hres);
-        return decodeTex(dev, cmd, data, (int)size);
-    }
-
-    // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
-    std::string loadResourceText(int resourceId) {
-    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
         HMODULE hmod = GetModuleHandleW(nullptr);
         HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
         if (!hres) return nullptr;
@@ -89,6 +75,10 @@ namespace {
         const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
         DWORD size = SizeofResource(hmod, hres);
         return decodeTex(dev, cmd, data, (int)size);
+#else
+        (void)dev; (void)cmd; (void)resourceId;
+        return nullptr;
+#endif
     }
 
     // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
@@ -96,12 +86,15 @@ namespace {
 #ifdef _WIN32
         HMODULE hmod = GetModuleHandleW(nullptr);
         HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
-#endif // _WIN32
         if (!hres) return {};
         HGLOBAL hg = LoadResource(hmod, hres);
         const char* data = static_cast<const char*>(LockResource(hg));
         DWORD size = SizeofResource(hmod, hres);
         return data ? std::string(data, data + size) : std::string{};
+#else
+        (void)resourceId;
+        return {};
+#endif
     }
 
     // SplashManager: pick a random non-empty line from splashes.txt.
@@ -845,17 +838,25 @@ void Minecraft::tick() {
             for (auto& [id, entity] : g_entities) {
                 if (entity) entity->tick();
             }
-            
+
             if (m_soundManager) {
                 const auto& s = m_localPlayer.state();
+#ifdef _WIN32
                 audio::SoundEngine::instance().setListenerPosition(s.x, s.y, s.z, s.yaw, s.pitch);
+#else
+                m_soundManager->setListenerPosition(s.x, s.y, s.z, s.yaw, s.pitch);
+#endif
             }
         } else if (!m_connection) {
             updateLocalChunks();
-            
+
             if (m_soundManager) {
                 const auto& s = m_localPlayer.state();
+#ifdef _WIN32
                 audio::SoundEngine::instance().setListenerPosition(s.x, s.y, s.z, s.yaw, s.pitch);
+#else
+                m_soundManager->setListenerPosition(s.x, s.y, s.z, s.yaw, s.pitch);
+#endif
             }
         }
     }

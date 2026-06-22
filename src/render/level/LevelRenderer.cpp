@@ -2,6 +2,7 @@
 #include "../../world/level/block/Blocks.h"
 #include "../../assets/resource_ids.h"
 #include "../../core/Log.h"
+#include "../../assets/AssetManager.h"
 #include "../../../profiling/include/Profiler.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -9,6 +10,11 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include "../../platform/Platform.h"
+#endif
 
 namespace mc::render {
 
@@ -158,6 +164,7 @@ void LevelRenderer::renderHud(ICommandList* cmd, int winW, int winH) {
 }
 
 void LevelRenderer::loadAtlas(ICommandList* cmd) {
+#ifdef _WIN32
     HMODULE hmod = GetModuleHandleW(nullptr);
     HRSRC hresPng = FindResourceW(hmod, MAKEINTRESOURCEW(IDR_BLOCK_ATLAS), RT_RCDATA);
     HRSRC hresJson = FindResourceW(hmod, MAKEINTRESOURCEW(IDR_ATLAS_UV), RT_RCDATA);
@@ -169,6 +176,18 @@ void LevelRenderer::loadAtlas(ICommandList* cmd) {
     DWORD pngSize = SizeofResource(hmod, hresPng);
     DWORD jsonSize = SizeofResource(hmod, hresJson);
     if (pngData && jsonData) m_atlas.load(m_device, cmd, {pngData, pngSize}, {jsonData, jsonSize});
+#else
+    // Linux: load atlas PNG + JSON from the asset pack on disk
+    auto png = mc::AssetManager::instance().readRaw("assets/minecraft/textures/atlas/blocks.png");
+    auto js  = mc::AssetManager::instance().readRaw("assets/minecraft/atlases/blocks.json");
+    if (!png.empty() && !js.empty()) {
+        m_atlas.load(m_device, cmd,
+                     {png.data(), png.size()},
+                     {js.data(),  js.size()});
+    } else {
+        MC_LOG_WARN("LevelRenderer: block atlas assets not found on disk");
+    }
+#endif
 }
 
 void LevelRenderer::onChunkLoaded(ChunkPos pos) {

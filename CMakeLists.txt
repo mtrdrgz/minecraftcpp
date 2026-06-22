@@ -96,17 +96,25 @@ endif()
 option(MCPP_SKIP_ASSET_PACK "Use pre-existing assets.bin without re-running asset_packer" OFF)
 
 if(NOT MCPP_SKIP_ASSET_PACK)
-    add_custom_target(pack_runtime_assets
-        COMMAND "${CMAKE_COMMAND}" -P "${MCPP_PREPARE_RUNTIME_ASSETS}"
-        COMMAND ${MCPP_ASSET_PACK_COMMAND}
-        COMMAND "${CMAKE_COMMAND}" -DASSET_BIN=${MCPP_RUNTIME_ASSET_PACK} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
-        BYPRODUCTS "${MCPP_RUNTIME_ASSET_PACK}"
-        DEPENDS asset_packer "${MCPP_PREPARE_RUNTIME_ASSETS}"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Packing runtime assets into src/assets/assets.bin"
-        VERBATIM
-    )
-    add_dependencies(mcpp pack_runtime_assets)
+    if(WIN32)
+        add_custom_target(pack_runtime_assets
+            COMMAND "${CMAKE_COMMAND}" -P "${MCPP_PREPARE_RUNTIME_ASSETS}"
+            COMMAND ${MCPP_ASSET_PACK_COMMAND}
+            COMMAND "${CMAKE_COMMAND}" -DASSET_BIN=${MCPP_RUNTIME_ASSET_PACK} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyAssetPack.cmake"
+            BYPRODUCTS "${MCPP_RUNTIME_ASSET_PACK}"
+            DEPENDS asset_packer "${MCPP_PREPARE_RUNTIME_ASSETS}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            COMMENT "Packing runtime assets into src/assets/assets.bin"
+            VERBATIM
+        )
+        add_dependencies(mcpp pack_runtime_assets)
+    else()
+        # Linux: skip resource packing (assets loaded from disk via AssetManager)
+        add_custom_target(pack_runtime_assets
+            COMMAND "${CMAKE_COMMAND}" -E echo "Skipping asset packing on Linux (loaded from disk)"
+            COMMENT "Linux: assets loaded from disk, no packing needed"
+        )
+    endif()
 endif()
 set_source_files_properties(src/assets/assets.rc PROPERTIES
     OBJECT_DEPENDS "${MCPP_RUNTIME_ASSET_PACK}"

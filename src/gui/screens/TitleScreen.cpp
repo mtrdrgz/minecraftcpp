@@ -2,6 +2,11 @@
 #include "../../client/Minecraft.h"
 #include <chrono>
 #include <cmath>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <cstdlib>
+#endif
 
 // 1:1 port of net.minecraft.client.gui.screens.TitleScreen (non-demo path).
 // Layout, button order, sizes, strings and text positions come straight from the
@@ -50,7 +55,13 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
     topPos += 36;
     addButton(w / 2 - 124, topPos, 20, 20, "", []() {});                              // CommonButtons.language — not ported
     addButton(w / 2 - 100, topPos, 98, 20, "Options...", [this]() { m_minecraft->openOptionsScreen(); });
-    addButton(w / 2 + 2, topPos, 98, 20, "Quit Game", []() { PostQuitMessage(0); });
+    addButton(w / 2 + 2, topPos, 98, 20, "Quit Game", []() {
+#ifdef _WIN32
+        PostQuitMessage(0);
+#else
+        std::exit(0);
+#endif
+    });
     addButton(w / 2 + 104, topPos, 20, 20, "", []() {});                              // CommonButtons.accessibility — not ported
 }
 
