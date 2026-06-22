@@ -236,12 +236,6 @@ LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 } // namespace mc
 
-
-
-HWND Window::hwnd() const {
-    return (HWND)m_native;
-}
-
 void* Window::nativeHandle() const {
     return m_native;
 }

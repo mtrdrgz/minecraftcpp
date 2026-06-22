@@ -31,9 +31,13 @@ public:
     // Returns false when the window should close
     bool pollEvents();
 
-    // Native window handle (HWND on Windows, GLFWwindow* on Linux via void*)
+    // Native window handle (HWND on Windows, GLFWwindow* on Linux)
     void*   nativeHandle() const;
-    HWND    hwnd() const;  // Returns nativeHandle() casted; nullptr on non-Win32
+#ifdef _WIN32
+    HWND    hwnd() const { return m_native; }
+#else
+    void*   hwnd() const { return nullptr; }  // No HWND on Linux
+#endif
     int32_t width()  const { return m_width; }
     int32_t height() const { return m_height; }
     bool    shouldClose() const { return m_shouldClose; }
@@ -72,7 +76,11 @@ public:
     void clearLButtonState();
 
 private:
-    void*   m_native      = nullptr;  // HWND or GLFWwindow*
+#ifdef _WIN32
+    HWND    m_native      = nullptr;
+#else
+    void*   m_native      = nullptr;  // GLFWwindow*
+#endif
     int32_t m_width       = 0;
     int32_t m_height      = 0;
     bool    m_shouldClose = false;
