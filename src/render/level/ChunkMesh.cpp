@@ -137,11 +137,29 @@ static std::string textureForStateFace(const mc::BlockState& state, int face) {
     return block->textures.forFace(face);
 }
 
-// Get UV coordinates and biome tint from atlas (or fallback grid if atlas null)
+// Biome-aware tint: when a biome context is present and the texture is biome-driven
+// (grass/foliage/water), use the certified per-position blend; otherwise fall back to
+// the fixed (plains-default) getTextureTint. wx/wy/wz are world block coordinates.
+static TintRGB biomeOrDefaultTint(const std::string& name, int wx, int wy, int wz,
+                                  const BiomeMeshContext* biome) {
+    if (biome && biome->biomeAt) {
+        if (auto c = mc::render::biometint::tint(name, biome->biomeAt, wx, wy, wz,
+                                                 biome->grassColormap, biome->foliageColormap,
+                                                 biome->blendRadius)) {
+            return {c->r, c->g, c->b};
+        }
+    }
+    return getTextureTint(name);
+}
+
+// Get UV coordinates and biome tint from atlas (or fallback grid if atlas null).
+// outName (when non-null) receives the resolved sprite name, so the caller can apply
+// a biome-aware tint at the block's world position.
 static void getUV(uint32_t stateId, int face,
                   const mc::TextureAtlas* atlas,
                   float& u0, float& v0, float& u1, float& v1,
-                  TintRGB& tint)
+                  TintRGB& tint,
+                  std::string* outName = nullptr)
 {
     tint = {255, 255, 255};
 
@@ -162,6 +180,7 @@ static void getUV(uint32_t stateId, int face,
                     u0 = auv->u0; v0 = auv->v0;
                     u1 = auv->u1; v1 = auv->v1;
                     tint = getTextureTint(name);
+                    if (outName) *outName = name;
                     return;
                 }
             }
@@ -245,11 +264,16 @@ bool ChunkMesher::shouldCull(const LevelChunk& chunk, const LevelChunk* neighbor
 
 void ChunkMesher::emitFace(SectionMesh& mesh, float bx, float by, float bz,
                             int face, uint32_t stateId, uint8_t light,
-                            const TextureAtlas* atlas)
+                            const TextureAtlas* atlas,
+                            const BiomeMeshContext* biome)
 {
     float u0, v0, u1, v1;
     TintRGB tint;
-    getUV(stateId, face, atlas, u0, v0, u1, v1, tint);
+    std::string texName;
+    getUV(stateId, face, atlas, u0, v0, u1, v1, tint, &texName);
+    if (biome && !texName.empty()) {
+        tint = biomeOrDefaultTint(texName, (int)bx, (int)by, (int)bz, biome);
+    }
 
     // Directional shading matching vanilla (top=full, bottom=dark, sides=medium)
     static const uint8_t SHADE[6] = {210, 210, 255, 128, 230, 230};
@@ -281,10 +305,12 @@ void ChunkMesher::emitFace(SectionMesh& mesh, float bx, float by, float bz,
 void ChunkMesher::emitCross(SectionMesh& mesh, float bx, float by, float bz,
                             uint32_t stateId, uint8_t light,
                             const TextureAtlas* atlas,
-                            const std::string& texOverride)
+                            const std::string& texOverride,
+                            const BiomeMeshContext* biome)
 {
     float u0, v0, u1, v1;
     TintRGB tint;
+    std::string texName = texOverride;
     if (!texOverride.empty() && atlas && atlas->isLoaded()) {
         const mc::AtlasUV* auv = atlas->uv(texOverride);
         if (auv) {
@@ -297,7 +323,10 @@ void ChunkMesher::emitCross(SectionMesh& mesh, float bx, float by, float bz,
             tint = {255, 255, 255};
         }
     } else {
-        getUV(stateId, 0, atlas, u0, v0, u1, v1, tint);
+        getUV(stateId, 0, atlas, u0, v0, u1, v1, tint, &texName);
+    }
+    if (biome && !texName.empty()) {
+        tint = biomeOrDefaultTint(texName, (int)bx, (int)by, (int)bz, biome);
     }
 
     uint8_t r = (uint8_t)((uint32_t)light * tint.r / 15);
@@ -859,7 +888,8 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                               const mc::BlockState& state,
                               uint32_t stateId,
                               uint8_t light,
-                              const TextureAtlas* atlas) {
+                              const TextureAtlas* atlas,
+                              const BiomeMeshContext* biome) {
     using namespace mc::render::model;
     using joml::Matrix4f;
     using joml::Vector3f;
@@ -931,7 +961,9 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                     sprite = { u0, u1, v0, v1 };
                 }
                 // Tint only faces that declare a tintindex (vanilla BlockColors gate).
-                const TintRGB tint = (f.tintIndex >= 0) ? getTextureTint(texture) : TintRGB{255, 255, 255};
+                const TintRGB tint = (f.tintIndex >= 0)
+                    ? biomeOrDefaultTint(texture, wx, wy, wz, biome)
+                    : TintRGB{255, 255, 255};
 
                 // UVs: explicit "uv" (model space) or the auto-generated from/to UV.
                 const fb::UVs uvs = f.hasUv
@@ -988,7 +1020,8 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
 void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                                 const LevelChunk* neighbors[4],
                                 const TextureAtlas* atlas,
-                                SectionMesh& out)
+                                SectionMesh& out,
+                                const BiomeMeshContext* biome)
 {
     PROFILE_SCOPE("chunk_mesh_buildSection");
     out.clear();
@@ -1061,7 +1094,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                 bool isPlant = false;
                 if (bs && bs->block) {
                     const std::string& name = bs->block->name;
-                    if (vanilla_model::tryEmitVanillaBlockModel(out, chunk, neighbors, wx, wy, wz, *bs, stateId, light, atlas)) {
+                    if (vanilla_model::tryEmitVanillaBlockModel(out, chunk, neighbors, wx, wy, wz, *bs, stateId, light, atlas, biome)) {
                         continue;
                     }
                     if (name == "pink_petals" || name == "wildflowers") {
@@ -1123,7 +1156,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                             }
                         }
                     }
-                    emitCross(out, bx, by, bz, stateId, light, atlas, texOverride);
+                    emitCross(out, bx, by, bz, stateId, light, atlas, texOverride, biome);
                 } else {
                     // Fast path: for interior blocks (lx/lz 1..14, ly 0..14
                     // with same-section vertical neighbor), check neighbors
@@ -1182,7 +1215,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                         }
 
                         if (!cull) {
-                            emitFace(out, bx, by, bz, face, stateId, light, atlas);
+                            emitFace(out, bx, by, bz, face, stateId, light, atlas, biome);
                         }
                     }
                 }
@@ -1193,12 +1226,13 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
 
 std::vector<SectionMesh> ChunkMesher::buildChunk(const LevelChunk& chunk,
                                                    const LevelChunk* neighbors[4],
-                                                   const TextureAtlas* atlas)
+                                                   const TextureAtlas* atlas,
+                                                   const BiomeMeshContext* biome)
 {
     PROFILE_SCOPE_CHUNK("chunk_mesh_buildChunk", chunk.pos().x, chunk.pos().z);
     std::vector<SectionMesh> meshes(CHUNK_SECTION_COUNT);
     for (int s = 0; s < CHUNK_SECTION_COUNT; ++s)
-        buildSection(chunk, s, neighbors, atlas, meshes[s]);
+        buildSection(chunk, s, neighbors, atlas, meshes[s], biome);
     return meshes;
 }
 

@@ -153,15 +153,18 @@
     #91BD59 (r0 y r2), water=waterColor del bioma, no-tinteadas→none, blend plains|forest
     intermedio → ALL OK. Con esto AMBAS mitades del cálculo de color están portadas y
     verificadas headless.
-  - PENDIENTE (única parte que necesita cliente en ejecución): el snapshot de bioma
-    thread-safe. El mesher corre en un worker y el `getNoiseBiome` del generador pasa por un
-    cache (`BiomeManager`, NoiseBasedChunkGenerator.cpp:559) → llamarlo desde el worker es
-    una posible data race. La integración correcta: muestrear los biomas del chunk + margen
-    (radio 2) en el hilo principal (en `LevelRenderer::scheduleMeshBuild`), pasar ese snapshot
-    inmutable como `biomeAt` al worker, y reemplazar `getTextureTint` por `biometint::tint`
-    en las rutas de emisión (cube `emitFace`, `emitCross`, bake de modelo). No verificable sin
-    cliente (riesgo de race + coste en hilo principal), por eso se deja la integración aquí
-    con ambos núcleos ya probados.
+  - [~] MESHER CABLEADO Y COMPILA 2026-06-22: `ChunkMesh` acepta un `BiomeMeshContext*`
+    opcional (snapshot `biomeAt` + colormaps grass/foliage + radio) y aplica `biometint::tint`
+    en las rutas de emisión (cube `emitFace`, `emitCross`, y bake de modelo para hojas/grass).
+    Con contexto nullptr el comportamiento es idéntico al anterior (cero riesgo); los callers
+    existentes (`LevelRenderer`, `TerrainEnginePerf`) siguen compilando sin cambios. Verificado:
+    `g++ -fsyntax-only` de `ChunkMesh.cpp` OK.
+  - PENDIENTE (único trozo que necesita cliente compilable/ejecutable, no hay `vendor/glfw`
+    aquí): que `LevelRenderer::scheduleMeshBuild` construya el `BiomeMeshContext` en el hilo
+    principal — muestrear biomas del chunk + margen (radio 2) en un snapshot inmutable (evita
+    la data race con el cache de `BiomeManager` al llamar desde el worker), cargar los colormaps
+    una vez (stb), y pasar el contexto a `buildChunk`. Es la única conexión que falta para que
+    el color por bioma se vea; toda la lógica debajo ya está portada, probada y compilada.
   - GROUNDED 2026-06-22: el camino exacto está identificado y los datos verificados. El
     tinte de hierba actual en el mesher está HARDCODEADO a `#79C05A` (que en realidad es el
     color de *forest*, ¡ni siquiera el de plains!). Decodificando el colormap real
