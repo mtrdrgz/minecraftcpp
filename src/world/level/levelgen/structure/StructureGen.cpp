@@ -5,6 +5,7 @@
 #include "structures/SwampHutPiece.h"
 #include "structures/DesertPyramidPiece.h"
 #include "structures/JungleTemplePiece.h"
+#include "structures/BuriedTreasurePieces.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -654,6 +655,7 @@ struct Runtime {
     bool tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bool isBeached);
     bool tryPlaceIgloo(ChunkPos active, const StructureWorld& world);
     bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 
@@ -910,7 +912,7 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     // recognised but NOT actually placed must NOT be marked supported — otherwise
     // it silently no-ops (failed jigsaw assembly with an empty start_pool) while
     // pretending to be ported. Types deliberately NOT here yet (helpers only, no
-    // in-game placement): ocean_ruin, ruined_portal, buried_treasure,
+    // in-game placement): ocean_ruin, ruined_portal,
     // ocean_monument, woodland_mansion, mineshaft, stronghold, fortress, end_city.
     // See docs/STRUCTURES_STATUS.md for the per-structure port ledger.
     static const std::set<std::string> supportedTypes = {
@@ -921,6 +923,7 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:jungle_temple",
         "minecraft:shipwreck",
         "minecraft:nether_fossil",
+        "minecraft:buried_treasure",
     };
 
     if (supportedTypes.count(type) == 0) {
@@ -1530,6 +1533,9 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:nether_fossil") {
         return tryPlaceNetherFossil(active, world);
     }
+    if (cfg.structureType == "minecraft:buried_treasure") {
+        return tryPlaceBuriedTreasure(active, world);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly. Prefer the COLUMN-based assembly the Beardifier
@@ -1592,6 +1598,29 @@ bool Runtime::tryPlaceSwampHut(ChunkPos active, const StructureWorld& world) {
 
     hut.postProcess(access);
     MC_LOG_INFO("Structure swamp_hut placed at chunk ({},{})", active.x, active.z);
+    return true;
+}
+
+bool Runtime::tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& world) {
+    // BuriedTreasureStructure.generatePieces:
+    //   offset = new BlockPos(chunkPos.getBlockX(9), 90, chunkPos.getBlockZ(9))
+    //   builder.addPiece(new BuriedTreasurePiece(offset))
+    // No structure RandomSource is needed for block placement (Java's random only
+    // drives the chest loot, which is not ported).
+    const int offsetX = active.x * 16 + 9;
+    const int offsetZ = active.z * 16 + 9;
+
+    piece::BuriedTreasurePiece treasure(offsetX, offsetZ);
+
+    StructureWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.minY = -64;
+    access.isInsideBoundingBox = nullptr;  // allow all writes
+
+    treasure.postProcess(access);
+    MC_LOG_INFO("Structure buried_treasure placed at chunk ({},{})", active.x, active.z);
     return true;
 }
 

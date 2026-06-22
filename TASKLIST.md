@@ -110,7 +110,14 @@
       `village_snowy` de 31 piezas, no como el caso plains forzado. Pendiente: gate de
       starts/piezas en el contexto real del server y despues diff bloque-a-bloque contra
       `.mca` del server.
-- [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
+- [x] Buried treasure: portado `BuriedTreasurePiece.postProcess` 1:1 (escaneo hacia abajo
+      hasta la primera columna anclada en sandstone/stone/andesite/granite/diorite, relleno
+      de aire/líquido de los 6 vecinos con belowState/softState, y colocación del cofre).
+      Cableado el dispatch `tryPlaceBuriedTreasure` + tipo `minecraft:buried_treasure` como
+      soportado. Verificado con `structure_gen_probe --seed 1 --radius 48 --biome minecraft:beach`:
+      ya NO sale como UNPORTED y coloca en chunks de playa escribiendo bloques (cofre + relleno).
+      Gap honesto: el LOOT del cofre (loot table + block-entity) no está portado — se coloca el
+      bloque de cofre, igual que en DesertPyramid/SwampHut.
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 
 ## Texturas / coloreado
