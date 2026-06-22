@@ -39,6 +39,7 @@ jobs:
             cmake
             vendor
             tools/asset_packer
+            tools/structure_gen_probe
             profiling
             .github/workflows/build-release.yml
 
