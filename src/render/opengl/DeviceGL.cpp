@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 #include "DeviceGL.h"
 #include "CommandListGL.h"
 #include "../../core/Log.h"
@@ -225,3 +227,6 @@ IPipeline* DeviceGL::createPipeline(const PipelineDesc& desc) {
 void DeviceGL::destroyPipeline(IPipeline* p) { delete p; }
 
 } // namespace mc::render
+
+
+#endif // _WIN32

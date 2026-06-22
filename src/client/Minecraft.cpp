@@ -18,7 +18,12 @@
 #include "../render/gui/PanoramaRenderer.h"
 #include "../assets/resource_ids.h"
 #include <stb_image.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#include <unistd.h>
+#endif
 #include <cmath>
 #include <ctime>
 #include <iomanip>
@@ -62,6 +67,21 @@ namespace {
 
     // Load a PNG embedded as an RCDATA resource (font / GUI textures from client.jar).
     render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
+    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
+#ifdef _WIN32
+        HMODULE hmod = GetModuleHandleW(nullptr);
+        HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+#endif // _WIN32
+        if (!hres) return nullptr;
+        HGLOBAL hg = LoadResource(hmod, hres);
+        const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
+        DWORD size = SizeofResource(hmod, hres);
+        return decodeTex(dev, cmd, data, (int)size);
+    }
+
+    // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
+    std::string loadResourceText(int resourceId) {
+    render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
         HMODULE hmod = GetModuleHandleW(nullptr);
         HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
         if (!hres) return nullptr;
@@ -73,8 +93,10 @@ namespace {
 
     // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
     std::string loadResourceText(int resourceId) {
+#ifdef _WIN32
         HMODULE hmod = GetModuleHandleW(nullptr);
         HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+#endif // _WIN32
         if (!hres) return {};
         HGLOBAL hg = LoadResource(hmod, hres);
         const char* data = static_cast<const char*>(LockResource(hg));
@@ -279,11 +301,21 @@ namespace {
         };
         std::error_code ec;
         if (auto r = probe(fs::current_path(ec)); !r.empty()) return r;
+#ifdef _WIN32
         wchar_t buf[MAX_PATH];
         DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
         if (n > 0 && n < MAX_PATH) {
             if (auto r = probe(fs::path(buf).parent_path()); !r.empty()) return r;
         }
+#else
+        // Linux: also check the executable's directory via /proc/self/exe
+        char exePath[4096];
+        ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+        if (len > 0) {
+            exePath[len] = '\0';
+            if (auto r = probe(fs::path(exePath).parent_path()); !r.empty()) return r;
+        }
+#endif
         return "";
     }
 

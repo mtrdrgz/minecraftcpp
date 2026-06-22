@@ -11,7 +11,11 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 #include <bcrypt.h>
 #endif
 

@@ -1,9 +1,15 @@
 #pragma once
 #include "../IRenderDevice.h"
-#include <windows.h>
 #include <glad/gl.h>
 #include <unordered_map>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+typedef void* GLContextHandle;  // HDC on Windows
+#else
+typedef void* GLContextHandle;  // GLFWwindow* on Linux
+#endif
 
 namespace mc::render {
 
@@ -36,7 +42,7 @@ private:
 
 class CommandListGL final : public ICommandList {
 public:
-    explicit CommandListGL(HDC hdc) : m_hdc(hdc) {}
+    explicit CommandListGL(GLContextHandle ctx) : m_ctx(ctx) {}
 
     void clear(float r, float g, float b, float a, bool depth) override;
     void setViewport(int32_t x, int32_t y, int32_t w, int32_t h) override;
@@ -52,7 +58,7 @@ public:
     void uploadTexture(ITexture*, const void* pixels) override;
 
 private:
-    HDC       m_hdc;
+    GLContextHandle m_ctx;
     PipelineGL* m_pipeline = nullptr;
     GLuint    m_vao = 0;  // single global VAO for core profile
 };

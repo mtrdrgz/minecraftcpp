@@ -1,7 +1,11 @@
 #include "LocalPlayer.h"
 #include "../../network/protocol/game/PlayPackets.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 
 #include <cmath>
 

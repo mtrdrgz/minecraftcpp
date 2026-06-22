@@ -1,7 +1,11 @@
 #include "PauseScreen.h"
 #include "options/OptionsScreen.h"
 #include "../../client/Minecraft.h"
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 
 namespace mc::gui::screens {
 

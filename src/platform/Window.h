@@ -4,7 +4,12 @@
 #include <functional>
 #include <array>
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+// On Linux, use void* for native window handle (GLFWwindow* casted)
+typedef void* HWND;
+#endif
 
 namespace mc {
 
@@ -26,14 +31,15 @@ public:
     // Returns false when the window should close
     bool pollEvents();
 
-    HWND    hwnd()   const { return m_hwnd; }
+    // Native window handle (HWND on Windows, GLFWwindow* on Linux via void*)
+    void*   nativeHandle() const;
+    HWND    hwnd() const;  // Returns nativeHandle() casted; nullptr on non-Win32
     int32_t width()  const { return m_width; }
     int32_t height() const { return m_height; }
     bool    shouldClose() const { return m_shouldClose; }
 
     // ── Input ─────────────────────────────────────────────────────────────────
-    // Virtual-key state (updated by WM_KEYDOWN / WM_KEYUP)
-    bool isKeyDown(int vkey) const { return m_keys[vkey & 0xFF]; }
+    bool isKeyDown(int vkey) const;
 
     int  mouseX() const { return m_lastMouseX; }
     int  mouseY() const { return m_lastMouseY; }
@@ -47,47 +53,46 @@ public:
         return dx != 0 || dy != 0;
     }
 
-    // Accumulated mouse delta since last consumeMouseDelta call.
-    // Reset to zero on each call.
     void consumeMouseDelta(int& dx, int& dy) {
         dx = m_mouseDx; dy = m_mouseDy;
         m_mouseDx = m_mouseDy = 0;
     }
 
-    // Hide/show cursor and confine it to the window.
     void captureMouse(bool capture);
     bool isMouseCaptured() const { return m_mouseCaptured; }
 
-    // Called by WndProc
+    // Called by platform event handler
     void onResize(int32_t w, int32_t h);
     void onClose();
-    void onKeyDown(int vkey) { m_keys[vkey & 0xFF] = true; }
-    void onKeyUp  (int vkey) { m_keys[vkey & 0xFF] = false; }
+    void onKeyDown(int vkey);
+    void onKeyUp  (int vkey);
     void onMouseMove(int x, int y);
     void onLButtonDown();
     void onLButtonUp();
     void clearLButtonState();
 
 private:
-    HWND    m_hwnd        = nullptr;
+    void*   m_native      = nullptr;  // HWND or GLFWwindow*
     int32_t m_width       = 0;
     int32_t m_height      = 0;
     bool    m_shouldClose = false;
 
-    // Keyboard
-    std::array<bool, 256> m_keys{};
+    // Keyboard (key codes 0-511 to cover both VK_ and GLFW ranges)
+    std::array<bool, 512> m_keys{};
 
     // Mouse
-    int  m_mouseDx = 0, m_mouseDy = 0;   // accumulated delta
-    int  m_dragDx = 0, m_dragDy = 0;     // accumulated visible-cursor LMB drag delta
+    int  m_mouseDx = 0, m_mouseDy = 0;
+    int  m_dragDx = 0, m_dragDy = 0;
     int  m_lastMouseX = 0, m_lastMouseY = 0;
     bool m_lButtonClicked = false;
     bool m_lButtonReleased = false;
     bool m_lButtonDown = false;
     bool m_mouseCaptured  = false;
-    bool m_ignoreNextMove = false;        // skip the warp-back WM_MOUSEMOVE
+    bool m_ignoreNextMove = false;
 
+#ifdef _WIN32
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+#endif
 };
 
 } // namespace mc

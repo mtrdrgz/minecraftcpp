@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 #include "Window.h"
 #include "../core/Log.h"
 #include <stdexcept>
@@ -33,7 +35,7 @@ Window::Window(const WindowDesc& desc)
     } else {
         wtitle = CLASS_NAME;
     }
-    m_hwnd = CreateWindowExW(
+    m_native = CreateWindowExW(
         0, CLASS_NAME, wtitle.c_str(), style,
         CW_USEDEFAULT, CW_USEDEFAULT,
         rc.right - rc.left, rc.bottom - rc.top,
@@ -41,19 +43,19 @@ Window::Window(const WindowDesc& desc)
     );
 
 
-    if (!m_hwnd)
+    if (!m_native)
         throw std::runtime_error("CreateWindowExW failed");
 
-    ShowWindow(m_hwnd, SW_SHOW);
-    UpdateWindow(m_hwnd);
+    ShowWindow(m_native, SW_SHOW);
+    UpdateWindow(m_native);
     MC_LOG_INFO("Window created ({}x{})", m_width, m_height);
 }
 
 Window::~Window() {
     captureMouse(false);
-    if (m_hwnd) {
-        DestroyWindow(m_hwnd);
-        m_hwnd = nullptr;
+    if (m_native) {
+        DestroyWindow(m_native);
+        m_native = nullptr;
     }
     UnregisterClassW(CLASS_NAME, GetModuleHandleW(nullptr));
 }
@@ -92,10 +94,10 @@ void Window::captureMouse(bool capture) {
         ShowCursor(FALSE);
         // Confine cursor to client area
         RECT r;
-        GetClientRect(m_hwnd, &r);
+        GetClientRect(m_native, &r);
         POINT tl{r.left, r.top}, br{r.right, r.bottom};
-        ClientToScreen(m_hwnd, &tl);
-        ClientToScreen(m_hwnd, &br);
+        ClientToScreen(m_native, &tl);
+        ClientToScreen(m_native, &br);
         RECT clipRect{tl.x, tl.y, br.x, br.y};
         ClipCursor(&clipRect);
         // Warp to center and track from there
@@ -103,7 +105,7 @@ void Window::captureMouse(bool capture) {
         int cy = (tl.y + br.y) / 2;
         SetCursorPos(cx, cy);
         POINT pt{cx, cy};
-        ScreenToClient(m_hwnd, &pt);
+        ScreenToClient(m_native, &pt);
         m_lastMouseX = pt.x;
         m_lastMouseY = pt.y;
         m_ignoreNextMove = true;
@@ -128,14 +130,14 @@ void Window::onMouseMove(int x, int y) {
 
         // Warp back to center of client area
         RECT r;
-        GetClientRect(m_hwnd, &r);
+        GetClientRect(m_native, &r);
         int cx = (r.left + r.right)  / 2;
         int cy = (r.top  + r.bottom) / 2;
         m_lastMouseX = cx;
         m_lastMouseY = cy;
 
         POINT screenCenter{cx, cy};
-        ClientToScreen(m_hwnd, &screenCenter);
+        ClientToScreen(m_native, &screenCenter);
         m_ignoreNextMove = true;
         SetCursorPos(screenCenter.x, screenCenter.y);
     } else {
@@ -155,19 +157,19 @@ void Window::onLButtonDown() {
     // every click hid the cursor on the title screen and broke button clicks.
     m_lButtonClicked = true;
     m_lButtonDown = true;
-    if (!m_mouseCaptured) SetCapture(m_hwnd);
+    if (!m_mouseCaptured) SetCapture(m_native);
 }
 
 void Window::onLButtonUp() {
     m_lButtonReleased = true;
     m_lButtonDown = false;
-    if (!m_mouseCaptured && GetCapture() == m_hwnd) ReleaseCapture();
+    if (!m_mouseCaptured && GetCapture() == m_native) ReleaseCapture();
 }
 
 void Window::clearLButtonState() {
     m_lButtonDown = false;
     m_dragDx = m_dragDy = 0;
-    if (!m_mouseCaptured && GetCapture() == m_hwnd) ReleaseCapture();
+    if (!m_mouseCaptured && GetCapture() == m_native) ReleaseCapture();
 }
 
 LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -233,3 +235,28 @@ LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 } // namespace mc
+
+
+
+HWND Window::hwnd() const {
+    return (HWND)m_native;
+}
+
+void* Window::nativeHandle() const {
+    return m_native;
+}
+
+bool Window::isKeyDown(int vkey) const {
+    if (vkey < 0 || vkey >= 512) return false;
+    return m_keys[vkey & 0x1FF];
+}
+
+void Window::onKeyDown(int vkey) {
+    if (vkey >= 0 && vkey < 512) m_keys[vkey] = true;
+}
+
+void Window::onKeyUp(int vkey) {
+    if (vkey >= 0 && vkey < 512) m_keys[vkey] = false;
+}
+
+#endif // _WIN32

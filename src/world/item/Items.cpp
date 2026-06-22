@@ -8,7 +8,11 @@
 #include <string_view>
 #include <vector>
 #if defined(_WIN32)
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 #include "../../assets/resource_ids.h"
 #endif
 

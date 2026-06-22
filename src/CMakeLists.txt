@@ -1,12 +1,11 @@
 set(MC_SOURCES
     main.cpp
-    # Platform
+    # Platform (Window.cpp on Windows, Window_glfw.cpp on Linux)
     platform/Window.cpp
     # Assets
     assets/AssetPack.cpp
     assets/AssetManager.cpp
     assets/TextureAtlas.cpp
-    assets/assets.rc
     # Core
     core/StbImpl.cpp
     core/ThreadPool.cpp
@@ -20,8 +19,6 @@ set(MC_SOURCES
     nbt/NbtIo.cpp
     # World — Block / Chunk
     world/level/block/Blocks.cpp
-    assets/AssetManager.cpp
-    assets/AssetPack.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/chunk/LevelChunk.cpp
     # World — Levelgen
@@ -49,9 +46,6 @@ set(MC_SOURCES
     world/level/block/BlockTags.cpp
     world/level/levelgen/feature/BiomeFeatures.cpp
     world/level/levelgen/feature/BiomeDecorator.cpp
-    # The certified whole-chunk decoration machinery (library mode: the engine
-    # target defines MCPP_DECORATE_NO_MAIN so the parity main is compiled out;
-    # the full_chunk_decorate_parity gate target keeps it and stays the truth).
     world/level/levelgen/feature/FullChunkDecorateParityTest.cpp
     world/level/levelgen/feature/TreeGen.cpp
     world/level/levelgen/feature/OreGen.cpp
@@ -94,22 +88,7 @@ set(MC_SOURCES
     # Render — Common
     render/RenderBackend.cpp
     # Render — OpenGL
-    render/opengl/DeviceGL.cpp
     render/opengl/CommandListGL.cpp
-    # Render — Vulkan
-    render/vulkan/DeviceVK.cpp
-    render/vulkan/SwapchainVK.cpp
-    render/vulkan/BufferVK.cpp
-    render/vulkan/TextureVK.cpp
-    render/vulkan/PipelineVK.cpp
-    render/vulkan/CommandListVK.cpp
-    # Render — DirectX 12
-    render/dx12/DeviceDX12.cpp
-    render/dx12/SwapchainDX12.cpp
-    render/dx12/BufferDX12.cpp
-    render/dx12/TextureDX12.cpp
-    render/dx12/PipelineDX12.cpp
-    render/dx12/CommandListDX12.cpp
     # Render — World
     render/entity/EntityRenderDispatcher.cpp
     render/gui/GuiGraphics.cpp
@@ -119,10 +98,36 @@ set(MC_SOURCES
     render/level/LevelRenderer.cpp
     # Audio
     audio/OggDecoder.cpp
-    audio/SoundEngine.cpp
     audio/SoundManager.cpp
     ../vendor/stb/stb_vorbis.c
 )
+
+# Platform-specific sources
+if(WIN32)
+    list(APPEND MC_SOURCES
+        platform/Window.cpp
+        render/opengl/DeviceGL.cpp
+        render/vulkan/DeviceVK.cpp
+        render/vulkan/SwapchainVK.cpp
+        render/vulkan/BufferVK.cpp
+        render/vulkan/TextureVK.cpp
+        render/vulkan/PipelineVK.cpp
+        render/vulkan/CommandListVK.cpp
+        render/dx12/DeviceDX12.cpp
+        render/dx12/SwapchainDX12.cpp
+        render/dx12/BufferDX12.cpp
+        render/dx12/TextureDX12.cpp
+        render/dx12/PipelineDX12.cpp
+        render/dx12/CommandListDX12.cpp
+        audio/SoundEngine.cpp
+        assets/assets.rc
+    )
+else()
+    list(APPEND MC_SOURCES
+        platform/Window_glfw.cpp
+        render/opengl/DeviceGL_linux.cpp
+    )
+endif()
 
 set(MC_ASSET_RESOURCE_DEPS
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets.bin"
@@ -144,14 +149,15 @@ set_source_files_properties(assets/assets.rc PROPERTIES
     OBJECT_DEPENDS "${MC_ASSET_RESOURCE_DEPS}"
 )
 
-add_executable(mcpp WIN32 ${MC_SOURCES})
+add_executable(mcpp ${MC_SOURCES})
 
 if(MSVC)
     target_link_options(mcpp PRIVATE "/ENTRY:mainCRTStartup")
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set_target_properties(mcpp PROPERTIES WIN32_EXECUTABLE TRUE)
+elseif(MINGW)
     target_link_options(mcpp PRIVATE "-Xlinker" "/ENTRY:mainCRTStartup")
+    set_target_properties(mcpp PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
-
 
 target_include_directories(mcpp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -162,40 +168,47 @@ target_include_directories(mcpp PRIVATE
     ../profiling/include
 )
 
-target_link_libraries(mcpp PRIVATE
-    glm
-    nlohmann_json
-    stb
-    glad
-    miniz
-    volk
-    glslang
-    glslang-default-resource-limits
-    SPIRV
-    MachineIndependent
-    GenericCodeGen
-    OSDependent
-    d3d12ma
-)
-
-target_link_libraries(mcpp PRIVATE
-    user32 gdi32 kernel32 opengl32
-    ws2_32 bcrypt
-    ole32
-    d3d12 dxgi d3dcompiler
-)
-# Audio import lib differs by toolchain: llvm-mingw bundles xaudio2_9.lib, while
-# the MSVC-ABI Windows SDK ships xaudio2.lib (xaudio2_9.lib does not exist there).
-if(MINGW)
-    target_link_libraries(mcpp PRIVATE xaudio2_9)
+if(WIN32)
+    target_link_libraries(mcpp PRIVATE
+        glm nlohmann_json stb glad miniz volk
+        glslang glslang-default-resource-limits
+        SPIRV MachineIndependent GenericCodeGen OSDependent
+        d3d12ma
+        user32 gdi32 kernel32 opengl32 ws2_32 bcrypt ole32
+        d3d12 dxgi d3dcompiler
+    )
+    if(MINGW)
+        target_link_libraries(mcpp PRIVATE xaudio2_9)
+    else()
+        target_link_libraries(mcpp PRIVATE xaudio2)
+    endif()
 else()
-    target_link_libraries(mcpp PRIVATE xaudio2)
+    # Linux
+    target_link_libraries(mcpp PRIVATE
+        glm nlohmann_json stb glad miniz
+        ${CMAKE_DL_LIBS} pthread
+    )
+    # GLFW (built from vendor/glfw)
+    target_include_directories(mcpp PRIVATE ../vendor/glfw/include)
+    find_library(GLFW3_LIB NAMES glfw3 PATHS /tmp/glfw-build/src NO_DEFAULT_PATH)
+    if(GLFW3_LIB)
+        target_link_libraries(mcpp PRIVATE ${GLFW3_LIB})
+    else()
+        # Build GLFW as part of the project
+        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_X11 ON CACHE BOOL "" FORCE)
+        add_subdirectory(../vendor/glfw glfw_build EXCLUDE_FROM_ALL)
+        target_link_libraries(mcpp PRIVATE glfw)
+    endif()
+    # OpenGL
+    target_link_libraries(mcpp PRIVATE /tmp/x11-dev/usr/lib/x86_64-linux-gnu/libGL.so)
 endif()
 
 target_compile_definitions(mcpp PRIVATE
     NLOHMANN_JSON_NOEXCEPTION=0
-    # Compile the certified decoration TU as a library (no parity main) — only
-    # this one TU checks the define; the parity executable target does NOT set it.
     MCPP_DECORATE_NO_MAIN
 )
 

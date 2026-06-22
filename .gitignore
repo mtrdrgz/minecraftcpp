@@ -85,3 +85,4 @@ logs/
 
 # Linux parity-only build dir
 /build-linux/
+vendor/glfw/

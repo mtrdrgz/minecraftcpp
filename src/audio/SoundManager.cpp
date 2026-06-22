@@ -2,6 +2,11 @@
 #include "../assets/AssetManager.h"
 #include "../core/Log.h"
 
+#ifdef _WIN32
+// SoundEngine is Windows-only (XAudio2). On Linux, SoundManager calls are no-ops.
+#include "SoundEngine.h"
+#endif
+
 namespace mc::audio {
 
 SoundManager::SoundManager() {
@@ -11,7 +16,9 @@ SoundManager::SoundManager() {
 }
 
 void SoundManager::init() {
+    #ifdef _WIN32
     SoundEngine::instance().init();
+#endif
     
     // Register some default sounds for testing/skeleton
     // In a real port, these would be loaded from a JSON registry like blocks.
@@ -34,14 +41,18 @@ void SoundManager::play(const ResourceLocation& name, SoundSource source, double
     float categoryVol = m_volumes[source] * m_volumes[SoundSource::MASTER];
     if (categoryVol <= 0.001f) return;
 
+    #ifdef _WIN32
     SoundEngine::instance().playAt(data, x, y, z, volume * categoryVol, pitch);
+    #endif
 }
 
 void SoundManager::stop(const ResourceLocation* name, SoundSource* source) {
     // Basic implementation: stop everything if both null, or just stopAll for now
     // A proper implementation would track handles per name/source.
     if (!name && !source) {
+        #ifdef _WIN32
         SoundEngine::instance().stopAll();
+#endif
     }
 }
 

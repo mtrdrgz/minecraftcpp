@@ -68,7 +68,9 @@ endif()
 
 # ── Subdirectories ───────────────────────────────────────────────────────────
 
+if(WIN32)
 add_subdirectory(tools/asset_packer)
+endif()
 add_subdirectory(src)
 include(cmake/StructureParityTargets.cmake)
 

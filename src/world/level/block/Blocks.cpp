@@ -5,7 +5,11 @@
 #include <nlohmann/json.hpp>
 #if defined(_WIN32)
 #include "../../../assets/resource_ids.h"
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 #endif
 #include <cstdlib>
 #include <fstream>

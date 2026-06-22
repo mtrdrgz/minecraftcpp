@@ -1,6 +1,10 @@
 #include "KeyMapping.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 
 #include <memory>
 #include <utility>

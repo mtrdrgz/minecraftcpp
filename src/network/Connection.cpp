@@ -1,38 +1,49 @@
 #include "Connection.h"
 #include "../core/Log.h"
 #include <miniz.h>
+#ifdef _WIN32
 #include <bcrypt.h>
-#include <stdexcept>
-#include <cstring>
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "bcrypt.lib")
+#else
+#include <openssl/aes.h>
+#endif
+#include <stdexcept>
+#include <cstring>
 
 namespace mc::net {
 
-// ── WinsockInit ───────────────────────────────────────────────────────────────
+// ── WinsockInit (no-op on Linux) ─────────────────────────────────────────────
 WinsockInit::WinsockInit() {
+#ifdef _WIN32
     WSADATA wsa{};
     int r = WSAStartup(MAKEWORD(2, 2), &wsa);
     if (r != 0) throw std::runtime_error("WSAStartup failed: " + std::to_string(r));
+#endif
 }
-WinsockInit::~WinsockInit() { WSACleanup(); }
+WinsockInit::~WinsockInit() {
+#ifdef _WIN32
+    WSACleanup();
+#endif
+}
 WinsockInit& WinsockInit::instance() {
     static WinsockInit inst;
     return inst;
 }
 
-// ── AES-128-CFB8 via Windows CNG (bcrypt) ────────────────────────────────────
+// ── AES-128-CFB8 encryption ─────────────────────────────────────────────────
+#ifdef _WIN32
+// Windows: CNG (bcrypt)
 struct Connection::EncryptState {
     BCRYPT_ALG_HANDLE  algo   = nullptr;
     BCRYPT_KEY_HANDLE  key    = nullptr;
     std::vector<uint8_t> iv;
 
     explicit EncryptState(std::span<const uint8_t> sharedSecret) {
-        iv.assign(sharedSecret.begin(), sharedSecret.end()); // IV = shared secret for MC
+        iv.assign(sharedSecret.begin(), sharedSecret.end());
         BCryptOpenAlgorithmProvider(&algo, BCRYPT_AES_ALGORITHM, nullptr, 0);
         BCryptSetProperty(algo, BCRYPT_CHAINING_MODE,
                           (PUCHAR)BCRYPT_CHAIN_MODE_CFB, sizeof(BCRYPT_CHAIN_MODE_CFB), 0);
-        // Import key
         struct KeyBlob {
             BCRYPT_KEY_DATA_BLOB_HEADER hdr;
             uint8_t key[16];
@@ -58,7 +69,6 @@ struct Connection::EncryptState {
         else
             BCryptDecrypt(key, data, (ULONG)len, nullptr, ivCopy.data(), (ULONG)ivCopy.size(),
                           data, (ULONG)len, &out, 0);
-        // Update IV: for CFB8 the IV advances by len bytes
         if (len >= 16) {
             memcpy(iv.data(), data + len - 16, 16);
         } else {
@@ -67,6 +77,33 @@ struct Connection::EncryptState {
         }
     }
 };
+#else
+// Linux: OpenSSL
+struct Connection::EncryptState {
+    AES_KEY aesKey;
+    std::vector<uint8_t> iv;
+
+    explicit EncryptState(std::span<const uint8_t> sharedSecret) {
+        iv.assign(sharedSecret.begin(), sharedSecret.end());
+        AES_set_encrypt_key(sharedSecret.data(), 128, &aesKey);
+    }
+    ~EncryptState() = default;
+
+    void process(uint8_t* data, size_t len, bool encrypt) {
+        std::vector<uint8_t> ivCopy = iv;
+        // AES-CFB8 via OpenSSL
+        int num = 0;
+        AES_cfb8_encrypt(data, data, (int)len, &aesKey, ivCopy.data(), &num,
+                         encrypt ? AES_ENCRYPT : AES_DECRYPT);
+        if (len >= 16) {
+            memcpy(iv.data(), data + len - 16, 16);
+        } else {
+            memmove(iv.data(), iv.data() + len, 16 - len);
+            memcpy(iv.data() + 16 - len, data, len);
+        }
+    }
+};
+#endif
 
 // ── Connection ────────────────────────────────────────────────────────────────
 Connection::~Connection() {
@@ -254,7 +291,7 @@ bool Connection::receivePacket(PacketBuffer& outPacket, int32_t& outPacketId) {
 bool Connection::hasData() const {
     if (!m_connected || m_socket == INVALID_SOCKET) return false;
     fd_set fds; FD_ZERO(&fds); FD_SET(m_socket, &fds);
-    TIMEVAL tv{0, 0};
+    timeval tv{0, 0};
     return select(0, &fds, nullptr, nullptr, &tv) > 0;
 }
 

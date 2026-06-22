@@ -4,7 +4,11 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "platform/Platform.h"
+#endif
 #endif
 
 namespace mc {

@@ -1,7 +1,13 @@
 #pragma once
 #include "IRenderDevice.h"
-#include <windows.h>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+typedef HWND NativeWindowHandle;
+#else
+typedef void* NativeWindowHandle;
+#endif
 
 namespace mc::render {
 
@@ -12,7 +18,7 @@ enum class BackendType {
 };
 
 struct RenderBackend {
-    static std::unique_ptr<IRenderDevice> createDevice(BackendType type, HWND hwnd);
+    static std::unique_ptr<IRenderDevice> createDevice(BackendType type, NativeWindowHandle hwnd);
     static BackendType typeFromString(std::string_view str);
 };
 
