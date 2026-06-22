@@ -193,3 +193,22 @@
 ## Proceso
 
 - [ ] Cada tarea sube el progreso a git.
+
+## Render en Linux / verificación visual (hallazgo 2026-06-22)
+
+- [x] El cliente completo `mcpp` AHORA COMPILA, ENLAZA Y EJECUTA en Linux headless
+      (Xvfb + Mesa llvmpipe GL 4.5). Verificado: arranca, carga el registro completo
+      (29873 block states / 1168 blocks), genera mundo, coloca estructuras, sube el
+      pipeline GL y renderiza el cielo. Requisitos provisionados en la sesión:
+      `vendor/glfw` (clonado), headers X11/GL (apt), y `tools/provision_runtime.sh`.
+- [ ] BLOQUEADOR de verificación visual de TEXTURAS en Linux (independiente del trabajo
+      de biomas/rotación, que ya está compilado en el binario y unit-tested): el terreno
+      sale sin textura porque el **atlas de bloques stitched NO se genera en Linux**.
+      `LevelRenderer::loadAtlas` espera `assets/minecraft/textures/atlas/blocks.png` +
+      `assets/minecraft/atlases/blocks.json` (en Windows es un recurso embebido en el .exe);
+      `tools/asset_packer/main.cpp` solo empaqueta texturas sueltas `textures/block/*.png`,
+      NO el atlas. Falta: cablear el `Stitcher` (ya portado/certificado) en el asset_packer
+      para stitchear los block textures → `blocks.png` + `blocks.json` y empaquetarlos, o
+      generarlos en build. Además se ve un `glDrawArrays error 0x502` a investigar.
+      Con eso, una captura bajo Xvfb verificaría visualmente la rotación de modelos y el
+      coloreado por bioma de esta sesión.
