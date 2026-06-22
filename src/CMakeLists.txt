@@ -6557,6 +6557,21 @@ add_executable(colormapcolorutil_parity world/level/ColorMapColorUtilParityTest.
 target_include_directories(colormapcolorutil_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(colormapcolorutil_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== biome grass/foliage colour resolution (Biome.getGrassColor/getFoliageColor +
+# GrassColorModifier) vs the REAL grass.png/foliage.png colormap + biome worldgen JSON.
+# Needs the provisioned runtime (tools/provision_runtime.sh). =====
+add_executable(biome_color_parity
+    world/level/biome/BiomeColorParityTest.cpp
+    world/level/biome/BiomeRegistry.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(biome_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/vendor/stb)
+target_compile_definitions(biome_color_parity PRIVATE GLM_ENABLE_EXPERIMENTAL)
+target_link_libraries(biome_color_parity PRIVATE glm)
+set_target_properties(biome_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== item: MerchantOffer getModifiedCostCount/updateDemand/isOutOfStock/needsRestock (int wrap + Mth.floor float + clamp) =====
 add_executable(merchant_offer_parity world/item/trading/MerchantOfferParityTest.cpp)
 target_include_directories(merchant_offer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

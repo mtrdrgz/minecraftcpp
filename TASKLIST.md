@@ -138,6 +138,14 @@
       assets de cliente, no disponibles en el entorno Linux headless).
 - [ ] Hay que implementar las texturas animadas del agua, la lava, las algas...
 - [ ] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
+  - [~] PORTADO Y VERIFICADO 2026-06-22 (núcleo de color): `BiomeColor.h` porta 1:1
+    `Biome.getGrassColor/getFoliageColor` (override-o-textura sobre el `ColorMapColorUtil`
+    certificado) y `GrassColorModifier` (NONE / DARK_FOREST `((c&0xFEFEFE)+2634762)>>1` /
+    SWAMP vía `BIOME_INFO_NOISE`, el `PerlinSimplexNoise` certificado). Test runnable headless
+    `biome_color_parity` contra el colormap real + JSON de bioma real: plains→#91BD59 y
+    forest→#79C05A (cross-verificados con un segundo decodificador PNG independiente), modifier
+    dark_forest y swamp → OK. Falta solo la INTEGRACIÓN en el mesher (cargar pixeles del
+    colormap + lookup de bioma por posición + blend de `BiomeColors`), descrita abajo.
   - GROUNDED 2026-06-22: el camino exacto está identificado y los datos verificados. El
     tinte de hierba actual en el mesher está HARDCODEADO a `#79C05A` (que en realidad es el
     color de *forest*, ¡ni siquiera el de plains!). Decodificando el colormap real
