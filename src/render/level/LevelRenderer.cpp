@@ -190,7 +190,11 @@ void LevelRenderer::loadAtlas(ICommandList* cmd) {
                      {png.data(), png.size()},
                      {js.data(),  js.size()});
     } else {
-        MC_LOG_WARN("LevelRenderer: block atlas assets not found on disk");
+        // No prebuilt stitched atlas on disk (the stitched blocks.png/.json is a
+        // Windows-embedded resource). Fall back to stitching one at runtime from the
+        // individual block textures packed in assets.bin (TextureAtlas::loadFromAssetPack).
+        MC_LOG_INFO("LevelRenderer: no prebuilt block atlas — stitching from assets.bin");
+        m_atlas.load(m_device, cmd, {}, {});
     }
 #endif
 }
