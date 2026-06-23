@@ -235,3 +235,21 @@
       generarlos en build. Además se ve un `glDrawArrays error 0x502` a investigar.
       Con eso, una captura bajo Xvfb verificaría visualmente la rotación de modelos y el
       coloreado por bioma de esta sesión.
+
+## Verificación de paridad worldgen (terreno + biomas) — 2026-06-23, harness operativo en Linux
+
+- [x] HARNESS DE PARIDAD DE DECORACIÓN OPERATIVO EN LINUX: con JDK 25 (Temurin) +
+      client.jar + las 107 libs descargadas, `tools/FullChunkDecorateParity.java`
+      compila y genera ground-truth IN-PROCESS (el `NoiseBasedChunkGenerator` real,
+      sin servidor), y el target C++ `full_chunk_decorate_parity` lo compara
+      byte-a-byte. Esto era antes solo-Windows; ahora es reproducible headless.
+- [x] TERRENO + BIOMAS BYTE-EXACTOS vs el Java real (seed 1), verificado en 6 biomas
+      diversos — cada chunk 98304 celdas, **0 mismatches**:
+      plains (0,0), dark_forest (-27,64), swamp (200,120), savanna (120,-200),
+      snowy (-80,-80), jungle (-43,60). El chunk completo (relieve por ruido, surface,
+      menas, árboles, plantas, decoración) coincide bloque-a-bloque con Minecraft Java.
+      => La capa de worldgen (terreno + biomas: routing+surface+decoración) está
+      esencialmente COMPLETA y demostrada 1:1; las quejas de "biomas/pantano mal
+      implementados" están desactualizadas (el pantano y el dark_forest son byte-exactos).
+      Lo que queda fuera de esta verificación: estructuras (generate-structures=false en
+      el harness; en progreso en paralelo) y dimensiones nether/end.
