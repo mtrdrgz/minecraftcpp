@@ -263,3 +263,15 @@
       en paralelo (ruined_portal hoy). Estructuras que SÍ se colocan: aldeas,
       trial_chambers, outpost, swamp_hut, pirámides, igloo, naufragio, nether_fossil,
       buried_treasure, ocean_ruin.
+
+## Estructuras — foundations byte-exactas (suite completa) 2026-06-23
+- [x] La geometría/math de TODAS las estructuras grandes restantes está verificada
+      byte-exacta vs el Java real (run_groundtruth.sh + JDK25 en Linux), ~1.25M checks,
+      0 mismatches: WoodlandMansionGrid + GridLayout (1.21M) + EdgeClean, OceanMonumentRoom
+      + RoomGraph + RoomFitter, StrongholdPieceBox + PieceTypeBox + SmallDoor,
+      NetherFortressPieceBox, MineShaftCorridor + Crossing + Room (+ Stairs box), IglooPiece,
+      OceanRuinCluster. => cuando se porte la colocación de bloques (postProcess) de cada una,
+      su layout/geometría está garantizado 1:1. Lo que falta por estructura es SOLO el
+      postProcess (con la infra de world-access que necesita: biome/liquid para
+      isInInvalidLocation, loot/block-entity para cofres) — trabajo grande por estructura,
+      en progreso en paralelo (ruined_portal).
