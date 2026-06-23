@@ -4,12 +4,15 @@
 #include "../../platform/Window.h"
 #include "../../assets/TextureAtlas.h"
 #include "../../core/ThreadPool.h"
+#include "../../world/level/biome/BiomeRegistry.h"
 #include "../entity/EntityRenderDispatcher.h"
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
 #include <future>
 #include <chrono>
+#include <vector>
 #include <glm/glm.hpp>
 
 namespace mc::render {
@@ -54,6 +57,15 @@ private:
     IBuffer*       m_hotbarSelIbo = nullptr;
     TextureAtlas   m_atlas;
     std::unique_ptr<EntityRenderDispatcher> m_entityRenderer;
+
+    // Per-biome block colouring (grass/foliage/water). Loaded once when a world is
+    // active; passed to the mesh worker as an immutable per-chunk BiomeMeshContext.
+    std::shared_ptr<const std::vector<std::int32_t>> m_grassColormap;
+    std::shared_ptr<const std::vector<std::int32_t>> m_foliageColormap;
+    std::unique_ptr<mc::biome::BiomeRegistry>        m_biomeRegistry;
+    bool m_biomeDataLoaded = false;
+    void ensureBiomeData();
+    std::shared_ptr<BiomeMeshContext> makeBiomeContext(ChunkPos cp);
 
     // Free-fly camera (decoupled from server player position after first sync)
     glm::vec3 m_camPos{0.f, 80.f, 0.f};

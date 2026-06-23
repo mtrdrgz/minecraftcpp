@@ -2,7 +2,15 @@
 #include "../../assets/AssetManager.h"
 #include "../../world/level/block/BlockState.h"
 #include "../../world/level/block/Blocks.h"
+#include "../../world/level/block/RedStoneWireBlockColor.h"
 #include "../../core/Log.h"
+#include "../../core/BlockMath.h"
+#include "../model/OctahedralGroup.h"
+#include "../model/CuboidRotation.h"
+#include "../model/FaceBakery.h"
+#include "../model/ModelElementBake.h"
+#include "../model/DirectionRotate.h"
+#include "../model/UVPair.h"
 #include "../../../profiling/include/Profiler.h"
 #include <array>
 #include <algorithm>
@@ -68,8 +76,6 @@ static const float UV_CORNERS[4][2] = {
     {0,1},{0,0},{1,0},{1,1}
 };
 
-static const char* FACE_NAMES[6] = { "east", "west", "up", "down", "south", "north" };
-
 // Per-vertex tint applied as vertex color multiplier (shader does tex * vColor)
 struct TintRGB { uint8_t r, g, b; };
 
@@ -78,25 +84,32 @@ struct TintRGB { uint8_t r, g, b; };
 // Plains: temperature=0.8, downfall=0.4 → grass #79C05A, foliage #59AE30
 static TintRGB getTextureTint(const std::string& name) {
     if (name.empty()) return {255, 255, 255};
-    // Grass-colored biome blocks
+    // Grass-tinted blocks (BlockColors.java:22-24,41) — plains default. Matches
+    // BiomeTint::tintClassForTexture so the no-biome fallback stays 1:1 with vanilla.
     if (name == "grass_block_top"     || name == "grass_block_side_overlay" ||
         name == "short_grass"          || name == "fern"                     ||
+        name == "potted_fern"          ||
         name == "tall_grass_top"       || name == "tall_grass_bottom"        ||
         name == "large_fern_top"       || name == "large_fern_bottom"        ||
-        name == "bush"                 || name == "firefly_bush"             ||
-        name == "sugar_cane")
-        return {121, 192, 90};   // #79C05A plains grass
+        name == "bush"                 || name == "sugar_cane"               ||
+        name == "pink_petals"          || name == "wildflowers")
+        return {121, 192, 90};   // #79BD59 plains grass
     if (name == "water_still" || name == "water_flow")
-        return {63, 118, 228};   // #3F76E4 beautiful water blue
+        return {63, 118, 228};   // #3F76E4 water
     // leaf_litter uses dryFoliage() tint (BlockColors.java:37), same constant
     if (name == "short_dry_grass" || name == "tall_dry_grass" || name == "leaf_litter")
         return {92, 60, 50};      // DryFoliageColor.FOLIAGE_DRY_DEFAULT (#5C3C32)
-    // Fixed spruce leaf tint (biome-independent per BlockColors.java)
+    // Fixed spruce/birch leaf tints (biome-independent per BlockColors.java:26-27).
     if (name == "spruce_leaves") return {97,  153, 97};  // #619961
-    // Fixed birch leaf tint (biome-independent per BlockColors.java)
     if (name == "birch_leaves")  return {128, 167, 85};  // #80A755
-    // Remaining leaves & vines use biome foliage color
-    if (name.ends_with("_leaves") || name == "vine") return {89, 174, 48}; // #59AE30
+    // Lily pad: fixed constant tint (BlockColors.java:35 constant(-9321636,..) = #71C35C).
+    // Without it lily pads render grey (swamp complaint).
+    if (name == "lily_pad") return {113, 195, 92};
+    // Only the foliage()-registered leaves are biome-tinted (BlockColors.java:28-36);
+    // cherry/azalea/pale_oak leaves are NOT tinted (their textures are pre-coloured).
+    if (name == "oak_leaves" || name == "jungle_leaves" || name == "acacia_leaves" ||
+        name == "dark_oak_leaves" || name == "mangrove_leaves" || name == "vine")
+        return {89, 174, 48}; // #59AE30 plains foliage
     return {255, 255, 255};
 }
 
@@ -132,11 +145,29 @@ static std::string textureForStateFace(const mc::BlockState& state, int face) {
     return block->textures.forFace(face);
 }
 
-// Get UV coordinates and biome tint from atlas (or fallback grid if atlas null)
+// Biome-aware tint: when a biome context is present and the texture is biome-driven
+// (grass/foliage/water), use the certified per-position blend; otherwise fall back to
+// the fixed (plains-default) getTextureTint. wx/wy/wz are world block coordinates.
+static TintRGB biomeOrDefaultTint(const std::string& name, int wx, int wy, int wz,
+                                  const BiomeMeshContext* biome) {
+    if (biome && biome->biomeAt && biome->grassColormap && biome->foliageColormap) {
+        if (auto c = mc::render::biometint::tint(name, biome->biomeAt, wx, wy, wz,
+                                                 *biome->grassColormap, *biome->foliageColormap,
+                                                 biome->blendRadius)) {
+            return {c->r, c->g, c->b};
+        }
+    }
+    return getTextureTint(name);
+}
+
+// Get UV coordinates and biome tint from atlas (or fallback grid if atlas null).
+// outName (when non-null) receives the resolved sprite name, so the caller can apply
+// a biome-aware tint at the block's world position.
 static void getUV(uint32_t stateId, int face,
                   const mc::TextureAtlas* atlas,
                   float& u0, float& v0, float& u1, float& v1,
-                  TintRGB& tint)
+                  TintRGB& tint,
+                  std::string* outName = nullptr)
 {
     tint = {255, 255, 255};
 
@@ -157,6 +188,7 @@ static void getUV(uint32_t stateId, int face,
                     u0 = auv->u0; v0 = auv->v0;
                     u1 = auv->u1; v1 = auv->v1;
                     tint = getTextureTint(name);
+                    if (outName) *outName = name;
                     return;
                 }
             }
@@ -240,11 +272,16 @@ bool ChunkMesher::shouldCull(const LevelChunk& chunk, const LevelChunk* neighbor
 
 void ChunkMesher::emitFace(SectionMesh& mesh, float bx, float by, float bz,
                             int face, uint32_t stateId, uint8_t light,
-                            const TextureAtlas* atlas)
+                            const TextureAtlas* atlas,
+                            const BiomeMeshContext* biome)
 {
     float u0, v0, u1, v1;
     TintRGB tint;
-    getUV(stateId, face, atlas, u0, v0, u1, v1, tint);
+    std::string texName;
+    getUV(stateId, face, atlas, u0, v0, u1, v1, tint, &texName);
+    if (biome && !texName.empty()) {
+        tint = biomeOrDefaultTint(texName, (int)bx, (int)by, (int)bz, biome);
+    }
 
     // Directional shading matching vanilla (top=full, bottom=dark, sides=medium)
     static const uint8_t SHADE[6] = {210, 210, 255, 128, 230, 230};
@@ -276,10 +313,12 @@ void ChunkMesher::emitFace(SectionMesh& mesh, float bx, float by, float bz,
 void ChunkMesher::emitCross(SectionMesh& mesh, float bx, float by, float bz,
                             uint32_t stateId, uint8_t light,
                             const TextureAtlas* atlas,
-                            const std::string& texOverride)
+                            const std::string& texOverride,
+                            const BiomeMeshContext* biome)
 {
     float u0, v0, u1, v1;
     TintRGB tint;
+    std::string texName = texOverride;
     if (!texOverride.empty() && atlas && atlas->isLoaded()) {
         const mc::AtlasUV* auv = atlas->uv(texOverride);
         if (auv) {
@@ -292,7 +331,10 @@ void ChunkMesher::emitCross(SectionMesh& mesh, float bx, float by, float bz,
             tint = {255, 255, 255};
         }
     } else {
-        getUV(stateId, 0, atlas, u0, v0, u1, v1, tint);
+        getUV(stateId, 0, atlas, u0, v0, u1, v1, tint, &texName);
+    }
+    if (biome && !texName.empty()) {
+        tint = biomeOrDefaultTint(texName, (int)bx, (int)by, (int)bz, biome);
     }
 
     uint8_t r = (uint8_t)((uint32_t)light * tint.r / 15);
@@ -494,12 +536,27 @@ struct Face {
     std::string cullface;
     float uv[4] = {0.f, 0.f, 16.f, 16.f};
     bool hasUv = false;
+    int uvRotation = 0;   // face "rotation" in degrees (0/90/180/270)
+    int tintIndex = -1;   // face "tintindex" (-1 = untinted)
 };
 
 struct Element {
     float from[3] = {0.f, 0.f, 0.f};
     float to[3] = {16.f, 16.f, 16.f};
     std::unordered_map<std::string, Face> faces;
+    // Per-element "rotation" {origin, axis, angle, rescale} (ElementRotation).
+    bool hasRotation = false;
+    float rotOrigin[3] = {8.f, 8.f, 8.f};
+    int rotAxis = 1;       // 0=x, 1=y, 2=z
+    float rotAngle = 0.f;
+    bool rotRescale = false;
+};
+
+// A blockstate "apply" entry: the model id plus its variant rotation/uvlock.
+struct AppliedModel {
+    std::string model;
+    int x = 0, y = 0, z = 0;  // degrees (0/90/180/270)
+    bool uvlock = false;
 };
 
 struct Model {
@@ -599,12 +656,23 @@ Model loadModel(const std::string& id, std::unordered_set<std::string>& visiting
             Element e;
             readVec3(ejson, "from", e.from);
             readVec3(ejson, "to", e.to);
+            if (auto rit = ejson.find("rotation"); rit != ejson.end() && rit->is_object()) {
+                const auto& rj = *rit;
+                readVec3(rj, "origin", e.rotOrigin);
+                const std::string axis = rj.value("axis", "y");
+                e.rotAxis = (axis == "x") ? 0 : (axis == "z") ? 2 : 1;
+                e.rotAngle = rj.value("angle", 0.0f);
+                e.rotRescale = rj.value("rescale", false);
+                e.hasRotation = true;
+            }
             if (auto fit = ejson.find("faces"); fit != ejson.end() && fit->is_object()) {
                 for (const auto& fitem : fit->items()) {
                     Face f;
                     const auto& fj = fitem.value();
                     f.texture = fj.value("texture", "");
                     f.cullface = fj.value("cullface", "");
+                    f.uvRotation = fj.value("rotation", 0);
+                    f.tintIndex = fj.value("tintindex", -1);
                     if (auto uit = fj.find("uv"); uit != fj.end() && uit->is_array() && uit->size() == 4) {
                         for (int i = 0; i < 4; ++i) f.uv[i] = (*uit)[i].get<float>();
                         f.hasUv = true;
@@ -704,19 +772,26 @@ bool selectorMatches(const std::string& selector, const mc::BlockState& state) {
     return true;
 }
 
-void collectApplyModels(const nlohmann::json& apply, std::vector<std::string>& out) {
+void collectApplyModels(const nlohmann::json& apply, std::vector<AppliedModel>& out) {
     if (apply.is_array()) {
+        // Java picks a weighted-random variant per block position; for a static mesh
+        // we take the first entry deterministically (matches prior behavior).
         if (!apply.empty()) collectApplyModels(apply.front(), out);
         return;
     }
     if (apply.is_object()) {
-        std::string model = apply.value("model", "");
-        if (!model.empty()) out.push_back(model);
+        AppliedModel am;
+        am.model = apply.value("model", "");
+        am.x = apply.value("x", 0);
+        am.y = apply.value("y", 0);
+        am.z = apply.value("z", 0);
+        am.uvlock = apply.value("uvlock", false);
+        if (!am.model.empty()) out.push_back(std::move(am));
     }
 }
 
-std::vector<std::string> modelsForState(const mc::BlockState& state) {
-    std::vector<std::string> out;
+std::vector<AppliedModel> modelsForState(const mc::BlockState& state) {
+    std::vector<AppliedModel> out;
     if (!state.block) return out;
     auto jOpt = loadJson("minecraft/blockstates/" + state.block->name + ".json");
     if (!jOpt) return out;
@@ -749,9 +824,9 @@ std::vector<std::string> modelsForState(const mc::BlockState& state) {
     return out;
 }
 
-std::vector<std::string> cachedModelsForState(uint32_t stateId, const mc::BlockState& state) {
+std::vector<AppliedModel> cachedModelsForState(uint32_t stateId, const mc::BlockState& state) {
     static std::mutex stateMutex;
-    static std::vector<std::vector<std::string>> cache;
+    static std::vector<std::vector<AppliedModel>> cache;
     static std::vector<uint8_t> resolved;
 
     {
@@ -765,7 +840,7 @@ std::vector<std::string> cachedModelsForState(uint32_t stateId, const mc::BlockS
         }
     }
 
-    std::vector<std::string> models = modelsForState(state);
+    std::vector<AppliedModel> models = modelsForState(state);
 
     std::lock_guard<std::mutex> lock(stateMutex);
     if (cache.size() < mc::g_blockStates.size()) {
@@ -783,76 +858,37 @@ std::vector<std::string> cachedModelsForState(uint32_t stateId, const mc::BlockS
     return {};
 }
 
-int faceIndex(const std::string& name) {
-    for (int i = 0; i < 6; ++i) if (name == FACE_NAMES[i]) return i;
+// Model-JSON face name -> net.minecraft.core.Direction ordinal (DOWN=0..EAST=5).
+int faceDirOrdinal(const std::string& name) {
+    if (name == "down")  return 0;
+    if (name == "up")    return 1;
+    if (name == "north") return 2;
+    if (name == "south") return 3;
+    if (name == "west")  return 4;
+    if (name == "east")  return 5;
     return -1;
 }
 
-void defaultFaceUv(const Element& e, int face, float uv[4]) {
-    const float* f = e.from;
-    const float* t = e.to;
-    switch (face) {
-        case 3: uv[0] = f[0];        uv[1] = 16.f - t[2]; uv[2] = t[0];        uv[3] = 16.f - f[2]; break;
-        case 2: uv[0] = f[0];        uv[1] = f[2];        uv[2] = t[0];        uv[3] = t[2];        break;
-        case 5: uv[0] = 16.f - t[0]; uv[1] = 16.f - t[1]; uv[2] = 16.f - f[0]; uv[3] = 16.f - f[1]; break;
-        case 4: uv[0] = f[0];        uv[1] = 16.f - t[1]; uv[2] = t[0];        uv[3] = 16.f - f[1]; break;
-        case 1: uv[0] = f[2];        uv[1] = 16.f - t[1]; uv[2] = t[2];        uv[3] = 16.f - f[1]; break;
-        case 0: uv[0] = 16.f - t[2]; uv[1] = 16.f - t[1]; uv[2] = 16.f - f[2]; uv[3] = 16.f - f[1]; break;
-        default: uv[0] = 0.f; uv[1] = 0.f; uv[2] = 16.f; uv[3] = 16.f; break;
-    }
+// Direction ordinal -> world block offset (DOWN..EAST).
+constexpr int DIR_OFF[6][3] = {
+    {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1}, {-1,0,0}, {1,0,0}
+};
+
+// Vanilla-style face diffuse shade indexed by Direction ordinal. Keeps the exact
+// brightness the previous model/cube path used: up=255, down=128, N/S=230, E/W=210.
+constexpr uint8_t DIR_SHADE[6] = { 128, 255, 230, 230, 210, 210 };
+
+// Degrees (0/90/180/270, any sign) -> Quadrant shift 0..3.
+inline int quadrantShift(int degrees) {
+    int d = ((degrees % 360) + 360) % 360;
+    return d / 90;
 }
 
-std::array<std::array<float, 3>, 4> faceCorners(const Element& e, float bx, float by, float bz, int face) {
-    const float x0 = bx + e.from[0] / 16.f, y0 = by + e.from[1] / 16.f, z0 = bz + e.from[2] / 16.f;
-    const float x1 = bx + e.to[0] / 16.f,   y1 = by + e.to[1] / 16.f,   z1 = bz + e.to[2] / 16.f;
-    switch (face) {
-        case 0: return {{{{x1,y0,z1}}, {{x1,y1,z1}}, {{x1,y1,z0}}, {{x1,y0,z0}}}};
-        case 1: return {{{{x0,y0,z0}}, {{x0,y1,z0}}, {{x0,y1,z1}}, {{x0,y0,z1}}}};
-        case 2: return {{{{x0,y1,z0}}, {{x1,y1,z0}}, {{x1,y1,z1}}, {{x0,y1,z1}}}};
-        case 3: return {{{{x0,y0,z1}}, {{x1,y0,z1}}, {{x1,y0,z0}}, {{x0,y0,z0}}}};
-        case 4: return {{{{x0,y0,z1}}, {{x0,y1,z1}}, {{x1,y1,z1}}, {{x1,y0,z1}}}};
-        default:return {{{{x1,y0,z0}}, {{x1,y1,z0}}, {{x0,y1,z0}}, {{x0,y0,z0}}}};
-    }
-}
-
-void emitModelFace(SectionMesh& mesh,
-                   const Element& e,
-                   const Face& f,
-                   const Model& model,
-                   int face,
-                   float bx, float by, float bz,
-                   const TextureAtlas* atlas,
-                   uint8_t light) {
-    const std::string texture = resolveTextureRef(model, f.texture);
-    float u0, v0, u1, v1;
-    TintRGB tint;
-    resolveTexture(atlas, texture, u0, v0, u1, v1, tint);
-
-    float uv[4];
-    if (f.hasUv) std::copy(std::begin(f.uv), std::end(f.uv), uv);
-    else defaultFaceUv(e, face, uv);
-
-    const uint8_t shade = (face == 2) ? 255 : (face == 3 ? 128 : (face == 0 || face == 1 ? 210 : 230));
-    const uint8_t r = (uint8_t)((uint32_t)shade * light * tint.r / (15u * 255u));
-    const uint8_t g = (uint8_t)((uint32_t)shade * light * tint.g / (15u * 255u));
-    const uint8_t b = (uint8_t)((uint32_t)shade * light * tint.b / (15u * 255u));
-
-    const float uu[4] = { uv[0], uv[0], uv[2], uv[2] };
-    const float vv[4] = { uv[1], uv[3], uv[3], uv[1] };
-    auto corners = faceCorners(e, bx, by, bz, face);
-    const uint32_t base = (uint32_t)mesh.vertices.size();
-    for (int i = 0; i < 4; ++i) {
-        mesh.vertices.push_back({
-            corners[i][0], corners[i][1], corners[i][2],
-            u0 + (uu[i] / 16.f) * (u1 - u0),
-            v0 + (vv[i] / 16.f) * (v1 - v0),
-            r, g, b, 255
-        });
-    }
-    mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
-    mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 2); mesh.indices.push_back(base + 3);
-}
-
+// 1:1 model bake: drives the certified FaceBakery::bakeQuad with the blockstate
+// variant rotation (OctahedralGroup), per-element rotation (CuboidRotation), per-face
+// UV rotation and uvlock (BlockMath::getFaceTransformation). Replaces the old
+// rotation-less emitter that left stairs/logs/etc. facing the wrong way and textures
+// upside-down.
 bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                               const LevelChunk& chunk,
                               const LevelChunk* neighbors[4],
@@ -860,25 +896,136 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                               const mc::BlockState& state,
                               uint32_t stateId,
                               uint8_t light,
-                              const TextureAtlas* atlas) {
-    const std::vector<std::string> modelIds = cachedModelsForState(stateId, state);
-    if (modelIds.empty()) return false;
+                              const TextureAtlas* atlas,
+                              const BiomeMeshContext* biome) {
+    using namespace mc::render::model;
+    using joml::Matrix4f;
+    using joml::Vector3f;
+
+    const std::vector<AppliedModel> applied = cachedModelsForState(stateId, state);
+    if (applied.empty()) return false;
 
     bool emitted = false;
-    for (const std::string& modelId : modelIds) {
-        std::optional<Model> model = loadModelCached(modelId);
+    for (const AppliedModel& am : applied) {
+        std::optional<Model> model = loadModelCached(am.model);
         if (!model) continue;
+
+        // Variant rotation -> ModelState transformation matrix (BlockModelRotation).
+        const int octa = OctahedralGroup::fromXYZAngles(
+            quadrantShift(am.x), quadrantShift(am.y), quadrantShift(am.z));
+        const bool hasModel = (octa != OctahedralGroup::IDENTITY);
+        const Matrix4f modelMatrix = OctahedralGroup::modelMatrix(octa);
+        const mc::core::block_math::Transformation modelTrans(modelMatrix);
+
         for (const Element& e : model->elements) {
-            for (const auto& [faceName, face] : e.faces) {
-                int fi = faceIndex(faceName);
-                if (fi < 0) continue;
-                if (!face.cullface.empty()) {
-                    const int ci = faceIndex(face.cullface);
-                    if (ci >= 0 && ChunkMesher::shouldCull(chunk, neighbors, wx + DX[ci], wy + DY[ci], wz + DZ[ci], stateId)) {
-                        continue;
+            const Vector3f from{ e.from[0], e.from[1], e.from[2] };
+            const Vector3f to{ e.to[0], e.to[1], e.to[2] };
+
+            // UnbakedCuboidGeometry degenerate-dimension face gating.
+            bool drawX = true, drawY = true, drawZ = true;
+            if (e.from[0] == e.to[0]) { drawY = false; drawZ = false; }
+            if (e.from[1] == e.to[1]) { drawX = false; drawZ = false; }
+            if (e.from[2] == e.to[2]) { drawX = false; drawY = false; }
+            if (!(drawX || drawY || drawZ)) continue;
+
+            // Element rotation -> origin (block space) + transform matrix.
+            const bool hasElement = e.hasRotation;
+            const Vector3f elemOrigin{ e.rotOrigin[0] / 16.f, e.rotOrigin[1] / 16.f, e.rotOrigin[2] / 16.f };
+            Matrix4f elemTransform;
+            if (hasElement) {
+                elemTransform = cuboid::computeTransform(
+                    cuboid::singleAxisTransformation(e.rotAxis, e.rotAngle), e.rotRescale);
+            }
+
+            for (const auto& [faceName, f] : e.faces) {
+                const int facing = faceDirOrdinal(faceName);
+                if (facing < 0) continue;
+                const int axis = elembake::AXIS_OF_DIR[facing];
+                const bool shouldDraw = (axis == 0) ? drawX : (axis == 1) ? drawY : drawZ;
+                if (!shouldDraw) continue;
+
+                // Cull against the neighbour in the (rotated) cullface direction.
+                if (!f.cullface.empty()) {
+                    const int cullDir = faceDirOrdinal(f.cullface);
+                    if (cullDir >= 0) {
+                        const int worldDir = hasModel ? dir::rotate(modelMatrix, cullDir) : cullDir;
+                        const int* o = DIR_OFF[worldDir];
+                        if (ChunkMesher::shouldCull(chunk, neighbors, wx + o[0], wy + o[1], wz + o[2], stateId)) {
+                            continue;
+                        }
                     }
                 }
-                emitModelFace(mesh, e, face, *model, fi, (float)wx, (float)wy, (float)wz, atlas, light);
+
+                // Resolve texture -> atlas sprite bounds.
+                const std::string texture = resolveTextureRef(*model, f.texture);
+                fb::SpriteUV sprite{};
+                if (atlas && atlas->isLoaded()) {
+                    const mc::AtlasUV* auv = atlas->uv(texture);
+                    const mc::AtlasUV& use = auv ? *auv : atlas->missingUV();
+                    sprite = { use.u0, use.u1, use.v0, use.v1 };
+                } else {
+                    float u0, v0, u1, v1; TintRGB t2;
+                    resolveTexture(atlas, texture, u0, v0, u1, v1, t2);
+                    sprite = { u0, u1, v0, v1 };
+                }
+                // Tint only faces that declare a tintindex (vanilla BlockColors gate).
+                TintRGB tint{255, 255, 255};
+                if (f.tintIndex >= 0) {
+                    if (state.block && state.block->name == "redstone_wire") {
+                        // BlockColors.redstone(): RedStoneWireBlock.getColorForPower(power).
+                        int power = 0;
+                        const std::string ps = state.getProperty("power");
+                        if (!ps.empty()) { try { power = std::clamp(std::stoi(ps), 0, 15); } catch (...) {} }
+                        const int c = mc::world::level::block::getColorForPower(power);
+                        tint = { (uint8_t)((c >> 16) & 0xFF), (uint8_t)((c >> 8) & 0xFF), (uint8_t)(c & 0xFF) };
+                    } else {
+                        tint = biomeOrDefaultTint(texture, wx, wy, wz, biome);
+                    }
+                }
+
+                // UVs: explicit "uv" (model space) or the auto-generated from/to UV.
+                const fb::UVs uvs = f.hasUv
+                    ? fb::UVs{ f.uv[0], f.uv[1], f.uv[2], f.uv[3] }
+                    : fb::defaultFaceUV(from, to, facing);
+                const int uvRot = quadrantShift(f.uvRotation);
+
+                // uvlock: per-face inverse face transformation.
+                bool hasUvTransform = false;
+                Matrix4f uvTransform;
+                if (am.uvlock && hasModel) {
+                    const Matrix4f inv =
+                        mc::core::block_math::getFaceTransformation(
+                            modelTrans, (mc::core::block_math::Dir)facing).inverse().matrix;
+                    if (!joml::matrixIsIdentity(inv)) { hasUvTransform = true; uvTransform = inv; }
+                }
+
+                const fb::BakedQuadGeom q = fb::bakeQuad(
+                    from, to, uvs, uvRot, facing, sprite,
+                    hasModel, modelMatrix, hasUvTransform, uvTransform,
+                    hasElement, elemOrigin, elemTransform);
+
+                const uint8_t shade = DIR_SHADE[q.direction];
+                const uint8_t r = (uint8_t)((uint32_t)shade * light * tint.r / (15u * 255u));
+                const uint8_t g = (uint8_t)((uint32_t)shade * light * tint.g / (15u * 255u));
+                const uint8_t b = (uint8_t)((uint32_t)shade * light * tint.b / (15u * 255u));
+
+                const uint32_t base = (uint32_t)mesh.vertices.size();
+                for (int i = 0; i < 4; ++i) {
+                    ChunkVertex vtx;
+                    vtx.x = (float)wx + q.pos[i].x;
+                    vtx.y = (float)wy + q.pos[i].y;
+                    vtx.z = (float)wz + q.pos[i].z;
+                    vtx.u = uvpair::unpackU(q.packedUV[i]);
+                    vtx.v = uvpair::unpackV(q.packedUV[i]);
+                    vtx.r = r; vtx.g = g; vtx.b = b; vtx.a = 255;
+                    mesh.vertices.push_back(vtx);
+                }
+                // bakeQuad emits vanilla FaceInfo winding, which is the reverse of this
+                // engine's cube-path (FACE_VERTS) winding. The opaque terrain pipeline
+                // culls back faces (CullMode::Back), so emit reversed indices to keep the
+                // model faces front-facing.
+                mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 2); mesh.indices.push_back(base + 1);
+                mesh.indices.push_back(base + 0); mesh.indices.push_back(base + 3); mesh.indices.push_back(base + 2);
                 emitted = true;
             }
         }
@@ -891,7 +1038,8 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
 void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                                 const LevelChunk* neighbors[4],
                                 const TextureAtlas* atlas,
-                                SectionMesh& out)
+                                SectionMesh& out,
+                                const BiomeMeshContext* biome)
 {
     PROFILE_SCOPE("chunk_mesh_buildSection");
     out.clear();
@@ -964,7 +1112,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                 bool isPlant = false;
                 if (bs && bs->block) {
                     const std::string& name = bs->block->name;
-                    if (vanilla_model::tryEmitVanillaBlockModel(out, chunk, neighbors, wx, wy, wz, *bs, stateId, light, atlas)) {
+                    if (vanilla_model::tryEmitVanillaBlockModel(out, chunk, neighbors, wx, wy, wz, *bs, stateId, light, atlas, biome)) {
                         continue;
                     }
                     if (name == "pink_petals" || name == "wildflowers") {
@@ -1026,7 +1174,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                             }
                         }
                     }
-                    emitCross(out, bx, by, bz, stateId, light, atlas, texOverride);
+                    emitCross(out, bx, by, bz, stateId, light, atlas, texOverride, biome);
                 } else {
                     // Fast path: for interior blocks (lx/lz 1..14, ly 0..14
                     // with same-section vertical neighbor), check neighbors
@@ -1085,7 +1233,7 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
                         }
 
                         if (!cull) {
-                            emitFace(out, bx, by, bz, face, stateId, light, atlas);
+                            emitFace(out, bx, by, bz, face, stateId, light, atlas, biome);
                         }
                     }
                 }
@@ -1096,12 +1244,13 @@ void ChunkMesher::buildSection(const LevelChunk& chunk, int sectionIndex,
 
 std::vector<SectionMesh> ChunkMesher::buildChunk(const LevelChunk& chunk,
                                                    const LevelChunk* neighbors[4],
-                                                   const TextureAtlas* atlas)
+                                                   const TextureAtlas* atlas,
+                                                   const BiomeMeshContext* biome)
 {
     PROFILE_SCOPE_CHUNK("chunk_mesh_buildChunk", chunk.pos().x, chunk.pos().z);
     std::vector<SectionMesh> meshes(CHUNK_SECTION_COUNT);
     for (int s = 0; s < CHUNK_SECTION_COUNT; ++s)
-        buildSection(chunk, s, neighbors, atlas, meshes[s]);
+        buildSection(chunk, s, neighbors, atlas, meshes[s], biome);
     return meshes;
 }
 

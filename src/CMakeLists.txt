@@ -40,6 +40,7 @@ set(MC_SOURCES
     world/level/levelgen/carver/WorldCarver.cpp
     world/level/levelgen/BiomeSource.cpp
     world/level/levelgen/BiomeManager.cpp
+    world/level/biome/BiomeRegistry.cpp
     world/level/levelgen/OverworldBiomeBuilder.cpp
     world/level/levelgen/NoiseBasedChunkGenerator.cpp
     # World — Levelgen / feature decoration
@@ -6557,6 +6558,35 @@ add_executable(colormapcolorutil_parity world/level/ColorMapColorUtilParityTest.
 target_include_directories(colormapcolorutil_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(colormapcolorutil_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== biome grass/foliage colour resolution (Biome.getGrassColor/getFoliageColor +
+# GrassColorModifier) vs the REAL grass.png/foliage.png colormap + biome worldgen JSON.
+# Needs the provisioned runtime (tools/provision_runtime.sh). =====
+add_executable(biome_color_parity
+    world/level/biome/BiomeColorParityTest.cpp
+    world/level/biome/BiomeRegistry.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(biome_color_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/vendor/stb)
+target_compile_definitions(biome_color_parity PRIVATE GLM_ENABLE_EXPERIMENTAL)
+target_link_libraries(biome_color_parity PRIVATE glm)
+set_target_properties(biome_color_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== mesher biome-tint blend (ClientLevel.calculateBlockTint + BiomeColors resolvers)
+# vs the real colormaps + biome JSON. Needs the provisioned runtime. =====
+add_executable(biome_tint_parity
+    render/level/BiomeTintParityTest.cpp
+    world/level/biome/BiomeRegistry.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/RandomSource.cpp
+)
+target_include_directories(biome_tint_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/vendor/stb)
+target_compile_definitions(biome_tint_parity PRIVATE GLM_ENABLE_EXPERIMENTAL)
+target_link_libraries(biome_tint_parity PRIVATE glm)
+set_target_properties(biome_tint_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== item: MerchantOffer getModifiedCostCount/updateDemand/isOutOfStock/needsRestock (int wrap + Mth.floor float + clamp) =====
 add_executable(merchant_offer_parity world/item/trading/MerchantOfferParityTest.cpp)
 target_include_directories(merchant_offer_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -6582,6 +6612,13 @@ add_executable(mine_shaft_corridor_parity
     world/level/levelgen/RandomSource.cpp)
 target_include_directories(mine_shaft_corridor_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mine_shaft_corridor_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# ===== structures #19: FULL recursive mineshaft assembly (createRandomShaftPiece + generateAndAddPiece + 4x addChildren + moveBelowSeaLevel); RNG-exact piece list vs real MineshaftPieces =====
+add_executable(mineshaft_assembly_parity
+    world/level/levelgen/structure/structures/MineshaftAssemblyParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(mineshaft_assembly_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mineshaft_assembly_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 # ===== render #26: WeatherEffectRenderer column orientation tables[32x32] + renderInstances billboard geometry (Mth.length double-widen) =====
 add_executable(weather_effect_parity client/renderer/WeatherEffectParityTest.cpp)

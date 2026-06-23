@@ -23,6 +23,11 @@
 namespace mc::levelgen::structure {
 
 // net.minecraft.core.Vec3i (BlockPos is a Vec3i subclass; same layout we need).
+// Guarded: BoundingBox.h also defines mc::levelgen::structure::Vec3i (a smaller
+// version without the offset/getX/Y/Z methods). Whichever header is included
+// first wins; this version is a superset so it works for both consumers.
+#ifndef MC_LEVELGEN_STRUCTURE_VEC3I_DEFINED
+#define MC_LEVELGEN_STRUCTURE_VEC3I_DEFINED
 struct Vec3i {
     int32_t x = 0, y = 0, z = 0;
     constexpr bool operator==(const Vec3i&) const = default;
@@ -32,6 +37,7 @@ struct Vec3i {
     constexpr int getY() const noexcept { return y; }
     constexpr int getZ() const noexcept { return z; }
 };
+#endif
 using BlockPos = Vec3i;
 
 inline constexpr Vec3i kBlockPosZero{0, 0, 0};
@@ -78,12 +84,15 @@ constexpr Rotation rotationGetRotated(Rotation self, Rotation rot) noexcept {
 }
 
 // Rotation.rotate(Direction) — Rotation.java:90-101.
-constexpr Direction rotationRotate(Rotation self, Direction direction) noexcept {
-    if (directionAxis(direction) == Axis::Y) return direction;
+// Fully-qualified ::mc::Direction: when BoundingBox.h (which defines its own
+// mc::levelgen::structure::Direction) is in the same TU, the unqualified name
+// would resolve to that one and break. Pin to ::mc::Direction explicitly.
+constexpr ::mc::Direction rotationRotate(Rotation self, ::mc::Direction direction) noexcept {
+    if (::mc::directionAxis(direction) == ::mc::Axis::Y) return direction;
     switch (self) {
-        case Rotation::CLOCKWISE_90:        return directionGetClockWise(direction);
-        case Rotation::CLOCKWISE_180:       return directionOpposite(direction);
-        case Rotation::COUNTERCLOCKWISE_90: return directionGetCounterClockWise(direction);
+        case Rotation::CLOCKWISE_90:        return ::mc::directionGetClockWise(direction);
+        case Rotation::CLOCKWISE_180:       return ::mc::directionOpposite(direction);
+        case Rotation::COUNTERCLOCKWISE_90: return ::mc::directionGetCounterClockWise(direction);
         default:                            return direction;
     }
 }
@@ -113,22 +122,27 @@ constexpr int mirrorMirrorInt(Mirror self, int rotation, int steps) noexcept {
 }
 
 // Mirror.getRotation(Direction) — Mirror.java:41-44.
-constexpr Rotation mirrorGetRotation(Mirror self, Direction value) noexcept {
-    Axis axis = directionAxis(value);
-    return ((self != Mirror::LEFT_RIGHT || axis != Axis::Z) &&
-            (self != Mirror::FRONT_BACK || axis != Axis::X))
+constexpr Rotation mirrorGetRotation(Mirror self, ::mc::Direction value) noexcept {
+    ::mc::Axis axis = ::mc::directionAxis(value);
+    return ((self != Mirror::LEFT_RIGHT || axis != ::mc::Axis::Z) &&
+            (self != Mirror::FRONT_BACK || axis != ::mc::Axis::X))
                ? Rotation::NONE
                : Rotation::CLOCKWISE_180;
 }
 
 // Mirror.mirror(Direction) — Mirror.java:46-52.
-constexpr Direction mirrorMirror(Mirror self, Direction direction) noexcept {
-    if (self == Mirror::FRONT_BACK && directionAxis(direction) == Axis::X) return directionOpposite(direction);
-    if (self == Mirror::LEFT_RIGHT && directionAxis(direction) == Axis::Z) return directionOpposite(direction);
+constexpr ::mc::Direction mirrorMirror(Mirror self, ::mc::Direction direction) noexcept {
+    if (self == Mirror::FRONT_BACK && ::mc::directionAxis(direction) == ::mc::Axis::X) return ::mc::directionOpposite(direction);
+    if (self == Mirror::LEFT_RIGHT && ::mc::directionAxis(direction) == ::mc::Axis::Z) return ::mc::directionOpposite(direction);
     return direction;
 }
 
 // ── net.minecraft.world.level.levelgen.structure.BoundingBox ─────────────────
+// Guarded: BoundingBox.h also defines mc::levelgen::structure::BoundingBox
+// (with extra methods like getYSpan/getCenter). Whichever is included first
+// wins; the two are layout-compatible (same first six int32_t fields).
+#ifndef MC_LEVELGEN_STRUCTURE_BOUNDINGBOX_DEFINED
+#define MC_LEVELGEN_STRUCTURE_BOUNDINGBOX_DEFINED
 struct BoundingBox {
     int32_t minX, minY, minZ, maxX, maxY, maxZ;
 
@@ -228,6 +242,7 @@ struct BoundingBox {
         return {minX + (maxX - minX + 1) / 2, minY + (maxY - minY + 1) / 2, minZ + (maxZ - minZ + 1) / 2};
     }
 };
+#endif  // MC_LEVELGEN_STRUCTURE_BOUNDINGBOX_DEFINED
 
 // ── StructureTemplate static transforms ──────────────────────────────────────
 

@@ -526,6 +526,10 @@ void Minecraft::runStructures(ChunkPos active) {
     }
 }
 
+std::string Minecraft::getNoiseBiomeName(int quartX, int quartY, int quartZ) const {
+    return m_localGenerator ? m_localGenerator->getNoiseBiome(quartX, quartY, quartZ) : std::string();
+}
+
 mc::levelgen::Beardifier Minecraft::buildChunkBeardifier(ChunkPos pos) {
     if (!m_localGenerator || m_dataMinecraftDir.empty()) return {};
     // WORLD_SURFACE_WG topmost-solid column height (getBaseHeight returns first-free).

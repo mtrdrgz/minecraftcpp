@@ -76,12 +76,30 @@ constexpr int64_t packChunkPos(int32_t x, int32_t z) noexcept {
 // DOWN,UP,NORTH,SOUTH,WEST,EAST. orientBox only switches on the four horizontals.
 enum class Direction : int32_t { DOWN = 0, UP = 1, NORTH = 2, SOUTH = 3, WEST = 4, EAST = 5 };
 
-// net.minecraft.core.Vec3i (only the three int fields are needed).
+// net.minecraft.core.Vec3i (BlockPos is a Vec3i subclass; same layout we need).
+// Guarded: StructureTransforms.h also defines mc::levelgen::structure::Vec3i.
+// This is the SUPERSET (with offset/getX/Y/Z methods); whichever header is
+// included first wins, but this version is backward-compatible with the
+// smaller version that only had x/y/z + ==.
+#ifndef MC_LEVELGEN_STRUCTURE_VEC3I_DEFINED
+#define MC_LEVELGEN_STRUCTURE_VEC3I_DEFINED
 struct Vec3i {
     int32_t x{}, y{}, z{};
     constexpr bool operator==(const Vec3i&) const = default;
+    // Vec3i.offset(int,int,int) — Vec3i.java
+    constexpr Vec3i offset(int dx, int dy, int dz) const noexcept { return {x + dx, y + dy, z + dz}; }
+    constexpr int getX() const noexcept { return x; }
+    constexpr int getY() const noexcept { return y; }
+    constexpr int getZ() const noexcept { return z; }
 };
+#endif
+using BlockPos = Vec3i;
 
+// Guarded: StructureTransforms.h also defines mc::levelgen::structure::BoundingBox
+// (a superset with extra methods). Whichever is included first wins; the two are
+// layout-compatible (same first six int32_t fields).
+#ifndef MC_LEVELGEN_STRUCTURE_BOUNDINGBOX_DEFINED
+#define MC_LEVELGEN_STRUCTURE_BOUNDINGBOX_DEFINED
 struct BoundingBox {
     int32_t minX{}, minY{}, minZ{}, maxX{}, maxY{}, maxZ{};
 
@@ -232,6 +250,8 @@ struct BoundingBox {
         maxX = iadd(maxX, dx); maxY = iadd(maxY, dy); maxZ = iadd(maxZ, dz);
         return *this;
     }
+    // Convenience overload used by StructureTransforms.h's BoundingBox consumers.
+    constexpr BoundingBox& move(const Vec3i& d) noexcept { return move(d.x, d.y, d.z); }
 
     // BoundingBox.java:199-201 — moved(dx,dy,dz) (new box, wrapping).
     constexpr BoundingBox moved(int32_t dx, int32_t dy, int32_t dz) const noexcept {
@@ -274,5 +294,6 @@ struct BoundingBox {
                 iadd(minZ, iadd(isub(maxZ, minZ), 1) / 2)};
     }
 };
+#endif  // MC_LEVELGEN_STRUCTURE_BOUNDINGBOX_DEFINED
 
 } // namespace mc::levelgen::structure

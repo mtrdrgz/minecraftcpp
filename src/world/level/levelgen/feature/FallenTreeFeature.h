@@ -62,11 +62,28 @@ inline void markAboveForPostProcessing(const TreeHooks& hooks, WorldGenLevel& le
 // FallenTreeFeature.isOverSolidGround (FallenTreeFeature.java:111-113):
 // level.getBlockState(pos.below()).isFaceSturdy(level, pos, UP) — supplied by the
 // harness as a state predicate (full-cube table).
-// FallenTreeFeature.placeLogBlock (FallenTreeFeature.java:115-125); the sideways
-// AXIS modifier is id-invisible.
+// getSidewaysStateModifier: state.trySetValue(RotatedPillarBlock.AXIS, axis). Applied
+// to the serialized log state so a fallen log lies on its side (axis=x|z) instead of
+// standing (the default axis=y). sidewaysAxis '\0' = Function.identity() (the stump).
+inline std::string withLogAxis(std::string state, char sidewaysAxis) {
+    if (sidewaysAxis == '\0') return state;            // identity (stump)
+    const std::size_t at = state.find("axis=");
+    if (at != std::string::npos && at + 5 < state.size()) {
+        state[at + 5] = sidewaysAxis;                  // overwrite the x|y|z value
+        return state;
+    }
+    // No serialized axis property: insert one.
+    const std::size_t br = state.find('[');
+    if (br == std::string::npos) return state + "[axis=" + sidewaysAxis + "]";
+    return state.substr(0, br + 1) + "axis=" + sidewaysAxis + "," + state.substr(br + 1);
+}
+
+// FallenTreeFeature.placeLogBlock (FallenTreeFeature.java:115-125). sidewaysAxis is the
+// AXIS value from getSidewaysStateModifier(direction) for fallen logs ('\0' for the stump).
 inline BlockPos placeLogBlock(const FallenTreeConfig& config, const TreeHooks& hooks,
-                              WorldGenLevel& level, RandomSource& random, BlockPos pos) {
-    level.setBlock(pos, config.trunkProvider(level, random, pos).value(), 3);
+                              WorldGenLevel& level, RandomSource& random, BlockPos pos,
+                              char sidewaysAxis = '\0') {
+    level.setBlock(pos, withLogAxis(config.trunkProvider(level, random, pos).value(), sidewaysAxis), 3);
     markAboveForPostProcessing(hooks, level, pos);
     return pos;
 }
@@ -187,11 +204,13 @@ inline mc::levelgen::placement::PlacedFeature::FeaturePlacer makeFallenTreePlace
             }
         }
         if (canPlace) {
-            // placeFallenLog (FallenTreeFeature.java:89-105)
+            // placeFallenLog (FallenTreeFeature.java:89-105) — logs lie along `direction`,
+            // so the pillar AXIS is that direction's axis (N/S->Z, E/W->X).
+            const char fallenAxis = (direction == 2 || direction == 3) ? 'z' : 'x';
             JavaBlockPosHashSet fallenLog;
             BlockPos cursor = logStartPos;
             for (int i = 0; i < logLength; ++i) {
-                fallenLog.add(placeLogBlock(*config, *hooks, level, random, cursor));
+                fallenLog.add(placeLogBlock(*config, *hooks, level, random, cursor, fallenAxis));
                 cursor = treeRelative(cursor, direction);
             }
             decorateLogs(*hooks, level, random, fallenLog, config->logDecorators);

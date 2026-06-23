@@ -5,6 +5,10 @@
 #include "structures/SwampHutPiece.h"
 #include "structures/DesertPyramidPiece.h"
 #include "structures/JungleTemplePiece.h"
+#include "structures/BuriedTreasurePieces.h"
+#include "structures/OceanRuinClusterGeometry.h"
+#include "structures/MineshaftPieces.h"
+#include "structures/MineshaftAssembly.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -281,6 +285,21 @@ struct StateResolver {
         long out = mc::block_rotation::rotate(states[id], static_cast<long>(id), rot, fit->second.first, lookup);
         return out >= 0 ? static_cast<std::uint32_t>(out) : id;
     }
+
+    // BlockState.mirror(Mirror) — the certified block_rotation::mirror dispatch over the
+    // mirror declaring-class family (families[].second). Used by template placement that
+    // applies a Mirror (e.g. ruined_portal's FRONT_BACK).
+    std::uint32_t mirrorState(std::uint32_t id, Mirror mir) const {
+        if (mir == Mirror::NONE || id >= states.size()) return id;
+        auto fit = families.find(states[id].name);
+        if (fit == families.end()) return id;
+        auto lookup = [this](const std::string& name, const std::string& props) -> long {
+            auto it = reverse.find(name + "\x01" + props);
+            return it == reverse.end() ? -1L : static_cast<long>(it->second);
+        };
+        long out = mc::block_rotation::mirror(states[id], static_cast<long>(id), mir, fit->second.second, lookup);
+        return out >= 0 ? static_cast<std::uint32_t>(out) : id;
+    }
 };
 
 struct PlaceBlock {
@@ -453,6 +472,12 @@ struct JigsawConfig {
 
     // Shipwreck-specific (is_beached in the structure JSON)
     bool isBeached = false;
+    // OceanRuin-specific (biome_temp / probabilities in the structure JSON)
+    bool oceanRuinWarm = false;
+    float largeProbability = 0.0f;
+    float clusterProbability = 0.0f;
+    // Mineshaft-specific (mineshaft_type in the structure JSON: "normal" / "mesa")
+    bool mineshaftMesa = false;
 
     // terrain_adaptation (TerrainAdjustment) — drives the Beardifier.
     mc::levelgen::TerrainAdjustment terrainAdjustment = mc::levelgen::TerrainAdjustment::NONE;
@@ -628,7 +653,18 @@ struct Runtime {
                               bool legacy = false,
                               const std::string& processorsId = "minecraft:empty",
                               bool terrainMatching = false,
-                              const BoundingBox* chunkBB = nullptr);
+                              const BoundingBox* chunkBB = nullptr,
+                              float integrity = 1.0f);
+
+    // OceanRuin (non-jigsaw, template-based with BlockRotProcessor integrity decay).
+    bool tryPlaceOceanRuin(ChunkPos active, const StructureWorld& world,
+                           bool warm, float largeProbability, float clusterProbability);
+    void addOceanRuinPiece(const BlockPos& pos, Rotation rot, bool isLarge, float integrity,
+                           bool warm, mc::levelgen::WorldgenRandom& random,
+                           const StructureWorld& world, std::size_t& placed);
+    void addOceanRuinCluster(const BlockPos& p, Rotation rot, bool warm,
+                             mc::levelgen::WorldgenRandom& random,
+                             const StructureWorld& world, std::size_t& placed);
     // Processor pipeline.
     RuleTest parseRuleTest(const json& j);
     std::uint32_t parseStateObject(const json& j, std::string& outShortName);
@@ -654,6 +690,8 @@ struct Runtime {
     bool tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bool isBeached);
     bool tryPlaceIgloo(ChunkPos active, const StructureWorld& world);
     bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bool isMesa);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 
@@ -910,8 +948,8 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     // recognised but NOT actually placed must NOT be marked supported — otherwise
     // it silently no-ops (failed jigsaw assembly with an empty start_pool) while
     // pretending to be ported. Types deliberately NOT here yet (helpers only, no
-    // in-game placement): ocean_ruin, ruined_portal, buried_treasure,
-    // ocean_monument, woodland_mansion, mineshaft, stronghold, fortress, end_city.
+    // in-game placement): ruined_portal,
+    // ocean_monument, woodland_mansion, stronghold, fortress, end_city.
     // See docs/STRUCTURES_STATUS.md for the per-structure port ledger.
     static const std::set<std::string> supportedTypes = {
         "minecraft:jigsaw",
@@ -921,6 +959,9 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:jungle_temple",
         "minecraft:shipwreck",
         "minecraft:nether_fossil",
+        "minecraft:buried_treasure",
+        "minecraft:ocean_ruin",
+        "minecraft:mineshaft",
     };
 
     if (supportedTypes.count(type) == 0) {
@@ -939,6 +980,16 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         // Shipwreck: parse is_beached flag
         if (type == "minecraft:shipwreck") {
             cfg.isBeached = j.value("is_beached", false);
+        }
+        // OceanRuin: biome_temp (warm/cold) + large/cluster probabilities
+        if (type == "minecraft:ocean_ruin") {
+            cfg.oceanRuinWarm = (j.value("biome_temp", std::string("cold")) == "warm");
+            cfg.largeProbability = j.value("large_probability", 0.0f);
+            cfg.clusterProbability = j.value("cluster_probability", 0.0f);
+        }
+        // Mineshaft: mineshaft_type ("normal" / "mesa") — selects planks/wood/fence.
+        if (type == "minecraft:mineshaft") {
+            cfg.mineshaftMesa = (j.value("mineshaft_type", std::string("normal")) == "mesa");
         }
         return cfg;
     }
@@ -1408,7 +1459,7 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
                                    Rotation rot, const StructureWorld& world,
                                    bool legacy, const std::string& processorsId,
                                    bool terrainMatching,
-                                   const BoundingBox* chunkBB) {
+                                   const BoundingBox* chunkBB, float integrity) {
     if (!ensureTemplate(location)) return 0;
     const PlaceTemplate& tpl = placeTemplates.at(location);
     const ProcList* rules = loadProcessorList(processorsId);
@@ -1440,6 +1491,14 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
             const std::string& sname = (state < resolver.states.size()) ? resolver.states[state].name
                                                                        : resolver.states[0].name;
             if (sname == "air" || sname == "structure_block") continue;
+        }
+
+        // BlockRotProcessor(integrity) — OceanRuin erosion. Per-block fresh random
+        // seeded by the world pos (== Java StructurePlaceSettings.getRandom(pos) default
+        // = RandomSource.create(Mth.getSeed(pos))); keep iff nextFloat() <= integrity.
+        if (integrity < 1.0f) {
+            auto rr = mc::levelgen::RandomSource::create(mc::levelgen::mth::getSeed(wx, wy, wz));
+            if (rr->nextFloat() > integrity) continue;
         }
 
         std::uint32_t finalState = resolver.rotateState(state, rot);
@@ -1530,6 +1589,16 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:nether_fossil") {
         return tryPlaceNetherFossil(active, world);
     }
+    if (cfg.structureType == "minecraft:buried_treasure") {
+        return tryPlaceBuriedTreasure(active, world);
+    }
+    if (cfg.structureType == "minecraft:ocean_ruin") {
+        return tryPlaceOceanRuin(active, world, cfg.oceanRuinWarm,
+                                 cfg.largeProbability, cfg.clusterProbability);
+    }
+    if (cfg.structureType == "minecraft:mineshaft") {
+        return tryPlaceMineshaft(active, world, cfg.mineshaftMesa);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly. Prefer the COLUMN-based assembly the Beardifier
@@ -1593,6 +1662,139 @@ bool Runtime::tryPlaceSwampHut(ChunkPos active, const StructureWorld& world) {
     hut.postProcess(access);
     MC_LOG_INFO("Structure swamp_hut placed at chunk ({},{})", active.x, active.z);
     return true;
+}
+
+bool Runtime::tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& world) {
+    // BuriedTreasureStructure.generatePieces:
+    //   offset = new BlockPos(chunkPos.getBlockX(9), 90, chunkPos.getBlockZ(9))
+    //   builder.addPiece(new BuriedTreasurePiece(offset))
+    // No structure RandomSource is needed for block placement (Java's random only
+    // drives the chest loot, which is not ported).
+    const int offsetX = active.x * 16 + 9;
+    const int offsetZ = active.z * 16 + 9;
+
+    piece::BuriedTreasurePiece treasure(offsetX, offsetZ);
+
+    StructureWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.minY = -64;
+    access.isInsideBoundingBox = nullptr;  // allow all writes
+
+    treasure.postProcess(access);
+    MC_LOG_INFO("Structure buried_treasure placed at chunk ({},{})", active.x, active.z);
+    return true;
+}
+
+// ── OceanRuin (OceanRuinPieces.java) ─────────────────────────────────────────
+// Template arrays — OceanRuinPieces.java:62-128.
+namespace {
+const char* WARM_RUINS[]   = { "warm_1","warm_2","warm_3","warm_4","warm_5","warm_6","warm_7","warm_8" };
+const char* RUINS_BRICK[]  = { "brick_1","brick_2","brick_3","brick_4","brick_5","brick_6","brick_7","brick_8" };
+const char* RUINS_CRACKED[]= { "cracked_1","cracked_2","cracked_3","cracked_4","cracked_5","cracked_6","cracked_7","cracked_8" };
+const char* RUINS_MOSSY[]  = { "mossy_1","mossy_2","mossy_3","mossy_4","mossy_5","mossy_6","mossy_7","mossy_8" };
+const char* BIG_RUINS_BRICK[]  = { "big_brick_1","big_brick_2","big_brick_3","big_brick_8" };
+const char* BIG_RUINS_MOSSY[]  = { "big_mossy_1","big_mossy_2","big_mossy_3","big_mossy_8" };
+const char* BIG_RUINS_CRACKED[]= { "big_cracked_1","big_cracked_2","big_cracked_3","big_cracked_8" };
+const char* BIG_WARM_RUINS[]   = { "big_warm_4","big_warm_5","big_warm_6","big_warm_7" };
+inline std::string ruinLoc(const char* leaf) { return std::string("minecraft:underwater_ruin/") + leaf; }
+}
+
+// OceanRuinPieces.addPiece — WARM: one warm ruin; COLD: brick(integrity) + cracked(0.7) + mossy(0.5)
+// (all sharing the same random index). Template placement uses BlockRot(integrity) +
+// STRUCTURE_AND_AIR (legacy=true skips air+structure_block).
+void Runtime::addOceanRuinPiece(const BlockPos& pos, Rotation rot, bool isLarge, float integrity,
+                                bool warm, mc::levelgen::WorldgenRandom& random,
+                                const StructureWorld& world, std::size_t& placed) {
+    if (warm) {
+        const char* leaf = isLarge ? BIG_WARM_RUINS[random.nextInt(4)]
+                                   : WARM_RUINS[random.nextInt(8)];
+        placed += placeTemplate(ruinLoc(leaf), pos, rot, world, /*legacy*/ true,
+                                "minecraft:empty", false, nullptr, integrity);
+    } else {
+        const char** bricks  = isLarge ? BIG_RUINS_BRICK   : RUINS_BRICK;
+        const char** cracked = isLarge ? BIG_RUINS_CRACKED : RUINS_CRACKED;
+        const char** mossy   = isLarge ? BIG_RUINS_MOSSY   : RUINS_MOSSY;
+        const int len = isLarge ? 4 : 8;
+        const int idx = random.nextInt(len);
+        placed += placeTemplate(ruinLoc(bricks[idx]),  pos, rot, world, true, "minecraft:empty", false, nullptr, integrity);
+        placed += placeTemplate(ruinLoc(cracked[idx]), pos, rot, world, true, "minecraft:empty", false, nullptr, 0.7f);
+        placed += placeTemplate(ruinLoc(mossy[idx]),   pos, rot, world, true, "minecraft:empty", false, nullptr, 0.5f);
+    }
+}
+
+// OceanRuinPieces.addClusterRuins — OceanRuinPieces.java:168-197.
+void Runtime::addOceanRuinCluster(const BlockPos& p, Rotation rot, bool warm,
+                                  mc::levelgen::WorldgenRandom& random,
+                                  const StructureWorld& world, std::size_t& placed) {
+    namespace ocg = mc::levelgen::structure::oceanruin;
+    const auto orot = static_cast<ocg::Rotation>(static_cast<int>(rot));
+    const ocg::BlockPos parentPos{ p.x, 90, p.z };
+    const ocg::BlockPos parentCorner =
+        ocg::transform(ocg::BlockPos{15, 0, 15}, ocg::Mirror::NONE, orot, ocg::BlockPos{0, 0, 0})
+            .offset(parentPos.x, parentPos.y, parentPos.z);
+    const ocg::BoundingBox parentBB = ocg::BoundingBox::fromCorners(parentPos, parentCorner);
+    const ocg::BlockPos parentBottomLeft{ std::min(parentPos.x, parentCorner.x), parentPos.y,
+                                          std::min(parentPos.z, parentCorner.z) };
+
+    // allPositions: 16 raw nextInt draws (x then z per position), then lo+base.
+    static const int32_t boundsX[8] = { 8, 8, 8, 7, 7, 7, 7, 7 };
+    static const int32_t boundsZ[8] = { 7, 7, 5, 7, 3, 6, 7, 5 };
+    ocg::ClusterCandidateDraws draws{};
+    for (int i = 0; i < 8; ++i) {
+        draws.raw[2 * i]     = random.nextInt(boundsX[i]);
+        draws.raw[2 * i + 1] = random.nextInt(boundsZ[i]);
+    }
+    std::array<ocg::BlockPos, 8> arr = ocg::allPositions(parentBottomLeft, draws);
+    std::vector<ocg::BlockPos> positions(arr.begin(), arr.end());
+
+    const int ruins = 4 + random.nextInt(5);  // Mth.nextInt(random, 4, 8)
+    for (int i = 0; i < ruins; ++i) {
+        if (positions.empty()) continue;
+        const int idx = random.nextInt(static_cast<int>(positions.size()));
+        const ocg::BlockPos rp = positions[idx];
+        positions.erase(positions.begin() + idx);
+        const int nextRotIdx = random.nextInt(4);  // Rotation.getRandom
+        const auto nextOrot = static_cast<ocg::Rotation>(nextRotIdx);
+        const ocg::BlockPos nextCorner =
+            ocg::transform(ocg::BlockPos{5, 0, 6}, ocg::Mirror::NONE, nextOrot, ocg::BlockPos{0, 0, 0})
+                .offset(rp.x, rp.y, rp.z);
+        const ocg::BoundingBox nextBB = ocg::BoundingBox::fromCorners(rp, nextCorner);
+        if (!nextBB.intersects(parentBB)) {
+            addOceanRuinPiece(BlockPos{ rp.x, rp.y, rp.z }, static_cast<Rotation>(nextRotIdx),
+                              /*isLarge*/ false, 0.8f, warm, random, world, placed);
+        }
+    }
+}
+
+// OceanRuinStructure.generatePieces + OceanRuinPieces.addPieces (chest loot, drowned
+// spawn and the suspicious-sand archaeology RuleProcessor are honest no-ops here —
+// they need block-entity/entity/loot support, like the other structures' chests).
+bool Runtime::tryPlaceOceanRuin(ChunkPos active, const StructureWorld& world,
+                                bool warm, float largeProbability, float clusterProbability) {
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // generatePieces: offset = (chunkMinX, 90, chunkMinZ); rotation = Rotation.getRandom.
+    const int rotIdx = random->nextInt(4);
+    const Rotation rot = static_cast<Rotation>(rotIdx);
+    const BlockPos offset{ active.x * 16, 90, active.z * 16 };
+
+    // addPieces: isLarge gate, baseIntegrity, then optional cluster.
+    const bool isLarge = random->nextFloat() <= largeProbability;
+    const float baseIntegrity = isLarge ? 0.9f : 0.8f;
+
+    std::size_t placed = 0;
+    addOceanRuinPiece(offset, rot, isLarge, baseIntegrity, warm, *random, world, placed);
+    if (isLarge && random->nextFloat() <= clusterProbability) {
+        addOceanRuinCluster(offset, rot, warm, *random, world, placed);
+    }
+
+    MC_LOG_INFO("Structure ocean_ruin ({}) placed at chunk ({},{}), large={}, blocks={}",
+                warm ? "warm" : "cold", active.x, active.z, isLarge, placed);
+    return placed > 0;
 }
 
 bool Runtime::tryPlaceDesertPyramid(ChunkPos active, const StructureWorld& world) {
@@ -1789,6 +1991,57 @@ bool Runtime::tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world)
     MC_LOG_INFO("Structure nether_fossil placed at chunk ({},{}), template={}, rot={}, blocks={}",
                 active.x, active.z, templateLocation, rotIdx, placed);
     return placed > 0;
+}
+
+bool Runtime::tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bool isMesa) {
+    // MineshaftStructure.findGenerationPoint:
+    //   random = WorldgenRandom(LegacyRandomSource(0)) seeded by setLargeFeatureSeed(seed, chunkX, chunkZ)
+    //   random.nextDouble()   // first draw inside findGenerationPoint
+    //   generatePiecesAndAdjust:
+    //     MineShaftRoom ctor: makeRoomBox(random, (chunkX<<4)+2, (chunkZ<<4)+2) [3 nextInt(6)]
+    //     addChildren recursion (depth-first) on the room
+    //     moveBelowSeaLevel(63, -64, random, 10)
+    //   Each piece's postProcess is then called per decorating chunk in FEATURES.
+    //
+    // The assembly is RNG-exact (byte-exact vs Java, gated by mineshaft_assembly_parity).
+    // Here we run the certified assembly, then call each piece's postProcess.
+    namespace msp = mc::levelgen::structure::piece;
+    const auto type = isMesa ? msp::MineshaftType::MESA : msp::MineshaftType::NORMAL;
+
+    auto pieces = mc::levelgen::structure::structures::assembleMineshaftNormal(
+        seed, active.x, active.z);
+
+    if (pieces.empty()) {
+        MC_LOG_DEBUG("Structure mineshaft at chunk ({},{}) assembled 0 pieces", active.x, active.z);
+        return false;
+    }
+
+    // Build the world-access adapter the placement helpers expect.
+    msp::MineShaftWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.isInsideBoundingBox = nullptr;   // allow all writes (matches other structures)
+    access.minY = -64;
+
+    // Re-seed a fresh WorldgenRandom for the postProcess RNG. Java's postProcess
+    // receives the structure-step random seeded by setFeatureSeed(decorationSeed,
+    // structureIndexInStep, stepIndex). For the in-game path that's a per-chunk
+    // seed we don't have here; for parity-style standalone placement we re-seed
+    // with setLargeFeatureSeed+chunkXZ (the assembly seed) — the postProcess RNG
+    // is used only for cobweb/chest/spider probabilities, not for piece geometry.
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    std::size_t pieceCount = 0;
+    for (const auto& p : pieces) {
+        msp::postProcessMsPiece(access, type, p, *random);
+        ++pieceCount;
+    }
+    MC_LOG_INFO("Structure mineshaft placed at chunk ({},{}), type={}, pieces={}",
+                active.x, active.z, isMesa ? "mesa" : "normal", pieceCount);
+    return true;
 }
 
 const JigsawConfig* Runtime::selectJigsawStructure(const StructureSetDef& set, ChunkPos start,

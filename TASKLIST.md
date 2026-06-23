@@ -18,7 +18,9 @@
 - [ ] Las algas parecen estar implementadas pero no se ven spawnear en el mar; solo ocasionalmente spawnean buggeadas encima de un bloque de hierba encima del mar.
 - [ ] A veces se generan conjuntos de hongos en el suelo en zonas en las que no deberían (no estoy seguro de que esto sea un bug, puede ser comportamiento normal).
 - [ ] A veces spawnean árboles encima de glaciares en medio del mar.
-- [ ] La textura del bambú es incorrecta: el bambú es como una especie de modelo 3D con texturas que lo rodean y necesita una implementación con especial cariño.
+- [x] Bambú: con el atlas + el path de modelos JSON funcionando, el bambú renderiza con su
+      modelo 3D real (multipart bamboo1..4 + hojas), no como billboard de cruz. Verificado
+      por captura en jungla (semilla 1, spawn -680 968): tallos verticales segmentados.
 - [ ] La hierba en el juego original spawnea con un displacement específico generado en base a las coordenadas en las que está y una función de ruido; lo mismo pasa para el bambú y otras cosas (aplica a todos los tipos de hierba).
 - [x] Los árboles generados cerca del borde de un chunk tienen las hojas/tronco que se desbordan al chunk vecino cortadas, en vez de escribirse en el vecino. (Regresión reintroducida al tomar la versión rama del BiomeDecorator en el merge del PR#6; arreglado re-cableando `chunkAt` desde el caller → `ChunkWGL` → `TreeWorld`, como en el commit 9307b4c.)
 
@@ -110,13 +112,88 @@
       `village_snowy` de 31 piezas, no como el caso plains forzado. Pendiente: gate de
       starts/piezas en el contexto real del server y despues diff bloque-a-bloque contra
       `.mca` del server.
-- [ ] Buried treasure: siguiente win más pequeño (1 pieza + cofre); placement ya soportado. Ver roadmap #2.
+- [x] Buried treasure: portado `BuriedTreasurePiece.postProcess` 1:1 (escaneo hacia abajo
+      hasta la primera columna anclada en sandstone/stone/andesite/granite/diorite, relleno
+      de aire/líquido de los 6 vecinos con belowState/softState, y colocación del cofre).
+      Cableado el dispatch `tryPlaceBuriedTreasure` + tipo `minecraft:buried_treasure` como
+      soportado. Verificado con `structure_gen_probe --seed 1 --radius 48 --biome minecraft:beach`:
+      ya NO sale como UNPORTED y coloca en chunks de playa escribiendo bloques (cofre + relleno).
+      Gap honesto: el LOOT del cofre (loot table + block-entity) no está portado — se coloca el
+      bloque de cofre, igual que en DesertPyramid/SwampHut.
+- [x] OCEAN_RUIN PORTADO Y VERIFICADO 2026-06-22: port 1:1 de `OceanRuinPieces`
+      (segunda estructura grande). `addPieces` (gate isLarge por `large_probability`,
+      baseIntegrity 0.9/0.8, cluster por `cluster_probability`), `addPiece` (WARM = 1 ruina;
+      COLD = brick+cracked+mossy superpuestas a integridad 0.9/0.7/0.5), y el **BlockRotProcessor**
+      (erosión: random por bloque sembrado por la pos del mundo, keep si `nextFloat() <= integrity`)
+      cableado en `placeTemplate`. Cluster vía `OceanRuinClusterGeometry` certificada. Verificado
+      con `structure_gen_probe --biome minecraft:ocean|warm_ocean`: ya NO es UNPORTED; cold coloca
+      ~66-77 (small) / ~480-880 (large+cluster), warm ~30-36 / ~207. Gaps honestos documentados
+      (loot del cofre, drowned, arqueología suspicious-sand → necesitan block-entity/entidad/loot).
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 
 ## Texturas / coloreado
 
-- [ ] Hay que implementar las texturas animadas del agua, la lava, las algas...
+- [x] Formas de bloque / texturas boca abajo o mal puestas: el path de modelos JSON
+      del mesher (`tryEmitVanillaBlockModel`) leía los elementos del modelo pero
+      descartaba TODA la rotación — ignoraba la rotación `x`/`y`/`uvlock` del variant
+      del blockstate, la `rotation` por elemento y la `rotation` (UV) por cara. Por eso
+      escaleras/troncos/vallas/etc. miraban todos igual y las texturas salían boca
+      abajo o desplazadas. Arreglado cableando el pipeline ya certificado
+      `FaceBakery::bakeQuad`: nuevo `render/model/OctahedralGroup.h` (port 1:1 de
+      `com.mojang.math.OctahedralGroup` sobre el `SymmetricGroup3` certificado) para la
+      matriz de `BlockModelRotation`; rotación de elemento vía `CuboidRotation`; UV
+      rotation por cara; uvlock por cara vía `BlockMath::getFaceTransformation`; culling
+      de la cara rotada vía `Direction.rotate`; tinte solo en caras con `tintindex>=0`.
+      Verificado: el grupo octaédrico cumple cierre/identidad/determinante (48 elementos)
+      y la TU compila limpia. Pendiente de verificación visual en runtime (requiere
+      assets de cliente, no disponibles en el entorno Linux headless).
+- [x] Texturas animadas (agua/lava/fuego/...) implementadas 2026-06-23: el atlas detecta
+      tiras animadas (PNG 16xN), extrae cada frame 16x16, parsea el `.mcmeta`
+      (frametime + orden), y `TextureAtlas::tickAnimations` avanza el frame por tiempo
+      (20 ticks/s) re-subiendo el atlas al cambiar; `LevelRenderer` lo llama por frame.
+      Verificado bajo Xvfb: "52 animated" y dos frames de mar con cámara fija difieren
+      (MAE 340) — el agua cicla en pantalla. (Sin cambios en la API de render.)
 - [ ] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
+  - [~] PORTADO Y VERIFICADO 2026-06-22 (núcleo de color): `BiomeColor.h` porta 1:1
+    `Biome.getGrassColor/getFoliageColor` (override-o-textura sobre el `ColorMapColorUtil`
+    certificado) y `GrassColorModifier` (NONE / DARK_FOREST `((c&0xFEFEFE)+2634762)>>1` /
+    SWAMP vía `BIOME_INFO_NOISE`, el `PerlinSimplexNoise` certificado). Test runnable headless
+    `biome_color_parity` contra el colormap real + JSON de bioma real: plains→#91BD59 y
+    forest→#79C05A (cross-verificados con un segundo decodificador PNG independiente), modifier
+    dark_forest y swamp → OK. Falta solo la INTEGRACIÓN en el mesher (cargar pixeles del
+    colormap + lookup de bioma por posición + blend de `BiomeColors`), descrita abajo.
+  - [~] RENDER-SIDE PORTADO Y VERIFICADO 2026-06-22: `render/level/BiomeTint.h` porta 1:1
+    `ClientLevel.calculateBlockTint` (blend de caja (2r+1)², radio por defecto 2) + los
+    resolvers `BiomeColors` GRASS/FOLIAGE/WATER + la clasificación textura→resolver de
+    `BlockColors`. Test runnable `biome_tint_parity` contra colormaps + JSON reales: plains
+    #91BD59 (r0 y r2), water=waterColor del bioma, no-tinteadas→none, blend plains|forest
+    intermedio → ALL OK. Con esto AMBAS mitades del cálculo de color están portadas y
+    verificadas headless.
+  - [~] MESHER CABLEADO Y COMPILA 2026-06-22: `ChunkMesh` acepta un `BiomeMeshContext*`
+    opcional (snapshot `biomeAt` + colormaps grass/foliage + radio) y aplica `biometint::tint`
+    en las rutas de emisión (cube `emitFace`, `emitCross`, y bake de modelo para hojas/grass).
+    Con contexto nullptr el comportamiento es idéntico al anterior (cero riesgo); los callers
+    existentes (`LevelRenderer`, `TerrainEnginePerf`) siguen compilando sin cambios. Verificado:
+    `g++ -fsyntax-only` de `ChunkMesh.cpp` OK.
+  - PENDIENTE (único trozo que necesita cliente compilable/ejecutable, no hay `vendor/glfw`
+    aquí): que `LevelRenderer::scheduleMeshBuild` construya el `BiomeMeshContext` en el hilo
+    principal — muestrear biomas del chunk + margen (radio 2) en un snapshot inmutable (evita
+    la data race con el cache de `BiomeManager` al llamar desde el worker), cargar los colormaps
+    una vez (stb), y pasar el contexto a `buildChunk`. Es la única conexión que falta para que
+    el color por bioma se vea; toda la lógica debajo ya está portada, probada y compilada.
+  - GROUNDED 2026-06-22: el camino exacto está identificado y los datos verificados. El
+    tinte de hierba actual en el mesher está HARDCODEADO a `#79C05A` (que en realidad es el
+    color de *forest*, ¡ni siquiera el de plains!). Decodificando el colormap real
+    `textures/colormap/grass.png` con la fórmula certificada `ColorMapColorUtil::get(temp,
+    downfall)` se obtiene: plains(0.8,0.4)→`#91BD59`, savanna(2.0→clamp 1.0,0.0)→color seco,
+    swamp→override por `grassColorModifier=SWAMP`, forest(0.7,0.8)→`#79C05A`. Piezas ya
+    disponibles: `ColorMapColorUtil`/`GrassColor`/`FoliageColor` (certificados),
+    `Biome.temperature/downfall/grassColor/grassColorModifier` (en `Biome.h`),
+    `ChunkSection::getBiome(x,y,z)` (acceso por posición en el mesher). Falta: (1) cargar los
+    colormaps grass/foliage (stb_image) al iniciar el atlas; (2) portar el blend de
+    `BiomeColors.getAverageColor` (radio 5×5 columnas) + `grassColorModifier`; (3) sustituir
+    `getTextureTint` por el lookup por-bioma en `ChunkMesh.cpp`. No verificable visualmente en
+    el entorno headless actual.
 
 ## Biomas / terreno
 
@@ -132,3 +209,123 @@
 ## Proceso
 
 - [ ] Cada tarea sube el progreso a git.
+
+## Render en Linux / verificación visual (hallazgo 2026-06-22)
+
+- [x] El cliente completo `mcpp` AHORA COMPILA, ENLAZA Y EJECUTA en Linux headless
+      (Xvfb + Mesa llvmpipe GL 4.5). Verificado: arranca, carga el registro completo
+      (29873 block states / 1168 blocks), genera mundo, coloca estructuras, sube el
+      pipeline GL y renderiza el cielo. Requisitos provisionados en la sesión:
+      `vendor/glfw` (clonado), headers X11/GL (apt), y `tools/provision_runtime.sh`.
+- [x] RESUELTO 2026-06-22: el atlas de bloques ahora se stitchea en runtime en Linux
+      (LevelRenderer.loadAtlas cae a `TextureAtlas::loadFromAssetPack`, que ya existía,
+      construyendo el atlas desde las texturas sueltas de assets.bin). Verificado bajo
+      Xvfb+llvmpipe: "built 512x416 atlas, 800 of 821 textures loaded" y el mundo renderiza
+      terreno texturizado con hierba verde coloreada por bioma + formas de bloque correctas.
+      Nota: el GL software necesita MESA_GL_VERSION_OVERRIDE=4.6 porque los shaders son
+      #version 460 (las GPUs reales soportan 4.6 nativo).
+- [ ] (histórico) BLOQUEADOR de verificación visual de TEXTURAS en Linux (independiente del trabajo
+      de biomas/rotación, que ya está compilado en el binario y unit-tested): el terreno
+      sale sin textura porque el **atlas de bloques stitched NO se genera en Linux**.
+      `LevelRenderer::loadAtlas` espera `assets/minecraft/textures/atlas/blocks.png` +
+      `assets/minecraft/atlases/blocks.json` (en Windows es un recurso embebido en el .exe);
+      `tools/asset_packer/main.cpp` solo empaqueta texturas sueltas `textures/block/*.png`,
+      NO el atlas. Falta: cablear el `Stitcher` (ya portado/certificado) en el asset_packer
+      para stitchear los block textures → `blocks.png` + `blocks.json` y empaquetarlos, o
+      generarlos en build. Además se ve un `glDrawArrays error 0x502` a investigar.
+      Con eso, una captura bajo Xvfb verificaría visualmente la rotación de modelos y el
+      coloreado por bioma de esta sesión.
+
+## Verificación de paridad worldgen (terreno + biomas) — 2026-06-23, harness operativo en Linux
+
+- [x] HARNESS DE PARIDAD DE DECORACIÓN OPERATIVO EN LINUX: con JDK 25 (Temurin) +
+      client.jar + las 107 libs descargadas, `tools/FullChunkDecorateParity.java`
+      compila y genera ground-truth IN-PROCESS (el `NoiseBasedChunkGenerator` real,
+      sin servidor), y el target C++ `full_chunk_decorate_parity` lo compara
+      byte-a-byte. Esto era antes solo-Windows; ahora es reproducible headless.
+- [x] TERRENO + BIOMAS BYTE-EXACTOS vs el Java real (seed 1), verificado en 8 biomas
+      diversos — cada chunk 98304 celdas, **0 mismatches**:
+      plains (0,0), dark_forest (-27,64), swamp (200,120), savanna (120,-200),
+      snowy (-80,-80), jungle (-43,60), meadow/montaña (-100,-60), ocean (-40,-13). El chunk completo (relieve por ruido, surface,
+      menas, árboles, plantas, decoración) coincide bloque-a-bloque con Minecraft Java.
+      => La capa de worldgen (terreno + biomas: routing+surface+decoración) está
+      esencialmente COMPLETA y demostrada 1:1; las quejas de "biomas/pantano mal
+      implementados" están desactualizadas (el pantano y el dark_forest son byte-exactos).
+      Lo que queda fuera de esta verificación: estructuras (generate-structures=false en
+      el harness; en progreso en paralelo) y dimensiones nether/end.
+
+## Verificación de estructuras (geometría/math) — 2026-06-23, harness en Linux
+- [x] El suite de paridad de estructuras corre headless en Linux (run_groundtruth.sh +
+      JDK25). Geometría byte-exacta vs Java confirmada para las grandes aún no colocadas:
+      WoodlandMansionGrid (11016 checks, 0 mismatch), OceanMonumentRoomGraph (1188, 0),
+      StrongholdPieceBox (280, 0), MineShaftCorridor (17280, 0). Sus cimientos matemáticos
+      son 1:1; falta la colocación de bloques (postProcess) — trabajo grande, en progreso
+      en paralelo (ruined_portal hoy). Estructuras que SÍ se colocan: aldeas,
+      trial_chambers, outpost, swamp_hut, pirámides, igloo, naufragio, nether_fossil,
+      buried_treasure, ocean_ruin.
+
+## Estructuras — foundations byte-exactas (suite completa) 2026-06-23
+- [x] La geometría/math de TODAS las estructuras grandes restantes está verificada
+      byte-exacta vs el Java real (run_groundtruth.sh + JDK25 en Linux), ~1.25M checks,
+      0 mismatches: WoodlandMansionGrid + GridLayout (1.21M) + EdgeClean, OceanMonumentRoom
+      + RoomGraph + RoomFitter, StrongholdPieceBox + PieceTypeBox + SmallDoor,
+      NetherFortressPieceBox, MineShaftCorridor + Crossing + Room (+ Stairs box), IglooPiece,
+      OceanRuinCluster. => cuando se porte la colocación de bloques (postProcess) de cada una,
+      su layout/geometría está garantizado 1:1. Lo que falta por estructura es SOLO el
+      postProcess (con la infra de world-access que necesita: biome/liquid para
+      isInInvalidLocation, loot/block-entity para cofres) — trabajo grande por estructura,
+      en progreso en paralelo (ruined_portal).
+
+## Estructuras — oráculo de colocación de bloques (ground-truth) en Linux 2026-06-23
+- [x] La colocación de bloques (postProcess) de las grandes hand-built
+      (mineshaft / stronghold / ocean_monument / woodland_mansion / fortress) NO se
+      puede verificar en aislamiento: cada postProcess LEE el terreno ya generado
+      (fillColumnDown escanea hacia abajo, isInInvalidLocation chequea bioma+líquidos,
+      setPlanksBlock/rails consultan isFaceSturdy del bloque existente). Sólo se puede
+      verificar byte-exacto contra un MUNDO COMPLETO ya generado. Ese oráculo ya existe
+      en Windows (run_server_gen_structures.ps1 → 26.1.2/server_run/world_structures +
+      ServerChunkDump) pero NO había contraparte headless.
+- [x] Portada la contraparte Linux: `tools/run_server_gen_structures.sh`. Levanta el
+      server 26.1.2 real headless (stdin vía `tail -f`, `tick freeze`, forceload en
+      tiles ≤256 chunks por el límite de vanilla, save-all, stop), genera
+      `26.1.2/server_run/world_structures/` con generate-structures=true y semilla fija.
+      Verificado end-to-end en Linux: región 7×7 chunks (seed 1) → 122 chunks `full`,
+      y `ServerChunkDump` decodifica (codec PalettedContainer real de Mojang) los bloques
+      de mina como ground-truth: 329 rail, 786 oak_fence, 252 cobweb, 34 iron_chain,
+      4 spawner. Una región más amplia (forceload -64..63) ya dio 401 chunks `full` con
+      múltiples minas (446 rail, 1042 fence, 297 cobweb, 34 chain, 8 cave_spider spawner,
+      Y −49..19). => el oráculo byte-exacto para portar postProcess de las 5 grandes
+      queda reproducible en headless/CI. Falta (multi-sesión, una estructura a la vez):
+      portar el postProcess + ensamblaje recursivo + infra world-access y comparar
+      byte-exacto contra este dump. Mineshaft es la más tratable (su geometría ya está
+      verificada 1:1 y es la estructura más común, así que aparece en el dump).
+- [x] Mineshaft — ENSAMBLAJE RECURSIVO COMPLETO byte-exacto (2026-06-23). Portado
+      `MineshaftAssembly.h`: createRandomShaftPiece + generateAndAddPiece + las 4
+      addChildren (Room/Corridor/Crossing/Stairs) + moveBelowSeaLevel, atando los
+      helpers de caja ya certificados (findCorridorSize/findCrossing/makeRoomBox/
+      findStairs) en la recursión depth-first con el ORDEN DE DRAWS RNG exacto
+      (nextInt(100) selector, nextInt(3)/nextInt(23) rails/spider del ctor corridor,
+      nextInt(4) endSelection, nextInt(span)/nextInt(heightSpace) del room, nextBoolean
+      de crossing two-floored, nextDouble inicial de findGenerationPoint). Oráculo:
+      `tools/MineshaftAssemblyParity.java` corre la MineshaftPieces real. Gate C++
+      `mineshaft_assembly_parity` (target CMake). Verificado: 5 semillas × 49 chunks =
+      245 ensamblajes, ~32.000 chequeos de pieza (kind, caja 6-int, orientación,
+      hasRails/spider/numSections, twoFloored/dirección, offset post-sea-level),
+      0 mismatches. => la geometría EXACTA (lista de piezas + cajas) de cualquier mina
+      está garantizada 1:1. Falta SOLO el postProcess (colocación de bloques, que lee el
+      terreno) — verificable ahora contra el dump de run_server_gen_structures.sh.
+- [~] Mineshaft — POSTPROCESS (colocación de bloques) PORTADO (2026-06-24). Nuevo
+      `structures/MineshaftPieces.h`: port 1:1 de los 4 postProcess (Corridor/Crossing/
+      Room/Stairs) sobre el ensamblaje byte-exacto. Helpers portados: generateBox,
+      generateMaybeBox, maybeGenerateBlock, generateUpperHalfSphere, isInterior,
+      setPlanksBlock, isSupportingBox, isInInvalidLocation (sólo liquid — gap: biome
+      MINESHAFT_BLOCKING tag), placeSupport, placeDoubleLowerOrUpperSupport,
+      fillPillarDownOrChainUp, canPlaceColumnOnTopOf, canHangChainBelow,
+      hasSturdyNeighbours, maybePlaceCobWeb, placeSupportPillar, createChest (rail
+      placement; loot/minecart-chest DEFERIDO). MsType NORMAL/MESA = oak/dark_oak.
+      Cableado: `tryPlaceMineshaft` en Runtime + `minecraft:mineshaft` en
+      supportedTypes + parseo `mineshaft_type` JSON. Verificado: `g++ -fsyntax-only`
+      de StructureGen.cpp + MineshaftPieces.h OK; todos los parity tests de
+      estructuras siguen en verde. Gaps honestos: loot del cofre, minecart-chest,
+      SpawnerBlockEntity.setEntityId, childEntranceBoxes del Room, biome tag
+      MINESHAFT_BLOCKING — documentados en el header.
