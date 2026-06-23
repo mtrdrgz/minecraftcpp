@@ -253,3 +253,13 @@
       implementados" están desactualizadas (el pantano y el dark_forest son byte-exactos).
       Lo que queda fuera de esta verificación: estructuras (generate-structures=false en
       el harness; en progreso en paralelo) y dimensiones nether/end.
+
+## Verificación de estructuras (geometría/math) — 2026-06-23, harness en Linux
+- [x] El suite de paridad de estructuras corre headless en Linux (run_groundtruth.sh +
+      JDK25). Geometría byte-exacta vs Java confirmada para las grandes aún no colocadas:
+      WoodlandMansionGrid (11016 checks, 0 mismatch), OceanMonumentRoomGraph (1188, 0),
+      StrongholdPieceBox (280, 0), MineShaftCorridor (17280, 0). Sus cimientos matemáticos
+      son 1:1; falta la colocación de bloques (postProcess) — trabajo grande, en progreso
+      en paralelo (ruined_portal hoy). Estructuras que SÍ se colocan: aldeas,
+      trial_chambers, outpost, swamp_hut, pirámides, igloo, naufragio, nether_fossil,
+      buried_treasure, ocean_ruin.
