@@ -145,7 +145,12 @@
       Verificado: el grupo octaédrico cumple cierre/identidad/determinante (48 elementos)
       y la TU compila limpia. Pendiente de verificación visual en runtime (requiere
       assets de cliente, no disponibles en el entorno Linux headless).
-- [ ] Hay que implementar las texturas animadas del agua, la lava, las algas...
+- [x] Texturas animadas (agua/lava/fuego/...) implementadas 2026-06-23: el atlas detecta
+      tiras animadas (PNG 16xN), extrae cada frame 16x16, parsea el `.mcmeta`
+      (frametime + orden), y `TextureAtlas::tickAnimations` avanza el frame por tiempo
+      (20 ticks/s) re-subiendo el atlas al cambiar; `LevelRenderer` lo llama por frame.
+      Verificado bajo Xvfb: "52 animated" y dos frames de mar con cámara fija difieren
+      (MAE 340) — el agua cicla en pantalla. (Sin cambios en la API de render.)
 - [ ] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
   - [~] PORTADO Y VERIFICADO 2026-06-22 (núcleo de color): `BiomeColor.h` porta 1:1
     `Biome.getGrassColor/getFoliageColor` (override-o-textura sobre el `ColorMapColorUtil`
