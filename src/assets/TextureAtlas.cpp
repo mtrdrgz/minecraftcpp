@@ -21,6 +21,15 @@ void addTextureName(std::set<std::string>& names, const std::string& name) {
 
 std::vector<std::string> collectBlockTextureNames() {
     std::set<std::string> names;
+    // Every packed block texture — so ANY model-referenced sprite resolves and no
+    // block renders as the magenta checker (missingno). Falls back to the per-block
+    // texture hints below if the pack can't be enumerated.
+    for (const std::string& path : AssetManager::instance().list("minecraft/textures/block/")) {
+        if (!path.ends_with(".png")) continue;
+        std::string name = path.substr(std::string("minecraft/textures/block/").size());
+        name.resize(name.size() - 4);  // strip ".png"
+        addTextureName(names, name);
+    }
     for (const auto& blockPtr : g_blockStorage) {
         if (!blockPtr) continue;
         addTextureName(names, blockPtr->textures.all);
