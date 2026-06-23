@@ -101,6 +101,9 @@ static TintRGB getTextureTint(const std::string& name) {
     // Fixed spruce/birch leaf tints (biome-independent per BlockColors.java:26-27).
     if (name == "spruce_leaves") return {97,  153, 97};  // #619961
     if (name == "birch_leaves")  return {128, 167, 85};  // #80A755
+    // Lily pad: fixed constant tint (BlockColors.java:35 constant(-9321636,..) = #71C35C).
+    // Without it lily pads render grey (swamp complaint).
+    if (name == "lily_pad") return {113, 195, 92};
     // Only the foliage()-registered leaves are biome-tinted (BlockColors.java:28-36);
     // cherry/azalea/pale_oak leaves are NOT tinted (their textures are pre-coloured).
     if (name == "oak_leaves" || name == "jungle_leaves" || name == "acacia_leaves" ||
