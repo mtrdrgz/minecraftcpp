@@ -18,7 +18,9 @@
 - [ ] Las algas parecen estar implementadas pero no se ven spawnear en el mar; solo ocasionalmente spawnean buggeadas encima de un bloque de hierba encima del mar.
 - [ ] A veces se generan conjuntos de hongos en el suelo en zonas en las que no deberían (no estoy seguro de que esto sea un bug, puede ser comportamiento normal).
 - [ ] A veces spawnean árboles encima de glaciares en medio del mar.
-- [ ] La textura del bambú es incorrecta: el bambú es como una especie de modelo 3D con texturas que lo rodean y necesita una implementación con especial cariño.
+- [x] Bambú: con el atlas + el path de modelos JSON funcionando, el bambú renderiza con su
+      modelo 3D real (multipart bamboo1..4 + hojas), no como billboard de cruz. Verificado
+      por captura en jungla (semilla 1, spawn -680 968): tallos verticales segmentados.
 - [ ] La hierba en el juego original spawnea con un displacement específico generado en base a las coordenadas en las que está y una función de ruido; lo mismo pasa para el bambú y otras cosas (aplica a todos los tipos de hierba).
 - [x] Los árboles generados cerca del borde de un chunk tienen las hojas/tronco que se desbordan al chunk vecino cortadas, en vez de escribirse en el vecino. (Regresión reintroducida al tomar la versión rama del BiomeDecorator en el merge del PR#6; arreglado re-cableando `chunkAt` desde el caller → `ChunkWGL` → `TreeWorld`, como en el commit 9307b4c.)
 
