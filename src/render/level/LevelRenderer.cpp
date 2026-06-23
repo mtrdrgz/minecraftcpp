@@ -432,6 +432,12 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
     static bool atlasLoaded = false;
     if (!atlasLoaded) { loadAtlas(cmd); atlasLoaded = true; }
 
+    // Advance animated block textures (water/lava/fire/...) and re-upload if changed.
+    if (m_atlas.isLoaded()) {
+        static const Clock::time_point animStart = Clock::now();
+        m_atlas.tickAnimations(cmd, std::chrono::duration<double>(Clock::now() - animStart).count());
+    }
+
     auto now = Clock::now();
     // Cap dt at 50ms (20 FPS minimum). The previous 100ms cap caused "lagback":
     // when a heavy frame took >100ms, the player only moved 100ms worth while

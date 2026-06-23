@@ -172,6 +172,49 @@ bool TextureAtlas::loadFromAssetPack(render::IRenderDevice* dev, render::IComman
         if (decodePng(bytes, tw, th, rgba)) {
             copyTopLeftTile(atlas, atlasW, x0, y0, rgba, tw, th);
             ++loaded;
+            // Animated strip (water/lava/fire/...): tw==16, th = 16*frames. Build the
+            // frame list + the .mcmeta sequence so tickAnimations can cycle it.
+            if (tw == TILE_SIZE && th > TILE_SIZE && th % TILE_SIZE == 0) {
+                const int frameCount = th / TILE_SIZE;
+                AnimatedSprite sp;
+                sp.x0 = x0; sp.y0 = y0;
+                sp.frames.reserve(frameCount);
+                for (int f = 0; f < frameCount; ++f) {
+                    std::vector<uint8_t> frame(static_cast<std::size_t>(TILE_SIZE) * TILE_SIZE * 4u);
+                    for (int yy = 0; yy < TILE_SIZE; ++yy) {
+                        const uint8_t* src = rgba.data() + (static_cast<std::size_t>(f * TILE_SIZE + yy) * tw) * 4u;
+                        std::copy(src, src + TILE_SIZE * 4, frame.data() + static_cast<std::size_t>(yy) * TILE_SIZE * 4u);
+                    }
+                    sp.frames.push_back(std::move(frame));
+                }
+                int frametime = 1;
+                const std::vector<uint8_t> meta =
+                    AssetManager::instance().readRaw("minecraft/textures/block/" + name + ".png.mcmeta");
+                if (!meta.empty()) {
+                    try {
+                        auto j = nlohmann::json::parse(meta.begin(), meta.end());
+                        if (auto a = j.find("animation"); a != j.end() && a->is_object()) {
+                            frametime = std::max(1, a->value("frametime", 1));
+                            if (auto fr = a->find("frames"); fr != a->end() && fr->is_array()) {
+                                for (const auto& e : *fr) {
+                                    if (e.is_number_integer()) sp.seq.emplace_back(e.get<int>(), frametime);
+                                    else if (e.is_object()) sp.seq.emplace_back(e.value("index", 0), e.value("time", frametime));
+                                }
+                            }
+                        }
+                    } catch (...) {}
+                }
+                if (sp.seq.empty())
+                    for (int f = 0; f < frameCount; ++f) sp.seq.emplace_back(f, frametime);
+                sp.totalTicks = 0;
+                for (auto& kv : sp.seq) {
+                    if (kv.first < 0 || kv.first >= frameCount) kv.first = 0;
+                    if (kv.second < 1) kv.second = 1;
+                    sp.totalTicks += kv.second;
+                }
+                if (sp.totalTicks < 1) sp.totalTicks = 1;
+                m_animated.push_back(std::move(sp));
+            }
         } else {
             writeMissingTile(atlas, atlasW, x0, y0);
         }
@@ -198,11 +241,41 @@ bool TextureAtlas::loadFromAssetPack(render::IRenderDevice* dev, render::IComman
     desc.genMipmaps = false;
     m_texture = dev->createTexture(desc);
     if (!m_texture) return false;
-    cmd->uploadTexture(m_texture, atlas.data());
+    // Keep the CPU atlas so tickAnimations can blit animated frames in place.
+    m_atlasW = atlasW;
+    m_atlasH = atlasH;
+    m_atlasPixels = std::move(atlas);
+    cmd->uploadTexture(m_texture, m_atlasPixels.data());
     m_loaded = true;
-    MC_LOG_INFO("TextureAtlas: built {}x{} atlas from assets.bin, {} of {} textures loaded",
-                atlasW, atlasH, loaded, names.size());
+    MC_LOG_INFO("TextureAtlas: built {}x{} atlas from assets.bin, {} of {} textures loaded ({} animated)",
+                atlasW, atlasH, loaded, names.size(), (int)m_animated.size());
     return true;
+}
+
+void TextureAtlas::tickAnimations(render::ICommandList* cmd, double timeSeconds) {
+    if (m_animated.empty() || !m_texture || m_atlasPixels.empty()) return;
+    const int tick = static_cast<int>(timeSeconds * 20.0);  // 20 game ticks / second
+    bool dirty = false;
+    for (AnimatedSprite& sp : m_animated) {
+        const int t = ((tick % sp.totalTicks) + sp.totalTicks) % sp.totalTicks;
+        int idx = sp.seq.front().first;
+        int acc = 0;
+        for (const auto& kv : sp.seq) {
+            if (t < acc + kv.second) { idx = kv.first; break; }
+            acc += kv.second;
+        }
+        if (idx == sp.lastFrame) continue;
+        sp.lastFrame = idx;
+        const std::vector<uint8_t>& frame = sp.frames[idx];
+        for (int yy = 0; yy < TILE_SIZE; ++yy) {
+            uint8_t* dst = m_atlasPixels.data() +
+                (static_cast<std::size_t>(sp.y0 + yy) * m_atlasW + sp.x0) * 4u;
+            std::copy(frame.data() + static_cast<std::size_t>(yy) * TILE_SIZE * 4u,
+                      frame.data() + static_cast<std::size_t>(yy + 1) * TILE_SIZE * 4u, dst);
+        }
+        dirty = true;
+    }
+    if (dirty) cmd->uploadTexture(m_texture, m_atlasPixels.data());
 }
 
 const AtlasUV* TextureAtlas::uv(const std::string& name) const {
