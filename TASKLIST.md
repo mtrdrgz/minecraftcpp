@@ -275,3 +275,27 @@
       postProcess (con la infra de world-access que necesita: biome/liquid para
       isInInvalidLocation, loot/block-entity para cofres) — trabajo grande por estructura,
       en progreso en paralelo (ruined_portal).
+
+## Estructuras — oráculo de colocación de bloques (ground-truth) en Linux 2026-06-23
+- [x] La colocación de bloques (postProcess) de las grandes hand-built
+      (mineshaft / stronghold / ocean_monument / woodland_mansion / fortress) NO se
+      puede verificar en aislamiento: cada postProcess LEE el terreno ya generado
+      (fillColumnDown escanea hacia abajo, isInInvalidLocation chequea bioma+líquidos,
+      setPlanksBlock/rails consultan isFaceSturdy del bloque existente). Sólo se puede
+      verificar byte-exacto contra un MUNDO COMPLETO ya generado. Ese oráculo ya existe
+      en Windows (run_server_gen_structures.ps1 → 26.1.2/server_run/world_structures +
+      ServerChunkDump) pero NO había contraparte headless.
+- [x] Portada la contraparte Linux: `tools/run_server_gen_structures.sh`. Levanta el
+      server 26.1.2 real headless (stdin vía `tail -f`, `tick freeze`, forceload en
+      tiles ≤256 chunks por el límite de vanilla, save-all, stop), genera
+      `26.1.2/server_run/world_structures/` con generate-structures=true y semilla fija.
+      Verificado end-to-end en Linux: región 7×7 chunks (seed 1) → 122 chunks `full`,
+      y `ServerChunkDump` decodifica (codec PalettedContainer real de Mojang) los bloques
+      de mina como ground-truth: 329 rail, 786 oak_fence, 252 cobweb, 34 iron_chain,
+      4 spawner. Una región más amplia (forceload -64..63) ya dio 401 chunks `full` con
+      múltiples minas (446 rail, 1042 fence, 297 cobweb, 34 chain, 8 cave_spider spawner,
+      Y −49..19). => el oráculo byte-exacto para portar postProcess de las 5 grandes
+      queda reproducible en headless/CI. Falta (multi-sesión, una estructura a la vez):
+      portar el postProcess + ensamblaje recursivo + infra world-access y comparar
+      byte-exacto contra este dump. Mineshaft es la más tratable (su geometría ya está
+      verificada 1:1 y es la estructura más común, así que aparece en el dump).
