@@ -299,3 +299,18 @@
       portar el postProcess + ensamblaje recursivo + infra world-access y comparar
       byte-exacto contra este dump. Mineshaft es la más tratable (su geometría ya está
       verificada 1:1 y es la estructura más común, así que aparece en el dump).
+- [x] Mineshaft — ENSAMBLAJE RECURSIVO COMPLETO byte-exacto (2026-06-23). Portado
+      `MineshaftAssembly.h`: createRandomShaftPiece + generateAndAddPiece + las 4
+      addChildren (Room/Corridor/Crossing/Stairs) + moveBelowSeaLevel, atando los
+      helpers de caja ya certificados (findCorridorSize/findCrossing/makeRoomBox/
+      findStairs) en la recursión depth-first con el ORDEN DE DRAWS RNG exacto
+      (nextInt(100) selector, nextInt(3)/nextInt(23) rails/spider del ctor corridor,
+      nextInt(4) endSelection, nextInt(span)/nextInt(heightSpace) del room, nextBoolean
+      de crossing two-floored, nextDouble inicial de findGenerationPoint). Oráculo:
+      `tools/MineshaftAssemblyParity.java` corre la MineshaftPieces real. Gate C++
+      `mineshaft_assembly_parity` (target CMake). Verificado: 5 semillas × 49 chunks =
+      245 ensamblajes, ~32.000 chequeos de pieza (kind, caja 6-int, orientación,
+      hasRails/spider/numSections, twoFloored/dirección, offset post-sea-level),
+      0 mismatches. => la geometría EXACTA (lista de piezas + cajas) de cualquier mina
+      está garantizada 1:1. Falta SOLO el postProcess (colocación de bloques, que lee el
+      terreno) — verificable ahora contra el dump de run_server_gen_structures.sh.

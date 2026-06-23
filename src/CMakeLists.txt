@@ -6613,6 +6613,13 @@ add_executable(mine_shaft_corridor_parity
 target_include_directories(mine_shaft_corridor_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mine_shaft_corridor_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# ===== structures #19: FULL recursive mineshaft assembly (createRandomShaftPiece + generateAndAddPiece + 4x addChildren + moveBelowSeaLevel); RNG-exact piece list vs real MineshaftPieces =====
+add_executable(mineshaft_assembly_parity
+    world/level/levelgen/structure/structures/MineshaftAssemblyParityTest.cpp
+    world/level/levelgen/RandomSource.cpp)
+target_include_directories(mineshaft_assembly_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(mineshaft_assembly_parity PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # ===== render #26: WeatherEffectRenderer column orientation tables[32x32] + renderInstances billboard geometry (Mth.length double-widen) =====
 add_executable(weather_effect_parity client/renderer/WeatherEffectParityTest.cpp)
 target_include_directories(weather_effect_parity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
