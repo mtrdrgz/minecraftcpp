@@ -7,6 +7,8 @@
 #include "structures/JungleTemplePiece.h"
 #include "structures/BuriedTreasurePieces.h"
 #include "structures/OceanRuinClusterGeometry.h"
+#include "structures/MineshaftPieces.h"
+#include "structures/MineshaftAssembly.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -474,6 +476,8 @@ struct JigsawConfig {
     bool oceanRuinWarm = false;
     float largeProbability = 0.0f;
     float clusterProbability = 0.0f;
+    // Mineshaft-specific (mineshaft_type in the structure JSON: "normal" / "mesa")
+    bool mineshaftMesa = false;
 
     // terrain_adaptation (TerrainAdjustment) — drives the Beardifier.
     mc::levelgen::TerrainAdjustment terrainAdjustment = mc::levelgen::TerrainAdjustment::NONE;
@@ -687,6 +691,7 @@ struct Runtime {
     bool tryPlaceIgloo(ChunkPos active, const StructureWorld& world);
     bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
     bool tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bool isMesa);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 
@@ -944,7 +949,7 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     // it silently no-ops (failed jigsaw assembly with an empty start_pool) while
     // pretending to be ported. Types deliberately NOT here yet (helpers only, no
     // in-game placement): ruined_portal,
-    // ocean_monument, woodland_mansion, mineshaft, stronghold, fortress, end_city.
+    // ocean_monument, woodland_mansion, stronghold, fortress, end_city.
     // See docs/STRUCTURES_STATUS.md for the per-structure port ledger.
     static const std::set<std::string> supportedTypes = {
         "minecraft:jigsaw",
@@ -956,6 +961,7 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:nether_fossil",
         "minecraft:buried_treasure",
         "minecraft:ocean_ruin",
+        "minecraft:mineshaft",
     };
 
     if (supportedTypes.count(type) == 0) {
@@ -980,6 +986,10 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
             cfg.oceanRuinWarm = (j.value("biome_temp", std::string("cold")) == "warm");
             cfg.largeProbability = j.value("large_probability", 0.0f);
             cfg.clusterProbability = j.value("cluster_probability", 0.0f);
+        }
+        // Mineshaft: mineshaft_type ("normal" / "mesa") — selects planks/wood/fence.
+        if (type == "minecraft:mineshaft") {
+            cfg.mineshaftMesa = (j.value("mineshaft_type", std::string("normal")) == "mesa");
         }
         return cfg;
     }
@@ -1586,6 +1596,9 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
         return tryPlaceOceanRuin(active, world, cfg.oceanRuinWarm,
                                  cfg.largeProbability, cfg.clusterProbability);
     }
+    if (cfg.structureType == "minecraft:mineshaft") {
+        return tryPlaceMineshaft(active, world, cfg.mineshaftMesa);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly. Prefer the COLUMN-based assembly the Beardifier
@@ -1978,6 +1991,57 @@ bool Runtime::tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world)
     MC_LOG_INFO("Structure nether_fossil placed at chunk ({},{}), template={}, rot={}, blocks={}",
                 active.x, active.z, templateLocation, rotIdx, placed);
     return placed > 0;
+}
+
+bool Runtime::tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bool isMesa) {
+    // MineshaftStructure.findGenerationPoint:
+    //   random = WorldgenRandom(LegacyRandomSource(0)) seeded by setLargeFeatureSeed(seed, chunkX, chunkZ)
+    //   random.nextDouble()   // first draw inside findGenerationPoint
+    //   generatePiecesAndAdjust:
+    //     MineShaftRoom ctor: makeRoomBox(random, (chunkX<<4)+2, (chunkZ<<4)+2) [3 nextInt(6)]
+    //     addChildren recursion (depth-first) on the room
+    //     moveBelowSeaLevel(63, -64, random, 10)
+    //   Each piece's postProcess is then called per decorating chunk in FEATURES.
+    //
+    // The assembly is RNG-exact (byte-exact vs Java, gated by mineshaft_assembly_parity).
+    // Here we run the certified assembly, then call each piece's postProcess.
+    namespace msp = mc::levelgen::structure::piece;
+    const auto type = isMesa ? msp::MineshaftType::MESA : msp::MineshaftType::NORMAL;
+
+    auto pieces = mc::levelgen::structure::structures::assembleMineshaftNormal(
+        seed, active.x, active.z);
+
+    if (pieces.empty()) {
+        MC_LOG_DEBUG("Structure mineshaft at chunk ({},{}) assembled 0 pieces", active.x, active.z);
+        return false;
+    }
+
+    // Build the world-access adapter the placement helpers expect.
+    msp::MineShaftWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.isInsideBoundingBox = nullptr;   // allow all writes (matches other structures)
+    access.minY = -64;
+
+    // Re-seed a fresh WorldgenRandom for the postProcess RNG. Java's postProcess
+    // receives the structure-step random seeded by setFeatureSeed(decorationSeed,
+    // structureIndexInStep, stepIndex). For the in-game path that's a per-chunk
+    // seed we don't have here; for parity-style standalone placement we re-seed
+    // with setLargeFeatureSeed+chunkXZ (the assembly seed) — the postProcess RNG
+    // is used only for cobweb/chest/spider probabilities, not for piece geometry.
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    std::size_t pieceCount = 0;
+    for (const auto& p : pieces) {
+        msp::postProcessMsPiece(access, type, p, *random);
+        ++pieceCount;
+    }
+    MC_LOG_INFO("Structure mineshaft placed at chunk ({},{}), type={}, pieces={}",
+                active.x, active.z, isMesa ? "mesa" : "normal", pieceCount);
+    return true;
 }
 
 const JigsawConfig* Runtime::selectJigsawStructure(const StructureSetDef& set, ChunkPos start,

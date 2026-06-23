@@ -314,3 +314,18 @@
       0 mismatches. => la geometría EXACTA (lista de piezas + cajas) de cualquier mina
       está garantizada 1:1. Falta SOLO el postProcess (colocación de bloques, que lee el
       terreno) — verificable ahora contra el dump de run_server_gen_structures.sh.
+- [~] Mineshaft — POSTPROCESS (colocación de bloques) PORTADO (2026-06-24). Nuevo
+      `structures/MineshaftPieces.h`: port 1:1 de los 4 postProcess (Corridor/Crossing/
+      Room/Stairs) sobre el ensamblaje byte-exacto. Helpers portados: generateBox,
+      generateMaybeBox, maybeGenerateBlock, generateUpperHalfSphere, isInterior,
+      setPlanksBlock, isSupportingBox, isInInvalidLocation (sólo liquid — gap: biome
+      MINESHAFT_BLOCKING tag), placeSupport, placeDoubleLowerOrUpperSupport,
+      fillPillarDownOrChainUp, canPlaceColumnOnTopOf, canHangChainBelow,
+      hasSturdyNeighbours, maybePlaceCobWeb, placeSupportPillar, createChest (rail
+      placement; loot/minecart-chest DEFERIDO). MsType NORMAL/MESA = oak/dark_oak.
+      Cableado: `tryPlaceMineshaft` en Runtime + `minecraft:mineshaft` en
+      supportedTypes + parseo `mineshaft_type` JSON. Verificado: `g++ -fsyntax-only`
+      de StructureGen.cpp + MineshaftPieces.h OK; todos los parity tests de
+      estructuras siguen en verde. Gaps honestos: loot del cofre, minecart-chest,
+      SpawnerBlockEntity.setEntityId, childEntranceBoxes del Room, biome tag
+      MINESHAFT_BLOCKING — documentados en el header.

@@ -54,19 +54,26 @@
 
 namespace mc::levelgen::structure::piece {
 
-using mc::levelgen::structure::BoundingBox;
+// NOTE: deliberately NOT `using mc::levelgen::structure::BoundingBox;` here.
+// StructurePieceMath.h (a sibling header) defines its OWN piece::BoundingBox
+// struct, and the `using` directive would conflict with it when both are
+// included in the same TU (e.g. StructureGen.cpp pulls in both via
+// StructurePieceBase.h -> StructurePieceMath.h and via MineshaftAssembly.h ->
+// StructurePieceCollection.h). We use the fully-qualified
+// mc::levelgen::structure::BoundingBox instead.
 
 // BoundingBox.encapsulatingBoxes(Iterable<BoundingBox>) — BoundingBox.java:138-148.
 // Returns empty when the sequence is empty; otherwise seeds from the first box's
 // raw fields and folds the mutating encapsulate over the remainder in order.
-inline std::optional<BoundingBox> encapsulatingBoxes(const std::vector<BoundingBox>& boxes) {
+inline std::optional<mc::levelgen::structure::BoundingBox> encapsulatingBoxes(
+        const std::vector<mc::levelgen::structure::BoundingBox>& boxes) {
     if (boxes.empty()) {
         return std::nullopt;
     }
-    const BoundingBox& first = boxes.front();
+    const mc::levelgen::structure::BoundingBox& first = boxes.front();
     // new BoundingBox(first.minX, first.minY, first.minZ, first.maxX, first.maxY, first.maxZ)
     // — a faithful field copy of an already-valid box (no inversion can occur).
-    BoundingBox result;
+    mc::levelgen::structure::BoundingBox result;
     result.minX = first.minX; result.minY = first.minY; result.minZ = first.minZ;
     result.maxX = first.maxX; result.maxY = first.maxY; result.maxZ = first.maxZ;
     for (std::size_t i = 1; i < boxes.size(); ++i) {
@@ -78,7 +85,8 @@ inline std::optional<BoundingBox> encapsulatingBoxes(const std::vector<BoundingB
 // StructurePiece.createBoundingBox(Stream<StructurePiece>) — StructurePiece.java:514-517.
 //   encapsulatingBoxes(pieces.map(getBoundingBox)).orElseThrow(IllegalStateException)
 // The Java message is reproduced verbatim.
-inline BoundingBox createBoundingBox(const std::vector<BoundingBox>& pieceBoxes) {
+inline mc::levelgen::structure::BoundingBox createBoundingBox(
+        const std::vector<mc::levelgen::structure::BoundingBox>& pieceBoxes) {
     auto bb = encapsulatingBoxes(pieceBoxes);
     if (!bb.has_value()) {
         throw std::logic_error("Unable to calculate boundingbox without pieces");
@@ -89,8 +97,9 @@ inline BoundingBox createBoundingBox(const std::vector<BoundingBox>& pieceBoxes)
 // StructurePiece.findCollisionPiece(List<StructurePiece>, BoundingBox)
 // — StructurePiece.java:519-527. Returns the index of the first piece (by list
 // order) whose box intersects `box`; -1 if none (Java returns @Nullable null).
-inline int findCollisionPieceIndex(const std::vector<BoundingBox>& pieceBoxes,
-                                   const BoundingBox& box) {
+inline int findCollisionPieceIndex(
+        const std::vector<mc::levelgen::structure::BoundingBox>& pieceBoxes,
+        const mc::levelgen::structure::BoundingBox& box) {
     for (std::size_t i = 0; i < pieceBoxes.size(); ++i) {
         if (pieceBoxes[i].intersects(box)) {
             return static_cast<int>(i);
