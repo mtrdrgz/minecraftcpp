@@ -52,3 +52,32 @@ echo "done:"
 echo "  worldgen biomes : $(ls "$VERSION/data/minecraft/worldgen/biome" 2>/dev/null | wc -l)"
 echo "  blockstates     : $(ls assets/client-extract/assets/minecraft/blockstates 2>/dev/null | wc -l)"
 echo "  block models    : $(ls assets/client-extract/assets/minecraft/models/block 2>/dev/null | wc -l)"
+
+# Optional: the Java parity runtime (JDK 25 + client.jar + libs) so the worldgen
+# ground-truth harnesses (tools/*Parity.java, e.g. FullChunkDecorateParity) compile
+# and run IN-PROCESS on Linux — the gold-standard byte-exact verification. Enable with:
+#   tools/provision_runtime.sh --parity
+if [ "${1:-}" = "--parity" ] || [ "${MCPP_PARITY:-}" = "1" ]; then
+    echo "[parity] client.jar -> $VERSION/client.jar"
+    cp "$TMP/client.jar" "$VERSION/client.jar"
+
+    if [ ! -x "$VERSION/jdk25/bin/java" ]; then
+        echo "[parity] downloading Temurin JDK 25 (linux x64)"
+        curl -sS -L --retry 3 --max-time 600 -o "$TMP/jdk25.tar.gz" \
+            "https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jdk/hotspot/normal/eclipse"
+        mkdir -p "$VERSION/jdk25"
+        tar xzf "$TMP/jdk25.tar.gz" -C "$VERSION/jdk25" --strip-components=1
+    fi
+    "$VERSION/jdk25/bin/java" -version 2>&1 | head -1
+
+    echo "[parity] downloading $(jq -r '.libraries | length' "$TMP/version.json") runtime libs"
+    mkdir -p "$VERSION/libs"
+    jq -r '.libraries[].downloads.artifact.url' "$TMP/version.json" \
+        | xargs -P 12 -I{} bash -c 'f=$(basename "{}"); [ -f "'"$VERSION"'/libs/$f" ] || curl -sS -L --max-time 120 -o "'"$VERSION"'/libs/$f" "{}"'
+    echo "[parity] ready: JDK25 + client.jar + $(ls "$VERSION/libs"/*.jar 2>/dev/null | wc -l) libs"
+    echo "[parity] verify worldgen byte-exactness, e.g.:"
+    echo "  CP=\"$VERSION/parity_classes:$VERSION/client.jar:$VERSION/libs/*\""
+    echo "  $VERSION/jdk25/bin/javac -cp \"\$CP\" -d $VERSION/parity_classes tools/FullChunkDecorateParity.java"
+    echo "  $VERSION/jdk25/bin/java -cp \"\$CP\" FullChunkDecorateParity 1 0 0 > /tmp/gt.tsv"
+    echo "  ./build/full_chunk_decorate_parity --cases /tmp/gt.tsv --datadir $VERSION/data/minecraft --family all"
+fi
