@@ -118,6 +118,15 @@
       ya NO sale como UNPORTED y coloca en chunks de playa escribiendo bloques (cofre + relleno).
       Gap honesto: el LOOT del cofre (loot table + block-entity) no está portado — se coloca el
       bloque de cofre, igual que en DesertPyramid/SwampHut.
+- [x] OCEAN_RUIN PORTADO Y VERIFICADO 2026-06-22: port 1:1 de `OceanRuinPieces`
+      (segunda estructura grande). `addPieces` (gate isLarge por `large_probability`,
+      baseIntegrity 0.9/0.8, cluster por `cluster_probability`), `addPiece` (WARM = 1 ruina;
+      COLD = brick+cracked+mossy superpuestas a integridad 0.9/0.7/0.5), y el **BlockRotProcessor**
+      (erosión: random por bloque sembrado por la pos del mundo, keep si `nextFloat() <= integrity`)
+      cableado en `placeTemplate`. Cluster vía `OceanRuinClusterGeometry` certificada. Verificado
+      con `structure_gen_probe --biome minecraft:ocean|warm_ocean`: ya NO es UNPORTED; cold coloca
+      ~66-77 (small) / ~480-880 (large+cluster), warm ~30-36 / ~207. Gaps honestos documentados
+      (loot del cofre, drowned, arqueología suspicious-sand → necesitan block-entity/entidad/loot).
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
 
 ## Texturas / coloreado
