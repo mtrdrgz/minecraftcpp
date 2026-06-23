@@ -83,25 +83,29 @@ struct TintRGB { uint8_t r, g, b; };
 // Plains: temperature=0.8, downfall=0.4 → grass #79C05A, foliage #59AE30
 static TintRGB getTextureTint(const std::string& name) {
     if (name.empty()) return {255, 255, 255};
-    // Grass-colored biome blocks
+    // Grass-tinted blocks (BlockColors.java:22-24,41) — plains default. Matches
+    // BiomeTint::tintClassForTexture so the no-biome fallback stays 1:1 with vanilla.
     if (name == "grass_block_top"     || name == "grass_block_side_overlay" ||
         name == "short_grass"          || name == "fern"                     ||
+        name == "potted_fern"          ||
         name == "tall_grass_top"       || name == "tall_grass_bottom"        ||
         name == "large_fern_top"       || name == "large_fern_bottom"        ||
-        name == "bush"                 || name == "firefly_bush"             ||
-        name == "sugar_cane")
-        return {121, 192, 90};   // #79C05A plains grass
+        name == "bush"                 || name == "sugar_cane"               ||
+        name == "pink_petals"          || name == "wildflowers")
+        return {121, 192, 90};   // #79BD59 plains grass
     if (name == "water_still" || name == "water_flow")
-        return {63, 118, 228};   // #3F76E4 beautiful water blue
+        return {63, 118, 228};   // #3F76E4 water
     // leaf_litter uses dryFoliage() tint (BlockColors.java:37), same constant
     if (name == "short_dry_grass" || name == "tall_dry_grass" || name == "leaf_litter")
         return {92, 60, 50};      // DryFoliageColor.FOLIAGE_DRY_DEFAULT (#5C3C32)
-    // Fixed spruce leaf tint (biome-independent per BlockColors.java)
+    // Fixed spruce/birch leaf tints (biome-independent per BlockColors.java:26-27).
     if (name == "spruce_leaves") return {97,  153, 97};  // #619961
-    // Fixed birch leaf tint (biome-independent per BlockColors.java)
     if (name == "birch_leaves")  return {128, 167, 85};  // #80A755
-    // Remaining leaves & vines use biome foliage color
-    if (name.ends_with("_leaves") || name == "vine") return {89, 174, 48}; // #59AE30
+    // Only the foliage()-registered leaves are biome-tinted (BlockColors.java:28-36);
+    // cherry/azalea/pale_oak leaves are NOT tinted (their textures are pre-coloured).
+    if (name == "oak_leaves" || name == "jungle_leaves" || name == "acacia_leaves" ||
+        name == "dark_oak_leaves" || name == "mangrove_leaves" || name == "vine")
+        return {89, 174, 48}; // #59AE30 plains foliage
     return {255, 255, 255};
 }
 

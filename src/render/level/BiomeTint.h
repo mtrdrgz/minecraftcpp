@@ -33,23 +33,28 @@ struct Rgb { std::uint8_t r, g, b; };
 enum class TintClass { NONE, GRASS, FOLIAGE, WATER };
 
 // net.minecraft.client.color.block.BlockColors registrations, expressed at the
-// texture-sprite granularity the mesher works in. Only the biome-driven sprites are
-// listed; spruce/birch leaves use a FIXED colour (handled by the mesher, not here).
+// texture-sprite granularity the mesher works in. 1:1 with BlockColors.java:
+//   grass(): FERN, SHORT_GRASS, POTTED_FERN, BUSH; doubleTallGrass(): TALL_GRASS,
+//   LARGE_FERN; grassBlock(): GRASS_BLOCK; PINK_PETALS, WILDFLOWERS; sugarCane().
+//   foliage(): OAK/JUNGLE/ACACIA/DARK_OAK/MANGROVE leaves + VINE.
+//   waterParticles(): WATER. (SPRUCE/BIRCH leaves use a FIXED constant — NONE here,
+//   the mesher applies it. CHERRY/AZALEA/PALE_OAK leaves are NOT tinted in vanilla.)
 inline TintClass tintClassForTexture(const std::string& name) {
     if (name == "grass_block_top" || name == "grass_block_side_overlay" ||
-        name == "short_grass" || name == "fern" ||
+        name == "short_grass" || name == "fern" || name == "potted_fern" ||
         name == "tall_grass_top" || name == "tall_grass_bottom" ||
         name == "large_fern_top" || name == "large_fern_bottom" ||
-        name == "bush" || name == "firefly_bush" || name == "sugar_cane" ||
-        name == "potted_fern") {
+        name == "bush" || name == "sugar_cane" ||
+        name == "pink_petals" || name == "wildflowers") {
         return TintClass::GRASS;
     }
     if (name == "water_still" || name == "water_flow") {
         return TintClass::WATER;
     }
-    // Spruce/birch leaves are biome-independent (fixed) — NOT handled here.
-    if (name == "spruce_leaves" || name == "birch_leaves") return TintClass::NONE;
-    if (name.ends_with("_leaves") || name == "vine") return TintClass::FOLIAGE;
+    if (name == "oak_leaves" || name == "jungle_leaves" || name == "acacia_leaves" ||
+        name == "dark_oak_leaves" || name == "mangrove_leaves" || name == "vine") {
+        return TintClass::FOLIAGE;
+    }
     return TintClass::NONE;
 }
 
