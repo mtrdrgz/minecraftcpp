@@ -283,6 +283,21 @@ struct StateResolver {
         long out = mc::block_rotation::rotate(states[id], static_cast<long>(id), rot, fit->second.first, lookup);
         return out >= 0 ? static_cast<std::uint32_t>(out) : id;
     }
+
+    // BlockState.mirror(Mirror) — the certified block_rotation::mirror dispatch over the
+    // mirror declaring-class family (families[].second). Used by template placement that
+    // applies a Mirror (e.g. ruined_portal's FRONT_BACK).
+    std::uint32_t mirrorState(std::uint32_t id, Mirror mir) const {
+        if (mir == Mirror::NONE || id >= states.size()) return id;
+        auto fit = families.find(states[id].name);
+        if (fit == families.end()) return id;
+        auto lookup = [this](const std::string& name, const std::string& props) -> long {
+            auto it = reverse.find(name + "\x01" + props);
+            return it == reverse.end() ? -1L : static_cast<long>(it->second);
+        };
+        long out = mc::block_rotation::mirror(states[id], static_cast<long>(id), mir, fit->second.second, lookup);
+        return out >= 0 ? static_cast<std::uint32_t>(out) : id;
+    }
 };
 
 struct PlaceBlock {
