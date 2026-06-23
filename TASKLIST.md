@@ -201,7 +201,14 @@
       (29873 block states / 1168 blocks), genera mundo, coloca estructuras, sube el
       pipeline GL y renderiza el cielo. Requisitos provisionados en la sesión:
       `vendor/glfw` (clonado), headers X11/GL (apt), y `tools/provision_runtime.sh`.
-- [ ] BLOQUEADOR de verificación visual de TEXTURAS en Linux (independiente del trabajo
+- [x] RESUELTO 2026-06-22: el atlas de bloques ahora se stitchea en runtime en Linux
+      (LevelRenderer.loadAtlas cae a `TextureAtlas::loadFromAssetPack`, que ya existía,
+      construyendo el atlas desde las texturas sueltas de assets.bin). Verificado bajo
+      Xvfb+llvmpipe: "built 512x416 atlas, 800 of 821 textures loaded" y el mundo renderiza
+      terreno texturizado con hierba verde coloreada por bioma + formas de bloque correctas.
+      Nota: el GL software necesita MESA_GL_VERSION_OVERRIDE=4.6 porque los shaders son
+      #version 460 (las GPUs reales soportan 4.6 nativo).
+- [ ] (histórico) BLOQUEADOR de verificación visual de TEXTURAS en Linux (independiente del trabajo
       de biomas/rotación, que ya está compilado en el binario y unit-tested): el terreno
       sale sin textura porque el **atlas de bloques stitched NO se genera en Linux**.
       `LevelRenderer::loadAtlas` espera `assets/minecraft/textures/atlas/blocks.png` +
