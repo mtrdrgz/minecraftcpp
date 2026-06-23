@@ -243,10 +243,10 @@
       compila y genera ground-truth IN-PROCESS (el `NoiseBasedChunkGenerator` real,
       sin servidor), y el target C++ `full_chunk_decorate_parity` lo compara
       byte-a-byte. Esto era antes solo-Windows; ahora es reproducible headless.
-- [x] TERRENO + BIOMAS BYTE-EXACTOS vs el Java real (seed 1), verificado en 6 biomas
+- [x] TERRENO + BIOMAS BYTE-EXACTOS vs el Java real (seed 1), verificado en 8 biomas
       diversos — cada chunk 98304 celdas, **0 mismatches**:
       plains (0,0), dark_forest (-27,64), swamp (200,120), savanna (120,-200),
-      snowy (-80,-80), jungle (-43,60). El chunk completo (relieve por ruido, surface,
+      snowy (-80,-80), jungle (-43,60), meadow/montaña (-100,-60), ocean (-40,-13). El chunk completo (relieve por ruido, surface,
       menas, árboles, plantas, decoración) coincide bloque-a-bloque con Minecraft Java.
       => La capa de worldgen (terreno + biomas: routing+surface+decoración) está
       esencialmente COMPLETA y demostrada 1:1; las quejas de "biomas/pantano mal
