@@ -2,6 +2,7 @@
 #include "../../assets/AssetManager.h"
 #include "../../world/level/block/BlockState.h"
 #include "../../world/level/block/Blocks.h"
+#include "../../world/level/block/RedStoneWireBlockColor.h"
 #include "../../core/Log.h"
 #include "../../core/BlockMath.h"
 #include "../model/OctahedralGroup.h"
@@ -968,9 +969,19 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
                     sprite = { u0, u1, v0, v1 };
                 }
                 // Tint only faces that declare a tintindex (vanilla BlockColors gate).
-                const TintRGB tint = (f.tintIndex >= 0)
-                    ? biomeOrDefaultTint(texture, wx, wy, wz, biome)
-                    : TintRGB{255, 255, 255};
+                TintRGB tint{255, 255, 255};
+                if (f.tintIndex >= 0) {
+                    if (state.block && state.block->name == "redstone_wire") {
+                        // BlockColors.redstone(): RedStoneWireBlock.getColorForPower(power).
+                        int power = 0;
+                        const std::string ps = state.getProperty("power");
+                        if (!ps.empty()) { try { power = std::clamp(std::stoi(ps), 0, 15); } catch (...) {} }
+                        const int c = mc::world::level::block::getColorForPower(power);
+                        tint = { (uint8_t)((c >> 16) & 0xFF), (uint8_t)((c >> 8) & 0xFF), (uint8_t)(c & 0xFF) };
+                    } else {
+                        tint = biomeOrDefaultTint(texture, wx, wy, wz, biome);
+                    }
+                }
 
                 // UVs: explicit "uv" (model space) or the auto-generated from/to UV.
                 const fb::UVs uvs = f.hasUv
