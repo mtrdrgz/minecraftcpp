@@ -1,4 +1,5 @@
 #include "StructurePlacement.h"
+#include "ConcentricRingsPositions.h"
 
 #include "../../RandomSource.h"
 
@@ -151,6 +152,11 @@ StructureState StructureState::loadFromDirectory(const std::string& structureSet
             else
                 p.spreadType = RandomSpreadType::LINEAR;
         }
+        if (p.type == PlacementType::CONCENTRIC_RINGS) {
+            p.distance = pj.at("distance").get<int>();
+            p.spread = pj.at("spread").get<int>();
+            p.count = pj.at("count").get<int>();
+        }
 
         // Key by "minecraft:<filename-without-ext>".
         const std::string id = "minecraft:" + entry.path().stem().string();
@@ -188,7 +194,33 @@ bool StructureState::hasStructureChunkInRange(const std::string& otherSet, int s
 }
 
 bool StructureState::isStructureChunk(const StructurePlacement& p, int sourceX, int sourceZ) const {
-    // isPlacementChunk (random_spread only; concentric_rings is unported)
+    // CONCENTRIC_RINGS: check if (sourceX, sourceZ) is one of the pre-computed
+    // ring positions. The ring positions are the geometric skeleton (without
+    // biome snap) — the full version would call BiomeSource.findBiomeHorizontal
+    // to snap each candidate to a preferred biome. GAP: biome snap is deferred.
+    if (p.type == PlacementType::CONCENTRIC_RINGS) {
+        // Lazy-compute ring positions on first access.
+        if (!ringPositionsComputed) {
+            ringPositionsComputed = true;
+            for (const auto& [id, placement] : sets) {
+                if (placement.type != PlacementType::CONCENTRIC_RINGS) continue;
+                auto skeleton = mc::levelgen::structure::placement::generateRingPositionsSkeleton(
+                    levelSeed, placement.distance, placement.count, placement.spread);
+                std::vector<RingPos> positions;
+                positions.reserve(skeleton.size());
+                for (const auto& rp : skeleton) {
+                    positions.push_back({rp.x, rp.z});
+                }
+                concentricRingPositions[&placement] = std::move(positions);
+            }
+        }
+        auto ringIt = concentricRingPositions.find(&p);
+        if (ringIt == concentricRingPositions.end()) return false;
+        for (const auto& rp : ringIt->second) {
+            if (rp.x == sourceX && rp.z == sourceZ) return true;
+        }
+        return false;
+    }
     if (p.type != PlacementType::RANDOM_SPREAD) return false;
     int px, pz;
     getPotentialStructureChunk(p, sourceX, sourceZ, px, pz);

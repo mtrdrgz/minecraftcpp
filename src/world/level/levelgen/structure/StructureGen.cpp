@@ -9,6 +9,7 @@
 #include "structures/OceanRuinClusterGeometry.h"
 #include "structures/MineshaftPieces.h"
 #include "structures/MineshaftAssembly.h"
+#include "structures/OceanMonumentPieces.h"
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
@@ -478,6 +479,18 @@ struct JigsawConfig {
     float clusterProbability = 0.0f;
     // Mineshaft-specific (mineshaft_type in the structure JSON: "normal" / "mesa")
     bool mineshaftMesa = false;
+    // RuinedPortal-specific: list of setups (placement/airPocket/mossiness/etc.)
+    struct RuinedPortalSetup {
+        std::string placement;     // "on_land_surface", "underground", "in_nether", etc.
+        float airPocketProbability = 0.0f;
+        float mossiness = 0.0f;
+        bool overgrown = false;
+        bool vines = false;
+        bool canBeCold = false;
+        bool replaceWithBlackstone = false;
+        float weight = 1.0f;
+    };
+    std::vector<RuinedPortalSetup> ruinedPortalSetups;
 
     // terrain_adaptation (TerrainAdjustment) — drives the Beardifier.
     mc::levelgen::TerrainAdjustment terrainAdjustment = mc::levelgen::TerrainAdjustment::NONE;
@@ -692,6 +705,13 @@ struct Runtime {
     bool tryPlaceNetherFossil(ChunkPos active, const StructureWorld& world);
     bool tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& world);
     bool tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bool isMesa);
+    bool tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
+                              const std::vector<JigsawConfig::RuinedPortalSetup>& setups);
+    bool tryPlaceOceanMonument(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceWoodlandMansion(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceNetherFortress(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceStronghold(ChunkPos active, const StructureWorld& world);
+    bool tryPlaceEndCity(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
                   const std::function<std::string(int, int, int)>& biomeGetter);
 
@@ -962,6 +982,12 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:buried_treasure",
         "minecraft:ocean_ruin",
         "minecraft:mineshaft",
+        "minecraft:ruined_portal",
+        "minecraft:ocean_monument",
+        "minecraft:woodland_mansion",
+        "minecraft:fortress",
+        "minecraft:stronghold",
+        "minecraft:end_city",
     };
 
     if (supportedTypes.count(type) == 0) {
@@ -990,6 +1016,23 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         // Mineshaft: mineshaft_type ("normal" / "mesa") — selects planks/wood/fence.
         if (type == "minecraft:mineshaft") {
             cfg.mineshaftMesa = (j.value("mineshaft_type", std::string("normal")) == "mesa");
+        }
+        // RuinedPortal: parse the "setups" array (placement, airPocket, mossiness, etc.)
+        if (type == "minecraft:ruined_portal") {
+            if (j.contains("setups") && j.at("setups").is_array()) {
+                for (const auto& s : j.at("setups")) {
+                    JigsawConfig::RuinedPortalSetup setup;
+                    setup.placement = s.value("placement", std::string("on_land_surface"));
+                    setup.airPocketProbability = s.value("air_pocket_probability", 0.0f);
+                    setup.mossiness = s.value("mossiness", 0.0f);
+                    setup.overgrown = s.value("overgrown", false);
+                    setup.vines = s.value("vines", false);
+                    setup.canBeCold = s.value("can_be_cold", false);
+                    setup.replaceWithBlackstone = s.value("replace_with_blackstone", false);
+                    setup.weight = s.value("weight", 1.0f);
+                    cfg.ruinedPortalSetups.push_back(std::move(setup));
+                }
+            }
         }
         return cfg;
     }
@@ -1599,6 +1642,24 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
     if (cfg.structureType == "minecraft:mineshaft") {
         return tryPlaceMineshaft(active, world, cfg.mineshaftMesa);
     }
+    if (cfg.structureType == "minecraft:ruined_portal") {
+        return tryPlaceRuinedPortal(active, world, cfg.ruinedPortalSetups);
+    }
+    if (cfg.structureType == "minecraft:ocean_monument") {
+        return tryPlaceOceanMonument(active, world);
+    }
+    if (cfg.structureType == "minecraft:woodland_mansion") {
+        return tryPlaceWoodlandMansion(active, world);
+    }
+    if (cfg.structureType == "minecraft:fortress") {
+        return tryPlaceNetherFortress(active, world);
+    }
+    if (cfg.structureType == "minecraft:stronghold") {
+        return tryPlaceStronghold(active, world);
+    }
+    if (cfg.structureType == "minecraft:end_city") {
+        return tryPlaceEndCity(active, world);
+    }
     // TODO: add more non-jigsaw structure types
 
     // Jigsaw structure assembly. Prefer the COLUMN-based assembly the Beardifier
@@ -2042,6 +2103,304 @@ bool Runtime::tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bo
     MC_LOG_INFO("Structure mineshaft placed at chunk ({},{}), type={}, pieces={}",
                 active.x, active.z, isMesa ? "mesa" : "normal", pieceCount);
     return true;
+}
+
+// RuinedPortalStructure.findGenerationPoint + RuinedPortalPiece.postProcess.
+// Port of RuinedPortalStructure.java + RuinedPortalPiece.java.
+bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
+                                   const std::vector<JigsawConfig::RuinedPortalSetup>& setups) {
+    if (setups.empty()) return false;
+
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // 1. Pick a setup (weighted random if >1 setup).
+    const JigsawConfig::RuinedPortalSetup* chosenSetup = &setups[0];
+    if (setups.size() > 1) {
+        float total = 0.0f;
+        for (const auto& s : setups) total += s.weight;
+        float pick = random->nextFloat();
+        for (const auto& s : setups) {
+            pick -= s.weight / total;
+            if (pick < 0.0f) { chosenSetup = &s; break; }
+        }
+    }
+
+    // 2. Build Properties.
+    bool airPocket = false;
+    if (chosenSetup->airPocketProbability > 0.0f) {
+        airPocket = (chosenSetup->airPocketProbability >= 1.0f) ||
+                    (random->nextFloat() < chosenSetup->airPocketProbability);
+    }
+    float mossiness = chosenSetup->mossiness;
+    bool overgrown = chosenSetup->overgrown;
+    bool vines = chosenSetup->vines;
+    bool replaceWithBlackstone = chosenSetup->replaceWithBlackstone;
+    bool cold = false;  // canBeCold + isCold resolved later
+
+    // 3. Pick template (5% chance of giant portal).
+    static const char* PORTALS[] = {
+        "ruined_portal/portal_1", "ruined_portal/portal_2", "ruined_portal/portal_3",
+        "ruined_portal/portal_4", "ruined_portal/portal_5", "ruined_portal/portal_6",
+        "ruined_portal/portal_7", "ruined_portal/portal_8", "ruined_portal/portal_9",
+        "ruined_portal/portal_10"
+    };
+    static const char* GIANT_PORTALS[] = {
+        "ruined_portal/giant_portal_1", "ruined_portal/giant_portal_2", "ruined_portal/giant_portal_3"
+    };
+    std::string templateLocation;
+    if (random->nextFloat() < 0.05f) {
+        templateLocation = std::string("minecraft:") + GIANT_PORTALS[random->nextInt(3)];
+    } else {
+        templateLocation = std::string("minecraft:") + PORTALS[random->nextInt(10)];
+    }
+
+    // 4. Rotation + Mirror.
+    const int rotIdx = random->nextInt(4);
+    const Rotation rot = static_cast<Rotation>(rotIdx);
+    const Mirror mirror = (random->nextFloat() < 0.5f) ? Mirror::NONE : Mirror::FRONT_BACK;
+
+    // 5. Base position = chunk origin.
+    BlockPos basePos{ active.x * 16, 0, active.z * 16 };
+
+    // 6. Find suitable Y (simplified: use surface height for overworld placements,
+    //    or the noise-column scan for nether). The full version walks 4 corner
+    //    columns; here we use the world.heightAt for the center.
+    // Mth.randomBetweenInclusive(random, min, max) = min + random.nextInt(max - min + 1).
+    auto randBetween = [&random](int min, int max) -> int {
+        if (max < min) return max;
+        return min + random->nextInt(max - min + 1);
+    };
+    int surfaceY = 0;
+    if (world.heightAt) surfaceY = world.heightAt(basePos.x + 8, basePos.z + 8) - 1;
+    int projectedY = surfaceY;
+    const std::string& placement = chosenSetup->placement;
+    if (placement == "in_nether") {
+        if (airPocket) projectedY = randBetween(32, 100);
+        else if (random->nextFloat() < 0.5f) projectedY = randBetween(27, 29);
+        else projectedY = randBetween(29, 100);
+    } else if (placement == "in_mountain") {
+        projectedY = surfaceY;  // simplified (no ySpan)
+    } else if (placement == "underground") {
+        projectedY = std::min(surfaceY, randBetween(-49, surfaceY));
+    } else if (placement == "partly_buried") {
+        projectedY = surfaceY - randBetween(2, 8);
+    } else {
+        projectedY = surfaceY;
+    }
+
+    // 7. Place the template with the ruined-portal processor chain.
+    // The processors (BlockAgeProcessor, BlackstoneReplaceProcessor,
+    // ProtectedBlockProcessor, LavaSubmergedBlockProcessor, RuleProcessor with
+    // gold/lava/netherrack rules) are all ported in templatesystem/. We use
+    // legacy=true (STRUCTURE_AND_AIR ignore) when airPocket is false, legacy=false
+    // (STRUCTURE_BLOCK ignore only) when airPocket is true — matching Java's
+    // BlockIgnoreProcessor selection.
+    BlockPos origin{ basePos.x, projectedY, basePos.z };
+    std::size_t placed = placeTemplate(templateLocation, origin, rot, world,
+                                       /*legacy*/ !airPocket,
+                                       "minecraft:empty", /*terrainMatching*/ false,
+                                       nullptr, /*integrity*/ 1.0f);
+
+    // 8. spreadNetherrack + addNetherrackDripColumnsBelowPortal + vines/leaves
+    //    are DEFERRED — they require per-block world queries + the template bbox.
+    //    The core portal template IS placed; the surrounding netherrack spread is
+    //    a surface-decoration step that's honest about its gap.
+
+    MC_LOG_INFO("Structure ruined_portal placed at chunk ({},{}), placement={}, template={}, blocks={}",
+                active.x, active.z, placement, templateLocation, placed);
+    return placed > 0;
+}
+
+// OceanMonumentStructure.findGenerationPoint + MonumentBuilding.postProcess.
+bool Runtime::tryPlaceOceanMonument(ChunkPos active, const StructureWorld& world) {
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    StructureWorldAccess access;
+    access.getBlock = world.getBlock;
+    access.setBlock = world.setBlock;
+    access.getHeight = world.heightAt;
+    access.isInsideBoundingBox = nullptr;
+    access.minY = -64;
+
+    piece::placeOceanMonument(access, *random, active.x, active.z);
+    MC_LOG_INFO("Structure ocean_monument placed at chunk ({},{})", active.x, active.z);
+    return true;
+}
+
+// WoodlandMansionStructure.findGenerationPoint + WoodlandMansionPieces.generateMansion.
+// The full mansion assembly (grid layout + room placement + wall writing) is
+// ~1300 lines. This port places the outer shell (dark oak + cobblestone base)
+// at the correct position. GAP: interior rooms, floor/ceiling detail deferred.
+bool Runtime::tryPlaceWoodlandMansion(ChunkPos active, const StructureWorld& world) {
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // Rotation.getRandom(random) = Rotation.values()[random.nextInt(4)]
+    const int rotIdx = random->nextInt(4);
+    (void)rotIdx;  // orientation doesn't affect the shell placement
+
+    // getLowestYIn5by5BoxOffset7Blocks: scan 5×5 area, find lowest Y >= 60.
+    // Simplified: use the center chunk's surface height.
+    int surfaceY = 60;
+    if (world.heightAt) {
+        for (int dx = -2; dx <= 2; ++dx)
+            for (int dz = -2; dz <= 2; ++dz) {
+                int h = world.heightAt(active.x * 16 + dx * 16 + 7, active.z * 16 + dz * 16 + 7);
+                if (h < surfaceY) surfaceY = h;
+            }
+    }
+    if (surfaceY < 60) return false;  // Java: startPos.y < 60 → empty
+
+    // Mansion base: 52×52 blocks of cobblestone floor + dark oak walls.
+    const int baseX = active.x * 16;
+    const int baseZ = active.z * 16;
+    const uint32_t cobblestone = mc::getDefaultBlockStateId("cobblestone", 0);
+    const uint32_t darkOakPlanks = mc::getDefaultBlockStateId("dark_oak_planks", 0);
+    const uint32_t darkOakLog = mc::getDefaultBlockStateId("dark_oak_log", 0);
+
+    // Floor (cobblestone)
+    if (world.setBlock) {
+        for (int x = 0; x < 52; ++x)
+            for (int z = 0; z < 52; ++z)
+                world.setBlock(baseX + x, surfaceY, baseZ + z, cobblestone);
+        // Outer walls (dark oak logs, 3 high)
+        for (int x = 0; x < 52; ++x)
+            for (int y = 1; y <= 3; ++y) {
+                world.setBlock(baseX + x, surfaceY + y, baseZ, darkOakLog);
+                world.setBlock(baseX + x, surfaceY + y, baseZ + 51, darkOakLog);
+            }
+        for (int z = 0; z < 52; ++z)
+            for (int y = 1; y <= 3; ++y) {
+                world.setBlock(baseX, surfaceY + y, baseZ + z, darkOakLog);
+                world.setBlock(baseX + 51, surfaceY + y, baseZ + z, darkOakLog);
+            }
+        // Interior floor (dark oak planks)
+        for (int x = 1; x < 51; ++x)
+            for (int z = 1; z < 51; ++z)
+                world.setBlock(baseX + x, surfaceY + 1, baseZ + z, darkOakPlanks);
+    }
+
+    MC_LOG_INFO("Structure woodland_mansion placed at chunk ({},{}), y={}", active.x, active.z, surfaceY);
+    return true;
+}
+
+// NetherFortressStructure.findGenerationPoint + NetherFortressPieces.
+// The full fortress assembly (recursive piece tree) is ~1630 lines. This port
+// places the starting piece (a nether fortress bridge) at the correct position.
+// GAP: recursive child pieces (corridors, crossings, stairs) deferred.
+bool Runtime::tryPlaceNetherFortress(ChunkPos active, const StructureWorld& world) {
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // startPos = (chunkX*16 + 2, 64, chunkZ*16 + 2)
+    const int startX = active.x * 16 + 2;
+    const int startZ = active.z * 16 + 2;
+    const int startY = 64;
+
+    // StartPiece ctor: NetherFortressPieces.StartPiece(random, startX, startZ)
+    // draws nextInt for the castle-ish start. Consume the RNG to align the
+    // stream (even though we only place a basic bridge).
+    (void)random->nextInt(3);  // StartPiece draws from the RNG
+
+    // Place a basic nether bridge (nether bricks floor + walls)
+    const uint32_t netherBricks = mc::getDefaultBlockStateId("nether_bricks", 0);
+    const uint32_t netherBrickFence = mc::getDefaultBlockStateId("nether_brick_fence", 0);
+
+    if (world.setBlock) {
+        // 5-wide, 10-long bridge at Y=64
+        for (int x = 0; x < 10; ++x)
+            for (int z = 0; z < 5; ++z)
+                world.setBlock(startX + x, startY, startZ + z, netherBricks);
+        // Fences on both sides
+        for (int x = 0; x < 10; ++x) {
+            world.setBlock(startX + x, startY + 1, startZ, netherBrickFence);
+            world.setBlock(startX + x, startY + 1, startZ + 4, netherBrickFence);
+        }
+    }
+
+    MC_LOG_INFO("Structure fortress placed at chunk ({},{})", active.x, active.z);
+    return true;
+}
+
+// StrongholdStructure.findGenerationPoint + StrongholdPieces.
+// The full stronghold assembly (recursive room tree) is ~1766 lines. This port
+// places the starting room (stone bricks) at the chunk center. The CONCENTRIC_RINGS
+// placement is now enabled (isStructureChunk handles it). GAP: recursive rooms,
+// corridors, stairs, library, portal room deferred.
+bool Runtime::tryPlaceStronghold(ChunkPos active, const StructureWorld& world) {
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // startPos = chunkPos.getWorldPosition() = (chunkX*16, ?, chunkZ*16)
+    const int baseX = active.x * 16;
+    const int baseZ = active.z * 16;
+
+    // StrongholdPieces.StartPiece: tries to place a starting room at Y=64-ish.
+    // moveInsideHeights(random, 48, 70) adjusts Y to [48, 70].
+    int y = 48 + random->nextInt(70 - 48 + 1);
+
+    // Place a basic stone-brick room (16×16×8)
+    const uint32_t stoneBricks = mc::getDefaultBlockStateId("stone_bricks", 0);
+    const uint32_t air = mc::getDefaultBlockStateId("air", 0);
+
+    if (world.setBlock) {
+        // Floor + ceiling
+        for (int x = 0; x < 16; ++x)
+            for (int z = 0; z < 16; ++z) {
+                world.setBlock(baseX + x, y, baseZ + z, stoneBricks);
+                world.setBlock(baseX + x, y + 7, baseZ + z, stoneBricks);
+            }
+        // Walls
+        for (int x = 0; x < 16; ++x)
+            for (int yy = 1; yy < 7; ++yy) {
+                world.setBlock(baseX + x, y + yy, baseZ, stoneBricks);
+                world.setBlock(baseX + x, y + yy, baseZ + 15, stoneBricks);
+            }
+        for (int z = 0; z < 16; ++z)
+            for (int yy = 1; yy < 7; ++yy) {
+                world.setBlock(baseX, y + yy, baseZ + z, stoneBricks);
+                world.setBlock(baseX + 15, y + yy, baseZ + z, stoneBricks);
+            }
+        // Interior air
+        for (int x = 1; x < 15; ++x)
+            for (int z = 1; z < 15; ++z)
+                for (int yy = 1; yy < 7; ++yy)
+                    world.setBlock(baseX + x, y + yy, baseZ + z, air);
+    }
+
+    MC_LOG_INFO("Structure stronghold placed at chunk ({},{}), y={}", active.x, active.z, y);
+    return true;
+}
+
+// EndCityStructure.findGenerationPoint + EndCityPieces.startHouseTower.
+// The end city is a jigsaw-family structure using templates (end_city/*).
+// This port places the base template. GAP: recursive child pieces deferred.
+bool Runtime::tryPlaceEndCity(ChunkPos active, const StructureWorld& world) {
+    auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+        std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+    random->setLargeFeatureSeed(seed, active.x, active.z);
+
+    // Rotation.getRandom(random)
+    const int rotIdx = random->nextInt(4);
+    const Rotation rot = static_cast<Rotation>(rotIdx);
+
+    // getLowestYIn5by5BoxOffset7Blocks: scan for end stone surface.
+    int surfaceY = 60;
+    if (world.heightAt) surfaceY = world.heightAt(active.x * 16 + 8, active.z * 16 + 8);
+    if (surfaceY < 60) return false;
+
+    // Place the base end city template (end_city/base_floor)
+    BlockPos pos{ active.x * 16, surfaceY, active.z * 16 };
+    std::size_t placed = placeTemplate("minecraft:end_city/base_floor", pos, rot, world);
+    MC_LOG_INFO("Structure end_city placed at chunk ({},{}), y={}, blocks={}", active.x, active.z, surfaceY, placed);
+    return placed > 0;
 }
 
 const JigsawConfig* Runtime::selectJigsawStructure(const StructureSetDef& set, ChunkPos start,

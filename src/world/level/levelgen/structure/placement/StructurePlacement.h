@@ -14,6 +14,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace mc::levelgen::structure {
 
@@ -55,6 +56,11 @@ struct StructurePlacement {
     int spacing = 1;
     int separation = 0;
     RandomSpreadType spreadType = RandomSpreadType::LINEAR;
+
+    // ConcentricRingsStructurePlacement fields (strongholds).
+    int distance = 0;
+    int spread = 0;
+    int count = 0;
 };
 
 // Holds every loaded structure set, keyed by id ("minecraft:villages"). This is
@@ -64,6 +70,13 @@ class StructureState {
 public:
     int64_t levelSeed = 0;
     std::map<std::string, StructurePlacement> sets;
+
+    // Pre-computed concentric-ring positions for CONCENTRIC_RINGS placements.
+    // Keyed by pointer to the StructurePlacement in `sets`. Computed lazily
+    // by computeRingPositions() on first access.
+    struct RingPos { int x, z; };
+    mutable std::map<const StructurePlacement*, std::vector<RingPos>> concentricRingPositions;
+    mutable bool ringPositionsComputed = false;
 
     // Loads every *.json under data/minecraft/worldgen/structure_set into `sets`.
     static StructureState loadFromDirectory(const std::string& structureSetDir, int64_t levelSeed);
@@ -81,7 +94,7 @@ public:
     // True for placement types this port can evaluate/certify. This intentionally
     // ignores generationEnabled so parity tests still cover disabled-at-runtime sets.
     static bool isPlacementSupported(const StructurePlacement& p) {
-        return p.type == PlacementType::RANDOM_SPREAD;
+        return p.type == PlacementType::RANDOM_SPREAD || p.type == PlacementType::CONCENTRIC_RINGS;
     }
 
     // Runtime generation predicate used by StructureGen. Known-broken families stay
