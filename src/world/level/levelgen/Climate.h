@@ -194,14 +194,17 @@ public:
     const T& search(const TargetPoint& target) const {
         const std::array<int64_t, 7> arr = { target.temperature, target.humidity, target.continentalness,
                                              target.erosion, target.depth, target.weirdness, 0 };
-        const Leaf* leaf = m_root->search(arr, m_lastResult);
-        m_lastResult = leaf;
+        // Java uses a ThreadLocal<Leaf> lastResult — each thread gets its own seed.
+        // C++ must mirror this with thread_local to avoid data races when multiple
+        // worker threads call getNoiseBiome concurrently.
+        thread_local const Leaf* tl_lastResult = nullptr;
+        const Leaf* leaf = m_root->search(arr, tl_lastResult);
+        tl_lastResult = leaf;
         return leaf->value;
     }
 
 private:
     std::shared_ptr<Node> m_root;
-    mutable const Leaf* m_lastResult = nullptr; // mirrors Java's per-instance ThreadLocal lastResult seed
 
     explicit RTree(std::shared_ptr<Node> root) : m_root(std::move(root)) {}
 
