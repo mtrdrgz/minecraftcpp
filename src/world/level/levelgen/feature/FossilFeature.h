@@ -221,8 +221,16 @@ inline bool placeTemplateInWorld(WorldGenLevel& level, const FossilHooks& hooks,
         for (const Processor& proc : processors) {
             if (!state.has_value()) break;
             if (proc.kind == 0) {
-                // BlockRotProcessor: settings random == the feature random.
-                if (!(random.nextFloat() <= proc.integrity)) state.reset();
+                // BlockRotProcessor (BlockRotProcessor.java:51-53): uses
+                // settings.getRandom(processedBlockInfo.pos()) — a PER-BLOCK
+                // positional random (RandomSource.create(Mth.getSeed(pos))),
+                // NOT the feature random. The C++ code previously used the
+                // feature random, which (a) gave different rot results and
+                // (b) CORRUPTED the feature RNG stream for all subsequent
+                // features in the chunk.
+                auto blockRandom = mc::levelgen::RandomSource::create(
+                    mc::levelgen::mth::getSeed(worldPos.x, worldPos.y, worldPos.z));
+                if (!(blockRandom->nextFloat() <= proc.integrity)) state.reset();
             } else if (proc.kind == 1) {
                 if (hooks.featuresCannotReplace(level.getBlockState(worldPos))) state.reset();
             } else {
