@@ -2085,15 +2085,18 @@ bool Runtime::tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bo
     access.isInsideBoundingBox = nullptr;   // allow all writes (matches other structures)
     access.minY = -64;
 
-    // Re-seed a fresh WorldgenRandom for the postProcess RNG. Java's postProcess
-    // receives the structure-step random seeded by setFeatureSeed(decorationSeed,
-    // structureIndexInStep, stepIndex). For the in-game path that's a per-chunk
-    // seed we don't have here; for parity-style standalone placement we re-seed
-    // with setLargeFeatureSeed+chunkXZ (the assembly seed) — the postProcess RNG
-    // is used only for cobweb/chest/spider probabilities, not for piece geometry.
+    // PostProcess RNG: Java's StructureStart.placeInChunk uses:
+    //   WorldgenRandom random = new WorldgenRandom(new LegacyRandomSource(0));
+    //   random.setDecorationSeed(level.getSeed(), chunkX, chunkZ);
+    //   random.setFeatureSeed(decorationSeed, structureIndexInStep, stepIndex);
+    // For mineshaft: stepIndex = UNDERGROUND_STRUCTURES (3), structureIndexInStep = 0
+    // (mineshaft is typically the only structure in its step for this chunk).
     auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
         std::make_shared<mc::levelgen::LegacyRandomSource>(0));
-    random->setLargeFeatureSeed(seed, active.x, active.z);
+    int64_t decorationSeed = random->setDecorationSeed(
+        static_cast<int64_t>(seed), active.x * 16, active.z * 16);
+    random->setFeatureSeed(decorationSeed, 0,
+        static_cast<int32_t>(mc::levelgen::feature::GenerationStep::UNDERGROUND_STRUCTURES));
 
     std::size_t pieceCount = 0;
     for (const auto& p : pieces) {
