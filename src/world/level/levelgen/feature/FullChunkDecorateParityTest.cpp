@@ -96,6 +96,8 @@
 #include "../../block/BlockBehaviour.h"
 #include "../../material/Fluids.h"
 #include "../../chunk/LevelChunk.h"
+#include "../structure/StructureGen.h"
+#include "../Beardifier.h"
 
 #include <nlohmann/json.hpp>
 
@@ -1476,6 +1478,8 @@ private:
         auto it = m_chunks->find(packChunk(cx, cz));
         return it == m_chunks->end() ? nullptr : it->second.get();
     }
+public:
+    mc::LevelChunk* chunkAt(int cx, int cz) const { return at(cx, cz); }
     // Top-down scan: highest y whose state passes the heightmap predicate
     // (Heightmap.java:147-156), or minY-1 when the column has none (getHeight adds
     // 1 -> minY, matching an unset Heightmap entry).
@@ -3848,10 +3852,35 @@ int main(int argc, char** argv) {
         // FullChunkDecorateParity.applyCarvers' withDifferentSource(raw sampler).
         std::unordered_map<std::int64_t, std::unique_ptr<mc::LevelChunk>> chunks;
         std::vector<std::vector<BlockPos>> genMarks;   // per-chunk noise+carver marks, generation order
+
+        // Build the per-chunk Beardifier for terrain-adapting structures (villages:
+        // beard_thin, trial_chambers: encapsulate, etc.). The Beardifier assembles
+        // jigsaw structure starts from the base column height and computes density
+        // adjustments that fillFromNoise adds to the final density. Without this,
+        // chunks near trial_chambers/villages would have wrong terrain.
+        auto columnHeight = [&gen, &storeNoiseBiome](int x, int z) -> int {
+            return gen.getBaseHeight(x, z) - 1;
+        };
+        auto beardBiomeGetter = [&storeNoiseBiome](int x, int y, int z) -> std::string {
+            return storeNoiseBiome(x >> 2, y >> 2, z >> 2);
+        };
+        std::string dataDirStr = findDataDir();
+
         for (int dx = -2; dx <= 2; ++dx) for (int dz = -2; dz <= 2; ++dz) {
             auto chunk = std::make_unique<mc::LevelChunk>(mc::ChunkPos{ Cx + dx, Cz + dz });
             std::vector<BlockPos> marks;   // NOISE-step marks first, then carver marks
-            gen.fillFromNoise(*chunk, &marks);
+
+            // Build Beardifier for this chunk (vanilla computes structure starts
+            // at STRUCTURE_STARTS, before NOISE, and the Beardifier reads them
+            // during NOISE to adapt terrain).
+            mc::levelgen::Beardifier beard;
+            try {
+                beard = mc::levelgen::structure::generateBeardifier(
+                    mc::ChunkPos{ Cx + dx, Cz + dz }, static_cast<std::uint64_t>(seed),
+                    columnHeight, beardBiomeGetter, dataDirStr);
+            } catch (...) { /* empty beardifier = no terrain adaptation */ }
+
+            gen.fillFromNoise(*chunk, &marks, beard.isEmpty() ? nullptr : &beard);
             gen.buildSurface(*chunk, storeZoomBiome);
             gen.applyCarvers(*chunk, &marks);
             genMarks.push_back(std::move(marks));
@@ -3867,6 +3896,36 @@ int main(int argc, char** argv) {
         // to FINAL_HEIGHTMAPS maintenance, freezing the WG pair at its post-carver
         // values for the whole FEATURES phase (ChunkStatus.java:18,27).
         level.freezeHeights();
+
+        // ---- STRUCTURES: run non-jigsaw structure placement (mineshaft, swamp_hut,
+        // desert_pyramid, etc.) on the inner 3×3, matching Java's FEATURES turn
+        // which calls runStructures before applyBiomeDecoration. Jigsaw structures
+        // (villages, outposts) are placed via FeaturePoolElement during decoration;
+        // this call handles the hand-built non-jigsaw families.
+        {
+            mc::levelgen::structure::StructureWorld structWorld;
+            structWorld.getBlock = [&level](int x, int y, int z) -> std::uint32_t {
+                mc::LevelChunk* c = level.chunkAt(x >> 4, z >> 4);
+                return c ? c->getBlock(x, y, z) : 0u;
+            };
+            structWorld.setBlock = [&level](int x, int y, int z, std::uint32_t id) {
+                mc::LevelChunk* c = level.chunkAt(x >> 4, z >> 4);
+                if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
+            };
+            structWorld.heightAt = [&level](int x, int z) -> int {
+                return level.getHeight(mc::levelgen::Heightmap::Types::WORLD_SURFACE_WG, x, z);
+            };
+            auto structBiomeGetter = [&storeNoiseBiome](int x, int y, int z) -> std::string {
+                return storeNoiseBiome(x >> 2, y >> 2, z >> 2);
+            };
+            for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
+                try {
+                    mc::levelgen::structure::generateStructures(
+                        mc::ChunkPos{ Cx + dx, Cz + dz }, static_cast<std::uint64_t>(seed),
+                        structWorld, structBiomeGetter, dataDirStr);
+                } catch (...) { /* structure gen failure is non-fatal */ }
+            }
+        }
 
         // The biome filter's level.getBiome goes through the chunk-cached biomes
         // (clamped store reads), exactly like the surface above.

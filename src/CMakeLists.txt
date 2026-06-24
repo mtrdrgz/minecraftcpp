@@ -811,6 +811,12 @@ add_executable(full_chunk_decorate_parity
     world/level/levelgen/SurfaceRuleData.cpp
     world/level/levelgen/carver/WorldCarver.cpp
     world/level/levelgen/feature/BiomeFeatures.cpp
+    world/level/levelgen/structure/StructureGen.cpp
+    world/level/levelgen/structure/placement/StructurePlacement.cpp
+    world/phys/AABB.cpp
+    world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
     world/level/chunk/LevelChunk.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/block/Blocks.cpp
