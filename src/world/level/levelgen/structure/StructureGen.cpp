@@ -2203,10 +2203,118 @@ bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
                                        "minecraft:empty", /*terrainMatching*/ false,
                                        nullptr, /*integrity*/ 1.0f);
 
-    // 8. spreadNetherrack + addNetherrackDripColumnsBelowPortal + vines/leaves
-    //    are DEFERRED — they require per-block world queries + the template bbox.
-    //    The core portal template IS placed; the surrounding netherrack spread is
-    //    a surface-decoration step that's honest about its gap.
+    // 8. spreadNetherrack (RuinedPortalPiece.java:228-262) — scatter netherrack/
+    //    magma around the portal center, with drip columns below.
+    {
+        const uint32_t netherrack = mc::getDefaultBlockStateId("netherrack", 0);
+        const uint32_t magmaBlock = mc::getDefaultBlockStateId("magma_block", 0);
+        const uint32_t air = mc::getDefaultBlockStateId("air", 0);
+        const uint32_t obsidian = mc::getDefaultBlockStateId("obsidian", 0);
+        const uint32_t lava = mc::getDefaultBlockStateId("lava", 0);
+
+        // Template bounding box center (approximate — use origin + half template size).
+        // Java uses this.boundingBox.getCenter(); we approximate with origin + (size/2).
+        // The template sizes are small (portal_1..10 are 3-5 wide), so the center
+        // is close to origin + 2.
+        const int centerX = origin.x + 2;
+        const int centerZ = origin.z + 2;
+        const int minY = origin.y;
+
+        bool followGroundSurface = (placement == "on_land_surface" || placement == "on_ocean_floor");
+        static const float netherrackProbByDist[] = {
+            1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+            0.9f, 0.9f, 0.8f, 0.7f, 0.6f, 0.4f, 0.2f
+        };
+        const int maxDistance = 14;  // sizeof(netherrackProbByDist)
+        const int averageWidth = 8;  // approximate (template sizes vary)
+        const int distanceAdjustment = random->nextInt(std::max(1, 8 - averageWidth / 2));
+
+        // placeNetherrackOrMagma (RuinedPortalPiece.java:282-287)
+        auto placeNetherrackOrMagma = [&](int x, int y, int z) {
+            if (!cold && random->nextFloat() < 0.07f) {
+                if (world.setBlock) world.setBlock(x, y, z, magmaBlock);
+            } else {
+                if (world.setBlock) world.setBlock(x, y, z, netherrack);
+            }
+        };
+
+        // canBlockBeReplacedByNetherrackOrMagma (RuinedPortalPiece.java:272-278)
+        auto canReplace = [&](int x, int y, int z) -> bool {
+            if (!world.getBlock) return false;
+            uint32_t state = world.getBlock(x, y, z);
+            const mc::BlockState* bs = mc::getBlockState(state);
+            if (!bs || !bs->block) return false;
+            const std::string& name = bs->block->name;
+            if (name == "minecraft:air") return false;
+            if (name == "minecraft:obsidian") return false;
+            // #minecraft:features_cannot_replace — simplified: just check the tag
+            // (the tag is small: bedrock, reinforced_deepslate, etc.)
+            if (name == "minecraft:bedrock" || name == "minecraft:reinforced_deepslate") return false;
+            if (placement != "in_nether" && name == "minecraft:lava") return false;
+            return true;
+        };
+
+        // addNetherrackDripColumn (RuinedPortalPiece.java:209-217)
+        auto addDripColumn = [&](int x, int y, int z) {
+            placeNetherrackOrMagma(x, y, z);
+            int remainingCap = 8;
+            int cy = y;
+            while (remainingCap > 0 && random->nextFloat() < 0.5f) {
+                --cy;
+                --remainingCap;
+                placeNetherrackOrMagma(x, cy, z);
+            }
+        };
+
+        // spreadNetherrack main loop (RuinedPortalPiece.java:228-262)
+        for (int x = centerX - maxDistance; x <= centerX + maxDistance; ++x) {
+            for (int z = centerZ - maxDistance; z <= centerZ + maxDistance; ++z) {
+                int distance = std::abs(x - centerX) + std::abs(z - centerZ);
+                int adjustedDistance = std::max(0, distance + distanceAdjustment);
+                if (adjustedDistance >= maxDistance) continue;
+                float probability = netherrackProbByDist[adjustedDistance];
+                if (random->nextDouble() >= probability) continue;
+
+                int surfaceY = 0;
+                if (world.heightAt) {
+                    surfaceY = world.heightAt(x, z) - 1;
+                }
+                int y = followGroundSurface ? surfaceY : std::min(minY, surfaceY);
+                if (std::abs(y - minY) > 3) continue;
+                if (!canReplace(x, y, z)) continue;
+
+                placeNetherrackOrMagma(x, y, z);
+
+                // maybeAddLeavesAbove (if overgrown)
+                if (overgrown && !cold && random->nextFloat() < 0.5f) {
+                    const mc::BlockState* above = world.getBlock ? mc::getBlockState(world.getBlock(x, y, z)) : nullptr;
+                    if (above && above->block && above->block->name == "minecraft:netherrack") {
+                        if (world.getBlock && world.getBlock(x, y + 1, z) == air) {
+                            uint32_t jungleLeaves = mc::getDefaultBlockStateId("jungle_leaves", 0);
+                            if (world.setBlock) world.setBlock(x, y + 1, z, jungleLeaves);
+                        }
+                    }
+                }
+
+                // addNetherrackDripColumn below
+                addDripColumn(x, y - 1, z);
+            }
+        }
+
+        // addNetherrackDripColumnsBelowPortal (RuinedPortalPiece.java:203-213)
+        // Scan the portal's bottom layer for netherrack and drip below it.
+        // Approximate bounding box: 5×5 around center at origin.y
+        for (int x = origin.x; x <= origin.x + 4; ++x) {
+            for (int z = origin.z; z <= origin.z + 4; ++z) {
+                if (!world.getBlock) continue;
+                uint32_t state = world.getBlock(x, origin.y, z);
+                const mc::BlockState* bs = mc::getBlockState(state);
+                if (bs && bs->block && bs->block->name == "minecraft:netherrack") {
+                    addDripColumn(x, origin.y - 1, z);
+                }
+            }
+        }
+    }
 
     MC_LOG_INFO("Structure ruined_portal placed at chunk ({},{}), placement={}, template={}, blocks={}",
                 active.x, active.z, placement, templateLocation, placed);
