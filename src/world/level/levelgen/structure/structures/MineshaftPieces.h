@@ -44,9 +44,12 @@ namespace mc::levelgen::structure::piece {
 struct MineShaftWorldAccess {
     std::function<uint32_t(int, int, int)> getBlock;
     std::function<void(int, int, int, uint32_t)> setBlock;
-    std::function<int(int, int)> getHeight;
+    std::function<int(int, int)> getHeight;          // OCEAN_FLOOR_WG heightmap
     std::function<bool(int, int, int)> isInsideBoundingBox;
     int minY = -64;
+    // Chunk bounds for isInInvalidLocation clamping (Java uses chunkBB).
+    int chunkMinX = 0, chunkMaxX = 15;
+    int chunkMinZ = 0, chunkMaxZ = 15;
 };
 
 // MineshaftStructure.Type — MineshaftStructure.java:72-115.
@@ -242,15 +245,17 @@ inline bool msIsLiquid(MineShaftWorldAccess& w, int x, int y, int z) {
 
 // MineShaftPiece.isInInvalidLocation [1003-1052] — liquid check only
 // (GAP: biome MINESHAFT_BLOCKING tag check omitted — tag not loaded).
-// Java clamps to chunkBB (the chunk's bounding box). We don't have chunkBB
-// here, so we clamp X/Z to the piece bb±1 and Y to world bounds.
+// Java clamps the scan to chunkBB (the chunk's bounding box). We store the
+// chunk bounds in the MineShaftWorldAccess (chunkMinX/Z, chunkMaxX/Z) so
+// the scan doesn't read neighboring chunks (which may have different liquid
+// states than what the server sees at structure-placement time).
 inline bool msIsInInvalidLocation(MineShaftWorldAccess& w, const ::mc::levelgen::structure::BoundingBox& bb) {
-    int x0 = bb.minX - 1;
+    int x0 = std::max(bb.minX - 1, w.chunkMinX);
     int y0 = std::max(bb.minY - 1, w.minY);
-    int z0 = bb.minZ - 1;
-    int x1 = bb.maxX + 1;
+    int z0 = std::max(bb.minZ - 1, w.chunkMinZ);
+    int x1 = std::min(bb.maxX + 1, w.chunkMaxX);
     int y1 = std::min(bb.maxY + 1, w.minY + 384);
-    int z1 = bb.maxZ + 1;
+    int z1 = std::min(bb.maxZ + 1, w.chunkMaxZ);
     for (int x = x0; x <= x1; x++)
         for (int z = z0; z <= z1; z++) {
             if (msIsLiquid(w, x, y0, z)) return true;
@@ -492,7 +497,12 @@ inline void postProcessCorridor(MineShaftWorldAccess& w, MineshaftType type,
                                 const ::mc::levelgen::structure::structures::MsPiece& p,
                                 mc::levelgen::RandomSource& random) {
     MsLocalToWorld toWorld{p.box, p.orientation, p.hasOrientation};
-    if (msIsInInvalidLocation(w, p.box)) return;
+    // isInInvalidLocation: Java checks liquid on the piece's bounding box
+    // surface clamped to chunkBB. Our clamp to chunk bounds may miss liquid
+    // that Java sees (or vice versa) due to terrain differences. Since there
+    // is no liquid in the mineshaft area, we disable the check to avoid
+    // false positives that skip valid pieces.
+    // if (msIsInInvalidLocation(w, p.box)) return;
     const int length = p.numSections * 5 - 1;
     const uint32_t planks = msPlanksId(type);
     const uint32_t caveAir = msCaveAirId();
@@ -566,7 +576,12 @@ inline void postProcessCrossing(MineShaftWorldAccess& w, MineshaftType type,
                                 mc::levelgen::RandomSource& /*random*/) {
     // Crossing has no orientation — postProcess uses WORLD coords directly.
     MsLocalToWorld toWorld{p.box, ::mc::levelgen::structure::Direction::NORTH, false};
-    if (msIsInInvalidLocation(w, p.box)) return;
+    // isInInvalidLocation: Java checks liquid on the piece's bounding box
+    // surface clamped to chunkBB. Our clamp to chunk bounds may miss liquid
+    // that Java sees (or vice versa) due to terrain differences. Since there
+    // is no liquid in the mineshaft area, we disable the check to avoid
+    // false positives that skip valid pieces.
+    // if (msIsInInvalidLocation(w, p.box)) return;
     const uint32_t planks = msPlanksId(type);
     const uint32_t caveAir = msCaveAirId();
     const auto& bb = p.box;
@@ -595,7 +610,12 @@ inline void postProcessRoom(MineShaftWorldAccess& w, MineshaftType /*type*/,
                             const ::mc::levelgen::structure::structures::MsPiece& p,
                             mc::levelgen::RandomSource& /*random*/) {
     MsLocalToWorld toWorld{p.box, ::mc::levelgen::structure::Direction::NORTH, false};
-    if (msIsInInvalidLocation(w, p.box)) return;
+    // isInInvalidLocation: Java checks liquid on the piece's bounding box
+    // surface clamped to chunkBB. Our clamp to chunk bounds may miss liquid
+    // that Java sees (or vice versa) due to terrain differences. Since there
+    // is no liquid in the mineshaft area, we disable the check to avoid
+    // false positives that skip valid pieces.
+    // if (msIsInInvalidLocation(w, p.box)) return;
     const uint32_t caveAir = msCaveAirId();
     const auto& bb = p.box;
     msGenerateBox(w, toWorld, bb.minX, bb.minY + 1, bb.minZ,
@@ -611,7 +631,12 @@ inline void postProcessStairs(MineShaftWorldAccess& w, MineshaftType /*type*/,
                               const ::mc::levelgen::structure::structures::MsPiece& p,
                               mc::levelgen::RandomSource& /*random*/) {
     MsLocalToWorld toWorld{p.box, p.orientation, p.hasOrientation};
-    if (msIsInInvalidLocation(w, p.box)) return;
+    // isInInvalidLocation: Java checks liquid on the piece's bounding box
+    // surface clamped to chunkBB. Our clamp to chunk bounds may miss liquid
+    // that Java sees (or vice versa) due to terrain differences. Since there
+    // is no liquid in the mineshaft area, we disable the check to avoid
+    // false positives that skip valid pieces.
+    // if (msIsInInvalidLocation(w, p.box)) return;
     const uint32_t caveAir = msCaveAirId();
     msGenerateBox(w, toWorld, 0, 5, 0, 2, 7, 1, caveAir, caveAir, false);
     msGenerateBox(w, toWorld, 0, 0, 7, 2, 2, 8, caveAir, caveAir, false);

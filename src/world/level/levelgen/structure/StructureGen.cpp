@@ -2078,12 +2078,24 @@ bool Runtime::tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bo
     }
 
     // Build the world-access adapter the placement helpers expect.
+    // Java's StructurePiece.placeBlock checks chunkBB.isInside(pos) for EVERY
+    // block write — pieces that straddle chunk boundaries must only write the
+    // blocks inside the decorating chunk. We set isInsideBoundingBox to clip
+    // to the chunk's bounding box.
+    const int chunkMinX = active.x * 16;
+    const int chunkMaxX = chunkMinX + 15;
+    const int chunkMinZ = active.z * 16;
+    const int chunkMaxZ = chunkMinZ + 15;
     msp::MineShaftWorldAccess access;
     access.getBlock = world.getBlock;
     access.setBlock = world.setBlock;
     access.getHeight = world.heightAt;
-    access.isInsideBoundingBox = nullptr;   // allow all writes (matches other structures)
+    access.isInsideBoundingBox = [chunkMinX, chunkMaxX, chunkMinZ, chunkMaxZ](int x, int, int z) -> bool {
+        return x >= chunkMinX && x <= chunkMaxX && z >= chunkMinZ && z <= chunkMaxZ;
+    };
     access.minY = -64;
+    access.chunkMinX = chunkMinX; access.chunkMaxX = chunkMaxX;
+    access.chunkMinZ = chunkMinZ; access.chunkMaxZ = chunkMaxZ;
 
     // PostProcess RNG: Java's StructureStart.placeInChunk uses:
     //   WorldgenRandom random = new WorldgenRandom(new LegacyRandomSource(0));

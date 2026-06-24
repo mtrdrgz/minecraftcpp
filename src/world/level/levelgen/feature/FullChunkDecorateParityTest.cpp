@@ -3913,7 +3913,8 @@ int main(int argc, char** argv) {
                 if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
             };
             structWorld.heightAt = [&level](int x, int z) -> int {
-                return level.getHeight(mc::levelgen::Heightmap::Types::WORLD_SURFACE_WG, x, z);
+                // Java's StructurePiece.isInterior uses OCEAN_FLOOR_WG heightmap.
+                return level.getHeight(mc::levelgen::Heightmap::Types::OCEAN_FLOOR_WG, x, z);
             };
             auto structBiomeGetter = [&storeNoiseBiome](int x, int y, int z) -> std::string {
                 return storeNoiseBiome(x >> 2, y >> 2, z >> 2);
