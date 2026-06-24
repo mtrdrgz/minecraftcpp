@@ -44,15 +44,24 @@ NoiseGeneratorSettings::RandomAlgorithm NoiseGeneratorSettings::getRandomSource(
 }
 
 NoiseGeneratorSettings NoiseGeneratorSettings::overworld() {
-    return make(NoiseSettings::overworld(), state("stone"), state("water"), 63, false, true, true, false);
+    NoiseGeneratorSettings s = make(NoiseSettings::overworld(), state("stone"), state("water"), 63, false, true, true, false);
+    s.largeBiomesFlag = false;
+    s.amplifiedFlag = false;
+    return s;
 }
 
+// Java: NoiseGeneratorSettings.overworld(context, isAmplified=false, largeBiomes=true).
 NoiseGeneratorSettings NoiseGeneratorSettings::largeBiomes() {
-    return overworld();
+    NoiseGeneratorSettings s = overworld();
+    s.largeBiomesFlag = true;
+    return s;
 }
 
+// Java: NoiseGeneratorSettings.overworld(context, isAmplified=true, largeBiomes=false).
 NoiseGeneratorSettings NoiseGeneratorSettings::amplified() {
-    return overworld();
+    NoiseGeneratorSettings s = overworld();
+    s.amplifiedFlag = true;
+    return s;
 }
 
 NoiseGeneratorSettings NoiseGeneratorSettings::nether() {

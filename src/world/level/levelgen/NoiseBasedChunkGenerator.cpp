@@ -371,7 +371,11 @@ namespace {
         if (settings.defaultBlock == endStone) {
             return NoiseRouterData::end(randomState);
         }
-        return NoiseRouterData::overworld(randomState, false, false);
+        // Java: NoiseRouterData.overworld(..., largeBiomes, isAmplified). The
+        // largeBiomes flag stretches biome climate parameters; the amplified
+        // flag steepens the terrain shaper. Both are now propagated from the
+        // NoiseGeneratorSettings preset (overworld/largeBiomes/amplified).
+        return NoiseRouterData::overworld(randomState, settings.largeBiomesFlag, settings.amplifiedFlag);
     }
 
 }
@@ -597,9 +601,12 @@ void NoiseBasedChunkGenerator::buildSurface(
 }
 
 void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks) const {
-    if (m_settings.defaultBlock == stateIdFor("netherrack", UINT32_MAX)
-        || m_settings.defaultBlock == stateIdFor("end_stone", UINT32_MAX)) {
-        return;
+    // End dimension has NO carvers in vanilla (TheEndBiomeSource + no configured
+    // carvers for the end). The nether has one carver (nether_cave). The overworld
+    // has three (cave, cave_extra_underground, canyon).
+    const uint32_t endStone = stateIdFor("end_stone", UINT32_MAX);
+    if (m_settings.defaultBlock == endStone) {
+        return;  // end: no carvers
     }
 
     auto preliminarySurface = [this](int blockX, int blockZ) {
@@ -624,6 +631,23 @@ void NoiseBasedChunkGenerator::applyCarvers(LevelChunk& chunk, std::vector<mc::B
             blockZ,
             underFluid);
     };
+
+    const uint32_t netherrack = stateIdFor("netherrack", UINT32_MAX);
+    if (m_settings.defaultBlock == netherrack) {
+        // Nether: apply nether_cave carver (NetherWorldCarver).
+        carver::applyNetherCarvers(
+            chunk,
+            static_cast<std::int64_t>(m_seed),
+            m_settings,
+            m_router,
+            m_aquiferRandom,
+            preliminarySurface,
+            topMaterial,
+            fluidUpdateMarks);
+        return;
+    }
+
+    // Overworld: apply cave, cave_extra_underground, canyon.
     carver::applyOverworldCarvers(
         chunk,
         static_cast<std::int64_t>(m_seed),

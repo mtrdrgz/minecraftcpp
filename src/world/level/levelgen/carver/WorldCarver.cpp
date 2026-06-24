@@ -75,6 +75,34 @@ const std::unordered_set<std::uint32_t>& overworldReplaceables() {
     return ids;
 }
 
+// #minecraft:nether_carver_replaceables (NetherWorldCarver.java:20 + the tag
+// expansion). Verbatim from
+// 26.1.2/data/minecraft/tags/block/nether_carver_replaceables.json.
+const std::unordered_set<std::uint32_t>& netherReplaceables() {
+    static const std::unordered_set<std::uint32_t> ids = [] {
+        const char* names[] = {
+            // base_stone_overworld
+            "stone", "granite", "diorite", "andesite", "tuff", "deepslate",
+            // base_stone_nether
+            "netherrack", "basalt", "blackstone",
+            // substrate_overworld
+            "dirt", "grass_block", "sand", "red_sand", "gravel", "sandstone", "red_sandstone",
+            // nylium
+            "crimson_nylium", "warped_nylium",
+            // wart_blocks
+            "nether_wart_block", "warped_wart_block",
+            // individual
+            "soul_sand", "soul_soil"
+        };
+        std::unordered_set<std::uint32_t> out;
+        for (const char* name : names) {
+            out.insert(state(name, 0));
+        }
+        return out;
+    }();
+    return ids;
+}
+
 class CarvingMask {
 public:
     CarvingMask(int height, int minY)
@@ -155,6 +183,11 @@ std::optional<std::uint32_t> carveState(
     return aquifer.computeSubstance(DensityFunctionContext{ x, y, z }, 0.0);
 }
 
+// Function-pointer type for the carveBlock override. Matches the overworld
+// carveBlock and the nether netherCarveBlock signatures exactly.
+using CarveBlockFn = bool(*)(const CarvingContext&, const CarverConfiguration&,
+                             LevelChunk&, int, int, int, Aquifer&, bool&);
+
 bool carveBlock(
     const CarvingContext& context,
     const CarverConfiguration& config,
@@ -226,7 +259,8 @@ bool carveEllipsoid(
     double horizontalRadius,
     double verticalRadius,
     CarvingMask& mask,
-    Skip&& shouldSkip
+    Skip&& shouldSkip,
+    CarveBlockFn carveBlockFn
 ) {
     const ChunkPos chunkPos = chunk.pos();
     const double centerX = chunkPos.x * 16 + 8;
@@ -263,7 +297,7 @@ bool carveEllipsoid(
                     continue;
                 }
                 mask.set(xIndex, worldY, zIndex);
-                carved |= carveBlock(context, config, chunk, worldX, worldY, worldZ, aquifer, hasGrass);
+                carved |= carveBlockFn(context, config, chunk, worldX, worldY, worldZ, aquifer, hasGrass);
             }
         }
     }
@@ -293,7 +327,8 @@ void createCaveTunnel(
     int dist,
     double yScale,
     CarvingMask& mask,
-    double floorLevel
+    double floorLevel,
+    CarveBlockFn carveBlockFn
 ) {
     SingleThreadedRandomSource random(tunnelSeed);
     const int splitPoint = random.nextInt(dist / 2) + dist / 4;
@@ -339,14 +374,14 @@ void createCaveTunnel(
                              horizontalRadiusMultiplier, verticalRadiusMultiplier,
                              childThickness1,
                              horizontalRotation - PI_F / 2.0f, verticalRotation / 3.0f,
-                             currentStep, dist, 1.0, mask, floorLevel);
+                             currentStep, dist, 1.0, mask, floorLevel, carveBlockFn);
             const std::int64_t childSeed2 = random.nextLong();
             const float childThickness2 = random.nextFloat() * 0.5f + 0.5f;
             createCaveTunnel(context, config, chunk, childSeed2, aquifer, x, y, z,
                              horizontalRadiusMultiplier, verticalRadiusMultiplier,
                              childThickness2,
                              horizontalRotation + PI_F / 2.0f, verticalRotation / 3.0f,
-                             currentStep, dist, 1.0, mask, floorLevel);
+                             currentStep, dist, 1.0, mask, floorLevel, carveBlockFn);
             return;
         }
 
@@ -362,7 +397,7 @@ void createCaveTunnel(
                        mask,
                        [floorLevel](const CarvingContext&, double xd, double yd, double zd, int) {
                            return caveShouldSkip(xd, yd, zd, floorLevel);
-                       });
+                       }, carveBlockFn);
     }
 }
 
@@ -374,17 +409,58 @@ float caveThickness(RandomSource& random) {
     return thickness;
 }
 
-bool carveCave(
+// NetherWorldCarver.getThickness — (nextFloat()*2 + nextFloat()) * 2.
+float netherCaveThickness(RandomSource& random) {
+    return (random.nextFloat() * 2.0f + random.nextFloat()) * 2.0f;
+}
+
+// NetherWorldCarver.carveBlock (NetherWorldCarver.java:38-62). Places LAVA
+// below minY+31, CAVE_AIR above. No aquifer, no grass/topMaterial.
+bool netherCarveBlock(
+    const CarvingContext& context,
+    const CarverConfiguration& /*config*/,
+    LevelChunk& chunk,
+    int x,
+    int y,
+    int z,
+    Aquifer& /*aquifer*/,
+    bool& /*hasGrass*/
+) {
+    static const std::uint32_t lava = state("lava", 0);
+    static const std::uint32_t caveAir = state("cave_air", 0);
+
+    const std::uint32_t old = chunk.getBlock(x, y, z);
+    if (netherReplaceables().count(old) == 0) {
+        return false;
+    }
+    if (y <= context.minGenY + 31) {
+        chunk.setBlock(x, y, z, lava);
+    } else {
+        chunk.setBlock(x, y, z, caveAir);
+    }
+    return true;
+}
+
+// Generic carveCave parameterized by the CaveWorldCarver overrides.
+//   caveBound: getCaveBound() (overworld=15, nether=10)
+//   thicknessFn: getThickness(random) (overworld/nether formulas)
+//   tunnelYScale: getYScale() (overworld=1.0, nether=5.0)
+//   carveBlockFn: carveBlock (overworld) or netherCarveBlock
+bool carveCaveGeneric(
     const CarvingContext& context,
     const CaveCarverConfiguration& config,
     LevelChunk& chunk,
     RandomSource& random,
     Aquifer& aquifer,
     const ChunkPos& sourceChunkPos,
-    CarvingMask& mask
+    CarvingMask& mask,
+    int caveBound,
+    float (*thicknessFn)(RandomSource&),
+    double tunnelYScale,
+    CarveBlockFn carveBlockFn
 ) {
     const int maxDistance = (4 * 2 - 1) * 16;
-    const int caveCount = random.nextInt(random.nextInt(random.nextInt(15) + 1) + 1);
+    const int caveCount = random.nextInt(random.nextInt(random.nextInt(caveBound) + 1) + 1);
 
     for (int cave = 0; cave < caveCount; ++cave) {
         const double x = sourceChunkPos.x * 16 + random.nextInt(16);
@@ -403,22 +479,54 @@ bool carveCave(
                            horizontalRadius, verticalRadius, mask,
                            [floorLevel](const CarvingContext&, double xd, double yd, double zd, int) {
                                return caveShouldSkip(xd, yd, zd, floorLevel);
-                           });
+                           }, carveBlockFn);
             tunnels += random.nextInt(4);
         }
 
         for (int i = 0; i < tunnels; ++i) {
             const float horizontalRotation = random.nextFloat() * (PI_F * 2.0f);
             const float verticalRotation = (random.nextFloat() - 0.5f) / 4.0f;
-            const float thickness = caveThickness(random);
+            const float thickness = thicknessFn(random);
             const int distance = maxDistance - random.nextInt(maxDistance / 4);
             createCaveTunnel(context, config, chunk, random.nextLong(), aquifer, x, y, z,
                              horizontalRadiusMultiplier, verticalRadiusMultiplier, thickness,
-                             horizontalRotation, verticalRotation, 0, distance, 1.0, mask, floorLevel);
+                             horizontalRotation, verticalRotation, 0, distance, tunnelYScale,
+                             mask, floorLevel, carveBlockFn);
         }
     }
 
     return true;
+}
+
+// Overworld carveCave — thin wrapper around carveCaveGeneric with overworld defaults.
+bool carveCave(
+    const CarvingContext& context,
+    const CaveCarverConfiguration& config,
+    LevelChunk& chunk,
+    RandomSource& random,
+    Aquifer& aquifer,
+    const ChunkPos& sourceChunkPos,
+    CarvingMask& mask
+) {
+    return carveCaveGeneric(context, config, chunk, random, aquifer, sourceChunkPos, mask,
+                            /*caveBound*/ 15, /*thicknessFn*/ caveThickness,
+                            /*tunnelYScale*/ 1.0, /*carveBlockFn*/ carveBlock);
+}
+
+// Nether carveCave — NetherWorldCarver overrides: caveBound=10, nether thickness,
+// yScale=5.0, netherCarveBlock (lava below minY+31, cave_air above).
+bool carveNetherCave(
+    const CarvingContext& context,
+    const CaveCarverConfiguration& config,
+    LevelChunk& chunk,
+    RandomSource& random,
+    Aquifer& aquifer,
+    const ChunkPos& sourceChunkPos,
+    CarvingMask& mask
+) {
+    return carveCaveGeneric(context, config, chunk, random, aquifer, sourceChunkPos, mask,
+                            /*caveBound*/ 10, /*thicknessFn*/ netherCaveThickness,
+                            /*tunnelYScale*/ 5.0, /*carveBlockFn*/ netherCarveBlock);
 }
 
 std::vector<float> initCanyonWidthFactors(const CarvingContext& context, const CanyonCarverConfiguration& config, RandomSource& random) {
@@ -498,7 +606,7 @@ void doCanyonCarve(
                            const int yIndex = y1 - ctx.minGenY;
                            return (xd * xd + zd * zd) * widthFactorPerHeight[static_cast<std::size_t>(yIndex - 1)]
                                   + yd * yd / 6.0 >= 1.0;
-                       });
+                       }, carveBlock);
     }
 }
 
@@ -560,6 +668,21 @@ CanyonCarverConfiguration canyonConfig() {
     return c;
 }
 
+// Configured carver minecraft:nether_cave (26.1.2/data/minecraft/worldgen/
+// configured_carver/nether_cave.json). Verbatim values from the JSON.
+CaveCarverConfiguration netherCaveConfig() {
+    CaveCarverConfiguration c;
+    c.probability = 0.2f;
+    c.y = std::make_shared<UniformHeight>(VerticalAnchors::absolute(0),
+                                          VerticalAnchors::belowTop(1));
+    c.yScale = ConstantFloat::of(0.5f);
+    c.lavaLevel = VerticalAnchors::aboveBottom(10);
+    c.horizontalRadiusMultiplier = ConstantFloat::of(1.0f);
+    c.verticalRadiusMultiplier = ConstantFloat::of(1.0f);
+    c.floorLevel = ConstantFloat::of(-0.7f);
+    return c;
+}
+
 } // namespace
 
 void applyOverworldCarvers(
@@ -616,6 +739,63 @@ void applyOverworldCarvers(
             random.setLargeFeatureSeed(worldSeed + 2, source.x, source.z);
             if (random.nextFloat() <= canyon.probability && (onlyIdx < 0 || onlyIdx == 2)) {
                 carveCanyon(context, canyon, chunk, random, *aquifer, source, mask);
+            }
+        }
+    }
+
+    chunk.computeHeightmap();
+    chunk.meshDirty = true;
+}
+
+// Applies the vanilla nether configured carver: minecraft:nether_cave.
+// The nether has only ONE carver (no canyon, no cave_extra). The carver uses
+// NetherWorldCarver overrides: caveBound=10, nether thickness formula,
+// yScale=5.0, carveBlock placing LAVA below minY+31 / CAVE_AIR above.
+//
+// Java: ChunkGenerator.applyCarvers for the nether dimension iterates the
+// nether's configured carvers list (which contains only nether_cave). The
+// scan window is 17×17 source chunks (getRange()=4 → 2*4+1=9 per side, but
+// Java iterates -8..8 = 17 — matches overworld).
+void applyNetherCarvers(
+    LevelChunk& chunk,
+    std::int64_t worldSeed,
+    const NoiseGeneratorSettings& settings,
+    const NoiseRouter& router,
+    std::shared_ptr<PositionalRandomFactory> aquiferRandom,
+    const std::function<int(int, int)>& preliminarySurface,
+    const TopMaterialGetter& topMaterial,
+    std::vector<mc::BlockPos>* fluidUpdateMarks
+) {
+    const int minY = settings.noiseSettings.minY;
+    const int height = settings.noiseSettings.height;
+    CarvingContext context{
+        WorldGenerationContext(minY, height),
+        minY,
+        height,
+        topMaterial,
+        fluidUpdateMarks
+    };
+    CarvingMask mask(height, minY);
+
+    auto fluidPicker = Aquifer::createFluidPicker(settings);
+    std::unique_ptr<Aquifer> aquifer = settings.isAquifersEnabled()
+        ? Aquifer::create(preliminarySurface, chunk.pos().x * 16, chunk.pos().z * 16,
+                          router, std::move(aquiferRandom), minY, height, std::move(fluidPicker))
+        : Aquifer::createDisabled(std::move(fluidPicker));
+
+    const CaveCarverConfiguration netherCave = netherCaveConfig();
+    WorldgenRandom random(std::make_shared<LegacyRandomSource>(0));
+
+    for (int dx = -8; dx <= 8; ++dx) {
+        for (int dz = -8; dz <= 8; ++dz) {
+            const ChunkPos source{ chunk.pos().x + dx, chunk.pos().z + dz };
+
+            // Java: setLargeFeatureSeed with the carver's seed offset (0 for the
+            // first/only nether carver). The isStartChunk gate uses the carver's
+            // probability (0.2 for nether_cave).
+            random.setLargeFeatureSeed(worldSeed + 0, source.x, source.z);
+            if (random.nextFloat() <= netherCave.probability) {
+                carveNetherCave(context, netherCave, chunk, random, *aquifer, source, mask);
             }
         }
     }

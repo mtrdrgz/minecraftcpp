@@ -33,4 +33,17 @@ void applyOverworldCarvers(
     const TopMaterialGetter& topMaterial,
     std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr);
 
+// Applies the vanilla nether configured carver: minecraft:nether_cave.
+// Uses NetherWorldCarver overrides (caveBound=10, nether thickness, yScale=5.0,
+// carveBlock placing LAVA below minY+31 / CAVE_AIR above).
+void applyNetherCarvers(
+    LevelChunk& chunk,
+    std::int64_t worldSeed,
+    const NoiseGeneratorSettings& settings,
+    const NoiseRouter& router,
+    std::shared_ptr<PositionalRandomFactory> aquiferRandom,
+    const std::function<int(int, int)>& preliminarySurface,
+    const TopMaterialGetter& topMaterial,
+    std::vector<mc::BlockPos>* fluidUpdateMarks = nullptr);
+
 } // namespace mc::levelgen::carver

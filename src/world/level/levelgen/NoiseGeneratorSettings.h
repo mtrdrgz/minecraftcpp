@@ -20,6 +20,13 @@ struct NoiseGeneratorSettings {
     bool aquifersEnabled = false;
     bool oreVeinsEnabled = false;
     bool useLegacyRandomSource = false;
+    // Overworld-only flags (Java's NoiseGeneratorSettings.overworld(context,
+    // isAmplified, largeBiomes)). Used by makeRouter to pick the correct
+    // NoiseRouterData::overworld(randomState, largeBiomes, amplified) variant.
+    // Named with the `Flag` suffix to avoid clashing with the static factory
+    // methods largeBiomes()/amplified() of the same name.
+    bool largeBiomesFlag = false;
+    bool amplifiedFlag = false;
 
     bool isAquifersEnabled() const;
     bool areOreVeinsEnabled() const;
