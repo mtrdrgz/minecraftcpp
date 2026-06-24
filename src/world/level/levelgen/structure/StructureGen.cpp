@@ -2099,7 +2099,15 @@ bool Runtime::tryPlaceMineshaft(ChunkPos active, const StructureWorld& world, bo
         static_cast<int32_t>(mc::levelgen::feature::GenerationStep::UNDERGROUND_STRUCTURES));
 
     std::size_t pieceCount = 0;
+    // Java StructureStart.placeInChunk: only place pieces whose bounding box
+    // intersects the current chunk's bounding box (chunkBB). Without this gate,
+    // pieces from neighboring chunks' mineshafts get written into this chunk,
+    // causing block mismatches at chunk boundaries.
+    const BoundingBox chunkBB{
+        active.x * 16, kMinBuildY, active.z * 16,
+        active.x * 16 + 15, kMaxBuildYInclusive, active.z * 16 + 15};
     for (const auto& p : pieces) {
+        if (!p.box.intersects(chunkBB)) continue;
         msp::postProcessMsPiece(access, type, p, *random);
         ++pieceCount;
     }

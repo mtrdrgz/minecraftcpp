@@ -242,13 +242,15 @@ inline bool msIsLiquid(MineShaftWorldAccess& w, int x, int y, int z) {
 
 // MineShaftPiece.isInInvalidLocation [1003-1052] — liquid check only
 // (GAP: biome MINESHAFT_BLOCKING tag check omitted — tag not loaded).
+// Java clamps to chunkBB (the chunk's bounding box). We don't have chunkBB
+// here, so we clamp X/Z to the piece bb±1 and Y to world bounds.
 inline bool msIsInInvalidLocation(MineShaftWorldAccess& w, const ::mc::levelgen::structure::BoundingBox& bb) {
-    int x0 = std::max(bb.minX - 1, bb.minX);
+    int x0 = bb.minX - 1;
     int y0 = std::max(bb.minY - 1, w.minY);
-    int z0 = std::max(bb.minZ - 1, bb.minZ);
-    int x1 = std::min(bb.maxX + 1, bb.maxX);
+    int z0 = bb.minZ - 1;
+    int x1 = bb.maxX + 1;
     int y1 = std::min(bb.maxY + 1, w.minY + 384);
-    int z1 = std::min(bb.maxZ + 1, bb.maxZ);
+    int z1 = bb.maxZ + 1;
     for (int x = x0; x <= x1; x++)
         for (int z = z0; z <= z1; z++) {
             if (msIsLiquid(w, x, y0, z)) return true;
