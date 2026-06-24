@@ -448,6 +448,12 @@ std::function<bool(WorldGenLevel&, BlockPos)> loadBlockPredicate(const json& j) 
         const auto& o = j.at("offset");
         off = { o.at(0).get<int>(), o.at(1).get<int>(), o.at(2).get<int>() };
     }
+    // TrueBlockPredicate (TrueBlockPredicate.java): always returns true. Used as
+    // the default allowed_search_condition in EnvironmentScanPlacement and in
+    // some rule_based_state_provider rules.
+    if (t == "true") {
+        return [](WorldGenLevel&, BlockPos) { return true; };
+    }
     if (t == "matching_blocks") {
         auto member = loadHolderSet(j.at("blocks"), g_tags);
         return [member, off](WorldGenLevel& level, BlockPos p) {
@@ -826,6 +832,20 @@ std::shared_ptr<const PlacementModifier> loadModifier(const json& j, const std::
         return std::make_shared<EnvironmentScanPlacement>(
             dir == "up" ? 1 : -1, std::move(target), std::move(allowed),
             j.at("max_steps").get<int>(), mc::CHUNK_MIN_Y, mc::CHUNK_MAX_Y);
+    }
+    // FixedPlacement (FixedPlacement.java): fixed positions list, filtered to
+    // the origin's chunk. No RNG draws.
+    if (t == "fixed") {
+        std::vector<mc::BlockPos> positions;
+        for (const auto& p : j.at("positions")) {
+            positions.push_back(mc::BlockPos{ p.at(0).get<int>(), p.at(1).get<int>(), p.at(2).get<int>() });
+        }
+        return std::make_shared<FixedPlacement>(std::move(positions));
+    }
+    // CountOnEveryLayerPlacement (CountOnEveryLayerPlacement.java): per-layer
+    // count sample, walk down from MOTION_BLOCKING to find each layer's Y.
+    if (t == "count_on_every_layer") {
+        return std::make_shared<CountOnEveryLayerPlacement>(loadIntProvider(j.at("count")));
     }
     throw std::runtime_error("unsupported placement modifier: " + t);
 }
@@ -3429,6 +3449,153 @@ struct DecorationResolver {
                 fh->levelMaxY = mc::CHUNK_MAX_Y - 1;
                 fh->structureDir = dataDir + "/structure";
                 placer = mc::levelgen::feature::makeFossilPlacer(std::move(fc), std::move(fh));
+            } else if (type == "scattered_ore") {
+                // ScatteredOreFeature (ScatteredOreFeature.java): same OreConfiguration
+                // as `ore` but places `nextInt(size+1)` scattered tries, each offset by
+                // round((nextFloat()-nextFloat()) * min(i,7)) on each axis. Uses the
+                // same OreFeature.canPlaceOre gate.
+                const json& cc = cfgJson.at("config");
+                const int size = cc.at("size").get<int>();
+                const float discard = cc.at("discard_chance_on_air_exposure").get<float>();
+                std::vector<mc::levelgen::feature::OreTarget> targets;
+                for (const auto& tj : cc.at("targets")) {
+                    const std::string st = stateName(tj.at("state"));
+                    oreFamily.insert(st);
+                    targets.push_back({ loadRuleTest(tj.at("target")), st });
+                }
+                placer = [size, discard, targets = std::move(targets)](
+                             WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+                    const int numberOfTries = random.nextInt(size + 1);
+                    for (int i = 0; i < numberOfTries; ++i) {
+                        const int maxDist = std::min(i, 7);
+                        // getRandomPlacementInOneAxisRelativeToOrigin: round((nextFloat()-nextFloat())*maxDist)
+                        // Draw order: x, y, z (each draws 2 floats).
+                        const float xf1 = random.nextFloat(), xf2 = random.nextFloat();
+                        const float yf1 = random.nextFloat(), yf2 = random.nextFloat();
+                        const float zf1 = random.nextFloat(), zf2 = random.nextFloat();
+                        const int xd = std::lround((xf1 - xf2) * maxDist);
+                        const int yd = std::lround((yf1 - yf2) * maxDist);
+                        const int zd = std::lround((zf1 - zf2) * maxDist);
+                        BlockPos targetPos{ origin.x + xd, origin.y + yd, origin.z + zd };
+                        const std::string blockState = level.getBlockState(targetPos);
+                        for (const auto& target : targets) {
+                            if (target.target(blockState, random)) {
+                                level.setBlock(targetPos, target.state, 2);
+                                break;
+                            }
+                        }
+                    }
+                    return true;
+                };
+            } else if (type == "replace_block") {
+                // ReplaceBlockFeature (ReplaceBlockFeature.java): at origin, if the
+                // block matches the target RuleTest, replace it with the state.
+                const json& cc = cfgJson.at("config");
+                auto target = loadRuleTest(cc.at("target"));
+                const std::string state = stateName(cc.at("state"));
+                placer = [target = std::move(target), state](
+                             WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+                    if (target(level.getBlockState(origin), random)) {
+                        level.setBlock(origin, state, 2);
+                    }
+                    return true;
+                };
+            } else if (type == "replace_blobs") {
+                // ReplaceBlobsFeature (ReplaceBlobsFeature.java): find target block
+                // by walking down from origin; sample radius 3 times (x,y,z); replace
+                // all target-block cells within the Manhattan ellipsoid.
+                const json& cc = cfgJson.at("config");
+                const std::string targetState = stateName(cc.at("target_state"));
+                const std::string replaceState = stateName(cc.at("replace_state"));
+                auto radius = loadIntProvider(cc.at("radius"));
+                // Extract target block name (strip properties).
+                const std::string targetBlock = mc::block::blockName(targetState);
+                placer = [targetBlock, replaceState, radius = std::move(radius)](
+                             WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+                    // findTarget: walk down from origin (clamped to [minY+1, maxY])
+                    // until we find the target block.
+                    int y = std::max(origin.y, level.getMinY() + 1);
+                    BlockPos center{ origin.x, y, origin.z };
+                    bool found = false;
+                    while (y > level.getMinY() + 1) {
+                        if (mc::block::blockName(level.getBlockState(center)) == targetBlock) {
+                            found = true;
+                            break;
+                        }
+                        --y;
+                        center = BlockPos{ origin.x, y, origin.z };
+                    }
+                    if (!found) return false;
+                    const int rx = radius->sample(random);
+                    const int ry = radius->sample(random);
+                    const int rz = radius->sample(random);
+                    const int maxR = std::max(rx, std::max(ry, rz));
+                    bool replacedAny = false;
+                    // BlockPos.withinManhattan(center, rx, ry, rz) — iterate the
+                    // diamond shape. Java breaks when distManhattan > maxR.
+                    for (int dy = -ry; dy <= ry; ++dy) {
+                        for (int dx = -rx; dx <= rx; ++dx) {
+                            for (int dz = -rz; dz <= rz; ++dz) {
+                                const int dist = std::abs(dx) + std::abs(dy) + std::abs(dz);
+                                if (dist > maxR) continue;  // withinManhattan skips these
+                                BlockPos pos{ center.x + dx, center.y + dy, center.z + dz };
+                                if (mc::block::blockName(level.getBlockState(pos)) == targetBlock) {
+                                    level.setBlock(pos, replaceState, 2);
+                                    replacedAny = true;
+                                }
+                            }
+                        }
+                    }
+                    return replacedAny;
+                };
+            } else if (type == "block_pile") {
+                // BlockPileFeature (BlockPileFeature.java): place a pile of blocks
+                // in a small ellipsoid around origin. Gates on isEmptyBlock + mayPlaceOn.
+                const json& cc = cfgJson.at("config");
+                auto stateProvider = loadStateProvider(cc.at("state_provider"));
+                placer = [stateProvider = std::move(stateProvider)](
+                             WorldGenLevel& level, RandomSource& random, BlockPos origin) -> bool {
+                    if (origin.y < level.getMinY() + 5) return false;
+                    const int xr = 2 + random.nextInt(2);
+                    const int zr = 2 + random.nextInt(2);
+                    for (int y = 0; y <= 1; ++y) {
+                        for (int x = -xr; x <= xr; ++x) {
+                            for (int z = -zr; z <= zr; ++z) {
+                                BlockPos pos{ origin.x + x, origin.y + y, origin.z + z };
+                                const int xd = origin.x - pos.x;
+                                const int zd = origin.z - pos.z;
+                                // Draw order: nextFloat for distance, nextFloat for offset.
+                                const float df1 = random.nextFloat();
+                                const float df2 = random.nextFloat();
+                                if (xd * xd + zd * zd <= df1 * 10.0f - df2 * 6.0f) {
+                                    // tryPlaceBlock
+                                    if (level.isEmptyBlock(pos)) {
+                                        BlockPos below{ pos.x, pos.y - 1, pos.z };
+                                        const std::string belowState = level.getBlockState(below);
+                                        bool mayPlace = (belowState == "minecraft:dirt_path" && random.nextBoolean()) ||
+                                                        mc::block::isFaceSturdyFull(belowState, 1);
+                                        if (mayPlace) {
+                                            auto s = stateProvider(level, random, pos);
+                                            if (s) level.setBlock(pos, *s, 260);
+                                        }
+                                    }
+                                } else if (random.nextFloat() < 0.031f) {
+                                    if (level.isEmptyBlock(pos)) {
+                                        BlockPos below{ pos.x, pos.y - 1, pos.z };
+                                        const std::string belowState = level.getBlockState(below);
+                                        bool mayPlace = (belowState == "minecraft:dirt_path" && random.nextBoolean()) ||
+                                                        mc::block::isFaceSturdyFull(belowState, 1);
+                                        if (mayPlace) {
+                                            auto s = stateProvider(level, random, pos);
+                                            if (s) level.setBlock(pos, *s, 260);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                };
             } else {
                 // Not yet ported: throw — resolveFeature records the hard no-op.
                 throw UnportedFeatureType{ type };

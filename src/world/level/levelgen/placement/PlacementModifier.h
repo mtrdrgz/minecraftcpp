@@ -84,4 +84,25 @@ private:
     IntProviderPtr m_xzSpread, m_ySpread;
 };
 
+// FixedPlacement (FixedPlacement.java): returns the fixed positions that fall
+// in the origin's chunk. No RNG draws.
+class FixedPlacement final : public PlacementModifier {
+public:
+    explicit FixedPlacement(std::vector<BlockPos> positions) : m_positions(std::move(positions)) {}
+    std::vector<BlockPos> getPositions(PlacementContext* /*ctx*/, RandomSource&, BlockPos origin) const override {
+        const int chunkX = origin.x >> 4;
+        const int chunkZ = origin.z >> 4;
+        std::vector<BlockPos> out;
+        for (const BlockPos& pos : m_positions) {
+            if ((pos.x >> 4) == chunkX && (pos.z >> 4) == chunkZ) {
+                out.push_back(pos);
+            }
+        }
+        return out;
+    }
+
+private:
+    std::vector<BlockPos> m_positions;
+};
+
 } // namespace mc::levelgen::placement

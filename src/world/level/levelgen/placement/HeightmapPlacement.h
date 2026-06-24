@@ -145,4 +145,69 @@ private:
     int m_levelMinY, m_levelMaxY;
 };
 
+// CountOnEveryLayerPlacement (CountOnEveryLayerPlacement.java): for each layer
+// from 0 upward, sample count positions; for each, find the Y at that layer by
+// walking down from MOTION_BLOCKING height, counting non-empty→empty
+// transitions. Repeat until a layer produces no positions.
+class CountOnEveryLayerPlacement final : public PlacementModifier {
+public:
+    explicit CountOnEveryLayerPlacement(IntProviderPtr count) : m_count(std::move(count)) {}
+
+    std::vector<BlockPos> getPositions(PlacementContext* ctx, RandomSource& random, BlockPos origin) const override {
+        std::vector<BlockPos> positions;
+        int layer = 0;
+        bool foundAny;
+        do {
+            foundAny = false;
+            const int n = m_count->sample(random);
+            for (int i = 0; i < n; ++i) {
+                const int x = random.nextInt(16) + origin.x;
+                const int z = random.nextInt(16) + origin.z;
+                const int startY = ctx->getHeight(Heightmap::Types::MOTION_BLOCKING, x, z);
+                const int y = findOnGroundY(ctx, x, startY, z, layer);
+                if (y != std::numeric_limits<int>::max()) {
+                    positions.push_back(BlockPos{ x, y, z });
+                    foundAny = true;
+                }
+            }
+            ++layer;
+        } while (foundAny);
+        return positions;
+    }
+
+private:
+    IntProviderPtr m_count;
+
+    // CountOnEveryLayerPlacement.findOnGroundYPosition (java:65-84): walk down
+    // from yStart; a "layer" is a transition where belowBlock is non-empty,
+    // currentBlock is empty, and belowBlock is not bedrock. Return the Y above
+    // the belowBlock at the requested layer, or INT_MAX.
+    static int findOnGroundY(PlacementContext* ctx, int x, int yStart, int z, int layerToPlaceOn) {
+        WorldGenLevel& level = *ctx->getLevel();
+        std::string currentBlock = level.getBlockState(BlockPos{ x, yStart, z });
+        int currentLayer = 0;
+        for (int y = yStart; y >= ctx->getMinY() + 1; --y) {
+            const std::string belowBlock = level.getBlockState(BlockPos{ x, y - 1, z });
+            // isEmpty: isAir() || is(WATER) || is(LAVA)
+            const bool belowEmpty = isStateEmpty(belowBlock);
+            const bool currentEmpty = isStateEmpty(currentBlock);
+            const bool belowIsBedrock = belowBlock == "minecraft:bedrock";
+            if (!belowEmpty && currentEmpty && !belowIsBedrock) {
+                if (currentLayer == layerToPlaceOn) {
+                    return y;  // (y-1) + 1 = y
+                }
+                ++currentLayer;
+            }
+            currentBlock = belowBlock;
+        }
+        return std::numeric_limits<int>::max();
+    }
+
+    static bool isStateEmpty(const std::string& state) {
+        return state == "minecraft:air" || state == "minecraft:cave_air" ||
+               state == "minecraft:void_air" ||
+               state == "minecraft:water" || state == "minecraft:lava";
+    }
+};
+
 } // namespace mc::levelgen::placement
