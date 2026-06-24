@@ -392,13 +392,29 @@ NoiseBasedChunkGenerator::NoiseBasedChunkGenerator(NoiseGeneratorSettings settin
     m_router        = makeRouter(m_settings, randomState);
     m_router.finalDensity = DensityFunctions::cacheAllInCell(m_router.finalDensity);
 
-    // Pick the appropriate surface rule for this dimension
+    // Pick the appropriate surface rule + biome source for this dimension.
+    // Java: ChunkGenerator overworld uses MultiNoiseBiomeSource(overworld preset),
+    // nether uses MultiNoiseBiomeSource(nether preset), end uses TheEndBiomeSource.
+    // The router is already dimension-correct (makeRouter above dispatches on
+    // defaultBlock == netherrack/end_stone).
     uint32_t netherrack = getDefaultBlockStateId("netherrack", UINT32_MAX);
     uint32_t endStone   = getDefaultBlockStateId("end_stone",  UINT32_MAX);
     if (m_settings.defaultBlock == netherrack) {
         m_surfaceRuleSource = SurfaceRuleData::nether();
+        // Nether: 5-biome MultiNoiseBiomeSource (nether_wastes, soul_sand_valley,
+        // crimson_forest, warped_forest, basalt_deltas).
+        m_biomeSource = std::make_unique<BiomeSource>(BiomeSource::createNether(m_router));
+        m_biomeManager = std::make_unique<BiomeManager>(
+            *m_biomeSource,
+            BiomeManager::obfuscateSeed(static_cast<int64_t>(m_seed)));
     } else if (m_settings.defaultBlock == endStone) {
         m_surfaceRuleSource = SurfaceRuleData::end();
+        // End: TheEndBiomeSource — erosion-based, NOT climate. 5 biomes
+        // (the_end, end_highlands, end_midlands, small_end_islands, end_barrens).
+        m_biomeSource = std::make_unique<BiomeSource>(BiomeSource::createEnd(m_router));
+        m_biomeManager = std::make_unique<BiomeManager>(
+            *m_biomeSource,
+            BiomeManager::obfuscateSeed(static_cast<int64_t>(m_seed)));
     } else {
         m_surfaceRuleSource = SurfaceRuleData::overworld();
         m_biomeSource = std::make_unique<BiomeSource>(m_router);
