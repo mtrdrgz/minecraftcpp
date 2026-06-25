@@ -21,37 +21,10 @@ set(MC_SOURCES
     world/level/block/Blocks.cpp
     world/level/chunk/PalettedContainer.cpp
     world/level/chunk/LevelChunk.cpp
-    # World — Levelgen
-    world/level/levelgen/Aquifer.cpp
-    world/level/levelgen/CubicSpline.cpp
-    world/level/levelgen/DensityFunction.cpp
-    world/level/levelgen/Noise.cpp
-    world/level/levelgen/Noises.cpp
-    world/level/levelgen/OreVeinifier.cpp
-    world/level/levelgen/RandomSource.cpp
-    world/level/levelgen/RandomState.cpp
-    world/level/levelgen/TerrainProvider.cpp
-    world/level/levelgen/NoiseRouterData.cpp
-    world/level/levelgen/NoiseSettings.cpp
-    world/level/levelgen/NoiseGeneratorSettings.cpp
-    world/level/levelgen/SurfaceRules.cpp
-    world/level/levelgen/SurfaceSystem.cpp
-    world/level/levelgen/SurfaceRuleData.cpp
-    world/level/levelgen/carver/WorldCarver.cpp
-    world/level/levelgen/BiomeSource.cpp
-    world/level/levelgen/BiomeManager.cpp
+    # World — Levelgen (unified into a single compilation unit)
+    world/level/levelgen/WorldGen.cpp
     world/level/biome/BiomeRegistry.cpp
-    world/level/levelgen/OverworldBiomeBuilder.cpp
-    world/level/levelgen/NoiseBasedChunkGenerator.cpp
-    # World — Levelgen / feature decoration
     world/level/block/BlockTags.cpp
-    world/level/levelgen/feature/BiomeFeatures.cpp
-    world/level/levelgen/feature/BiomeDecorator.cpp
-    world/level/levelgen/feature/FullChunkDecorateParityTest.cpp
-    world/level/levelgen/feature/TreeGen.cpp
-    world/level/levelgen/feature/OreGen.cpp
-    world/level/levelgen/structure/StructureGen.cpp
-    world/level/levelgen/structure/placement/StructurePlacement.cpp
     # World — Item
     world/item/Item.cpp
     world/item/Items.cpp
