@@ -103,18 +103,21 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <set>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -210,14 +213,44 @@ std::uint32_t stateIdWithProperty(std::uint32_t stateId, const std::string& key,
     return "26.1.2/data/minecraft";
 }
 
-const mc::block::BlockTags* g_tags = nullptr;        // data/minecraft/tags/block
-const mc::block::BlockTags* g_fluidTags = nullptr;   // data/minecraft/tags/fluid
-long long g_oreRuns = 0, g_orePlacedOk = 0;          // diagnostics
-long long g_vegRuns = 0, g_vegPlacedOk = 0;
+const mc::block::BlockTags* g_tags = nullptr;        // data/minecraft/tags/block  (read-only after init)
+const mc::block::BlockTags* g_fluidTags = nullptr;   // data/minecraft/tags/fluid (read-only after init)
+// Diagnostics counters — atomic so multiple decoration workers can increment
+// concurrently without losing updates. The parity harness reads these at the
+// end of a case; the engine never reads them at runtime.
+std::atomic<long long> g_oreRuns{0}, g_orePlacedOk{0};
+std::atomic<long long> g_vegRuns{0}, g_vegPlacedOk{0};
+// g_unportedType is populated once at resolver-construction time (single-threaded
+// init), then only read at runtime — safe to share across workers without locking.
 std::map<std::string, std::string> g_unportedType;   // featureKey -> configured type (hard no-ops)
+// g_unportedSkips is mutated per-feature during decoration — guard with a mutex.
 std::map<std::string, long long> g_unportedSkips;    // configured type -> skipped RUNS
+std::mutex g_unportedSkipsMutex;
+// g_blocksMotionDefaulted / g_solidRenderDefaulted are populated by the block
+// property table lookups, which run during decoration. Guard with a mutex to
+// make insertion thread-safe (lookup-then-insert is not atomic without it).
 std::set<std::string> g_blocksMotionDefaulted;       // block ids the table defaulted (must be empty)
+std::mutex g_blocksMotionDefaultedMutex;
 std::set<std::string> g_solidRenderDefaulted;        // isSolidRender defaults (must be empty)
+std::mutex g_solidRenderDefaultedMutex;
+
+// Helper: thread-safe insert into the diagnostics sets. The sets are only
+// inspected at end-of-run by the parity harness; in the engine they exist
+// only as a safety net to catch unported block properties. The lock is
+// uncontended in single-threaded mode (no overhead) and serializes inserts
+// under multi-threaded decoration.
+inline void recordBlocksMotionDefaulted(const std::string& name) {
+    std::lock_guard<std::mutex> lk(g_blocksMotionDefaultedMutex);
+    recordBlocksMotionDefaulted(name);
+}
+inline void recordSolidRenderDefaulted(const std::string& name) {
+    std::lock_guard<std::mutex> lk(g_solidRenderDefaultedMutex);
+    recordSolidRenderDefaulted(name);
+}
+inline void recordUnportedSkip(const std::string& type) {
+    std::lock_guard<std::mutex> lk(g_unportedSkipsMutex);
+    recordUnportedSkip(type);
+}
 
 // Thrown by the configured-feature loader for a clean "type not yet ported"
 // (recorded as a hard no-op, not a load failure).
@@ -247,7 +280,7 @@ const StateFlags& stateFlagsForId(std::uint32_t id) {
         f.blocksMotion = mc::block::blocksMotion(name, &defaulted);
         f.hasFluid = !mc::material::fluidStateOf(name).isEmpty();
         f.isLeaves = mc::block::isLeavesBlock(name);
-        if (defaulted) g_blocksMotionDefaulted.insert(name);
+        if (defaulted) recordBlocksMotionDefaulted(name);
         memo[id] = f;
     }
     return *memo[id];
@@ -295,23 +328,31 @@ struct DecoBiomeContext {
         return false;
     }
 };
-const DecoBiomeContext* g_biomeCtx = nullptr;   // set per case before decorating
+// Per-turn decoration state — thread_local so each decoration worker has its
+// own copy. Single-threaded behaviour is identical to the previous globals:
+// prepareFeatureTurn() sets these per-call, and a single thread sees its own
+// writes in order. Multi-threaded decoration is now safe as long as the
+// underlying MultiChunkLevel mutations are also synchronized (see the
+// per-chunk mutex in MultiChunkLevel).
+thread_local const DecoBiomeContext* g_biomeCtx = nullptr;   // set per case before decorating
 
 // Per-biome climate settings (Biome.ClimateSettings codec: has_precipitation,
 // temperature, optional temperature_modifier), loaded once from the biome JSONs;
 // fail-closed lookup for freeze_top_layer / lake freeze.
 std::map<std::string, mc::levelgen::feature::BiomeClimate> g_biomeClimate;
-long long g_curLevelSeed = 0;                   // level.getSeed() for the running case
-long long g_skippedScheduleTicks = 0;           // scheduleTick: needs a ServerLevel (hard no-op, counted)
+thread_local long long g_curLevelSeed = 0;                   // level.getSeed() for the running case
+// Diagnostics counters — atomic so multiple decoration workers can increment
+// concurrently without losing updates.
+std::atomic<long long> g_skippedScheduleTicks{0};           // scheduleTick: needs a ServerLevel (hard no-op, counted)
 
 // The per-case level, reachable from cached feature placers (the multiface side
 // map and postprocess marks live on it). Set/cleared alongside g_biomeCtx.
 class MultiChunkLevel;
-MultiChunkLevel* g_level = nullptr;
+thread_local MultiChunkLevel* g_level = nullptr;
 // Debug attribution: the placed feature currently running + decorating chunk
 // (MCPP_WATCH=x,y,z prints every write at that cell with its owner).
-std::string g_curFeatureKey = "?";
-int g_curTurnCx = 0, g_curTurnCz = 0;
+thread_local std::string g_curFeatureKey = "?";
+thread_local int g_curTurnCx = 0, g_curTurnCz = 0;
 
 // WorldGenRegion.getRandom() (WorldGenRegion.java:69,86,386-388): one stateful
 // RandomSource per decoration turn, from the "minecraft:worldgen_region_random"
@@ -319,7 +360,7 @@ int g_curTurnCx = 0, g_curTurnCz = 0;
 // minBlockZ). Reset at every turn start, exactly as the Java GT's REGION_RANDOM
 // (FullChunkDecorateParity.java:646). Sole worldgen consumer: MossyCarpetBlock
 // .placeAt's topper nextBoolean draws (SimpleBlockFeature.java:33-35).
-std::shared_ptr<RandomSource> g_regionRandom;
+thread_local std::shared_ptr<RandomSource> g_regionRandom;
 
 // ---- minimal loaders (throw on anything else: fail-closed) ----
 IntProviderPtr loadIntProvider(const json& j) {
@@ -526,7 +567,7 @@ std::function<bool(WorldGenLevel&, BlockPos)> loadBlockPredicate(const json& j) 
             const std::string st = level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] });
             bool defaulted = false;
             const bool r = mc::block::isFaceSturdyFull(st, dirIdx, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(st));
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(st));
             return r;
         };
     }
@@ -536,7 +577,7 @@ std::function<bool(WorldGenLevel&, BlockPos)> loadBlockPredicate(const json& j) 
             bool defaulted = false;
             const bool r = mc::block::isSolid(
                 level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] }), &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(
                 level.getBlockState(BlockPos{ p.x + off[0], p.y + off[1], p.z + off[2] })));
             return r;
         };
@@ -1217,7 +1258,7 @@ public:
             if (attached == "minecraft:kelp" || attached == "minecraft:kelp_plant") return true;
             bool defaulted = false;
             const bool sturdy = mc::block::isFaceSturdyUp(attached, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(attached);
+            if (defaulted) recordBlocksMotionDefaulted(attached);
             return sturdy;
         }
         // VegetationBlock.canSurvive (VegetationBlock.java:44-47): mayPlaceOn(below)
@@ -1265,7 +1306,7 @@ public:
             if (g_tags->isInTag(below, "minecraft:overrides_mushroom_light_requirement")) return true;
             bool defaulted = false;
             const bool solid = mc::block::isSolidRender(below, &defaulted);
-            if (defaulted) g_solidRenderDefaulted.insert(below);
+            if (defaulted) recordSolidRenderDefaulted(below);
             return solid;
         }
         // PumpkinBlock / MelonBlock extend Block: canSurvive is the Block default (true);
@@ -1277,7 +1318,7 @@ public:
         if (block == "minecraft:leaf_litter") {
             bool defaulted = false;
             const bool sturdy = mc::block::isFaceSturdyUp(mc::block::blockName(getBlockState(belowPos)), &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(getBlockState(belowPos)));
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(getBlockState(belowPos)));
             return sturdy;
         }
         // CactusBlock.canSurvive (CactusBlock.java:113-123): every horizontal
@@ -1290,7 +1331,7 @@ public:
                 const std::string neighbor = getBlockState(np);
                 bool defaulted = false;
                 const bool solid = mc::block::isSolid(neighbor, &defaulted);
-                if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(neighbor));
+                if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(neighbor));
                 if (solid || mc::material::fluidStateOf(neighbor).is(*g_fluidTags, "minecraft:lava")) return false;
             }
             const std::string below = mc::block::blockName(getBlockState(belowPos));
@@ -1333,7 +1374,7 @@ public:
             bool defaulted = false;
             const bool r = mc::block::isFaceSturdyFull(
                 mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z })), 0, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z })));
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z })));
             return r;
         }
         // CaveVinesBlock/CaveVinesPlantBlock via GrowingPlantBlock.canSurvive
@@ -1345,7 +1386,7 @@ public:
             if (above == "minecraft:cave_vines" || above == "minecraft:cave_vines_plant") return true;
             bool defaulted = false;
             const bool r = mc::block::isFaceSturdyFull(above, 0, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(above);
+            if (defaulted) recordBlocksMotionDefaulted(above);
             return r;
         }
         // SporeBlossomBlock.canSurvive (SporeBlossomBlock.java:35-37):
@@ -1356,7 +1397,7 @@ public:
             const std::string above = mc::block::blockName(getBlockState(BlockPos{ pos.x, pos.y + 1, pos.z }));
             bool defaulted = false;
             const bool sturdy = mc::block::isFaceSturdyFull(above, 0, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(above);
+            if (defaulted) recordBlocksMotionDefaulted(above);
             return sturdy && getBlockState(pos) != "minecraft:water";
         }
         // CarpetBlock.canSurvive (CarpetBlock.java:50-52): below not empty.
@@ -1414,7 +1455,7 @@ public:
             bool defaulted = false;
             const bool r = mc::block::isCollisionFaceFullUp(below, &defaulted)
                 || mc::block::isFaceSturdyUp(below, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(below);
+            if (defaulted) recordBlocksMotionDefaulted(below);
             return r;
         }
         // MossyCarpetBlock.canSurvive (MossyCarpetBlock.java:104-107): worldgen
@@ -1434,7 +1475,7 @@ public:
             const std::string below = mc::block::blockName(getBlockState(belowPos));
             bool defaulted = false;
             const bool r = mc::block::isFaceSturdyUp(below, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(below);
+            if (defaulted) recordBlocksMotionDefaulted(below);
             return r;
         }
         // SnowLayerBlock.canSurvive (SnowLayerBlock.java:77-86): below
@@ -1447,7 +1488,7 @@ public:
             if (g_tags->isInTag(below, "minecraft:support_override_snow_layer")) return true;
             bool defaulted = false;
             const bool full = mc::block::isCollisionFaceFullUp(below, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(below);
+            if (defaulted) recordBlocksMotionDefaulted(below);
             return full;
         }
         throw std::logic_error("canSurvive not ported for " + block);
@@ -1471,7 +1512,7 @@ private:
         const std::string below = mc::block::blockName(getBlockState(belowPos));
         bool defaulted = false;
         const bool sturdy = mc::block::isFaceSturdyUp(below, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(below);
+        if (defaulted) recordBlocksMotionDefaulted(below);
         return sturdy && !g_tags->isInTag(below, "minecraft:cannot_support_seagrass");
     }
     mc::LevelChunk* at(int cx, int cz) const {
@@ -1825,7 +1866,7 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
             bool defaulted = false;
             const bool sturdy = mc::block::isFaceSturdyFull(
                 level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z }), 1, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z })));
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z })));
             if (!sturdy) return "minecraft:air";
         }
         return bs;
@@ -1935,7 +1976,7 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
             const std::string rel = level.getBlockState(mc::levelgen::feature::treeRelative(pos, OPP[facing]));
             bool defaulted = false;
             const bool sturdy = mc::block::isFaceSturdyFull(rel, facing, &defaulted);
-            if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(rel));
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(rel));
             if (!sturdy) return "minecraft:air";
         }
         return bs;
@@ -2363,7 +2404,7 @@ int parseDirection(const std::string& d) {
 bool isFaceSturdyUpState(const std::string& s) {
     bool defaulted = false;
     const bool r = mc::block::isFaceSturdyUp(s, &defaulted);
-    if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+    if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
     return r;
 }
 
@@ -2472,7 +2513,7 @@ struct DecorationResolver {
     treeHooks->isSolidRender = [](const std::string& s) {
         bool defaulted = false;
         const bool r = mc::block::isSolidRender(s, &defaulted);
-        if (defaulted) g_solidRenderDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordSolidRenderDefaulted(mc::block::blockName(s));
         return r;
     };
     treeHooks->optionalDistanceAt = [](BlockPos p) -> std::optional<int> {
@@ -2516,7 +2557,7 @@ struct DecorationResolver {
     monsterHooks->isSolid = [](const std::string& s) {
         bool defaulted = false;
         const bool r = mc::block::isSolid(s, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
         return r;
     };
     monsterHooks->isAir = [](const std::string& s) { return mc::block::isAirBlock(s); };
@@ -2559,7 +2600,7 @@ struct DecorationResolver {
     lakeHooks->isSolid = [](const std::string& s) {
         bool defaulted = false;
         const bool r = mc::block::isSolid(s, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
         return r;
     };
     lakeHooks->isLiquid = [](const std::string& s) {
@@ -2589,13 +2630,13 @@ struct DecorationResolver {
     caveHooks->isFaceSturdyFull = [](const std::string& s, int dir) {
         bool defaulted = false;
         const bool r = mc::block::isFaceSturdyFull(s, dir, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
         return r;
     };
     caveHooks->isSolid = [](const std::string& s) {
         bool defaulted = false;
         const bool r = mc::block::isSolid(s, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
         return r;
     };
     caveHooks->isWaterFluid = [](const std::string& s) {
@@ -2688,13 +2729,13 @@ struct DecorationResolver {
     sculkHooks->isCollisionShapeFullBlock = [](const std::string& s) {
         bool defaulted = false;
         const bool r = mc::block::isCollisionShapeFullBlock(s, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
         return r;
     };
     sculkHooks->isFaceSturdy = [](const std::string& s, int dir) {
         bool defaulted = false;
         const bool r = mc::block::isFaceSturdyFull(s, dir, &defaulted);
-        if (defaulted) g_blocksMotionDefaulted.insert(mc::block::blockName(s));
+        if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(s));
         return r;
     };
     sculkHooks->isWaterFluid = [](const std::string& s) {
@@ -3723,7 +3764,7 @@ void decorateOneChunk(MultiChunkLevel& level, int nx, int nz, long long seed,
             std::shared_ptr<PlacedFeature> placed = resolver.resolveFeature(normKey);
             if (!placed) {   // unported type (hard no-op; reseeded next feature)
                 auto ut = g_unportedType.find(normKey);
-                ++g_unportedSkips[ut != g_unportedType.end() ? ut->second : "load-failed"];
+                recordUnportedSkip(ut != g_unportedType.end() ? ut->second : "load-failed");
                 continue;
             }
             random.setFeatureSeed(deco, index, step);
@@ -4020,27 +4061,36 @@ int main(int argc, char** argv) {
                   << ") cells=" << pc.allCells << " mismatches=" << pc.allMism << "\n";
     std::cout << "DecorateOre ore_cells=" << oreCells << " ore_mismatches=" << oreMism
               << " other_feature_cells=" << otherFeatureCells
-              << " | oreRuns=" << g_oreRuns << " orePlacedOk=" << g_orePlacedOk
+              << " | oreRuns=" << g_oreRuns.load() << " orePlacedOk=" << g_orePlacedOk.load()
               << " oreFamilySize=" << oreFamily.size() << "\n";
     std::cout << "DecorateVegetal veg_cells=" << vegCells << " veg_mismatches=" << vegMism
-              << " | vegRuns=" << g_vegRuns << " vegPlacedOk=" << g_vegPlacedOk << "\n";
+              << " | vegRuns=" << g_vegRuns.load() << " vegPlacedOk=" << g_vegPlacedOk.load() << "\n";
     std::cout << "DecorateAll cells=" << allCells << " mismatches=" << allMism << "\n";
     for (const auto& [t, n] : transitions)
         std::cout << "DecorateAllTransition got=" << t.first << " want=" << t.second << " n=" << n << "\n";
-    for (const auto& [type, n] : g_unportedSkips)
-        std::cout << "UNPORTED-FEATURE-TYPE " << type << " skipped_placed_features=" << n << "\n";
-    if (g_skippedScheduleTicks > 0)
-        std::cout << "SKIPPED-SCHEDULE-TICKS (need a ServerLevel; hard no-op as in the Java GT): "
-                  << g_skippedScheduleTicks << "\n";
-    if (!g_blocksMotionDefaulted.empty()) {
-        std::cout << "BLOCKSMOTION-DEFAULTED (verify each vs Blocks.java and add to the table):";
-        for (const auto& b : g_blocksMotionDefaulted) std::cout << " " << b;
-        std::cout << "\n";
+    {
+        std::lock_guard<std::mutex> lk(g_unportedSkipsMutex);
+        for (const auto& [type, n] : g_unportedSkips)
+            std::cout << "UNPORTED-FEATURE-TYPE " << type << " skipped_placed_features=" << n << "\n";
     }
-    if (!g_solidRenderDefaulted.empty()) {
-        std::cout << "SOLIDRENDER-DEFAULTED (verify each vs Blocks.java and add to the table):";
-        for (const auto& b : g_solidRenderDefaulted) std::cout << " " << b;
-        std::cout << "\n";
+    if (g_skippedScheduleTicks.load() > 0)
+        std::cout << "SKIPPED-SCHEDULE-TICKS (need a ServerLevel; hard no-op as in the Java GT): "
+                  << g_skippedScheduleTicks.load() << "\n";
+    {
+        std::lock_guard<std::mutex> lk(g_blocksMotionDefaultedMutex);
+        if (!g_blocksMotionDefaulted.empty()) {
+            std::cout << "BLOCKSMOTION-DEFAULTED (verify each vs Blocks.java and add to the table):";
+            for (const auto& b : g_blocksMotionDefaulted) std::cout << " " << b;
+            std::cout << "\n";
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_solidRenderDefaultedMutex);
+        if (!g_solidRenderDefaulted.empty()) {
+            std::cout << "SOLIDRENDER-DEFAULTED (verify each vs Blocks.java and add to the table):";
+            for (const auto& b : g_solidRenderDefaulted) std::cout << " " << b;
+            std::cout << "\n";
+        }
     }
     if (!mc::levelgen::feature::underwaterMagmaOcclusionDefaulted().empty()) {
         std::cout << "OCCLUSION-DEFAULTED (verify each vs Blocks.java and add to the table):";
