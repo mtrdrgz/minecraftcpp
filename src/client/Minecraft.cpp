@@ -487,28 +487,37 @@ namespace {
 }
 
 void Minecraft::tryDecorate(ChunkPos cp) {
-    LevelChunk* c = getChunk(cp);
+    // Phase 3: the ENTIRE decoration pipeline (beginFeatureTurn + runStructures
+    // + decorateChunk) now runs on the worker thread. The main thread just
+    // checks eligibility and submits.
+    //
+    // Thread-safety verification:
+    //  - beginFeatureTurn: uses EngineDecorationContext, Phase 1 made its
+    //    globals thread_local → safe.
+    //  - runStructures: calls m_localGenerator->getBaseHeight/getNoiseBiome,
+    //    which are const and only read pure density functions + the
+    //    thread-safe Climate RTree → safe.
+    //  - runStructures: calls generateStructures → Runtime::generate, which
+    //    now takes a std::shared_mutex lock on its caches → safe.
+    //  - decorateChunk: calls applyBiomeDecoration → same EngineDecorationContext
+    //    path as before → safe (Phase 1).
+
+    // Take shared lock to read the chunk and its neighbours. We need to verify
+    // all 9 chunks exist before submitting — if any neighbour is missing, the
+    // decoration would clip cross-chunk writes.
+    std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+    auto it = m_chunks.find(chunkKey(cp));
+    LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
     if (!c || c->decorated) return;
-    // Require all 8 neighbours loaded so cross-chunk feature writes (tree foliage,
-    // ore veins, structures) land in real chunks rather than being clipped.
     for (int dz = -1; dz <= 1; ++dz)
         for (int dx = -1; dx <= 1; ++dx)
-            if ((dx || dz) && !getChunk({ cp.x + dx, cp.z + dz })) return;
+            if ((dx || dz) && m_chunks.find(chunkKey({ cp.x + dx, cp.z + dz })) == m_chunks.end())
+                return;  // neighbour missing — wait for next tick
 
-    c->decorated = true;
-    // Java ChunkGenerator.applyFeaturesAndStructures starts the FEATURES turn by
-    // priming non-WG heightmaps, then runs structures for each step before the
-    // biome features in that same step. Villages need this for feature_pool_element
-    // RNG/order, so begin the turn before structure placement.
-    levelgen::feature::beginFeatureTurn(*c);
-    {
-        PROFILE_SCOPE_CHUNK("runStructures", cp.x, cp.z);
-        runStructures(cp);
-    }
-    // Submit the decoration (the hundreds-of-ms part) to the worker thread.
-    // The worker runs engineDecorateChunk off the main thread so the main
-    // thread never blocks on decoration. The 3x3 meshDirty marking happens
-    // in pollDecorationDone() when the worker reports completion.
+    c->decorated = true;  // claim it synchronously so we don't resubmit
+    chunksLk.unlock();
+
+    // Submit the entire decoration pipeline to the worker.
     {
         std::lock_guard<std::mutex> lk(m_decorationQueueMutex);
         m_decorationQueue.push_back(cp);
@@ -517,17 +526,16 @@ void Minecraft::tryDecorate(ChunkPos cp) {
 }
 
 void Minecraft::decorationWorkerLoop() {
-    // Phase 2 of Option B refactor: decoration worker thread.
+    // Phase 3 of Option B refactor: decoration worker thread.
     //
-    // Pops chunks from m_decorationQueue and runs engineDecorateChunk on them.
-    // Holds a shared_lock on m_chunksMutex for the duration of each decoration
+    // Pops chunks from m_decorationQueue and runs the FULL decoration pipeline:
+    //   beginFeatureTurn → runStructures → decorateChunk
+    //
+    // All three are now off the main thread. The main thread never blocks on
+    // decoration or structures.
+    //
+    // The worker holds a shared_lock on m_chunksMutex for the duration of each
     // turn so the engine cannot unload the chunks being decorated.
-    //
-    // The worker uses the SAME EngineDecorationContext the main thread used to
-    // use (m_decorationContext). Phase 1 made the per-turn globals thread_local,
-    // so the worker has its own thread_local copy and won't race with the main
-    // thread's reads of biomeCtx/level/etc. (the main thread no longer touches
-    // them now that decoration is off the main thread).
     while (true) {
         ChunkPos cp;
         {
@@ -542,18 +550,21 @@ void Minecraft::decorationWorkerLoop() {
         // Hold the chunk map shared lock for the entire decoration turn so
         // unloadChunk cannot erase any of the 9 chunks we're about to touch.
         std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
-        // Direct map lookup (we already hold the shared lock — calling getChunk
-        // would re-take the same shared_lock and may deadlock).
         auto it = m_chunks.find(chunkKey(cp));
         LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
         if (!c) continue;
         try {
-            // Delegate to Minecraft::decorateChunk which calls
-            // levelgen::feature::applyBiomeDecoration. Phase 1 made the
-            // per-turn globals thread_local, so this is safe from the worker.
+            // Java ChunkGenerator.applyFeaturesAndStructures starts the FEATURES
+            // turn by priming non-WG heightmaps, then runs structures for each
+            // step before the biome features in that same step.
+            levelgen::feature::beginFeatureTurn(*c);
+            {
+                PROFILE_SCOPE_CHUNK("runStructures", cp.x, cp.z);
+                runStructures(cp);
+            }
             decorateChunk(*c);
         } catch (const std::exception& e) {
-            MC_LOG_WARN("decorationWorker decorateChunk failed at ({},{}): {}",
+            MC_LOG_WARN("decorationWorker failed at ({},{}): {}",
                         cp.x, cp.z, e.what());
         }
         chunksLk.unlock();
@@ -1068,8 +1079,10 @@ void Minecraft::updateLocalChunks() {
     if (movementKeyDown) {
         m_lastLocalMovement = now;
     }
-    const bool allowMainThreadDecoration =
-        (now - m_lastLocalMovement) >= std::chrono::milliseconds(750);
+    // Phase 3: decoration runs on a worker thread, so we no longer need the
+    // 750ms player-idle gate. The main thread submits decoration requests
+    // regardless of player movement — the worker handles them async.
+    (void)now;  // suppress unused warning if m_lastLocalMovement isn't read elsewhere
     
     constexpr int RADIUS = 6;
     

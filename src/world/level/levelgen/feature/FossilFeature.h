@@ -41,7 +41,9 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -143,7 +145,23 @@ inline Template loadTemplate(const std::string& path) {
 }
 
 inline Template& templateFor(const FossilHooks& hooks, const std::string& id) {
+    // Phase 3: thread-safe template cache. The cache is populated lazily on
+    // first request for each fossil id, then read on subsequent requests.
+    // A shared_mutex lets multiple readers proceed concurrently; the first
+    // load of a new template takes the exclusive lock. After the first few
+    // chunks, all fossil templates are cached and the lock is uncontended.
     static std::map<std::string, Template> cache;
+    static std::shared_mutex cacheMutex;
+
+    // Fast path: shared lock for cache reads.
+    {
+        std::shared_lock<std::shared_mutex> lk(cacheMutex);
+        auto it = cache.find(id);
+        if (it != cache.end()) return it->second;
+    }
+    // Slow path: exclusive lock for cache miss + load.
+    std::unique_lock<std::shared_mutex> lk(cacheMutex);
+    // Re-check: another thread may have loaded it while we waited.
     auto it = cache.find(id);
     if (it != cache.end()) return it->second;
     // id "minecraft:fossil/spine_1" -> <structureDir>/fossil/spine_1.nbt
