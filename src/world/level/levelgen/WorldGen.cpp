@@ -116,7 +116,14 @@
 #include <map>
 #include <shared_mutex>
 #include <tuple>
+namespace treegen_impl { // isolate TreeGen.h definitions
 #include "feature/TreeGen.h"
+} // namespace treegen_impl
+// Bring TreeGen.h's unique symbols (TreeWorld, FoliagePlacer, etc.) into
+// mc::levelgen::feature via using-declarations, so TreeGen.cpp's code
+// (which is NOT wrapped) can still reference them.
+// NOTE: FoliageAttachment/TreeConfig are NOT re-exported — they stay
+// in treegen_impl to avoid conflicting with TreeFeature.h's versions.
 #include <numbers>
 #include "feature/OreGen.h"
 #include "structure/placement/StructurePlacement.h"
@@ -12062,7 +12069,7 @@ bool enginePlaceStructurePoolFeature(EngineDecorationContext* ctx, const std::st
 // ═════════════════════════════════════════════════════════════════════════
 // BEGIN feature/TreeGen.cpp
 // ═════════════════════════════════════════════════════════════════════════
-namespace treegen_impl { // isolates this file's header definitions
+namespace treegen_impl { // isolates this file + its header's definitions
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif

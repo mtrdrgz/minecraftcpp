@@ -240,7 +240,19 @@ def main():
 
     output_lines.append("// ── Unified includes (deduplicated, paths adjusted) ────────────────────")
     for inc in all_includes_ordered:
-        output_lines.append(inc)
+        # Special case: wrap TreeGen.h include in a namespace to isolate its
+        # FoliageAttachment/TreeConfig definitions from TreeFeature.h's versions.
+        if 'TreeGen.h' in inc:
+            output_lines.append("namespace treegen_impl { // isolate TreeGen.h definitions")
+            output_lines.append(inc)
+            output_lines.append("} // namespace treegen_impl")
+            output_lines.append("// Bring TreeGen.h's unique symbols (TreeWorld, FoliagePlacer, etc.) into")
+            output_lines.append("// mc::levelgen::feature via using-declarations, so TreeGen.cpp's code")
+            output_lines.append("// (which is NOT wrapped) can still reference them.")
+            output_lines.append("// NOTE: FoliageAttachment/TreeConfig are NOT re-exported — they stay")
+            output_lines.append("// in treegen_impl to avoid conflicting with TreeFeature.h's versions.")
+        else:
+            output_lines.append(inc)
     output_lines.append("")
 
     for relpath, body in file_bodies:
@@ -250,7 +262,7 @@ def main():
         output_lines.append(f"// BEGIN {relpath}")
         output_lines.append(f"// ═════════════════════════════════════════════════════════════════════════")
         if wrap_ns:
-            output_lines.append(f"namespace {wrap_ns} {{ // isolates this file's header definitions")
+            output_lines.append(f"namespace {wrap_ns} {{ // isolates this file + its header's definitions")
         output_lines.append(body)
         if wrap_ns:
             output_lines.append(f"}} // namespace {wrap_ns}")
