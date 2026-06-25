@@ -81,9 +81,10 @@ COLLISION_RENAMES = [
     # normalizeId
     ("feature/BiomeFeatures.cpp", "normalizeId", "bf_normalizeId"),
     ("structure/StructureGen.cpp", "normalizeId", "sg_normalizeId"),
-    # apply (free function in CubicSpline and SurfaceRules)
-    ("CubicSpline.cpp", "apply", "cs_apply"),
-    ("SurfaceRules.cpp", "apply", "sr_apply"),
+    # apply is a VIRTUAL METHOD (IConditionSource::apply, IRuleSource::apply)
+    # in SurfaceRules.cpp — NOT a free function. Do NOT rename it.
+    # ("CubicSpline.cpp", "apply", "cs_apply"),
+    # ("SurfaceRules.cpp", "apply", "sr_apply"),
     # packXZ
     ("NoiseBasedChunkGenerator.cpp", "packXZ", "nbcg_packXZ"),
     ("SurfaceRules.cpp", "packXZ", "sr_packXZ"),
@@ -95,10 +96,10 @@ COLLISION_RENAMES = [
     ("NoiseGeneratorSettings.cpp", "state", "ngs_state"),
     ("OreVeinifier.cpp", "state", "ov_state"),
     ("carver/WorldCarver.cpp", "state", "wc_state"),
-    # getDefaultBlockStateId (free function in anonymous namespaces)
-    ("Aquifer.cpp", "getDefaultBlockStateId", "aquifer_getDefaultBlockStateId"),
-    ("NoiseGeneratorSettings.cpp", "getDefaultBlockStateId", "ngs_getDefaultBlockStateId"),
-    ("OreVeinifier.cpp", "getDefaultBlockStateId", "ov_getDefaultBlockStateId"),
+    # getDefaultBlockStateId is NOT a collision — it's the PUBLIC API
+    # (mc::getDefaultBlockStateId from BlockStates.h). The collision detector
+    # found CALLS to it inside anonymous namespaces, not DEFINITIONS.
+    # Do NOT rename it.
     # WAY_BELOW_MIN_Y (constant)
     ("Aquifer.cpp", "WAY_BELOW_MIN_Y", "AQUIFER_WAY_BELOW_MIN_Y"),
     ("SurfaceSystem.cpp", "WAY_BELOW_MIN_Y", "SURFSYS_WAY_BELOW_MIN_Y"),

@@ -157,7 +157,7 @@ namespace {
     constexpr int INVALID_DISTANCE = std::numeric_limits<int>::max();
 
     uint32_t aquifer_state(std::string_view name, uint32_t fallback = 0) {
-        return aquifer_getDefaultBlockStateId(name, fallback);
+        return getDefaultBlockStateId(name, fallback);
     }
 
     int aquifer_floorDiv(int x, int y) {
@@ -728,7 +728,7 @@ namespace {
     public:
         explicit ConstantSpline(float value) : m_value(value) {}
 
-        float cs_apply(const DensityFunctionContext&) const override { return m_value; }
+        float apply(const DensityFunctionContext&) const override { return m_value; }
         float minValue() const override { return m_value; }
         float maxValue() const override { return m_value; }
 
@@ -747,16 +747,16 @@ namespace {
             computeBounds();
         }
 
-        float cs_apply(const DensityFunctionContext& context) const override {
-            float input = m_coordinate->cs_apply(context);
+        float apply(const DensityFunctionContext& context) const override {
+            float input = m_coordinate->apply(context);
             int start = findIntervalStart(m_locations, input);
             int lastIndex = static_cast<int>(m_locations.size()) - 1;
             if (start < 0) {
-                return linearExtend(input, m_locations, m_values.front()->cs_apply(context), m_derivatives, 0);
+                return linearExtend(input, m_locations, m_values.front()->apply(context), m_derivatives, 0);
             }
 
             if (start == lastIndex) {
-                return linearExtend(input, m_locations, m_values.back()->cs_apply(context), m_derivatives, lastIndex);
+                return linearExtend(input, m_locations, m_values.back()->apply(context), m_derivatives, lastIndex);
             }
 
             float x1 = m_locations[static_cast<size_t>(start)];
@@ -766,8 +766,8 @@ namespace {
             const CubicSplinePtr& f2 = m_values[static_cast<size_t>(start + 1)];
             float d1 = m_derivatives[static_cast<size_t>(start)];
             float d2 = m_derivatives[static_cast<size_t>(start + 1)];
-            float y1 = f1->cs_apply(context);
-            float y2 = f2->cs_apply(context);
+            float y1 = f1->apply(context);
+            float y2 = f2->apply(context);
             float a = d1 * (x2 - x1) - (y2 - y1);
             float b = -d2 * (x2 - x1) + (y2 - y1);
             return cs_lerp(t, y1, y2) + t * (1.0f - t) * cs_lerp(t, a, b);
@@ -852,7 +852,7 @@ namespace {
     public:
         explicit DensityCoordinateFunction(DensityFunctionPtr function) : m_function(std::move(function)) {}
 
-        float cs_apply(const DensityFunctionContext& context) const override {
+        float apply(const DensityFunctionContext& context) const override {
             return static_cast<float>(m_function->compute(context));
         }
 
@@ -868,7 +868,7 @@ namespace {
         explicit SplineDensityFunction(CubicSplinePtr spline) : m_spline(std::move(spline)) {}
 
         double compute(const DensityFunctionContext& context) const override {
-            return m_spline->cs_apply(context);
+            return m_spline->apply(context);
         }
 
         double minValue() const override { return m_spline->minValue(); }
@@ -2460,7 +2460,7 @@ namespace mc::levelgen {
 
 namespace {
     uint32_t ov_state(std::string_view name, uint32_t fallback = 0) {
-        return ov_getDefaultBlockStateId(name, fallback);
+        return getDefaultBlockStateId(name, fallback);
     }
 
     double ov_clampedMap(double value, double fromMin, double fromMax, double toMin, double toMax) {
@@ -4062,7 +4062,7 @@ namespace mc::levelgen {
 
 namespace {
     uint32_t ngs_state(std::string_view name, uint32_t fallback = 0) {
-        return ngs_getDefaultBlockStateId(name, fallback);
+        return getDefaultBlockStateId(name, fallback);
     }
 
     NoiseGeneratorSettings make(
@@ -4270,19 +4270,19 @@ private:
 
 class TemperatureCS final : public IConditionSource {
 public:
-    ConditionPtr sr_apply(Context& ctx) override { return ctx.temperature; }
+    ConditionPtr apply(Context& ctx) override { return ctx.temperature; }
 };
 class SteepCS final : public IConditionSource {
 public:
-    ConditionPtr sr_apply(Context& ctx) override { return ctx.steep; }
+    ConditionPtr apply(Context& ctx) override { return ctx.steep; }
 };
 class HoleCS final : public IConditionSource {
 public:
-    ConditionPtr sr_apply(Context& ctx) override { return ctx.hole; }
+    ConditionPtr apply(Context& ctx) override { return ctx.hole; }
 };
 class AbovePreliminarySurfaceCS final : public IConditionSource {
 public:
-    ConditionPtr sr_apply(Context& ctx) override { return ctx.abovePreliminarySurface; }
+    ConditionPtr apply(Context& ctx) override { return ctx.abovePreliminarySurface; }
 };
 
 // ---------- StoneDepthCheck ----------
@@ -4321,7 +4321,7 @@ public:
         , m_secRange(secRange)
         , m_ceiling(surface == CaveSurface::CEILING) {}
 
-    ConditionPtr sr_apply(Context& ctx) override {
+    ConditionPtr apply(Context& ctx) override {
         return std::make_shared<StoneDepthCondition>(&ctx, m_offset, m_addSurface, m_secRange, m_ceiling);
     }
 private:
@@ -4344,8 +4344,8 @@ private:
 class NotCS final : public IConditionSource {
 public:
     explicit NotCS(ConditionSourcePtr target) : m_target(std::move(target)) {}
-    ConditionPtr sr_apply(Context& ctx) override {
-        return std::make_shared<NotCondition>(m_target->sr_apply(ctx));
+    ConditionPtr apply(Context& ctx) override {
+        return std::make_shared<NotCondition>(m_target->apply(ctx));
     }
 private:
     ConditionSourcePtr m_target;
@@ -4380,7 +4380,7 @@ public:
         : m_anchor(anchor)
         , m_multiplier(multiplier)
         , m_addStoneDepth(addStoneDepth) {}
-    ConditionPtr sr_apply(Context& ctx) override {
+    ConditionPtr apply(Context& ctx) override {
         int ay = m_anchor.resolveY(ctx.genCtx.minGenY, ctx.genCtx.genDepth);
         return std::make_shared<YCondition>(&ctx, ay, m_multiplier, m_addStoneDepth);
     }
@@ -4418,7 +4418,7 @@ public:
         : m_offset(offset)
         , m_multiplier(multiplier)
         , m_addStoneDepth(addStoneDepth) {}
-    ConditionPtr sr_apply(Context& ctx) override {
+    ConditionPtr apply(Context& ctx) override {
         return std::make_shared<WaterCondition>(&ctx, m_offset, m_multiplier, m_addStoneDepth);
     }
 private:
@@ -4446,7 +4446,7 @@ private:
 class BiomeCS final : public IConditionSource {
 public:
     explicit BiomeCS(std::vector<std::string> biomeKeys) : m_biomes(biomeKeys.begin(), biomeKeys.end()) {}
-    ConditionPtr sr_apply(Context& ctx) override {
+    ConditionPtr apply(Context& ctx) override {
         return std::make_shared<BiomeCondition>(&ctx, m_biomes);
     }
 private:
@@ -4479,7 +4479,7 @@ class NoiseThresholdCS final : public IConditionSource {
 public:
     NoiseThresholdCS(std::string noiseKey, double minR, double maxR)
         : m_key(std::move(noiseKey)), m_min(minR), m_max(maxR) {}
-    ConditionPtr sr_apply(Context& ctx) override {
+    ConditionPtr apply(Context& ctx) override {
         auto noise = ctx.randomState->getOrCreateNoise(m_key);
         return std::make_shared<NoiseThresholdCondition>(&ctx, std::move(noise), m_min, m_max);
     }
@@ -4524,7 +4524,7 @@ public:
         , m_trueAt(trueAtAndBelow)
         , m_falseAt(falseAtAndAbove) {}
 
-    ConditionPtr sr_apply(Context& ctx) override {
+    ConditionPtr apply(Context& ctx) override {
         int trueY  = m_trueAt.resolveY(ctx.genCtx.minGenY, ctx.genCtx.genDepth);
         int falseY = m_falseAt.resolveY(ctx.genCtx.minGenY, ctx.genCtx.genDepth);
         auto factory = ctx.randomState->getOrCreateRandomFactory(m_randomName);
@@ -4594,7 +4594,7 @@ private:
 class BlockRuleSource final : public IRuleSource {
 public:
     explicit BlockRuleSource(uint32_t stateId) noexcept : m_stateId(stateId) {}
-    SurfaceRulePtr sr_apply(Context&) override {
+    SurfaceRulePtr apply(Context&) override {
         return std::make_shared<StateRule>(m_stateId);
     }
 private:
@@ -4605,11 +4605,11 @@ class SequenceRuleSource final : public IRuleSource {
 public:
     explicit SequenceRuleSource(std::vector<RuleSourcePtr> sources)
         : m_sources(std::move(sources)) {}
-    SurfaceRulePtr sr_apply(Context& ctx) override {
-        if (m_sources.size() == 1) return m_sources[0]->sr_apply(ctx);
+    SurfaceRulePtr apply(Context& ctx) override {
+        if (m_sources.size() == 1) return m_sources[0]->apply(ctx);
         std::vector<SurfaceRulePtr> rules;
         rules.reserve(m_sources.size());
-        for (auto& src : m_sources) rules.push_back(src->sr_apply(ctx));
+        for (auto& src : m_sources) rules.push_back(src->apply(ctx));
         return std::make_shared<SequenceRule>(std::move(rules));
     }
 private:
@@ -4620,8 +4620,8 @@ class TestRuleSource final : public IRuleSource {
 public:
     TestRuleSource(ConditionSourcePtr cond, RuleSourcePtr thenRun)
         : m_cond(std::move(cond)), m_then(std::move(thenRun)) {}
-    SurfaceRulePtr sr_apply(Context& ctx) override {
-        return std::make_shared<TestRule>(m_cond->sr_apply(ctx), m_then->sr_apply(ctx));
+    SurfaceRulePtr apply(Context& ctx) override {
+        return std::make_shared<TestRule>(m_cond->apply(ctx), m_then->apply(ctx));
     }
 private:
     ConditionSourcePtr m_cond;
@@ -4630,7 +4630,7 @@ private:
 
 class BandlandsRuleSource final : public IRuleSource {
 public:
-    SurfaceRulePtr sr_apply(Context& ctx) override {
+    SurfaceRulePtr apply(Context& ctx) override {
         return std::make_shared<BandlandsRule>(&ctx);
     }
 };
