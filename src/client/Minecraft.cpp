@@ -542,8 +542,16 @@ void Minecraft::decorationWorkerLoop() {
         // Hold the chunk map shared lock for the entire decoration turn so
         // unloadChunk cannot erase any of the 9 chunks we're about to touch.
         std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+        // Direct map lookup (we already hold the shared lock — calling getChunk
+        // would re-take the same shared_lock and may deadlock).
+        auto it = m_chunks.find(chunkKey(cp));
+        LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
+        if (!c) continue;
         try {
-            levelgen::feature::decorateChunk(*getChunk(cp));
+            // Delegate to Minecraft::decorateChunk which calls
+            // levelgen::feature::applyBiomeDecoration. Phase 1 made the
+            // per-turn globals thread_local, so this is safe from the worker.
+            decorateChunk(*c);
         } catch (const std::exception& e) {
             MC_LOG_WARN("decorationWorker decorateChunk failed at ({},{}): {}",
                         cp.x, cp.z, e.what());
