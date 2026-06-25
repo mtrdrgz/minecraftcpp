@@ -103,26 +103,14 @@ def fix_include(line, subdir_prefix):
     # The subdir depth = number of "/" in subdir_prefix
     subdir_depth = subdir_prefix.count('/') if subdir_prefix else 0
 
-    # From WorldGen.cpp (depth 0), we need levels_up - subdir_depth "../" prefixes
+    # From WorldGen.cpp (at levelgen/ depth 0), we need levels_up - subdir_depth
+    # "../" prefixes. This is because the original file was subdir_depth levels
+    # deeper, so levels_up - subdir_depth is the number of "../" needed from
+    # levelgen/ to reach the same target.
     if levels_up > 0:
         remaining_up = levels_up - subdir_depth
         if remaining_up > 0:
-            # If remaining_up would take us above src/, the -I src/ flag will
-            # resolve the bare path. So if remaining_up > 1, strip all ../
-            # and let the include directory handle it.
-            # From levelgen/ (depth 0), one ../ takes us to level/, two to world/,
-            # three to src/. Anything beyond src/ should be resolved via -I src/.
-            # The original files used paths like ../../../core/Log.h from
-            # structure/placement/ (depth 2), which = 1 remaining ../ from
-            # levelgen/ → ../core/Log.h → from level/ that's level/core/Log.h
-            # (wrong) BUT with -I src/ the compiler also finds core/Log.h
-            # (correct). So: if remaining_up >= 2, strip all ../ (let -I handle it).
-            # If remaining_up == 1, keep one ../ (resolves to level/X which may
-            # or may not be right, but matches what a depth-0 file would use).
-            # Actually, the safest approach: always strip ALL ../ and rely on -I src/.
-            # This works because the build has -I src/ and all original includes
-            # were relative to src/ via a chain of ../
-            new_header = temp
+            new_header = '../' * remaining_up + temp
         else:
             new_header = temp
         return f'{prefix}"{new_header}"{suffix}'

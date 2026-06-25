@@ -41,7 +41,7 @@
 
 // ── Unified includes (deduplicated, paths adjusted) ────────────────────
 #include "Aquifer.h"
-#include "block/Blocks.h"
+#include "../block/Blocks.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -81,14 +81,14 @@
 #include "WorldGenerationContext.h"
 #include "heightproviders/HeightProvider.h"
 #include "Mth.h"
-#include "block/BlockState.h"
+#include "../block/BlockState.h"
 #include <functional>
 #include <optional>
 #include <string_view>
 #include "BiomeSource.h"
 #include "OverworldBiomeBuilder.h"
 #include "BiomeManager.h"
-#include "core/Sha256.h"
+#include "../../../core/Sha256.h"
 #include <cstring>
 #include "NoiseBasedChunkGenerator.h"
 #include <memory>
@@ -100,7 +100,7 @@
 #include <sstream>
 #include "feature/BiomeDecorator.h"
 #include "feature/EngineDecoration.h"
-#include "core/Log.h"
+#include "../../../core/Log.h"
 #include "IntProvider.h"
 #include "placement/PlacedFeature.h"
 #include "placement/PlacementModifier.h"
@@ -135,11 +135,11 @@
 #include "feature/FossilFeature.h"
 #include "feature/FeatureSorter.h"
 #include "feature/GenerationStep.h"
-#include "block/BlockStates.h"
-#include "block/BlockTags.h"
-#include "block/BlockBehaviour.h"
-#include "material/Fluids.h"
-#include "chunk/LevelChunk.h"
+#include "../block/BlockStates.h"
+#include "../block/BlockTags.h"
+#include "../block/BlockBehaviour.h"
+#include "../material/Fluids.h"
+#include "../chunk/LevelChunk.h"
 #include "structure/StructureGen.h"
 #include "Beardifier.h"
 #include <atomic>
@@ -164,6 +164,7 @@
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
+#include "core/Log.h"
 #include "nbt/NbtIo.h"
 #include "util/SequencedPriorityIterator.h"
 #include "world/level/block/BlockRotation.h"
