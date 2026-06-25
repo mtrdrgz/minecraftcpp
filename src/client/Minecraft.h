@@ -15,7 +15,9 @@
 #include "Options.h"
 #include <unordered_map>
 #include <unordered_set>
+#include <condition_variable>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <atomic>
 #include <thread>
@@ -116,6 +118,9 @@ private:
     void decorateChunk(LevelChunk& chunk);
     void tryDecorate(ChunkPos cp);
     void runStructures(ChunkPos active);
+    // Phase 2 of Option B refactor: decoration runs on a worker thread.
+    void decorationWorkerLoop();
+    void pollDecorationDone();
     // Build the per-chunk Beardifier on the MAIN thread (the structure runtime is
     // single-threaded) so it can be passed to fillFromNoise on any worker. Empty
     // when no terrain-adapting structure is near `pos`.
@@ -183,6 +188,32 @@ private:
     double m_lastStreamPlayerY = 0.0;
     double m_lastStreamPlayerZ = 0.0;
     bool   m_haveLastStreamPlayerPos = false;
+
+    // ── Decoration worker (Phase 2 of Option B refactor) ──────────────────
+    // Decoration is moved OFF the main thread to eliminate the hundreds-of-ms
+    // stutter each tryDecorate() call caused. The main thread now submits
+    // "decorate (cx,cz)" requests to m_decorationQueue; the single decoration
+    // worker pops them and runs engineDecorateChunk. Results are integrated
+    // back on the main thread via m_decorationDone.
+    //
+    // Chunk-map safety: m_chunksMutex is a shared_mutex. Unload takes it
+    // exclusively (no decoration running on those chunks). The decoration
+    // worker takes it shared for the duration of ONE decoration turn, so it
+    // can read all 9 chunks (3x3) without them being unloaded mid-turn.
+    // Main-thread reads (render, player physics) take it shared too — they
+    // don't block each other or the worker.
+    std::shared_mutex                      m_chunksMutex;
+    std::vector<ChunkPos>                  m_decorationQueue;
+    std::mutex                             m_decorationQueueMutex;
+    std::condition_variable                m_decorationQueueCv;
+    std::thread                            m_decorationThread;
+    std::atomic<bool>                      m_decorationStop{false};
+    // Chunks finished by the worker, awaiting main-thread integration
+    // (meshDirty marking on the 3x3 neighborhood, etc.)
+    std::vector<ChunkPos>                  m_decorationDone;
+    std::mutex                             m_decorationDoneMutex;
+    // Per-request: the worker sets this when its decoration turn finishes.
+    // The main thread polls and integrates.
 
     static int64_t chunkKey(ChunkPos p) {
         return ((int64_t)(uint32_t)p.x << 32) | (uint32_t)p.z;

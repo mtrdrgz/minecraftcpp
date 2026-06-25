@@ -128,13 +128,23 @@ Minecraft::Minecraft(Window* window, render::IRenderDevice* device)
     else numThreads = 1;
     m_threadPool = std::make_unique<ThreadPool>(numThreads);
     MC_LOG_INFO("ThreadPool initialized with {} threads", numThreads);
-    
+
+    // Start the decoration worker thread (Phase 2 of Option B refactor).
+    // The worker runs engineDecorateChunk off the main thread so the main
+    // thread never blocks on decoration (each chunk is hundreds of ms).
+    m_decorationThread = std::thread([this] { decorationWorkerLoop(); });
+
     // Explicitly set the TitleScreen
     auto ts = std::make_unique<gui::screens::TitleScreen>();
     setScreen(std::move(ts));
 }
 
 Minecraft::~Minecraft() {
+    // Signal the decoration worker to stop and wait for it to finish.
+    m_decorationStop.store(true);
+    m_decorationQueueCv.notify_all();
+    if (m_decorationThread.joinable()) m_decorationThread.join();
+
     disconnect();
     // Cancel or wait on any active generation tasks
     m_generationTasks.clear();
@@ -227,10 +237,15 @@ bool Minecraft::panoramaLoaded() const {
 
 // ── Chunk storage ─────────────────────────────────────────────────────────────
 LevelChunk* Minecraft::getChunk(ChunkPos pos) {
+    // Shared-lock the chunk map: unloadChunk takes the exclusive lock, so this
+    // read can never race with an erase. Uncontended shared_lock is ~10ns.
+    std::shared_lock<std::shared_mutex> lk(m_chunksMutex);
     auto it = m_chunks.find(chunkKey(pos));
     return it == m_chunks.end() ? nullptr : it->second.get();
 }
 LevelChunk* Minecraft::getOrCreateChunk(ChunkPos pos) {
+    // Exclusive lock — getOrCreateChunk mutates the map.
+    std::unique_lock<std::shared_mutex> lk(m_chunksMutex);
     auto key = chunkKey(pos);
     auto it  = m_chunks.find(key);
     if (it != m_chunks.end()) return it->second.get();
@@ -240,6 +255,12 @@ LevelChunk* Minecraft::getOrCreateChunk(ChunkPos pos) {
     return ptr;
 }
 void Minecraft::unloadChunk(ChunkPos pos) {
+    // Exclusive lock — block any decoration worker (and any getChunk) from
+    // touching the map while we erase. If a decoration turn is in progress on
+    // this chunk, the worker holds the shared lock and we block here until it
+    // finishes. This is intentional: the engine NEVER unloads a chunk that's
+    // actively being decorated.
+    std::unique_lock<std::shared_mutex> lk(m_chunksMutex);
     m_chunks.erase(chunkKey(pos));
 }
 
@@ -484,13 +505,74 @@ void Minecraft::tryDecorate(ChunkPos cp) {
         PROFILE_SCOPE_CHUNK("runStructures", cp.x, cp.z);
         runStructures(cp);
     }
-    decorateChunk(*c);
-    // Cross-chunk writes can touch the neighbours — re-mesh the 3x3.
+    // Submit the decoration (the hundreds-of-ms part) to the worker thread.
+    // The worker runs engineDecorateChunk off the main thread so the main
+    // thread never blocks on decoration. The 3x3 meshDirty marking happens
+    // in pollDecorationDone() when the worker reports completion.
     {
-        PROFILE_SCOPE("remesh_9chunk_neighborhood");
+        std::lock_guard<std::mutex> lk(m_decorationQueueMutex);
+        m_decorationQueue.push_back(cp);
+    }
+    m_decorationQueueCv.notify_one();
+}
+
+void Minecraft::decorationWorkerLoop() {
+    // Phase 2 of Option B refactor: decoration worker thread.
+    //
+    // Pops chunks from m_decorationQueue and runs engineDecorateChunk on them.
+    // Holds a shared_lock on m_chunksMutex for the duration of each decoration
+    // turn so the engine cannot unload the chunks being decorated.
+    //
+    // The worker uses the SAME EngineDecorationContext the main thread used to
+    // use (m_decorationContext). Phase 1 made the per-turn globals thread_local,
+    // so the worker has its own thread_local copy and won't race with the main
+    // thread's reads of biomeCtx/level/etc. (the main thread no longer touches
+    // them now that decoration is off the main thread).
+    while (true) {
+        ChunkPos cp;
+        {
+            std::unique_lock<std::mutex> lk(m_decorationQueueMutex);
+            m_decorationQueueCv.wait(lk, [this] {
+                return m_decorationStop.load() || !m_decorationQueue.empty();
+            });
+            if (m_decorationStop.load() && m_decorationQueue.empty()) return;
+            cp = m_decorationQueue.front();
+            m_decorationQueue.erase(m_decorationQueue.begin());
+        }
+        // Hold the chunk map shared lock for the entire decoration turn so
+        // unloadChunk cannot erase any of the 9 chunks we're about to touch.
+        std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+        try {
+            levelgen::feature::decorateChunk(*getChunk(cp));
+        } catch (const std::exception& e) {
+            MC_LOG_WARN("decorationWorker decorateChunk failed at ({},{}): {}",
+                        cp.x, cp.z, e.what());
+        }
+        chunksLk.unlock();
+        // Report completion — the main thread will mark meshDirty on the 3x3.
+        {
+            std::lock_guard<std::mutex> lk(m_decorationDoneMutex);
+            m_decorationDone.push_back(cp);
+        }
+    }
+}
+
+void Minecraft::pollDecorationDone() {
+    // Drain m_decorationDone on the main thread and mark the 3x3 neighborhood
+    // for re-meshing. This is the only main-thread work that happens after the
+    // worker finishes — it's a handful of atomic-flag sets, very cheap.
+    std::vector<ChunkPos> done;
+    {
+        std::lock_guard<std::mutex> lk(m_decorationDoneMutex);
+        done.swap(m_decorationDone);
+    }
+    if (done.empty()) return;
+    PROFILE_SCOPE("remesh_9chunk_neighborhood");
+    for (ChunkPos cp : done) {
         for (int dz = -1; dz <= 1; ++dz)
             for (int dx = -1; dx <= 1; ++dx)
-                if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz })) n->meshDirty = true;
+                if (LevelChunk* n = getChunk({ cp.x + dx, cp.z + dz }))
+                    n->meshDirty = true;
     }
 }
 
@@ -557,7 +639,23 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
 
     clearEntities();
     m_playerInfo.clear();
-    m_chunks.clear();
+    // Drain the decoration queue and wait for the worker to finish its current
+    // turn before clearing the chunk map — otherwise the worker could be
+    // writing to a chunk we're about to destroy.
+    {
+        std::lock_guard<std::mutex> qlk(m_decorationQueueMutex);
+        m_decorationQueue.clear();
+    }
+    // Take the exclusive lock on the chunk map and hold it until after clear.
+    // This blocks the worker from starting any new turn (it takes shared lock).
+    // If the worker is mid-turn, we block here until it finishes.
+    {
+        std::unique_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+        // Drain any done notifications too so they don't fire on stale chunks.
+        std::lock_guard<std::mutex> dlk(m_decorationDoneMutex);
+        m_decorationDone.clear();
+        m_chunks.clear();
+    }
     m_generationTasks.clear();
     m_queuedChunks.clear();
     m_localPlayer.reset();
@@ -969,11 +1067,16 @@ void Minecraft::updateLocalChunks() {
     
     // 1. Unload chunks outside RADIUS
     std::vector<ChunkPos> toUnload;
-    for (const auto& [key, chunk] : m_chunks) {
-        if (chunk) {
-            ChunkPos cp = chunk->pos();
-            if (std::abs(cp.x - px) > RADIUS || std::abs(cp.z - pz) > RADIUS) {
-                toUnload.push_back(cp);
+    {
+        // Shared lock — read iteration over the chunk map. The actual erase
+        // happens in unloadChunk() which takes the exclusive lock.
+        std::shared_lock<std::shared_mutex> lk(m_chunksMutex);
+        for (const auto& [key, chunk] : m_chunks) {
+            if (chunk) {
+                ChunkPos cp = chunk->pos();
+                if (std::abs(cp.x - px) > RADIUS || std::abs(cp.z - pz) > RADIUS) {
+                    toUnload.push_back(cp);
+                }
             }
         }
     }
@@ -995,6 +1098,10 @@ void Minecraft::updateLocalChunks() {
                 // Check if still within radius
                 if (std::abs(cp.x - px) <= RADIUS && std::abs(cp.z - pz) <= RADIUS) {
                     auto key = chunkKey(cp);
+                    // Exclusive lock — we're about to mutate m_chunks. This
+                    // also blocks the decoration worker from starting a new
+                    // turn while we integrate. Integration is fast (no I/O).
+                    std::unique_lock<std::shared_mutex> chunksLk(m_chunksMutex);
                     if (m_chunks.find(key) == m_chunks.end()) {
                         LevelChunk* ptr = chunk.get();
                         // Store terrain now; decoration is DEFERRED until all 8
@@ -1010,8 +1117,11 @@ void Minecraft::updateLocalChunks() {
                         // marking the full 3×3 (which flooded the mesh queue).
                         static constexpr int kCardinal[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
                         for (const auto& d : kCardinal) {
-                            if (LevelChunk* n = getChunk({ cp.x + d[0], cp.z + d[1] })) {
-                                n->meshDirty = true;
+                            // No need to lock getChunk here — we already hold the
+                            // exclusive lock, so the lookup is safe.
+                            auto itN = m_chunks.find(chunkKey({ cp.x + d[0], cp.z + d[1] }));
+                            if (itN != m_chunks.end() && itN->second) {
+                                itN->second->meshDirty = true;
                             }
                         }
                         ++integrated;
@@ -1025,32 +1135,40 @@ void Minecraft::updateLocalChunks() {
         }
     }
 
-    // 2b. Deferred decoration: one chunk at a time, with a minimum interval.
-    // Full biome decoration + structures can take hundreds of ms; the old dynamic
-    // budget (up to 24/tick) caused multi-second main-thread stalls when the
-    // player moved and many chunks became eligible at once.
+    // 2b. Submit decoration requests to the worker thread.
+    // Decoration is now off the main thread (Phase 2 of Option B refactor),
+    // so we no longer need the 750ms idle gate or the 150ms throttle — the
+    // worker runs continuously and the main thread never blocks on it.
+    // We still throttle SUBMISSION to one chunk per tick to avoid flooding
+    // the worker queue (the worker takes hundreds of ms per chunk anyway).
     {
-        constexpr auto kMinDecorateInterval = std::chrono::milliseconds(150);
-        if (allowMainThreadDecoration && now - m_lastDecorateStart >= kMinDecorateInterval) {
-            std::vector<ChunkPos> ready;
+        std::vector<ChunkPos> ready;
+        {
+            // Shared lock — read iteration to find decoration candidates.
+            std::shared_lock<std::shared_mutex> lk(m_chunksMutex);
             ready.reserve(m_chunks.size());
             for (const auto& [key, chunk] : m_chunks)
                 if (chunk && !chunk->decorated) ready.push_back(chunk->pos());
-            std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
-                return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
-                     < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
-            });
-            for (ChunkPos cp : ready) {
-                LevelChunk* c = getChunk(cp);
-                if (!c || c->decorated) continue;
-                tryDecorate(cp);
-                if (c->decorated) {
-                    m_lastDecorateStart = now;
-                    break;
-                }
-            }
+        }
+        std::sort(ready.begin(), ready.end(), [px, pz](ChunkPos a, ChunkPos b) {
+            return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
+                 < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
+        });
+        // Submit at most one new decoration request per tick — the worker
+        // drains the queue at its own pace. tryDecorate marks the chunk
+        // decorated=true synchronously so we don't resubmit it.
+        for (ChunkPos cp : ready) {
+            LevelChunk* c = getChunk(cp);
+            if (!c || c->decorated) continue;
+            tryDecorate(cp);
+            break;  // one per tick
         }
     }
+
+    // 2c. Poll the decoration worker for completed chunks and mark their 3x3
+    // neighborhoods for re-meshing. This is the only main-thread work after
+    // the worker finishes — a handful of atomic-flag sets, very cheap.
+    pollDecorationDone();
 
     // 3. Load/generate chunks inside RADIUS
     struct ChunkCand {
