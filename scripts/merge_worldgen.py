@@ -102,10 +102,21 @@ COLLISION_RENAMES = [
 
 # Headers that should NOT be included in WorldGen.cpp because they duplicate
 # definitions from other headers already included.
-# TreeGen.h duplicates FoliageAttachment/TreeConfig from TreeFeature.h (included via FossilFeature.h)
+# TreeGen.h is NOT excluded — it has unique content (TreeWorld, FoliagePlacer, etc.)
+# But it also has FoliageAttachment/TreeConfig which conflict with TreeFeature.h.
+# Solution: wrap TreeGen.cpp's section in a unique inner namespace so its
+# TreeGen.h definitions don't conflict with TreeFeature.h's versions.
 EXCLUDE_INCLUDES = [
-    "feature/TreeGen.h",
+    # Nothing excluded — TreeGen.h is included but TreeGen.cpp is namespace-wrapped
 ]
+
+# Files whose body should be wrapped in a unique inner namespace to isolate
+# their header definitions from other files' headers.
+# TreeGen.cpp: TreeGen.h defines FoliageAttachment/TreeConfig which conflict
+# with TreeFeature.h's versions (different struct layouts).
+NAMESPACE_WRAP = {
+    "feature/TreeGen.cpp": "treegen_impl",
+}
 
 
 def fix_include(line, subdir_prefix):
@@ -233,11 +244,16 @@ def main():
     output_lines.append("")
 
     for relpath, body in file_bodies:
+        wrap_ns = NAMESPACE_WRAP.get(relpath)
         output_lines.append("")
         output_lines.append(f"// ═════════════════════════════════════════════════════════════════════════")
         output_lines.append(f"// BEGIN {relpath}")
         output_lines.append(f"// ═════════════════════════════════════════════════════════════════════════")
+        if wrap_ns:
+            output_lines.append(f"namespace {wrap_ns} {{ // isolates this file's header definitions")
         output_lines.append(body)
+        if wrap_ns:
+            output_lines.append(f"}} // namespace {wrap_ns}")
         output_lines.append(f"// ═════════════════════════════════════════════════════════════════════════")
         output_lines.append(f"// END {relpath}")
         output_lines.append(f"// ═════════════════════════════════════════════════════════════════════════")

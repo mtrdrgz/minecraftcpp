@@ -116,6 +116,7 @@
 #include <map>
 #include <shared_mutex>
 #include <tuple>
+#include "feature/TreeGen.h"
 #include <numbers>
 #include "feature/OreGen.h"
 #include "structure/placement/StructurePlacement.h"
@@ -12061,6 +12062,7 @@ bool enginePlaceStructurePoolFeature(EngineDecorationContext* ctx, const std::st
 // ═════════════════════════════════════════════════════════════════════════
 // BEGIN feature/TreeGen.cpp
 // ═════════════════════════════════════════════════════════════════════════
+namespace treegen_impl { // isolates this file's header definitions
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -12929,6 +12931,7 @@ void decorateChunk(LevelChunk& chunk, uint64_t worldSeed, const std::function<st
 }
 
 } // namespace mc::levelgen::feature
+} // namespace treegen_impl
 // ═════════════════════════════════════════════════════════════════════════
 // END feature/TreeGen.cpp
 // ═════════════════════════════════════════════════════════════════════════
