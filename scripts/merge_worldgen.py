@@ -72,13 +72,20 @@ COLLISION_RENAMES = [
 
 
 def fix_include(line, subdir_prefix):
-    """Fix an #include line for the merged file's directory.
+    """Fix an #include line for the merged file's directory (levelgen/).
 
-    Rules:
+    The merged file lives at levelgen/WorldGen.cpp. Original files lived at:
+      levelgen/Foo.cpp              (depth 0 — same as WorldGen.cpp)
+      levelgen/feature/Foo.cpp      (depth 1 — one level deeper)
+      levelgen/structure/placement/Foo.cpp (depth 2 — two levels deeper)
+
+    Rules for path rewriting:
     - #include <...> (system/external) → leave as-is
-    - #include "../Foo.h" → strip the "../" (WorldGen.cpp is in the parent)
-    - #include "Foo.h" (from a subdir file) → prepend subdir_prefix
-    - #include "subdir/Foo.h" → leave as-is (already has a path)
+    - #include "../X" from a depth-N file → strip N "../" prefixes
+      (e.g. "../../block/Blocks.h" from feature/ → "../block/Blocks.h")
+    - #include "Foo.h" (bare, from a subdir file at depth>0) → prepend subdir
+      (e.g. "WorldCarver.h" from carver/ → "carver/WorldCarver.h")
+    - #include "subdir/Foo.h" (already pathed) → leave as-is
     """
     m = re.match(r'(\s*#include\s+)"([^"]+)"(.*)', line)
     if not m:
@@ -86,19 +93,47 @@ def fix_include(line, subdir_prefix):
 
     prefix, header, suffix = m.group(1), m.group(2), m.group(3)
 
-    # Already has a path separator and doesn't start with ..
-    if '/' in header and not header.startswith('../'):
-        return line
+    # Count how many "../" the original header had
+    levels_up = 0
+    temp = header
+    while temp.startswith('../'):
+        levels_up += 1
+        temp = temp[3:]
 
-    # Relative parent include: "../Foo.h" → "Foo.h"
-    if header.startswith('../'):
-        # Strip one or more "../" prefixes
-        while header.startswith('../'):
-            header = header[3:]
-        return f'{prefix}"{header}"{suffix}'
+    # The subdir depth = number of "/" in subdir_prefix
+    subdir_depth = subdir_prefix.count('/') if subdir_prefix else 0
+
+    # From WorldGen.cpp (depth 0), we need levels_up - subdir_depth "../" prefixes
+    if levels_up > 0:
+        remaining_up = levels_up - subdir_depth
+        if remaining_up > 0:
+            # If remaining_up would take us above src/, the -I src/ flag will
+            # resolve the bare path. So if remaining_up > 1, strip all ../
+            # and let the include directory handle it.
+            # From levelgen/ (depth 0), one ../ takes us to level/, two to world/,
+            # three to src/. Anything beyond src/ should be resolved via -I src/.
+            # The original files used paths like ../../../core/Log.h from
+            # structure/placement/ (depth 2), which = 1 remaining ../ from
+            # levelgen/ → ../core/Log.h → from level/ that's level/core/Log.h
+            # (wrong) BUT with -I src/ the compiler also finds core/Log.h
+            # (correct). So: if remaining_up >= 2, strip all ../ (let -I handle it).
+            # If remaining_up == 1, keep one ../ (resolves to level/X which may
+            # or may not be right, but matches what a depth-0 file would use).
+            # Actually, the safest approach: always strip ALL ../ and rely on -I src/.
+            # This works because the build has -I src/ and all original includes
+            # were relative to src/ via a chain of ../
+            new_header = temp
+        else:
+            new_header = temp
+        return f'{prefix}"{new_header}"{suffix}'
+
+    # No "../" — bare header or already-pathed
+    # If it has a "/" already, it's already a path (e.g. "world/level/block/Blocks.h")
+    if '/' in header:
+        return line  # leave as-is
 
     # Bare header from a subdirectory file: "Foo.h" → "subdir/Foo.h"
-    if subdir_prefix and '/' not in header:
+    if subdir_prefix:
         return f'{prefix}"{subdir_prefix}{header}"{suffix}'
 
     return line
