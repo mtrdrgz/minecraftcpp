@@ -124,6 +124,9 @@ BLOCK_COLORS: dict[str, Tuple[float, float, float]] = {
     "spawner":        (0.40, 0.30, 0.30),
     "end_portal_frame":(0.10, 0.20, 0.18),
     "bone_block":     (0.86, 0.84, 0.72),
+    "cave_air":       (0.05, 0.05, 0.05),   # invisible (treated as transparent)
+    "iron_chain":     (0.45, 0.45, 0.47),
+    "wall_torch":     (0.95, 0.78, 0.30),
 
     # Liquids
     "water":          (0.20, 0.36, 0.78),

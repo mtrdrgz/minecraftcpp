@@ -9,6 +9,13 @@ from .fossils import (
     NETHER_FOSSILS,
     FOSSIL_REGISTRY,
 )
+from .mineshaft import (
+    generate_mineshaft,
+    assemble_mineshaft_normal,
+    MineshaftType,
+    LegacyRandomSource,
+    set_large_feature_seed,
+)
 
 __all__ = [
     "fossil_generator",
@@ -19,4 +26,9 @@ __all__ = [
     "OVERWORLD_FOSSILS",
     "NETHER_FOSSILS",
     "FOSSIL_REGISTRY",
+    "generate_mineshaft",
+    "assemble_mineshaft_normal",
+    "MineshaftType",
+    "LegacyRandomSource",
+    "set_large_feature_seed",
 ]
