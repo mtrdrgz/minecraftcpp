@@ -148,22 +148,21 @@
 #include <map>
 #include <shared_mutex>
 #include <tuple>
-#include "feature/TreeGen.h"
 #include <numbers>
 #include "feature/OreGen.h"
-#include "placement/StructurePlacement.h"
+#include "structure/placement/StructurePlacement.h"
 #include "structure/StructurePieceBase.h"
-#include "structures/SwampHutPiece.h"
-#include "structures/DesertPyramidPiece.h"
-#include "structures/JungleTemplePiece.h"
-#include "structures/BuriedTreasurePieces.h"
-#include "structures/OceanRuinClusterGeometry.h"
-#include "structures/MineshaftPieces.h"
-#include "structures/MineshaftAssembly.h"
-#include "structures/OceanMonumentPieces.h"
-#include "pools/PoolAlias.h"
-#include "pools/StructureTemplatePool.h"
-#include "templatesystem/StructureTemplateLoader.h"
+#include "structure/structures/SwampHutPiece.h"
+#include "structure/structures/DesertPyramidPiece.h"
+#include "structure/structures/JungleTemplePiece.h"
+#include "structure/structures/BuriedTreasurePieces.h"
+#include "structure/structures/OceanRuinClusterGeometry.h"
+#include "structure/structures/MineshaftPieces.h"
+#include "structure/structures/MineshaftAssembly.h"
+#include "structure/structures/OceanMonumentPieces.h"
+#include "structure/pools/PoolAlias.h"
+#include "structure/pools/StructureTemplatePool.h"
+#include "structure/templatesystem/StructureTemplateLoader.h"
 #include "core/Log.h"
 #include "nbt/NbtIo.h"
 #include "util/SequencedPriorityIterator.h"
@@ -178,7 +177,6 @@
 #include "world/phys/shapes/Shapes.h"
 #include <cstddef>
 #include <iterator>
-#include "structure/placement/StructurePlacement.h"
 #include "structure/placement/ConcentricRingsPositions.h"
 
 

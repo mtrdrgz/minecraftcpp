@@ -116,9 +116,26 @@ def fix_include(line, subdir_prefix):
         return f'{prefix}"{new_header}"{suffix}'
 
     # No "../" — bare header or already-pathed
-    # If it has a "/" already, it's already a path (e.g. "world/level/block/Blocks.h")
+    # If the header has a "/" and the file is from a subdirectory, the path
+    # is relative to that subdirectory. E.g. StructureGen.cpp (in structure/)
+    # includes "placement/StructurePlacement.h" which means
+    # "structure/placement/StructurePlacement.h" from the merged file.
+    # We need to prepend the subdir prefix UNLESS the path already starts
+    # with the subdir or is an absolute project path like "world/level/...".
     if '/' in header:
-        return line  # leave as-is
+        # Skip paths that are already project-root-relative (start with world/, core/, etc.)
+        # These are resolved via -I src/ and don't need adjustment.
+        known_roots = ('world/', 'core/', 'render/', 'gui/', 'client/', 'network/',
+                       'nbt/', 'util/', 'platform/', 'audio/', 'profiling/', 'assets/')
+        if header.startswith(known_roots):
+            return line  # Already project-root-relative — leave as-is
+        # Skip if the header already starts with the subdir prefix
+        if subdir_prefix and header.startswith(subdir_prefix):
+            return line  # Already correct
+        # Prepend subdir prefix
+        if subdir_prefix:
+            return f'{prefix}"{subdir_prefix}{header}"{suffix}'
+        return line  # Depth-0 file — path is already relative to levelgen/
 
     # Bare header from a subdirectory file: "Foo.h" → "subdir/Foo.h"
     if subdir_prefix:
