@@ -2,38 +2,14 @@
 """
 Merge all worldgen .cpp files into a single WorldGen.cpp.
 
-Strategy:
-  1. Read each .cpp file listed in the engine build (CMakeLists.txt lines 25-54)
-  2. Extract #include directives — union them (deduplicate, preserving order)
-  3. Extract the file body (everything after the last #include)
-  4. Wrap each file's body in a unique named namespace to avoid anonymous
-     namespace collisions (6 symbols collide across files — wrapping each
-     file's body in its own namespace fixes this automatically)
-  5. Concatenate: includes + all wrapped bodies → WorldGen.cpp
-  6. Update CMakeLists.txt to replace the 27 entries with a single WorldGen.cpp
+Fixes include paths: when a .cpp from a subdirectory (e.g. carver/WorldCarver.cpp)
+includes a header relative to its own directory (e.g. "WorldCarver.h"), the
+merged file (which lives in the parent levelgen/ directory) needs the include
+adjusted to "carver/WorldCarver.h".
 
-The wrapping namespace per-file is the KEY trick: anonymous namespaces in
-different .cpp files are independent scopes, but if we merge them into one
-file they'd share the same anonymous scope. By wrapping each file's body
-in `namespace worldgen_<filename> { ... }`, we preserve the independence.
-
-However, this means functions that were in anonymous namespaces and called
-from the SAME file still work (they're in the same wrapping namespace).
-Functions that were `static` also still work (file-scope statics become
-namespace-scope within the wrapper).
-
-The PUBLIC API functions (non-static, non-anonymous-namespace) are NOT
-inside the wrapping namespace — they're at file scope. Wait, that won't
-work either because they'd lose access to the anonymous helpers.
-
-Actually the simplest correct approach: wrap EVERYTHING from each file
-(including the anonymous namespace) in a named namespace, then add `using`
-declarations for the public symbols that need to be visible.
-
-But that's very complex. Let me use a simpler approach: just rename the
-6 colliding symbols. There are only 6, and they're all in anonymous
-namespaces, so renaming them with a file-specific prefix fixes the issue
-without wrapping.
+Also fixes "../" relative includes: a file in feature/ that includes
+"../RandomSource.h" needs it changed to "RandomSource.h" (since WorldGen.cpp
+is in the parent).
 """
 
 import os
@@ -44,38 +20,39 @@ REPO_ROOT = "/home/z/my-project"
 LEVELGEN_DIR = os.path.join(REPO_ROOT, "src/world/level/levelgen")
 OUTPUT_FILE = os.path.join(LEVELGEN_DIR, "WorldGen.cpp")
 
-# The 27 .cpp files in the main engine build (from CMakeLists.txt lines 25-54)
+# (relpath, subdirectory_prefix) — subdirectory_prefix is prepended to
+# relative includes that don't start with ../
 SOURCE_FILES = [
-    "Aquifer.cpp",
-    "CubicSpline.cpp",
-    "DensityFunction.cpp",
-    "Noise.cpp",
-    "Noises.cpp",
-    "OreVeinifier.cpp",
-    "RandomSource.cpp",
-    "RandomState.cpp",
-    "TerrainProvider.cpp",
-    "NoiseRouterData.cpp",
-    "NoiseSettings.cpp",
-    "NoiseGeneratorSettings.cpp",
-    "SurfaceRules.cpp",
-    "SurfaceSystem.cpp",
-    "SurfaceRuleData.cpp",
-    "carver/WorldCarver.cpp",
-    "BiomeSource.cpp",
-    "BiomeManager.cpp",
-    "OverworldBiomeBuilder.cpp",
-    "NoiseBasedChunkGenerator.cpp",
-    "feature/BiomeFeatures.cpp",
-    "feature/BiomeDecorator.cpp",
-    "feature/FullChunkDecorateParityTest.cpp",
-    "feature/TreeGen.cpp",
-    "feature/OreGen.cpp",
-    "structure/StructureGen.cpp",
-    "structure/placement/StructurePlacement.cpp",
+    ("Aquifer.cpp", ""),
+    ("CubicSpline.cpp", ""),
+    ("DensityFunction.cpp", ""),
+    ("Noise.cpp", ""),
+    ("Noises.cpp", ""),
+    ("OreVeinifier.cpp", ""),
+    ("RandomSource.cpp", ""),
+    ("RandomState.cpp", ""),
+    ("TerrainProvider.cpp", ""),
+    ("NoiseRouterData.cpp", ""),
+    ("NoiseSettings.cpp", ""),
+    ("NoiseGeneratorSettings.cpp", ""),
+    ("SurfaceRules.cpp", ""),
+    ("SurfaceSystem.cpp", ""),
+    ("SurfaceRuleData.cpp", ""),
+    ("carver/WorldCarver.cpp", "carver/"),
+    ("BiomeSource.cpp", ""),
+    ("BiomeManager.cpp", ""),
+    ("OverworldBiomeBuilder.cpp", ""),
+    ("NoiseBasedChunkGenerator.cpp", ""),
+    ("feature/BiomeFeatures.cpp", "feature/"),
+    ("feature/BiomeDecorator.cpp", "feature/"),
+    ("feature/FullChunkDecorateParityTest.cpp", "feature/"),
+    ("feature/TreeGen.cpp", "feature/"),
+    ("feature/OreGen.cpp", "feature/"),
+    ("structure/StructureGen.cpp", "structure/"),
+    ("structure/placement/StructurePlacement.cpp", "structure/placement/"),
 ]
 
-# Colliding symbols in anonymous namespaces — these need per-file renaming.
+# Colliding symbols in anonymous namespaces
 COLLISION_RENAMES = [
     ("Aquifer.cpp", "WAY_BELOW_MIN_Y", "AQUIFER_WAY_BELOW_MIN_Y"),
     ("SurfaceSystem.cpp", "WAY_BELOW_MIN_Y", "SURFACE_SYSTEM_WAY_BELOW_MIN_Y"),
@@ -94,6 +71,39 @@ COLLISION_RENAMES = [
 ]
 
 
+def fix_include(line, subdir_prefix):
+    """Fix an #include line for the merged file's directory.
+
+    Rules:
+    - #include <...> (system/external) → leave as-is
+    - #include "../Foo.h" → strip the "../" (WorldGen.cpp is in the parent)
+    - #include "Foo.h" (from a subdir file) → prepend subdir_prefix
+    - #include "subdir/Foo.h" → leave as-is (already has a path)
+    """
+    m = re.match(r'(\s*#include\s+)"([^"]+)"(.*)', line)
+    if not m:
+        return line  # <...> or malformed — leave as-is
+
+    prefix, header, suffix = m.group(1), m.group(2), m.group(3)
+
+    # Already has a path separator and doesn't start with ..
+    if '/' in header and not header.startswith('../'):
+        return line
+
+    # Relative parent include: "../Foo.h" → "Foo.h"
+    if header.startswith('../'):
+        # Strip one or more "../" prefixes
+        while header.startswith('../'):
+            header = header[3:]
+        return f'{prefix}"{header}"{suffix}'
+
+    # Bare header from a subdirectory file: "Foo.h" → "subdir/Foo.h"
+    if subdir_prefix and '/' not in header:
+        return f'{prefix}"{subdir_prefix}{header}"{suffix}'
+
+    return line
+
+
 def extract_includes(content):
     includes = []
     for line in content.split('\n'):
@@ -103,15 +113,18 @@ def extract_includes(content):
     return includes
 
 
-def remove_includes(content):
-    lines = content.split('\n')
-    result = []
-    for line in lines:
+def process_includes(content, subdir_prefix):
+    """Remove #include lines and return (includes, body)."""
+    includes = []
+    body_lines = []
+    for line in content.split('\n'):
         stripped = line.strip()
         if stripped.startswith('#include'):
-            continue
-        result.append(line)
-    return '\n'.join(result)
+            fixed = fix_include(stripped, subdir_prefix)
+            includes.append(fixed)
+        else:
+            body_lines.append(line)
+    return includes, '\n'.join(body_lines)
 
 
 def apply_renames(content, filename):
@@ -126,7 +139,7 @@ def main():
     all_includes_ordered = []
     file_bodies = []
 
-    for relpath in SOURCE_FILES:
+    for relpath, subdir_prefix in SOURCE_FILES:
         filepath = os.path.join(LEVELGEN_DIR, relpath)
         if not os.path.exists(filepath):
             print(f"WARNING: {filepath} does not exist, skipping", file=sys.stderr)
@@ -135,13 +148,12 @@ def main():
         with open(filepath) as f:
             content = f.read()
 
-        includes = extract_includes(content)
+        includes, body = process_includes(content, subdir_prefix)
         for inc in includes:
             if inc not in all_includes:
                 all_includes.add(inc)
                 all_includes_ordered.append(inc)
 
-        body = remove_includes(content)
         body = apply_renames(body, os.path.basename(relpath))
         body = body.strip('\n')
 
@@ -158,12 +170,17 @@ def main():
     for relpath, _ in file_bodies:
         output_lines.append(f"//   - {relpath}")
     output_lines.append("//")
+    output_lines.append("// Include paths have been adjusted: relative includes from subdirectory")
+    output_lines.append("// files (e.g. carver/WorldCarver.cpp's \"WorldCarver.h\") are prefixed")
+    output_lines.append("// with the subdirectory name (\"carver/WorldCarver.h\"). Parent-relative")
+    output_lines.append("// includes (\"../Foo.h\") are collapsed to bare (\"Foo.h\").")
+    output_lines.append("//")
     output_lines.append("// Anonymous-namespace symbol collisions (6 symbols across 27 files)")
     output_lines.append("// were resolved by renaming with file-specific prefixes.")
     output_lines.append("// DO NOT EDIT MANUALLY — edit the original files and re-run the merge script.")
     output_lines.append("")
 
-    output_lines.append("// ── Unified includes (deduplicated) ─────────────────────────────────────")
+    output_lines.append("// ── Unified includes (deduplicated, paths adjusted) ────────────────────")
     for inc in all_includes_ordered:
         output_lines.append(inc)
     output_lines.append("")
@@ -186,6 +203,7 @@ def main():
     line_count = output_content.count('\n')
     print(f"\nWritten {OUTPUT_FILE}: {line_count} lines")
     print(f"Merged {len(file_bodies)} files")
+    print(f"Unique includes: {len(all_includes_ordered)}")
 
 
 if __name__ == "__main__":

@@ -30,13 +30,18 @@
 //   - structure/StructureGen.cpp
 //   - structure/placement/StructurePlacement.cpp
 //
+// Include paths have been adjusted: relative includes from subdirectory
+// files (e.g. carver/WorldCarver.cpp's "WorldCarver.h") are prefixed
+// with the subdirectory name ("carver/WorldCarver.h"). Parent-relative
+// includes ("../Foo.h") are collapsed to bare ("Foo.h").
+//
 // Anonymous-namespace symbol collisions (6 symbols across 27 files)
 // were resolved by renaming with file-specific prefixes.
 // DO NOT EDIT MANUALLY — edit the original files and re-run the merge script.
 
-// ── Unified includes (deduplicated) ─────────────────────────────────────
+// ── Unified includes (deduplicated, paths adjusted) ────────────────────
 #include "Aquifer.h"
-#include "../block/Blocks.h"
+#include "block/Blocks.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -70,93 +75,84 @@
 #include <cstdio>
 #include <cstdlib>
 #include "SurfaceRuleData.h"
-#include "WorldCarver.h"
-#include "../Aquifer.h"
-#include "../FloatProvider.h"
-#include "../VerticalAnchor.h"
-#include "../WorldGenerationContext.h"
-#include "../heightproviders/HeightProvider.h"
-#include "../Mth.h"
-#include "../../block/BlockState.h"
-#include "../../block/Blocks.h"
+#include "carver/WorldCarver.h"
+#include "FloatProvider.h"
+#include "VerticalAnchor.h"
+#include "WorldGenerationContext.h"
+#include "heightproviders/HeightProvider.h"
+#include "Mth.h"
+#include "block/BlockState.h"
 #include <functional>
 #include <optional>
 #include <string_view>
 #include "BiomeSource.h"
 #include "OverworldBiomeBuilder.h"
 #include "BiomeManager.h"
-#include "../../../core/Sha256.h"
+#include "core/Sha256.h"
 #include <cstring>
 #include "NoiseBasedChunkGenerator.h"
-#include "carver/WorldCarver.h"
-#include "../block/BlockState.h"
 #include <memory>
 #include <string>
-#include "BiomeFeatures.h"
+#include "feature/BiomeFeatures.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include "BiomeDecorator.h"
-#include "EngineDecoration.h"
-#include "../../../../core/Log.h"
-#include "../RandomSource.h"
-#include "../IntProvider.h"
-#include "../NoiseBasedChunkGenerator.h"
-#include "../BiomeSource.h"
-#include "../BiomeManager.h"
-#include "../placement/PlacedFeature.h"
-#include "../placement/PlacementModifier.h"
-#include "../placement/NoiseCountPlacement.h"
-#include "../placement/HeightmapPlacement.h"  // transitively brings HeightProvider.h + VerticalAnchor.h
-#include "OreFeature.h"
-#include "SeagrassFeature.h"
-#include "KelpFeature.h"
-#include "DiskFeature.h"
-#include "SpringFeature.h"
-#include "UnderwaterMagmaFeature.h"
-#include "MultifaceGrowthFeature.h"
-#include "TreeFeature.h"
-#include "FallenTreeFeature.h"
-#include "SimpleBlockFeature.h"
-#include "RandomSelectorFeature.h"
-#include "MonsterRoomFeature.h"
-#include "SnowAndFreezeFeature.h"
-#include "LakeFeature.h"
-#include "BlockColumnFeature.h"
-#include "SpikeFeature.h"
-#include "BlockBlobFeature.h"
-#include "GeodeFeature.h"
-#include "DesertWellFeature.h"
-#include "CaveFeatures.h"
-#include "DripstoneFeatures.h"
-#include "HugeMushroomFeatures.h"
-#include "BambooFeature.h"
-#include "IcebergFeatures.h"
-#include "CoralFeatures.h"
-#include "SculkFeatures.h"
-#include "FossilFeature.h"
-#include "FeatureSorter.h"
-#include "GenerationStep.h"
-#include "../../block/BlockStates.h"
-#include "../../block/BlockTags.h"
-#include "../../block/BlockBehaviour.h"
-#include "../../material/Fluids.h"
-#include "../../chunk/LevelChunk.h"
-#include "../structure/StructureGen.h"
-#include "../Beardifier.h"
+#include "feature/BiomeDecorator.h"
+#include "feature/EngineDecoration.h"
+#include "core/Log.h"
+#include "IntProvider.h"
+#include "placement/PlacedFeature.h"
+#include "placement/PlacementModifier.h"
+#include "placement/NoiseCountPlacement.h"
+#include "placement/HeightmapPlacement.h"  // transitively brings HeightProvider.h + VerticalAnchor.h
+#include "feature/OreFeature.h"
+#include "feature/SeagrassFeature.h"
+#include "feature/KelpFeature.h"
+#include "feature/DiskFeature.h"
+#include "feature/SpringFeature.h"
+#include "feature/UnderwaterMagmaFeature.h"
+#include "feature/MultifaceGrowthFeature.h"
+#include "feature/TreeFeature.h"
+#include "feature/FallenTreeFeature.h"
+#include "feature/SimpleBlockFeature.h"
+#include "feature/RandomSelectorFeature.h"
+#include "feature/MonsterRoomFeature.h"
+#include "feature/SnowAndFreezeFeature.h"
+#include "feature/LakeFeature.h"
+#include "feature/BlockColumnFeature.h"
+#include "feature/SpikeFeature.h"
+#include "feature/BlockBlobFeature.h"
+#include "feature/GeodeFeature.h"
+#include "feature/DesertWellFeature.h"
+#include "feature/CaveFeatures.h"
+#include "feature/DripstoneFeatures.h"
+#include "feature/HugeMushroomFeatures.h"
+#include "feature/BambooFeature.h"
+#include "feature/IcebergFeatures.h"
+#include "feature/CoralFeatures.h"
+#include "feature/SculkFeatures.h"
+#include "feature/FossilFeature.h"
+#include "feature/FeatureSorter.h"
+#include "feature/GenerationStep.h"
+#include "block/BlockStates.h"
+#include "block/BlockTags.h"
+#include "block/BlockBehaviour.h"
+#include "material/Fluids.h"
+#include "chunk/LevelChunk.h"
+#include "structure/StructureGen.h"
+#include "Beardifier.h"
 #include <atomic>
 #include <mutex>
 #include <iostream>
 #include <map>
 #include <shared_mutex>
 #include <tuple>
-#include "TreeGen.h"
+#include "feature/TreeGen.h"
 #include <numbers>
-#include "OreGen.h"
-#include "StructureGen.h"
+#include "feature/OreGen.h"
 #include "placement/StructurePlacement.h"
-#include "StructurePieceBase.h"
+#include "structure/StructurePieceBase.h"
 #include "structures/SwampHutPiece.h"
 #include "structures/DesertPyramidPiece.h"
 #include "structures/JungleTemplePiece.h"
@@ -168,7 +164,6 @@
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
-#include "core/Log.h"
 #include "nbt/NbtIo.h"
 #include "util/SequencedPriorityIterator.h"
 #include "world/level/block/BlockRotation.h"
@@ -182,9 +177,8 @@
 #include "world/phys/shapes/Shapes.h"
 #include <cstddef>
 #include <iterator>
-#include "StructurePlacement.h"
-#include "ConcentricRingsPositions.h"
-#include "../../RandomSource.h"
+#include "structure/placement/StructurePlacement.h"
+#include "structure/placement/ConcentricRingsPositions.h"
 
 
 // ═════════════════════════════════════════════════════════════════════════
