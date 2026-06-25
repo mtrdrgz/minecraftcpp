@@ -23,6 +23,7 @@ set(MC_SOURCES
     world/level/chunk/LevelChunk.cpp
     # World — Levelgen (unified into a single compilation unit)
     world/level/levelgen/WorldGen.cpp
+    world/level/levelgen/feature/TreeGen.cpp
     world/level/biome/BiomeRegistry.cpp
     world/level/block/BlockTags.cpp
     # World — Item

@@ -41,7 +41,11 @@ SOURCE_FILES = [
     ("feature/BiomeFeatures.cpp", "feature/"),
     ("feature/BiomeDecorator.cpp", "feature/"),
     ("feature/FullChunkDecorateParityTest.cpp", "feature/"),
-    ("feature/TreeGen.cpp", "feature/"),
+    # TreeGen.cpp EXCLUDED: TreeGen.h defines FoliageAttachment/TreeConfig with
+    # different layouts than TreeFeature.h, and both are needed (TreeGen.cpp
+    # uses TreeGen.h's, FullChunkDecorateParityTest.cpp uses TreeFeature.h's).
+    # These cannot coexist in one compilation unit. TreeGen.cpp stays as a
+    # separate .cpp file — it's only 868 lines and compiles independently.
     ("feature/OreGen.cpp", "feature/"),
     ("structure/StructureGen.cpp", "structure/"),
     ("structure/placement/StructurePlacement.cpp", "structure/placement/"),
@@ -102,21 +106,10 @@ COLLISION_RENAMES = [
 
 # Headers that should NOT be included in WorldGen.cpp because they duplicate
 # definitions from other headers already included.
-# TreeGen.h is NOT excluded — it has unique content (TreeWorld, FoliagePlacer, etc.)
-# But it also has FoliageAttachment/TreeConfig which conflict with TreeFeature.h.
-# Solution: wrap TreeGen.cpp's section in a unique inner namespace so its
-# TreeGen.h definitions don't conflict with TreeFeature.h's versions.
-EXCLUDE_INCLUDES = [
-    # Nothing excluded — TreeGen.h is included but TreeGen.cpp is namespace-wrapped
-]
+EXCLUDE_INCLUDES = []
 
-# Files whose body should be wrapped in a unique inner namespace to isolate
-# their header definitions from other files' headers.
-# TreeGen.cpp: TreeGen.h defines FoliageAttachment/TreeConfig which conflict
-# with TreeFeature.h's versions (different struct layouts).
-NAMESPACE_WRAP = {
-    "feature/TreeGen.cpp": "treegen_impl",
-}
+# No namespace wrapping needed — TreeGen.cpp is excluded from the merge.
+NAMESPACE_WRAP = {}
 
 
 def fix_include(line, subdir_prefix):
@@ -240,19 +233,7 @@ def main():
 
     output_lines.append("// ── Unified includes (deduplicated, paths adjusted) ────────────────────")
     for inc in all_includes_ordered:
-        # Special case: wrap TreeGen.h include in a namespace to isolate its
-        # FoliageAttachment/TreeConfig definitions from TreeFeature.h's versions.
-        if 'TreeGen.h' in inc:
-            output_lines.append("namespace treegen_impl { // isolate TreeGen.h definitions")
-            output_lines.append(inc)
-            output_lines.append("} // namespace treegen_impl")
-            output_lines.append("// Bring TreeGen.h's unique symbols (TreeWorld, FoliagePlacer, etc.) into")
-            output_lines.append("// mc::levelgen::feature via using-declarations, so TreeGen.cpp's code")
-            output_lines.append("// (which is NOT wrapped) can still reference them.")
-            output_lines.append("// NOTE: FoliageAttachment/TreeConfig are NOT re-exported — they stay")
-            output_lines.append("// in treegen_impl to avoid conflicting with TreeFeature.h's versions.")
-        else:
-            output_lines.append(inc)
+        output_lines.append(inc)
     output_lines.append("")
 
     for relpath, body in file_bodies:
