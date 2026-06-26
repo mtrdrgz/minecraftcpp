@@ -13024,16 +13024,19 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:ocean_ruin",
         "minecraft:mineshaft",
         "minecraft:ruined_portal",
-        "minecraft:ocean_monument",
         "minecraft:end_city",
-        // RULE #0: woodland_mansion / fortress / stronghold were marked supported
-        // but their tryPlace* bodies place FABRICATED "looks reasonable" geometry —
-        // a hand-built 52×52 cobblestone slab (mansion), a 5×10 nether-brick bridge
-        // (fortress), and a 16×16×8 stone-brick box that CARVES a 14×14×6 pocket of
-        // AIR into the terrain (stronghold). None of that comes from the Java piece
-        // ports; it is invented. Per RULE #0 a not-yet-ported structure must be a
-        // hard no-op, never a silent return-true. They are removed from this set so
-        // the loader reports them UNPORTED. Re-add ONLY with a real 1:1 piece port.
+        // RULE #0: woodland_mansion / fortress / stronghold / ocean_monument were
+        // marked supported but place geometry that is NOT a faithful Java piece port:
+        //   - mansion: a hand-built 52×52 cobblestone slab + dark-oak-log box.
+        //   - fortress: a 5×10 nether-brick bridge.
+        //   - stronghold: a 16×16×8 stone-brick box that CARVES a 14×14×6 pocket of
+        //     AIR into the terrain.
+        //   - ocean_monument: only the outer shell, with NO child rooms and an RNG
+        //     stream that does NOT match Java (placeOceanMonument admits this) — a
+        //     "looks reasonable" partial that still returns true.
+        // Per RULE #0 a not-yet-ported structure must be a hard no-op, never a silent
+        // return-true. Removed from this set so the loader reports them UNPORTED.
+        // Re-add ONLY with a real 1:1 piece port. (end_city is End-only: kept.)
     };
 
     if (supportedTypes.count(type) == 0) {

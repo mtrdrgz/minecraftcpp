@@ -993,14 +993,14 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:ocean_ruin",
         "minecraft:mineshaft",
         "minecraft:ruined_portal",
-        "minecraft:ocean_monument",
         "minecraft:end_city",
-        // RULE #0: woodland_mansion / fortress / stronghold removed — their
-        // tryPlace* bodies place FABRICATED geometry (mansion: 52×52 cobblestone
-        // slab; fortress: 5×10 nether-brick bridge; stronghold: 16×16×8 stone box
-        // that carves a 14×14×6 AIR pocket). None is a Java piece port. A
-        // not-yet-ported structure must be a hard no-op, never a silent return-true.
-        // Re-add ONLY with a real 1:1 piece port. Keep in sync with WorldGen.cpp.
+        // RULE #0: woodland_mansion / fortress / stronghold / ocean_monument removed —
+        // their tryPlace* bodies are NOT faithful piece ports (mansion: 52×52
+        // cobblestone slab; fortress: 5×10 nether-brick bridge; stronghold: 16×16×8
+        // stone box that carves a 14×14×6 AIR pocket; ocean_monument: outer shell
+        // only, no rooms, RNG stream not matching Java). A not-yet-ported structure
+        // must be a hard no-op, never a silent return-true. Re-add ONLY with a real
+        // 1:1 piece port. (end_city is End-only: kept.) Keep in sync with WorldGen.cpp.
     };
 
     if (supportedTypes.count(type) == 0) {

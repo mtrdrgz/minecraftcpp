@@ -136,8 +136,9 @@
       `stronghold` (caja 16×16×8 de stone_bricks que **excava un hueco de aire
       14×14×6** en el terreno — el "espacio cuadrado de aire" reportado). Eliminadas
       de `supportedTypes` en `WorldGen.cpp` y `StructureGen.cpp`: ahora son no-ops
-      honestos (UNPORTED). Pendiente decisión del owner sobre `ocean_monument`
-      (cáscara real pero RNG roto + sin salas) y `end_city` (solo `base_floor`).
+      honestos (UNPORTED). `ocean_monument` también revertido (cáscara real pero RNG
+      roto + sin salas). `end_city` se mantiene (solo `base_floor`, pero es del End,
+      no afecta al overworld).
 - [ ] FÓSILES overworld ("huesos de dinosaurio"): el cuerpo del feature
       (`FossilFeature.h`) es 1:1 fiel a `FossilFeature.java` (rarity 1/64 en
       desert/swamp/mangrove, colocado 15–24 bajo la superficie, NUNCA escribe aire).

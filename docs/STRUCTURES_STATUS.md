@@ -40,13 +40,17 @@ both `WorldGen.cpp` and `StructureGen.cpp`**; they now report UNPORTED and place
 nothing (RULE #0). Their `tryPlace*` bodies are left as unreachable dead code to
 be replaced by real ports.
 
-**Still partial (NOT pure fabrication, left enabled pending owner call):**
-- `ocean_monument` — places the **real Java outer-shell geometry** (correct
-  `createTopPiece` coords/blocks) but **defers all child rooms** and **does not
-  align the RNG stream** (`placeOceanMonument` comment: "RNG state … does NOT
-  match Java's"). Overworld-visible (deep ocean). Candidate for the same revert.
-- `end_city` — places only the `end_city/base_floor` template, child pieces
-  deferred. End dimension only; not reached in overworld play.
+**`ocean_monument` — also reverted (owner decision 2026-06-26).** It placed the
+**real Java outer-shell geometry** (correct `createTopPiece` coords/blocks) but
+**deferred all child rooms** and **did not align the RNG stream**
+(`placeOceanMonument` comment: "RNG state … does NOT match Java's"). A lone shell
+with no interior in deep ocean is a "looks reasonable" partial that still returns
+true, so it is removed from `supportedTypes` in both files → UNPORTED no-op.
+
+**`end_city` — kept enabled.** Places only the `end_city/base_floor` template
+(child pieces deferred), but it is reachable only in the End dimension, which is
+not generated during overworld play. Left as a partial pending a real port; it
+does not affect the overworld world the owner is finishing.
 
 **Fossils (overworld "dinosaur bones") — investigated, body is faithful.** The
 owner suspected absurd frequency + air carving. `FossilFeature.h` is a faithful
