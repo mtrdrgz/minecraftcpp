@@ -130,6 +130,19 @@
       ~66-77 (small) / ~480-880 (large+cluster), warm ~30-36 / ~207. Gaps honestos documentados
       (loot del cofre, drowned, arqueología suspicious-sand → necesitan block-entity/entidad/loot).
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
+- [x] AUDITORÍA 2026-06-26 (RULE #0): se encontraron 3 estructuras con colocación
+      FABRICADA marcadas como soportadas (violación de RULE #0): `woodland_mansion`
+      (losa 52×52 de adoquín inventada), `fortress` (puente 5×10 inventado) y
+      `stronghold` (caja 16×16×8 de stone_bricks que **excava un hueco de aire
+      14×14×6** en el terreno — el "espacio cuadrado de aire" reportado). Eliminadas
+      de `supportedTypes` en `WorldGen.cpp` y `StructureGen.cpp`: ahora son no-ops
+      honestos (UNPORTED). Pendiente decisión del owner sobre `ocean_monument`
+      (cáscara real pero RNG roto + sin salas) y `end_city` (solo `base_floor`).
+- [ ] FÓSILES overworld ("huesos de dinosaurio"): el cuerpo del feature
+      (`FossilFeature.h`) es 1:1 fiel a `FossilFeature.java` (rarity 1/64 en
+      desert/swamp/mangrove, colocado 15–24 bajo la superficie, NUNCA escribe aire).
+      La frecuencia/aire que se ve es probablemente la re-decoración (race) y/o el
+      `stronghold` fabricado de arriba. Confirmar en el engine de Windows.
 
 ## Texturas / coloreado
 

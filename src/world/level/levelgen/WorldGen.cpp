@@ -13025,10 +13025,15 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:mineshaft",
         "minecraft:ruined_portal",
         "minecraft:ocean_monument",
-        "minecraft:woodland_mansion",
-        "minecraft:fortress",
-        "minecraft:stronghold",
         "minecraft:end_city",
+        // RULE #0: woodland_mansion / fortress / stronghold were marked supported
+        // but their tryPlace* bodies place FABRICATED "looks reasonable" geometry —
+        // a hand-built 52×52 cobblestone slab (mansion), a 5×10 nether-brick bridge
+        // (fortress), and a 16×16×8 stone-brick box that CARVES a 14×14×6 pocket of
+        // AIR into the terrain (stronghold). None of that comes from the Java piece
+        // ports; it is invented. Per RULE #0 a not-yet-ported structure must be a
+        // hard no-op, never a silent return-true. They are removed from this set so
+        // the loader reports them UNPORTED. Re-add ONLY with a real 1:1 piece port.
     };
 
     if (supportedTypes.count(type) == 0) {
