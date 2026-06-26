@@ -25,6 +25,7 @@
 #include <unistd.h>
 #endif
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <iomanip>
 #include <filesystem>
@@ -40,6 +41,13 @@
 namespace mc {
 
 namespace {
+    // Opt-in (MCPP_CHUNK_CACHE=1) in-memory chunk persistence. Default off restores
+    // the original erase-on-unload streaming while the in-game crash is diagnosed.
+    bool chunkCacheEnabled() {
+        static const bool v = (std::getenv("MCPP_CHUNK_CACHE") != nullptr);
+        return v;
+    }
+
     // Decode a 4-channel texture from already-read PNG bytes.
     render::ITexture* decodeTex(render::IRenderDevice* dev, render::ICommandList* cmd, const uint8_t* bytes, int len) {
         if (!bytes || len <= 0) return nullptr;
@@ -265,6 +273,14 @@ void Minecraft::unloadChunk(ChunkPos pos) {
     auto it = m_chunks.find(key);
     if (it == m_chunks.end()) return;
 
+    // The in-memory persistence cache is OPT-IN (MCPP_CHUNK_CACHE=1). It is the
+    // newest change to the streaming hot path and is the prime suspect for the
+    // in-game crash, so the default is the original, known-good behaviour: just
+    // erase. With the cache off, revisiting a chunk regenerates+re-decorates it
+    // (the cross-chunk feature duplication returns — that is the trade-off until
+    // the crash is understood). Enable the cache to test/keep the duplication fix.
+    if (!chunkCacheEnabled()) { m_chunks.erase(it); return; }
+
     // Only PERSIST a chunk that is fully decorated and not still awaiting its
     // decoration turn. A chunk whose decoration was submitted but not yet completed
     // (still in m_decorationQueue) must NOT be cached: if we cached it, on restore
@@ -319,7 +335,7 @@ void Minecraft::restoreCachedChunksInRadius(int px, int pz, int radius) {
     // empty() check and the collection pass do not race the decoration worker
     // (which never touches m_chunkCache). The actual move back into m_chunks takes
     // the exclusive lock so the worker never observes a half-moved map.
-    if (m_chunkCache.empty()) return;
+    if (!chunkCacheEnabled() || m_chunkCache.empty()) return;
     std::vector<ChunkPos> toRestore;
     {
         std::shared_lock<std::shared_mutex> lk(m_chunksMutex);
@@ -641,6 +657,11 @@ void Minecraft::decorationWorkerLoop() {
         auto it = m_chunks.find(chunkKey(cp));
         LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
         if (!c) continue;
+        // Exclude the render thread's mesh-snapshot copy while we write block data
+        // (this turn writes cross-chunk: features overhang, fossils ±16, structure
+        // pieces span chunks). Copying a LevelChunk while we mutate its blocks is a
+        // data race → crash. See Minecraft::chunkWriteMutex().
+        std::lock_guard<std::mutex> writeLk(m_chunkWriteMutex);
         try {
             // Java ChunkGenerator.applyFeaturesAndStructures starts the FEATURES
             // turn by priming non-WG heightmaps, then runs structures for each

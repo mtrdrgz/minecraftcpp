@@ -692,11 +692,18 @@ Model loadModel(const std::string& id, std::unordered_set<std::string>& visiting
     return result;
 }
 
-std::optional<Model> loadModelCached(const std::string& id) {
+// Returns a POINTER into the model cache (nullptr if the model isn't loadable).
+// This is called per block during meshing; returning by value copied the whole
+// Model (textures + elements + faces) every time, which dominated chunkMesh.
+// The cache only ever inserts (never erases/mutates an entry), so a pointer to a
+// cached Model stays valid for the process lifetime, including across concurrent
+// inserts/rehashes from other meshing threads (std::unordered_map does not
+// invalidate element pointers on rehash).
+const Model* loadModelCached(const std::string& id) {
     {
         std::lock_guard<std::mutex> lock(cacheMutex());
         auto it = modelCache().find(id);
-        if (it != modelCache().end()) return it->second.loaded ? std::optional<Model>(it->second) : std::nullopt;
+        if (it != modelCache().end()) return it->second.loaded ? &it->second : nullptr;
     }
 
     std::unordered_set<std::string> visiting;
@@ -704,8 +711,8 @@ std::optional<Model> loadModelCached(const std::string& id) {
 
     std::lock_guard<std::mutex> lock(cacheMutex());
     auto it = modelCache().find(id);
-    if (it == modelCache().end() || !it->second.loaded) return std::nullopt;
-    return it->second;
+    if (it == modelCache().end() || !it->second.loaded) return nullptr;
+    return &it->second;
 }
 
 std::string resolveTextureRef(const Model& model, std::string ref) {
@@ -907,7 +914,7 @@ bool tryEmitVanillaBlockModel(SectionMesh& mesh,
 
     bool emitted = false;
     for (const AppliedModel& am : applied) {
-        std::optional<Model> model = loadModelCached(am.model);
+        const Model* model = loadModelCached(am.model);
         if (!model) continue;
 
         // Variant rotation -> ModelState transformation matrix (BlockModelRotation).

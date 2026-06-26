@@ -165,7 +165,14 @@ else()
     )
     # GLFW (built from vendor/glfw)
     target_include_directories(mcpp PRIVATE ../vendor/glfw/include)
-    find_library(GLFW3_LIB NAMES glfw3 PATHS /tmp/glfw-build/src NO_DEFAULT_PATH)
+    # Windows CI builds GLFW from vendor/glfw (prebuilt into /tmp/glfw-build).
+    # On Linux, also accept a system-installed libglfw so the client can be built
+    # and run headless (xvfb + llvmpipe) for testing without vendoring GLFW.
+    if(WIN32)
+        find_library(GLFW3_LIB NAMES glfw3 PATHS /tmp/glfw-build/src NO_DEFAULT_PATH)
+    else()
+        find_library(GLFW3_LIB NAMES glfw3 glfw PATHS /tmp/glfw-build/src /usr/lib/x86_64-linux-gnu)
+    endif()
     if(GLFW3_LIB)
         target_link_libraries(mcpp PRIVATE ${GLFW3_LIB})
     else()
