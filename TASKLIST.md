@@ -42,9 +42,19 @@
         decoración dentro de una residencia — es la regeneración-al-revisitar.
         "A peor CPU más pasa" encaja: más lag de generación → el borde se mueve más →
         más churn de descarga/regeneración. Arreglo 1:1 correcto: **persistencia**
-        (no regenerar chunks ya decorados — caché LRU en memoria que sobreviva al
-        radio de descarga, o guardado tipo región como vanilla). Pendiente de
-        implementar + build-test en el engine de Windows.
+        (no regenerar chunks ya decorados).
+  - [~] IMPLEMENTADO 2026-06-26 (pendiente build-test en Windows): **caché de
+        persistencia en memoria**. `unloadChunk` ahora MUEVE el chunk a
+        `m_chunkCache` (no lo destruye) en vez de borrarlo, y un paso nuevo
+        `restoreCachedChunksInRadius` lo devuelve VERBATIM a `m_chunks` al revisitar
+        (sin regenerar ni re-decorar → sin re-derrame de features). Solo se cachean
+        chunks totalmente decorados y que no estén en la cola de decoración (los que
+        están en vuelo se borran y se auto-curan al revisitar, como antes). El
+        renderer ya reconcilia mallas GPU contra `m_chunks` (las suelta al salir,
+        las reconstruye vía `meshDirty` al volver), así que es transparente. Capacidad
+        1024 chunks (~100-150 MB; cubre un área revisitada mucho mayor que RADIUS=6).
+        La caché se vacía al crear/cambiar de mundo. Equivale a la persistencia en
+        disco de vanilla pero en memoria. Falta compilar y probar en el engine real.
 - [ ] Hay que compilar todo a un solo ejecutable. Si el ejecutable se saca de la carpeta funciona, pero no se generan árboles ni nada; supongo que hay otros ejecutables en la carpeta de `/build` de los que depende `mcpp.exe`. Compila todo a uno. Además, seguramente el tener un proceso de generación de decoración esté quitando rendimiento y causando los problemas de chunks corruptos.
 - [ ] La generación de terreno presenta problemas de rendimiento, debe ser optimizada; hace que el juego tenga stutters.
   - [ ] Perfil 2026-06-20 22:40 UTC: `terrain_engine_perf --radius 4 --seed 1` bajó de `fillFromNoise` 190.5 ms/chunk + `buildSurface` 105.8 ms/chunk a 138.3 + 76.4 ms/chunk tras cachear generadores/RandomState/SurfaceSystem, usar setter de fase NOISE y cachear modelos vanilla por `stateId`. Sigue abierta: density functions/surface rules son aún demasiado lentos.
