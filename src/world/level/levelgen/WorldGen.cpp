@@ -14784,6 +14784,15 @@ mc::levelgen::Beardifier Runtime::buildBeardifier(
     using mc::levelgen::Beardifier;
     using mc::levelgen::TerrainAdjustment;
 
+    // Lock the Runtime caches for the same reason generate() does: this runs on the
+    // MAIN thread (per chunk, via buildChunkBeardifier — frequent while moving) and
+    // mutates the shared caches (assembledCache inserts, poolMap/jigsawTemplates via
+    // assembledFor/ensurePoolSubtree). generate() runs concurrently on the decoration
+    // worker under this same lock. Without locking here, the two race on those caches
+    // → crash when moving during generation. Same lock, no nesting (buildBeardifier
+    // never calls generate() and vice versa), so no deadlock.
+    std::lock_guard<std::shared_mutex> lk(cacheMutex);
+
     StructureWorld world;
     world.heightAt = columnHeight;
     world.getBlock = [](int, int, int) { return 0u; };
