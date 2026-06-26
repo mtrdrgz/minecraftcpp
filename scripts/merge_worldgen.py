@@ -109,6 +109,18 @@ COLLISION_RENAMES = [
 # definitions from other headers already included.
 EXCLUDE_INCLUDES = []
 
+# Includes that in the original sources lived inside a `#if defined(_WIN32)` guard
+# (RandomSource.cpp). They must NOT be hoisted unconditionally: windows.h/bcrypt.h
+# don't exist off-Windows and platform/Platform.h pulls in GLFW, so emitting them
+# bare broke every non-Windows build of the merged TU. They are dropped from the
+# normal include collection and re-emitted inside a _WIN32 guard (see main()).
+WIN32_GUARDED_INCLUDES = ("windows.h", "bcrypt.h", "platform/Platform.h")
+
+
+def is_win32_guarded_include(stripped):
+    m = re.match(r'\s*#include\s+[<"]([^>"]+)[>"]', stripped)
+    return bool(m) and m.group(1) in WIN32_GUARDED_INCLUDES
+
 # No namespace wrapping needed — TreeGen.cpp is excluded from the merge.
 NAMESPACE_WRAP = {}
 
@@ -186,6 +198,8 @@ def process_file(relpath, subdir_prefix):
     for line in content.split('\n'):
         stripped = line.strip()
         if stripped.startswith('#include'):
+            if is_win32_guarded_include(stripped):
+                continue  # dropped here; re-emitted inside a _WIN32 guard in main()
             fixed = fix_include(stripped, subdir_prefix)
             if fixed is not None:
                 includes.append(fixed)
@@ -235,6 +249,16 @@ def main():
     output_lines.append("// ── Unified includes (deduplicated, paths adjusted) ────────────────────")
     for inc in all_includes_ordered:
         output_lines.append(inc)
+    # Platform includes that were inside a `#if defined(_WIN32)` guard in the
+    # source must stay guarded — emitting them bare breaks non-Windows builds.
+    output_lines.append("#if defined(_WIN32)")
+    output_lines.append("#ifndef NOMINMAX")
+    output_lines.append("#define NOMINMAX")
+    output_lines.append("#endif")
+    output_lines.append("#include <windows.h>")
+    output_lines.append('#include "platform/Platform.h"')
+    output_lines.append("#include <bcrypt.h>")
+    output_lines.append("#endif")
     output_lines.append("")
 
     for relpath, body in file_bodies:

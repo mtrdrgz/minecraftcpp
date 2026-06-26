@@ -27,6 +27,34 @@
 ## Rendimiento / race conditions
 
 - [ ] Hay race conditions que hacen que el chunk que se genere esté corrupto. Solo pasa al ir rápido, y a peor CPU más pasa.
+  - [ ] DIAGNÓSTICO 2026-06-26 (causa raíz de la "frecuencia absurda y artificial"
+        de features): **no hay persistencia de chunks**. En `Minecraft.cpp` los chunks
+        fuera de `RADIUS = 6` se **borran** (`unloadChunk` → `m_chunks.erase`) y al
+        revisitarlos se **regeneran y RE-DECORAN** desde cero (no hay caché ni
+        guardado en disco). La decoración de un chunk N escribe features que se
+        derraman a sus vecinos (árboles que sobresalen, fósiles en ±16, piezas de
+        estructura). Si el jugador se aleja (N se descarga) y vuelve (N se regenera y
+        re-decora), N vuelve a derramar sus features sobre los vecinos que SÍ
+        persistieron → **duplicación acumulativa** en la zona de solape; a la vez el
+        chunk regenerado pierde el derrame que recibió de SUS vecinos. Ir y venir por
+        el borde de streaming acumula features. La decoración de un chunk individual
+        SÍ está protegida (flag `decorated` + un único worker), así que no es doble
+        decoración dentro de una residencia — es la regeneración-al-revisitar.
+        "A peor CPU más pasa" encaja: más lag de generación → el borde se mueve más →
+        más churn de descarga/regeneración. Arreglo 1:1 correcto: **persistencia**
+        (no regenerar chunks ya decorados).
+  - [~] IMPLEMENTADO 2026-06-26 (pendiente build-test en Windows): **caché de
+        persistencia en memoria**. `unloadChunk` ahora MUEVE el chunk a
+        `m_chunkCache` (no lo destruye) en vez de borrarlo, y un paso nuevo
+        `restoreCachedChunksInRadius` lo devuelve VERBATIM a `m_chunks` al revisitar
+        (sin regenerar ni re-decorar → sin re-derrame de features). Solo se cachean
+        chunks totalmente decorados y que no estén en la cola de decoración (los que
+        están en vuelo se borran y se auto-curan al revisitar, como antes). El
+        renderer ya reconcilia mallas GPU contra `m_chunks` (las suelta al salir,
+        las reconstruye vía `meshDirty` al volver), así que es transparente. Capacidad
+        1024 chunks (~100-150 MB; cubre un área revisitada mucho mayor que RADIUS=6).
+        La caché se vacía al crear/cambiar de mundo. Equivale a la persistencia en
+        disco de vanilla pero en memoria. Falta compilar y probar en el engine real.
 - [ ] Hay que compilar todo a un solo ejecutable. Si el ejecutable se saca de la carpeta funciona, pero no se generan árboles ni nada; supongo que hay otros ejecutables en la carpeta de `/build` de los que depende `mcpp.exe`. Compila todo a uno. Además, seguramente el tener un proceso de generación de decoración esté quitando rendimiento y causando los problemas de chunks corruptos.
 - [ ] La generación de terreno presenta problemas de rendimiento, debe ser optimizada; hace que el juego tenga stutters.
   - [ ] Perfil 2026-06-20 22:40 UTC: `terrain_engine_perf --radius 4 --seed 1` bajó de `fillFromNoise` 190.5 ms/chunk + `buildSurface` 105.8 ms/chunk a 138.3 + 76.4 ms/chunk tras cachear generadores/RandomState/SurfaceSystem, usar setter de fase NOISE y cachear modelos vanilla por `stateId`. Sigue abierta: density functions/surface rules son aún demasiado lentos.
@@ -130,6 +158,20 @@
       ~66-77 (small) / ~480-880 (large+cluster), warm ~30-36 / ~207. Gaps honestos documentados
       (loot del cofre, drowned, arqueología suspicious-sand → necesitan block-entity/entidad/loot).
 - [ ] Hay que acabar completamente el plan de implementación de estructuras. (Roadmap completo en `docs/STRUCTURES_STATUS.md`.)
+- [x] AUDITORÍA 2026-06-26 (RULE #0): se encontraron 3 estructuras con colocación
+      FABRICADA marcadas como soportadas (violación de RULE #0): `woodland_mansion`
+      (losa 52×52 de adoquín inventada), `fortress` (puente 5×10 inventado) y
+      `stronghold` (caja 16×16×8 de stone_bricks que **excava un hueco de aire
+      14×14×6** en el terreno — el "espacio cuadrado de aire" reportado). Eliminadas
+      de `supportedTypes` en `WorldGen.cpp` y `StructureGen.cpp`: ahora son no-ops
+      honestos (UNPORTED). `ocean_monument` también revertido (cáscara real pero RNG
+      roto + sin salas). `end_city` se mantiene (solo `base_floor`, pero es del End,
+      no afecta al overworld).
+- [ ] FÓSILES overworld ("huesos de dinosaurio"): el cuerpo del feature
+      (`FossilFeature.h`) es 1:1 fiel a `FossilFeature.java` (rarity 1/64 en
+      desert/swamp/mangrove, colocado 15–24 bajo la superficie, NUNCA escribe aire).
+      La frecuencia/aire que se ve es probablemente la re-decoración (race) y/o el
+      `stronghold` fabricado de arriba. Confirmar en el engine de Windows.
 
 ## Texturas / coloreado
 

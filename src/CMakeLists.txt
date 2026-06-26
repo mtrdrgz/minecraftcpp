@@ -175,8 +175,10 @@ else()
         set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
         set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
         set(GLFW_BUILD_X11 ON CACHE BOOL "" FORCE)
-        add_subdirectory(../vendor/glfw glfw_build EXCLUDE_FROM_ALL)
-        target_link_libraries(mcpp PRIVATE glfw)
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../vendor/glfw/CMakeLists.txt)
+            add_subdirectory(../vendor/glfw glfw_build EXCLUDE_FROM_ALL)
+            target_link_libraries(mcpp PRIVATE glfw)
+        endif()
     endif()
     # OpenGL — prefer system libGL, fall back to /tmp/x11-dev if needed
     find_library(GL_LIB GL

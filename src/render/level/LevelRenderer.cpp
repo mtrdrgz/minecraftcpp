@@ -209,6 +209,16 @@ void LevelRenderer::updateCamera(float dtSec) {
         m_camYaw = m_mc->player().yaw; m_camPitch = m_mc->player().pitch;
         m_camInitialized = true; if (m_window) m_window->captureMouse(true);
     }
+    // Debug teleport: the camera is the position authority, so a teleport must move
+    // m_camPos (just setting player() would be overwritten below). Streaming reloads
+    // the world around the new position on its own.
+    {
+        double tx, ty, tz;
+        if (m_mc->consumeTeleport(tx, ty, tz)) {
+            m_camPos = {(float)tx, (float)ty + 1.62f, (float)tz};
+            m_camInitialized = true;
+        }
+    }
     if (!m_window) return;
     int dx = 0, dy = 0; m_window->consumeMouseDelta(dx, dy);
     if (dx || dy) {

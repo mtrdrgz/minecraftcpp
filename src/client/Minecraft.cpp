@@ -256,12 +256,100 @@ LevelChunk* Minecraft::getOrCreateChunk(ChunkPos pos) {
 }
 void Minecraft::unloadChunk(ChunkPos pos) {
     // Exclusive lock — block any decoration worker (and any getChunk) from
-    // touching the map while we erase. If a decoration turn is in progress on
-    // this chunk, the worker holds the shared lock and we block here until it
-    // finishes. This is intentional: the engine NEVER unloads a chunk that's
-    // actively being decorated.
+    // touching the map while we move the chunk out. If a decoration turn is in
+    // progress on this chunk, the worker holds the shared lock and we block here
+    // until it finishes. This is intentional: the engine NEVER unloads a chunk
+    // that's actively being decorated.
     std::unique_lock<std::shared_mutex> lk(m_chunksMutex);
-    m_chunks.erase(chunkKey(pos));
+    const int64_t key = chunkKey(pos);
+    auto it = m_chunks.find(key);
+    if (it == m_chunks.end()) return;
+
+    // Only PERSIST a chunk that is fully decorated and not still awaiting its
+    // decoration turn. A chunk whose decoration was submitted but not yet completed
+    // (still in m_decorationQueue) must NOT be cached: if we cached it, on restore
+    // it would look "decorated" and never actually receive its features. Erase it
+    // instead — revisiting regenerates it from scratch and decorates it freshly
+    // (self-healing, exactly as before this cache existed). Note: a chunk the worker
+    // is actively decorating can't be here yet, because the worker holds the shared
+    // lock for its whole turn and we hold the exclusive lock — so we already waited
+    // for it to finish, after which it is decorated and out of the queue.
+    bool cacheable = it->second && it->second->decorated;
+    if (cacheable) {
+        std::lock_guard<std::mutex> qlk(m_decorationQueueMutex);
+        for (const ChunkPos& q : m_decorationQueue)
+            if (chunkKey(q) == key) { cacheable = false; break; }
+    }
+    if (!cacheable) {
+        m_chunks.erase(it);
+        return;
+    }
+
+    // Persist the chunk in memory instead of destroying it. Revisiting restores
+    // it verbatim, so its terrain + decoration (including features that spilled in
+    // from neighbours) are NOT regenerated — and, crucially, its OWN features are
+    // never re-spilled into neighbours. That re-spill on every regeneration is what
+    // produced the artificial over-density of trees/fossils/structures near the
+    // streaming edge. Vanilla persists chunks to disk; this is the in-memory form.
+    // Moving the unique_ptr does not move the LevelChunk object, so any LevelChunk*
+    // held elsewhere stays valid.
+    m_chunkCache[key] = std::move(it->second);
+    m_chunks.erase(it);
+    m_chunkCacheOrder.push_back(key);
+    // Drop stale front entries (keys already restored or evicted) so the order
+    // deque can't grow unboundedly under repeated unload/restore cycles (pacing
+    // back and forth over the same boundary).
+    while (!m_chunkCacheOrder.empty() &&
+           m_chunkCache.find(m_chunkCacheOrder.front()) == m_chunkCache.end())
+        m_chunkCacheOrder.pop_front();
+    // Evict the oldest live entries beyond capacity (truly free them).
+    while (m_chunkCache.size() > kChunkCacheCapacity && !m_chunkCacheOrder.empty()) {
+        const int64_t oldest = m_chunkCacheOrder.front();
+        m_chunkCacheOrder.pop_front();
+        m_chunkCache.erase(oldest);
+        // Skip any stale entries newly exposed at the front.
+        while (!m_chunkCacheOrder.empty() &&
+               m_chunkCache.find(m_chunkCacheOrder.front()) == m_chunkCache.end())
+            m_chunkCacheOrder.pop_front();
+    }
+}
+
+void Minecraft::restoreCachedChunksInRadius(int px, int pz, int radius) {
+    // Main-thread only. m_chunkCache is mutated solely on the main thread, so the
+    // empty() check and the collection pass do not race the decoration worker
+    // (which never touches m_chunkCache). The actual move back into m_chunks takes
+    // the exclusive lock so the worker never observes a half-moved map.
+    if (m_chunkCache.empty()) return;
+    std::vector<ChunkPos> toRestore;
+    {
+        std::shared_lock<std::shared_mutex> lk(m_chunksMutex);
+        for (int cz = -radius; cz <= radius; ++cz) {
+            for (int cx = -radius; cx <= radius; ++cx) {
+                const ChunkPos cp{ px + cx, pz + cz };
+                const int64_t key = chunkKey(cp);
+                if (m_chunks.find(key) != m_chunks.end()) continue;   // already live
+                if (m_chunkCache.find(key) != m_chunkCache.end()) toRestore.push_back(cp);
+            }
+        }
+    }
+    if (toRestore.empty()) return;
+    std::unique_lock<std::shared_mutex> lk(m_chunksMutex);
+    static constexpr int kCardinal[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+    for (const ChunkPos cp : toRestore) {
+        const int64_t key = chunkKey(cp);
+        auto cit = m_chunkCache.find(key);
+        if (cit == m_chunkCache.end()) continue;
+        LevelChunk* ptr = cit->second.get();
+        m_chunks[key] = std::move(cit->second);
+        m_chunkCache.erase(cit);
+        // Rebuild the mesh (GPU meshes are reconciled from meshDirty) and re-seam
+        // the cardinal neighbours so the borders stitch to whatever is loaded now.
+        ptr->meshDirty = true;
+        for (const auto& d : kCardinal) {
+            auto itN = m_chunks.find(chunkKey({ cp.x + d[0], cp.z + d[1] }));
+            if (itN != m_chunks.end() && itN->second) itN->second->meshDirty = true;
+        }
+    }
 }
 
 // ── Login sequence ─────────────────────────────────────────────────────────────
@@ -674,6 +762,10 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
         std::lock_guard<std::mutex> dlk(m_decorationDoneMutex);
         m_decorationDone.clear();
         m_chunks.clear();
+        // Drop the persistence cache too — its chunks belong to the OLD world/seed
+        // and must never be restored into the new one.
+        m_chunkCache.clear();
+        m_chunkCacheOrder.clear();
     }
     m_generationTasks.clear();
     m_queuedChunks.clear();
@@ -1104,6 +1196,11 @@ void Minecraft::updateLocalChunks() {
     for (auto cp : toUnload) {
         unloadChunk(cp);
     }
+
+    // 1b. Restore any in-radius chunks from the persistence cache BEFORE the
+    // generation pass below, so they count as already loaded and are not
+    // regenerated/re-decorated (which would re-spill their cross-chunk features).
+    restoreCachedChunksInRadius(px, pz, RADIUS);
 
     // 2. Poll completed generation tasks (bounded — integrating many at once
     // marks huge mesh-dirty regions and stalls the frame).

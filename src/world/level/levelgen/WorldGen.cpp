@@ -26,9 +26,19 @@
 #include "OreVeinifier.h"
 #include "RandomSource.h"
 #include <vector>
+// These three came from RandomSource.cpp's `#if defined(_WIN32)` block; the merge
+// script hoisted them out of that guard, which broke every non-Windows build of
+// this TU (windows.h/bcrypt.h don't exist on Linux, and platform/Platform.h pulls
+// in GLFW). They carry no symbols actually used here, so restore the original
+// _WIN32 guard. (merge_worldgen.py is fixed to keep these guarded on re-merge.)
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include "platform/Platform.h"
 #include <bcrypt.h>
+#endif
 #include "RandomState.h"
 #include "TerrainProvider.h"
 #include "NoiseRouterData.h"
@@ -13024,11 +13034,19 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
         "minecraft:ocean_ruin",
         "minecraft:mineshaft",
         "minecraft:ruined_portal",
-        "minecraft:ocean_monument",
-        "minecraft:woodland_mansion",
-        "minecraft:fortress",
-        "minecraft:stronghold",
         "minecraft:end_city",
+        // RULE #0: woodland_mansion / fortress / stronghold / ocean_monument were
+        // marked supported but place geometry that is NOT a faithful Java piece port:
+        //   - mansion: a hand-built 52×52 cobblestone slab + dark-oak-log box.
+        //   - fortress: a 5×10 nether-brick bridge.
+        //   - stronghold: a 16×16×8 stone-brick box that CARVES a 14×14×6 pocket of
+        //     AIR into the terrain.
+        //   - ocean_monument: only the outer shell, with NO child rooms and an RNG
+        //     stream that does NOT match Java (placeOceanMonument admits this) — a
+        //     "looks reasonable" partial that still returns true.
+        // Per RULE #0 a not-yet-ported structure must be a hard no-op, never a silent
+        // return-true. Removed from this set so the loader reports them UNPORTED.
+        // Re-add ONLY with a real 1:1 piece port. (end_city is End-only: kept.)
     };
 
     if (supportedTypes.count(type) == 0) {

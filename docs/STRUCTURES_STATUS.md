@@ -8,8 +8,70 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-22 (session: in-game village smoke clean; villages are
-> implemented/integrated but NOT fully block-diff certified).
+> Last updated: 2026-06-26 (verification pass: dispatch re-audited against the
+> current `WorldGen.cpp` monolith; three FABRICATED structure placements removed
+> per RULE #0 — see the 2026-06-26 section).
+
+---
+
+## UPDATE 2026-06-26 — verification pass + RULE #0 reverts (fabricated structures)
+
+Re-audited the in-game structure dispatch directly in the post-merge monolith
+(`WorldGen.cpp::tryGenerateAndPlace`, mirrored in the probe's
+`structure/StructureGen.cpp`). Since the 2026-06-22 ledger the `supportedTypes`
+set had grown to include `mineshaft`, `ocean_ruin`, `buried_treasure`,
+`ruined_portal`, `ocean_monument`, `woodland_mansion`, `fortress`, `stronghold`,
+`end_city`. Three of those were **fabricated placeholders**, not piece ports:
+
+- **`woodland_mansion`** (`tryPlaceWoodlandMansion`) — writes a hand-built
+  **52×52 cobblestone slab + dark-oak-log box**. Comment admits "Simplified",
+  "GAP: interior rooms … deferred". Not from `WoodlandMansionPieces`.
+- **`fortress`** (`tryPlaceNetherFortress`) — writes a **5×10 nether-brick
+  bridge with fences**. Comment: "we only place a basic bridge". Invented.
+- **`stronghold`** (`tryPlaceStronghold`) — writes a **16×16×8 stone-brick box
+  and then fills its 14×14×6 interior with AIR**. This is the literal
+  "square pocket of air carved into the terrain" the owner reported. Invented.
+
+All three were `supported = true` with **no gating** (`isKnownBrokenRuntimeStructureSet`
+returns false for everything), so they generated in-game in any biome that passed
+the centre-column biome check — exactly the "structures generate where they
+shouldn't / leave a square of air" symptom. **Removed from `supportedTypes` in
+both `WorldGen.cpp` and `StructureGen.cpp`**; they now report UNPORTED and place
+nothing (RULE #0). Their `tryPlace*` bodies are left as unreachable dead code to
+be replaced by real ports.
+
+**`ocean_monument` — also reverted (owner decision 2026-06-26).** It placed the
+**real Java outer-shell geometry** (correct `createTopPiece` coords/blocks) but
+**deferred all child rooms** and **did not align the RNG stream**
+(`placeOceanMonument` comment: "RNG state … does NOT match Java's"). A lone shell
+with no interior in deep ocean is a "looks reasonable" partial that still returns
+true, so it is removed from `supportedTypes` in both files → UNPORTED no-op.
+
+**`end_city` — kept enabled.** Places only the `end_city/base_floor` template
+(child pieces deferred), but it is reachable only in the End dimension, which is
+not generated during overworld play. Left as a partial pending a real port; it
+does not affect the overworld world the owner is finishing.
+
+**Fossils (overworld "dinosaur bones") — investigated, body is faithful.** The
+owner suspected absurd frequency + air carving. `FossilFeature.h` is a faithful
+1:1 of `FossilFeature.java`: rarity is `RarityFilter.onAverageOnceEvery(64)` for
+both `FOSSIL_UPPER`/`FOSSIL_LOWER` (`CavePlacements`), registered only in
+`desert`/`swamp`/`mangrove_swamp` (`BiomeDefaultFeatures.addFossilDecoration`),
+placed 15–24 blocks below the OCEAN_FLOOR_WG surface, and it writes only
+`bone_block`/ore — **never air**. The per-feature seeding
+(`setDecorationSeed`+`setFeatureSeed`) and `rarity_filter` parsing are correct,
+and the engine shares the exact `decorateOneChunk` path. So the square-air the
+owner attributed to fossils is the fabricated **stronghold** above; any genuine
+over-frequency is most likely the known **re-decoration / race** issue
+(chunks decorated more than once amplifies rare distinctive features) or a
+runtime biome-filter mismatch — both need the Windows engine to confirm and were
+NOT reproducible by static read of the faithful feature.
+
+> Environment note for this pass: run on remote Linux; the fictional `26.1.2`
+> client/data is not fetchable here, so the data-driven probes
+> (`structure_gen_probe`, `full_chunk_decorate_parity`) and the Windows engine
+> could not be run. Findings above are grounded in the decompiled Java source
+> (present) + the C++ dispatch code.
 
 ---
 

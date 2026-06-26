@@ -15,6 +15,7 @@
 #include "Options.h"
 #include <unordered_map>
 #include <unordered_set>
+#include <deque>
 #include <condition_variable>
 #include <memory>
 #include <shared_mutex>
@@ -67,12 +68,32 @@ public:
     PlayerState&       player()       { return m_localPlayer.state(); }
     const PlayerState& player() const { return m_localPlayer.state(); }
 
+    // Debug teleport. The free-fly camera (LevelRenderer::m_camPos) is the real
+    // position authority — it overwrites player() every frame — so setting
+    // player().x/z alone does nothing. The debug overlay calls requestTeleport();
+    // the camera consumes it once per frame and jumps m_camPos there. Streaming
+    // then loads chunks around the new position on its own (no manual chunk clear,
+    // which would race the decoration worker).
+    void requestTeleport(double x, double y, double z) {
+        m_pendingTpX = x; m_pendingTpY = y; m_pendingTpZ = z; m_hasPendingTeleport = true;
+    }
+    bool consumeTeleport(double& x, double& y, double& z) {
+        if (!m_hasPendingTeleport) return false;
+        x = m_pendingTpX; y = m_pendingTpY; z = m_pendingTpZ;
+        m_hasPendingTeleport = false;
+        return true;
+    }
+
     Window*            window()       { return m_window; }
     render::IRenderDevice* device()   { return m_device; }
 
     LevelChunk* getChunk(ChunkPos pos);
     LevelChunk* getOrCreateChunk(ChunkPos pos);
     void        unloadChunk(ChunkPos pos);
+    // Restore any chunks within the radius that are sitting in m_chunkCache back
+    // into m_chunks (verbatim, no regeneration/re-decoration). Returns nothing;
+    // restored chunks are marked meshDirty. Main thread only.
+    void        restoreCachedChunksInRadius(int px, int pz, int radius);
     const auto& chunks() const { return m_chunks; }
 
     // Biome id at QUART coordinates from the local generator's biome source. Empty
@@ -136,6 +157,10 @@ private:
     uint32_t    m_tickCounter = 0;
     uint64_t    m_worldSeed = 0;
 
+    // Debug-overlay teleport request, consumed by LevelRenderer::updateCamera.
+    bool        m_hasPendingTeleport = false;
+    double      m_pendingTpX = 0.0, m_pendingTpY = 0.0, m_pendingTpZ = 0.0;
+
     std::unique_ptr<levelgen::NoiseBasedChunkGenerator> m_localGenerator;
     std::unique_ptr<levelgen::feature::BiomeFeatures>    m_biomeFeatures;
     std::unique_ptr<block::BlockTags>                    m_blockTags;
@@ -160,6 +185,24 @@ private:
 
     std::unordered_map<int64_t, std::unique_ptr<LevelChunk>> m_chunks;
     std::unordered_map<UUID, PlayerInfo, UUIDHash> m_playerInfo;
+
+    // In-memory chunk persistence cache. Chunks that leave the active radius are
+    // kept here (their LevelChunk is MOVED out of m_chunks, not destroyed) so that
+    // revisiting restores them VERBATIM instead of regenerating + re-decorating.
+    // This matches vanilla, where chunks are persisted to disk and never re-run:
+    // it is what prevents cross-chunk feature spill (trees overhanging borders,
+    // fossils spanning ±16, structure pieces) from being placed AGAIN every time a
+    // chunk is regenerated — the cause of the "absurd/artificial" feature density
+    // near streaming edges. Mutated only on the main thread; moving a chunk between
+    // this map and m_chunks keeps its LevelChunk* heap pointer valid. m_chunksMutex
+    // (exclusive) guards the m_chunks side of every move so the decoration worker
+    // never sees a half-moved map.
+    std::unordered_map<int64_t, std::unique_ptr<LevelChunk>> m_chunkCache;
+    std::deque<int64_t>                  m_chunkCacheOrder;   // FIFO eviction (oldest front)
+    // ~100 KB/chunk typical → ~100-150 MB cap. Covers a recently-visited window far
+    // larger than the active RADIUS=6 (169 chunks), so normal wandering/backtracking
+    // never re-decorates. Bump if more RAM is available and you roam farther.
+    static constexpr std::size_t         kChunkCacheCapacity = 1024;
 
     std::unique_ptr<render::GuiGraphics>     m_guiGraphics;
     std::unique_ptr<render::PanoramaRenderer> m_panorama;
