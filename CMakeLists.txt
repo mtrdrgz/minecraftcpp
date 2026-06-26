@@ -79,6 +79,10 @@ set(MCPP_RUNTIME_ASSET_PACK "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/assets.bin")
 set(MCPP_SRC_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/assets")
 set(MCPP_EXTERNAL_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets")
 set(MCPP_WORLDGEN_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/26.1.2/data/minecraft")
+# Extracted client.jar assets/ (provisioned by tools/provision_runtime.sh on Linux
+# or tools/provision_parity_runtime.ps1 on Windows). Contains biome colormaps
+# (minecraft/textures/colormap/*.png) which are NOT in the launcher asset index.
+set(MCPP_CLIENT_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets/client-extract/assets")
 set(MCPP_PREPARE_RUNTIME_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareRuntimeAssets.cmake")
 
 set(MCPP_ASSET_PACK_COMMAND
@@ -89,6 +93,11 @@ set(MCPP_ASSET_PACK_COMMAND
 )
 if(EXISTS "${MCPP_WORLDGEN_DATA_DIR}")
     list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_WORLDGEN_DATA_DIR}")
+    # Colormaps ship inside client.jar; pack them when the extracted tree is present
+    # so the standalone exe can resolve biome tints without assets/client-extract/ on disk.
+    if(EXISTS "${MCPP_CLIENT_ASSETS_DIR}/minecraft/textures/colormap")
+        list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_CLIENT_ASSETS_DIR}")
+    endif()
 endif()
 
 option(MCPP_SKIP_ASSET_PACK "Use pre-existing assets.bin without re-running asset_packer" OFF)

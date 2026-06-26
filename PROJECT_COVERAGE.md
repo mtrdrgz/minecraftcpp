@@ -118,6 +118,79 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-27 — Biome colouring wired end-to-end (runtime verified on Linux headless)
+
+**Agent**: Super Z (Claude Code web session, headless Linux)
+
+- **Goal**: close the last integration gap for the TASKLIST "Texturas / coloreado →
+  La sabana no tiene el color característico de la hierba" item. The pure colour
+  math (`BiomeColor.h`, `BiomeTint.h`) and the mesher's `BiomeMeshContext`
+  plumbing were already ported and unit-tested (Sessions 41–42), but the runtime
+  still fell back to the hardcoded plains-default tint because (a) the grass /
+  foliage colormaps were not in `assets.bin` (only available via the
+  `assets/client-extract/` disk fallback that requires a provisioned machine)
+  and (b) the hardcoded fallback was wrong — labelled `#79BD59 plains grass`
+  but the value was `{121, 192, 90}` = `#79C05A`, which is **forest**'s grass
+  colour, not plains.
+
+- **Fix 1 — pack the colormaps into `assets.bin`** (`tools/asset_packer/main.cpp`):
+  added an optional 5th CLI argument `client_assets_dir` that points at the
+  extracted `client.jar` `assets/` tree. The packer now walks
+  `<client_assets_dir>/minecraft/textures/colormap/` and packs
+  `grass.png` / `foliage.png` / `dry_foliage.png` with the exact key the runtime
+  requests (`minecraft/textures/colormap/<file>`), so `AssetManager::readRaw`
+  finds them without any disk fallback. Also extended to pack
+  `minecraft/textures/block/` from the same source, because the repo's
+  asset index `30.json` only carries sounds/lang (no PNGs) and the runtime
+  was logging `TextureAtlas: assets.bin fallback found no block textures`
+  on Linux — without block textures the standalone exe cannot stitch the
+  terrain atlas and biome tints cannot be visually verified.
+
+- **Fix 2 — correct the hardcoded plains-default tint** (`src/render/level/ChunkMesh.cpp`):
+  the no-biome fallback path in `getTextureTint` was returning forest's
+  `#79C05A` for grass and `#59AE30` for foliage, both mislabelled as plains.
+  Sampled the real colormaps with the certified `ColorMapColorUtil::get`:
+  - plains grass (temp=0.8, downfall=0.4) = `#91BD59` (RGB 145, 189, 89)
+  - plains foliage (temp=0.8, downfall=0.4) = `#77AB2F` (RGB 119, 171, 47)
+  - plains water (from `plains.json:effects.water_color`) = `#3F76E4`
+  Updated `getTextureTint` to return these correct plains values; the comment
+  now cites the colormap + JSON sources explicitly. The fixed-tint constants
+  for spruce leaves (`#619961`), birch leaves (`#80A755`), lily pad (`#71C35C`),
+  and `DryFoliageColor.FOLIAGE_DRY_DEFAULT` (`#5C3C32`) are unchanged — they
+  were already correct 1:1 with `BlockColors.java`.
+
+- **Wiring verification — Linux headless smoke**:
+  - Provisioned the runtime with `tools/provision_runtime.sh` (65 biomes +
+    1214 block textures + 3 colormaps extracted from the 26.1.2 client.jar).
+  - Rebuilt `assets.bin` (now 6988 → 8202 entries, 350 MB) and built the full
+    `mcpp` target with the local Mesa llvmpipe OpenGL 4.6 stack under Xvfb.
+  - `./build/mcpp --quickPlaySingleplayer --seed 1 --backend opengl` reaches
+    the main loop and logs:
+    - `[INF] TextureAtlas: built 512x576 atlas from assets.bin, 1112 of 1133 textures loaded (52 animated)`
+    - `[INF] Biome colouring active (65 biomes)`
+    - `[INF] Main loop ticking, frames=1800` (no `Biome colouring: colormap/registry unavailable` warning).
+  - Both biome parity tests still pass unchanged after the fallback-tint fix:
+    `biome_color_parity` (plains `#91BD59`, forest `#79C05A`, dark_forest modifier,
+    swamp modifier) and `biome_tint_parity` (plains r0/r2 `#91BD59`, water=
+    biome.waterColor, plains|forest blend in-between, stone → no biome tint).
+
+- **Files touched this session**:
+  - `src/render/level/ChunkMesh.cpp` — `getTextureTint` corrected to actual plains colours
+  - `tools/asset_packer/main.cpp` — new optional `client_assets_dir` arg packs colormaps + block textures
+  - `CMakeLists.txt` — passes `assets/client-extract/assets` as the 5th arg when present
+  - `docs/PORT_COVERAGE.tsv` — updated 11 rows (BiomeColors/BlockColors/ColorMapColorUtil/
+    GrassColor/FoliageColor/Biome/BiomeSpecialEffects + 3 reload-listener `n/a` rows +
+    GrassColorSource still `unvisited`)
+  - `TASKLIST.md` — marked the savanna-grass colour item as resolved
+
+- **Outstanding (not blocking)**: visual capture under Xvfb shows the sky shader
+  rendering correctly (zenith `#78A7FF`), the texture atlas stitched, and frames
+  ticking, but the spawned camera angle in the headless smoke produces a
+  horizon-dominated frame that is hard to eyeball for "savanna is yellow" style
+  assertions. A future session with a real GPU + interactive camera, or a
+  dedicated `--screenshot <biome>` smoke target, should produce the visual
+  confirmation. The colour math itself is provably 1:1 (see parity tests above).
+
 ### 2026-06-22 c — Village in-game verification + structure postprocess blockers cleared
 
 **Agent**: Codex

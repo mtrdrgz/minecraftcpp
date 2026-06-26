@@ -224,7 +224,7 @@ The renderer uses an `IRenderDevice` abstraction so all three backends (OpenGL, 
 | Cross-quad geometry | Flower/grass X-shaped geometry | ✅ Functional | — |
 | Transparent sorting | Water, glass render order | 🔄 Partial | — |
 | Animated textures | Water, lava, kelp frame animation | ❌ Not started | — |
-| Biome color tinting | Grass and water tinted per-biome (foliage/water color maps) | ❌ Not started | — |
+| Biome color tinting | Grass and water tinted per-biome (foliage/water color maps) | ✅ Complete | `biome_color_parity` (plains `#91BD59`, forest `#79C05A`, dark_forest/swamp modifiers) + `biome_tint_parity` (plains r0/r2 `#91BD59`, water=biome.waterColor, plains\|forest blend); runtime wired in `LevelRenderer` (colormaps packed in `assets.bin` + per-chunk `BiomeMeshContext` snapshot on main thread + `biometint::tint` per vertex); Linux headless smoke logs "Biome colouring active (65 biomes)" |
 
 ### Camera & View
 

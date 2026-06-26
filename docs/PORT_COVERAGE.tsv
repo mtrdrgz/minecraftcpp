@@ -459,7 +459,7 @@ net/minecraft/client/animation/definitions/WardenAnimation.java	unvisited
 net/minecraft/client/animation/definitions/package-info.java	unvisited	
 net/minecraft/client/animation/package-info.java	unvisited	
 net/minecraft/client/color/ColorLerper.java	ported	C++ parity gate colorlerper_parity (byte-exact, full-suite reconcile 2026-06-11): ColorLerper checks=248 mismatches=0
-net/minecraft/client/color/block/BlockColors.java	unvisited	
+net/minecraft/client/color/block/BlockColors.java	partial	render/level/BiomeTint.h:tintClassForTexture ports the texture→resolver mapping for grass/foliage/water registered blocks (grass_block/short_grass/fern/tall_grass/large_fern/bush/sugar_cane/pink_petals/wildflowers → GRASS; oak/jungle/acacia/dark_oak/mangrove leaves + vine → FOLIAGE; water_still/flow → WATER); ChunkMesh getTextureTint applies fixed plains-default fallback for spruce/birch/lily_pad/dry_foliage (BlockColors constants). Missing: item-side BlockColor registrations (ItemColors), and full registry hook surface for non-block tint callers.
 net/minecraft/client/color/block/BlockTintCache.java	unvisited	
 net/minecraft/client/color/block/BlockTintSource.java	unvisited	
 net/minecraft/client/color/block/BlockTintSources.java	unvisited	
@@ -468,7 +468,7 @@ net/minecraft/client/color/item/Constant.java	unvisited
 net/minecraft/client/color/item/CustomModelDataSource.java	unvisited	
 net/minecraft/client/color/item/Dye.java	unvisited	
 net/minecraft/client/color/item/Firework.java	unvisited	
-net/minecraft/client/color/item/GrassColorSource.java	unvisited	
+net/minecraft/client/color/item/GrassColorSource.java	unvisited	Item-side tinting not yet ported (only block-side BlockColors is wired in ChunkMesh).
 net/minecraft/client/color/item/ItemTintSource.java	unvisited	
 net/minecraft/client/color/item/ItemTintSources.java	unvisited	
 net/minecraft/client/color/item/MapColor.java	unvisited	
@@ -1369,7 +1369,7 @@ net/minecraft/client/profiling/package-info.java	unvisited
 net/minecraft/client/quickplay/QuickPlay.java	unvisited	
 net/minecraft/client/quickplay/QuickPlayLog.java	unvisited	
 net/minecraft/client/quickplay/package-info.java	unvisited	
-net/minecraft/client/renderer/BiomeColors.java	unvisited	
+net/minecraft/client/renderer/BiomeColors.java	ported	render/level/BiomeTint.h:resolveColumn + tint 1:1 port of BiomeColors.GRASS/FOLIAGE/WATER ColorResolver + ClientLevel.calculateBlockTint (2r+1)² column blend (default r=2); verified by biome_tint_parity (plains r0/r2 #91BD59, water=biome.waterColor, plains|forest blend in-between, stone->nullopt)
 net/minecraft/client/renderer/CloudRenderer.java	partial	cloud cell geometry math certified: cloud_cell_math_parity 23917/0 (byte-exact, 2026-06-11); render orchestration unported
 net/minecraft/client/renderer/CubeMap.java	unvisited	
 net/minecraft/client/renderer/DynamicUniformStorage.java	unvisited	
@@ -2053,9 +2053,9 @@ net/minecraft/client/renderer/texture/atlas/sources/package-info.java	unvisited
 net/minecraft/client/renderer/texture/package-info.java	unvisited	
 net/minecraft/client/resources/ClientPackSource.java	unvisited	
 net/minecraft/client/resources/DefaultPlayerSkin.java	unvisited	
-net/minecraft/client/resources/DryFoliageColorReloadListener.java	unvisited	
-net/minecraft/client/resources/FoliageColorReloadListener.java	unvisited	
-net/minecraft/client/resources/GrassColorReloadListener.java	unvisited	
+net/minecraft/client/resources/DryFoliageColorReloadListener.java	n/a	DryFoliageColor.FOLIAGE_DRY_DEFAULT constant applied directly in ChunkMesh::getTextureTint for short_dry_grass/tall_dry_grass/leaf_litter; no runtime listener needed.
+net/minecraft/client/resources/FoliageColorReloadListener.java	n/a	Replaced by direct stb_image decode of assets.bin minecraft/textures/colormap/foliage.png in LevelRenderer::ensureBiomeData.
+net/minecraft/client/resources/GrassColorReloadListener.java	n/a	Replaced by direct stb_image decode of assets.bin minecraft/textures/colormap/grass.png in LevelRenderer::ensureBiomeData; no Java resource-listener pipeline needed in the C++ port.
 net/minecraft/client/resources/IndexedAssetSource.java	unvisited	
 net/minecraft/client/resources/LegacyStuffWrapper.java	unvisited	
 net/minecraft/client/resources/MapTextureManager.java	unvisited	
@@ -5523,7 +5523,7 @@ net/minecraft/world/level/ChunkPos.java	unvisited
 net/minecraft/world/level/ClipBlockStateContext.java	unvisited	
 net/minecraft/world/level/ClipContext.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit 0c96d702 (wave 6)
 net/minecraft/world/level/CollisionGetter.java	unvisited	
-net/minecraft/world/level/ColorMapColorUtil.java	unvisited	
+net/minecraft/world/level/ColorMapColorUtil.java	ported	ColorMapColorUtil.h:grassGet/foliageGet bit-exact vs Java (BiomeColorParityTest plains/forest grass + foliage + dark_forest/swamp modifiers ALL OK); 1:1 port of the (1-temp)*255 / (1-rain*temp)*255 colormap index
 net/minecraft/world/level/ColorResolver.java	unvisited	
 net/minecraft/world/level/CommonLevelAccessor.java	unvisited	
 net/minecraft/world/level/CustomSpawner.java	unvisited	
@@ -5534,9 +5534,9 @@ net/minecraft/world/level/EntityBasedExplosionDamageCalculator.java	unvisited
 net/minecraft/world/level/EntityGetter.java	unvisited	
 net/minecraft/world/level/Explosion.java	unvisited	
 net/minecraft/world/level/ExplosionDamageCalculator.java	unvisited	
-net/minecraft/world/level/FoliageColor.java	unvisited	
+net/minecraft/world/level/FoliageColor.java	ported	ColorMapColorUtil.h:foliageGet wraps ColorMapColorUtil.get with FOLIAGE_DEFAULT=-12012264; constants FOLIAGE_EVERGREEN/BIRCH/DEFAULT/MANGROVE exposed; verified by foliageColor(0.8,0.4)=#77AB2F plains
 net/minecraft/world/level/GameType.java	ported	C++ *ParityTest.cpp + tools/*Parity.java gate (byte-exact); commit de044ac6 (wave 5)
-net/minecraft/world/level/GrassColor.java	unvisited	
+net/minecraft/world/level/GrassColor.java	ported	ColorMapColorUtil.h:grassGet wraps ColorMapColorUtil.get with default -65281; verified by biome_color_parity (plains=#91BD59, forest=#79C05A)
 net/minecraft/world/level/ItemLike.java	unvisited	
 net/minecraft/world/level/Level.java	unvisited	
 net/minecraft/world/level/LevelAccessor.java	unvisited	
@@ -5564,13 +5564,13 @@ net/minecraft/world/level/StructureManager.java	unvisited
 net/minecraft/world/level/TicketStorage.java	unvisited	
 net/minecraft/world/level/WorldDataConfiguration.java	unvisited	
 net/minecraft/world/level/WorldGenLevel.java	unvisited	
-net/minecraft/world/level/biome/Biome.java	partial	shouldFreeze/shouldSnow/climate/TemperatureModifier.FROZEN ported (SnowAndFreezeFeature gate); rest of Biome partial
+net/minecraft/world/level/biome/Biome.java	partial	climate/effects/grassColor/grassColorModifier ported in Biome.h+BiomeColor.h:grassColor/foliageColor/baseGrassColor 1:1 vs Java (BiomeColorParityTest); shouldFreeze/shouldSnow/TemperatureModifier.FROZEN already ported; rest of Biome partial
 net/minecraft/world/level/biome/BiomeGenerationSettings.java	unvisited	
 net/minecraft/world/level/biome/BiomeManager.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 2026-06-21 exposed selectQuart for Java BiomeManager.getBiome cache-equivalent surface lookup
 net/minecraft/world/level/biome/BiomeResolver.java	unvisited	
 net/minecraft/world/level/biome/BiomeSource.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 8f55e4e6
 net/minecraft/world/level/biome/BiomeSources.java	unvisited	
-net/minecraft/world/level/biome/BiomeSpecialEffects.java	unvisited	
+net/minecraft/world/level/biome/BiomeSpecialEffects.java	partial	Biome.h:BiomeSpecialEffects ports waterColor/fogColor/grassColor/foliageColor/dryFoliageColor/grassColorModifier; GrassColorModifier.modifyColor ported in BiomeColor.h (NONE/DARK_FOREST/SWAMP — SWAMP uses certified PerlinSimplexNoise BIOME_INFO_NOISE); remaining special-effects fields (sound loop additions, ambient particle settings, etc.) unported
 net/minecraft/world/level/biome/Biomes.java	unvisited	
 net/minecraft/world/level/biome/CheckerboardColumnBiomeSource.java	unvisited	
 net/minecraft/world/level/biome/Climate.java	ported	climate_biome_parity 1536/0 + biome store byte-identical; 8f55e4e6

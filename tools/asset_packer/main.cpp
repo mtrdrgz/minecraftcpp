@@ -118,8 +118,8 @@ static void write_u32(std::ostream& out, uint32_t v) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 4 && argc != 5) {
-        std::cerr << "Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir]\n";
+    if (argc < 4 || argc > 6) {
+        std::cerr << "Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir] [client_assets_dir]\n";
         return 1;
     }
 
@@ -127,9 +127,9 @@ int main(int argc, char* argv[]) {
     fs::path src_assets_dir = argv[2];
     fs::path output_path = argv[3];
     fs::path data_minecraft_dir;
-    if (argc == 5) {
-        data_minecraft_dir = argv[4];
-    }
+    fs::path client_assets_dir;   // extracted client.jar assets/ (has minecraft/textures/colormap/*.png)
+    if (argc >= 5) data_minecraft_dir = argv[4];
+    if (argc >= 6) client_assets_dir = argv[5];
 
     // Never run git-lfs from the build tool. CI and local setup scripts are
     // responsible for preparing any real assets before CMake invokes this target.
@@ -194,6 +194,25 @@ int main(int argc, char* argv[]) {
         addDirectory(entries, data_minecraft_dir / "tags" / "block", "data/minecraft/tags/block", false);
         addDirectory(entries, data_minecraft_dir / "tags" / "fluid", "data/minecraft/tags/fluid", false);
         addDirectory(entries, data_minecraft_dir / "structure", "data/minecraft/structure");
+    }
+
+    // 4. Biome colormaps (grass.png / foliage.png / dry_foliage.png) AND block
+    //    textures live INSIDE client.jar at assets/minecraft/textures/... — they
+    //    are NOT in the launcher asset index, so step 1 never sees them. Pack
+    //    them from the extracted client.jar assets/ tree so the runtime can read
+    //    them via AssetManager::readRaw without needing assets/client-extract/
+    //    on disk. Stored with the same key the runtime requests
+    //    ("minecraft/textures/colormap/<file>" / "minecraft/textures/block/<file>").
+    if (!client_assets_dir.empty() && fs::exists(client_assets_dir)) {
+        const fs::path tex_root = client_assets_dir / "minecraft" / "textures";
+        if (fs::exists(tex_root)) {
+            std::cout << "Packing client.jar textures from: " << tex_root << "\n";
+            // Colormaps (small, ~30KB) — needed by LevelRenderer::ensureBiomeData.
+            addDirectory(entries, tex_root / "colormap", "minecraft/textures/colormap", false);
+            // Block textures (~5MB, ~1200 PNGs) — needed by TextureAtlas::loadFromAssetPack
+            // when no prebuilt stitched atlas is available (Linux path + standalone exe).
+            addDirectory(entries, tex_root / "block", "minecraft/textures/block", true);
+        }
     }
 
     std::cout << "Packing " << entries.size() << " total assets...\n";

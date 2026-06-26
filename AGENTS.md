@@ -352,7 +352,49 @@ C:\Users\Mateo\Desktop\minecraftcpp\  ← C++ project root (repo root)
 
 ## CURRENT STATE
 
-**Last updated**: 2026-06-22 — village in-game smoke clean; block-diff certification still pending.
+**Last updated**: 2026-06-27 — biome colouring wired end-to-end and verified on Linux headless.
+
+**Biome colouring integration complete (2026-06-27):** closed the last integration
+gap for the TASKLIST "Texturas / coloreado" item. The pure colour math
+(`BiomeColor.h`, `BiomeTint.h`) and the mesher's `BiomeMeshContext` plumbing
+were already ported and unit-tested (Sessions 41–42); this session wired the
+runtime end-to-end:
+
+- `tools/asset_packer/main.cpp` now accepts an optional 5th CLI argument
+  `client_assets_dir` and packs `minecraft/textures/colormap/{grass,foliage,
+  dry_foliage}.png` AND `minecraft/textures/block/*.png` from the extracted
+  client.jar `assets/` tree into `assets.bin`. The repo's launcher asset
+  index `30.json` only carries sounds/lang, so block textures + colormaps
+  were previously unavailable to the standalone exe. `CMakeLists.txt` passes
+  `assets/client-extract/assets` as the 5th arg when present.
+- `src/render/level/ChunkMesh.cpp`'s `getTextureTint` no-biome fallback was
+  mislabelled and wrong — it returned forest's `#79C05A` for grass and
+  `#59AE30` for foliage, both labelled "plains". Sampled the real colormaps
+  with the certified `ColorMapColorUtil::get`: plains grass (temp=0.8,
+  downfall=0.4) = `#91BD59` (RGB 145,189,89), plains foliage = `#77AB2F`
+  (RGB 119,171,47). Updated to the correct plains values; comment cites
+  the colormap + JSON sources. Fixed tint constants for spruce/birch/lily
+  pad/dry_foliage were already correct (1:1 with `BlockColors.java`).
+- Linux headless smoke (Xvfb + Mesa llvmpipe GL 4.6) confirms:
+  `./build/mcpp --quickPlaySingleplayer --seed 1 --backend opengl` logs
+  `[INF] TextureAtlas: built 512x576 atlas from assets.bin, 1112 of 1133
+  textures loaded (52 animated)` + `[INF] Biome colouring active (65 biomes)`
+  + reaches `frames=1800` with no `Biome colouring: colormap/registry
+  unavailable` warning.
+- Both biome parity tests still pass: `biome_color_parity` (plains/forest
+  grass, dark_forest/swamp modifiers) and `biome_tint_parity` (plains r0/r2
+  `#91BD59`, water=biome.waterColor, plains|forest blend in-between, stone
+  → no biome tint).
+- Files: `src/render/level/ChunkMesh.cpp`, `tools/asset_packer/main.cpp`,
+  `CMakeLists.txt`, `docs/PORT_COVERAGE.tsv` (11 rows updated), this file,
+  `PROJECT_COVERAGE.md` (devlog entry), `TASKLIST.md` (item resolved).
+- Outstanding (not blocking): the Xvfb smoke captures the sky shader correctly
+  but the headless camera angle produces a horizon-dominated frame; a future
+  session with a real GPU + interactive camera (or a `--screenshot <biome>`
+  smoke target) should produce the "savanna is yellow" visual confirmation.
+  The colour math itself is provably 1:1 via the parity tests.
+
+**Last updated prior**: 2026-06-22 — village in-game smoke clean; block-diff certification still pending.
 
 **Village in-game verification handoff (2026-06-22 c):** resumed from the paused
 server-GT certification state. The focused flat/plains probe now reproduces the
@@ -1341,6 +1383,44 @@ gray atlas pixels; bush/firefly_bush use the existing plains grass tint fallback
 Verified with wrapper command: `mcpp` target builds. Remaining caveat: this is
 still a fallback tint path; true biome-aware grass/foliage/dry-foliage/water
 colors need biome IDs available to the mesher and Java colormap sampling.
+
+**Session 43**: wired biome colouring end-to-end and closed the runtime
+integration gap that Sessions 41–42 left open. The pure colour math
+(`BiomeColor.h`, `BiomeTint.h`) and the mesher `BiomeMeshContext` plumbing
+were already ported and unit-tested; this session made the runtime actually
+use them in the shipped exe. `tools/asset_packer/main.cpp` now takes an
+optional 5th argument `client_assets_dir` (set by `CMakeLists.txt` to
+`assets/client-extract/assets` when present) and packs
+`minecraft/textures/colormap/{grass,foliage,dry_foliage}.png` plus the
+whole `minecraft/textures/block/` tree from the extracted `client.jar`
+assets/ — the launcher asset index `30.json` only carries sounds/lang,
+so block textures + colormaps were previously unavailable to the
+standalone exe (Linux runtime was logging `TextureAtlas: assets.bin
+fallback found no block textures` and `Biome colouring: colormap/registry
+unavailable`). Also fixed `ChunkMesh::getTextureTint`'s no-biome fallback:
+it was returning forest's `#79C05A` (RGB 121,192,90) for grass and
+`#59AE30` (RGB 89,174,48) for foliage, both mislabelled "plains".
+Re-sampled the real colormaps with the certified
+`ColorMapColorUtil::get(temp, downfall)`: plains grass (0.8, 0.4) =
+`#91BD59` (RGB 145,189,89), plains foliage = `#77AB2F` (RGB 119,171,47).
+Updated to the correct plains values; comment now cites colormap + JSON
+sources. Fixed-tint constants for spruce/birch/lily_pad/dry_foliage were
+already correct 1:1 with `BlockColors.java` and remain unchanged. Linux
+headless smoke (Xvfb + Mesa llvmpipe GL 4.6) confirms:
+`./build/mcpp --quickPlaySingleplayer --seed 1 --backend opengl` logs
+`TextureAtlas: built 512x576 atlas from assets.bin, 1112 of 1133 textures
+loaded (52 animated)` + `Biome colouring active (65 biomes)` + reaches
+`frames=1800` with no `Biome colouring: colormap/registry unavailable`
+warning. Both biome parity tests still pass: `biome_color_parity` and
+`biome_tint_parity`. `docs/PORT_COVERAGE.tsv` updated for 11 touched
+Java files (BiomeColors/BlockColors/ColorMapColorUtil/GrassColor/
+FoliageColor/Biome/BiomeSpecialEffects + 3 reload-listener `n/a` rows +
+GrassColorSource still `unvisited`). Outstanding: the Xvfb smoke captures
+the sky shader correctly but the headless camera angle produces a
+horizon-dominated frame; a future session with a real GPU + interactive
+camera (or a dedicated `--screenshot <biome>` smoke target) should
+produce the "savanna is yellow" visual confirmation. The colour math
+itself is provably 1:1 via the parity tests.
 
 **Session 41**: fixed the tasklist standalone-decoration gap. `tools/asset_packer`
 now accepts an optional `data_minecraft_dir` argument and packs

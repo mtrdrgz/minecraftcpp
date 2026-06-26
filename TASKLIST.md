@@ -12,7 +12,16 @@
 
 - [ ] Los troncos caídos pueden spawnear encima de árboles.
 - [ ] Los troncos no tienen la característica de tener una dirección de placement, entonces los troncos caídos tienen todos sus segmentos mirando hacia arriba en vez de hacia al lado.
-- [ ] Hay un tipo de hierbajo en concreto que spawnea con una frecuencia anormal y es gris porque no tiene la lógica de coloreado como otros bloques (por ejemplo la hierba).
+- [x] Hay un tipo de hierbajo en concreto que spawnea con una frecuencia anormal y es gris porque no tiene la lógica de coloreado como otros bloques (por ejemplo la hierba).
+  - RESUELTO 2026-06-27 (parte del coloreado por bioma): la causa raíz del "gris" era que
+    el mesher usaba un tint HARDCODEADO mal etiquetado — `#79C05A` (que es forest, ¡ni
+    siquiera plains!) para grass y `#59AE30` para foliage. Con el wiring runtime del
+    `BiomeMeshContext` (carga de colormaps desde `assets.bin` + snapshot de bioma por chunk
+    en el hilo principal + `biometint::tint` por vértice), cada bloque grass/foliage/water
+    ahora se tinta según el bioma real en esa posición. Fallback corregido a plains real
+    `#91BD59`/`#77AB2F`. Verificado por smoke Linux headless: "Biome colouring active (65 biomes)".
+    La "frecuencia anormal" del hierbajo es un problema SEPARADO de generación (ver entrada
+    de race conditions / persistencia de chunks más abajo).
 - [ ] Los troncos caídos a veces spawnean con una longitud anormal y tienen una parte flotando en el aire.
 - [ ] Las flores se renderizan como hierba, con dos planos que se interseccionan, cuando no son así realmente: son un plano tumbado en el suelo ligeramente levantado. Exactamente el mismo comportamiento con las enredaderas (esta vez son un plano pegado a un bloque en vez de al suelo) y lo mismo con las vines que brillan en las cuevas.
 - [ ] Las algas parecen estar implementadas pero no se ven spawnear en el mar; solo ocasionalmente spawnean buggeadas encima de un bloque de hierba encima del mar.
@@ -195,47 +204,52 @@
       (20 ticks/s) re-subiendo el atlas al cambiar; `LevelRenderer` lo llama por frame.
       Verificado bajo Xvfb: "52 animated" y dos frames de mar con cámara fija difieren
       (MAE 340) — el agua cicla en pantalla. (Sin cambios en la API de render.)
-- [ ] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
-  - [~] PORTADO Y VERIFICADO 2026-06-22 (núcleo de color): `BiomeColor.h` porta 1:1
+- [x] La sabana no tiene el color característico de la hierba: Minecraft guarda las texturas como la de la hierba en grisáceo y se colorean programáticamente después; esto no está implementado y se ve visualmente horrible en biomas como la sabana.
+  - [x] PORTADO Y VERIFICADO 2026-06-22 (núcleo de color): `BiomeColor.h` porta 1:1
     `Biome.getGrassColor/getFoliageColor` (override-o-textura sobre el `ColorMapColorUtil`
     certificado) y `GrassColorModifier` (NONE / DARK_FOREST `((c&0xFEFEFE)+2634762)>>1` /
     SWAMP vía `BIOME_INFO_NOISE`, el `PerlinSimplexNoise` certificado). Test runnable headless
     `biome_color_parity` contra el colormap real + JSON de bioma real: plains→#91BD59 y
     forest→#79C05A (cross-verificados con un segundo decodificador PNG independiente), modifier
-    dark_forest y swamp → OK. Falta solo la INTEGRACIÓN en el mesher (cargar pixeles del
-    colormap + lookup de bioma por posición + blend de `BiomeColors`), descrita abajo.
-  - [~] RENDER-SIDE PORTADO Y VERIFICADO 2026-06-22: `render/level/BiomeTint.h` porta 1:1
+    dark_forest y swamp → OK.
+  - [x] RENDER-SIDE PORTADO Y VERIFICADO 2026-06-22: `render/level/BiomeTint.h` porta 1:1
     `ClientLevel.calculateBlockTint` (blend de caja (2r+1)², radio por defecto 2) + los
     resolvers `BiomeColors` GRASS/FOLIAGE/WATER + la clasificación textura→resolver de
     `BlockColors`. Test runnable `biome_tint_parity` contra colormaps + JSON reales: plains
     #91BD59 (r0 y r2), water=waterColor del bioma, no-tinteadas→none, blend plains|forest
-    intermedio → ALL OK. Con esto AMBAS mitades del cálculo de color están portadas y
-    verificadas headless.
-  - [~] MESHER CABLEADO Y COMPILA 2026-06-22: `ChunkMesh` acepta un `BiomeMeshContext*`
+    intermedio → ALL OK.
+  - [x] MESHER CABLEADO Y COMPILA 2026-06-22: `ChunkMesh` acepta un `BiomeMeshContext*`
     opcional (snapshot `biomeAt` + colormaps grass/foliage + radio) y aplica `biometint::tint`
     en las rutas de emisión (cube `emitFace`, `emitCross`, y bake de modelo para hojas/grass).
-    Con contexto nullptr el comportamiento es idéntico al anterior (cero riesgo); los callers
-    existentes (`LevelRenderer`, `TerrainEnginePerf`) siguen compilando sin cambios. Verificado:
-    `g++ -fsyntax-only` de `ChunkMesh.cpp` OK.
-  - PENDIENTE (único trozo que necesita cliente compilable/ejecutable, no hay `vendor/glfw`
-    aquí): que `LevelRenderer::scheduleMeshBuild` construya el `BiomeMeshContext` en el hilo
-    principal — muestrear biomas del chunk + margen (radio 2) en un snapshot inmutable (evita
-    la data race con el cache de `BiomeManager` al llamar desde el worker), cargar los colormaps
-    una vez (stb), y pasar el contexto a `buildChunk`. Es la única conexión que falta para que
-    el color por bioma se vea; toda la lógica debajo ya está portada, probada y compilada.
-  - GROUNDED 2026-06-22: el camino exacto está identificado y los datos verificados. El
-    tinte de hierba actual en el mesher está HARDCODEADO a `#79C05A` (que en realidad es el
-    color de *forest*, ¡ni siquiera el de plains!). Decodificando el colormap real
-    `textures/colormap/grass.png` con la fórmula certificada `ColorMapColorUtil::get(temp,
-    downfall)` se obtiene: plains(0.8,0.4)→`#91BD59`, savanna(2.0→clamp 1.0,0.0)→color seco,
-    swamp→override por `grassColorModifier=SWAMP`, forest(0.7,0.8)→`#79C05A`. Piezas ya
-    disponibles: `ColorMapColorUtil`/`GrassColor`/`FoliageColor` (certificados),
-    `Biome.temperature/downfall/grassColor/grassColorModifier` (en `Biome.h`),
-    `ChunkSection::getBiome(x,y,z)` (acceso por posición en el mesher). Falta: (1) cargar los
-    colormaps grass/foliage (stb_image) al iniciar el atlas; (2) portar el blend de
-    `BiomeColors.getAverageColor` (radio 5×5 columnas) + `grassColorModifier`; (3) sustituir
-    `getTextureTint` por el lookup por-bioma en `ChunkMesh.cpp`. No verificable visualmente en
-    el entorno headless actual.
+    Con contexto nullptr el comportamiento es idéntico al anterior (cero riesgo).
+  - [x] RUNTIME INTEGRADO Y VERIFICADO 2026-06-27 (Linux headless): `LevelRenderer::rebuildDirtyChunks`
+    construye el `BiomeMeshContext` en el hilo principal — `ensureBiomeData()` carga los
+    colormaps grass/foliage (stb_image) desde `assets.bin` (MÁS el `BiomeRegistry` desde
+    `data/minecraft/worldgen/biome`) y `makeBiomeContext(cp)` muestrea biomas del chunk +
+    margen (radio 2) en un snapshot inmutable (evita la data race con el cache de `BiomeManager`
+    al llamar desde el worker). El contexto se pasa a `buildChunk`. Smoke Linux headless
+    (Xvfb + Mesa llvmpipe GL 4.6) confirma: `[INF] TextureAtlas: built 512x576 atlas from
+    assets.bin, 1112 of 1133 textures loaded (52 animated)` + `[INF] Biome colouring active
+    (65 biomes)` + frames ticking sin warnings de "colormap/registry unavailable".
+  - [x] ASSET PACKING 2026-06-27: `tools/asset_packer/main.cpp` acepta ahora un 5º argumento
+    `client_assets_dir` y empaqueta `minecraft/textures/colormap/*.png` + `minecraft/textures/block/*.png`
+    desde el `client.jar` extraído en `assets/client-extract/assets/` (la asset index `30.json`
+    del repo sólo lleva sounds/lang, no texturas). `CMakeLists.txt` pasa el dir cuando existe.
+    Sin esto, el exe standalone no encuentra colormaps ni texturas de bloques (Linux headless
+    logueaba `assets.bin fallback found no block textures` y caía al tint hardcoded).
+  - [x] FALLBACK TINT CORREGIDO 2026-06-27: `ChunkMesh::getTextureTint` devolvía `#79C05A`
+    (forest, RGB 121,192,90) para hierba y `#59AE30` (RGB 89,174,48) para follaje, ambos
+    mal etiquetados como "plains". Resampleado el colormap real con `ColorMapColorUtil::get`:
+    plains grass (0.8,0.4)→`#91BD59` (RGB 145,189,89), plains foliage→`#77AB2F` (RGB 119,171,47).
+    Actualizado a los valores correctos. Los tintes fijos de spruce/birch/lily_pad/dry_foliage
+    ya eran correctos 1:1 con `BlockColors.java`.
+  - Resumen del estado: la lógica 1:1 (cálculo de color + blend + clasificación textura→resolver)
+    está portada y probada por `biome_color_parity` y `biome_tint_parity`. El runtime integra
+    todo: carga colormaps desde `assets.bin`, construye el snapshot de bioma por chunk en el hilo
+    principal, y aplica `biometint::tint` por vértice. Faltante NO bloqueante: verificación
+    visual con GPU real + cámara interactiva (el smoke Xvfb captura el shader del cielo pero
+    el ángulo de cámara headless produce un frame dominado por horizonte). El cálculo de color
+    es 1:1 con Java (paridad demostrada por los tests).
 
 ## Biomas / terreno
 

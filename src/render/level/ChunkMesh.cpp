@@ -81,7 +81,11 @@ struct TintRGB { uint8_t r, g, b; };
 
 // Biome tint per texture. Hardcoded to plains biome defaults.
 // Port of net.minecraft.client.color.block.BlockColors + biome colormap lookup.
-// Plains: temperature=0.8, downfall=0.4 → grass #79C05A, foliage #59AE30
+// Plains (temperature=0.8, downfall=0.4) sampled from the real colormaps via the
+// certified ColorMapColorUtil::get(temp, rain): grass #91BD59, foliage #77AB2F.
+// Plains water (#3F76E4) comes straight from plains.json:effects.water_color.
+// (Previously these were hardcoded to FOREST values #79C05A/#59AE30 mislabelled as
+// plains — fixed to match BiomeTintParity's plains ground truth.)
 static TintRGB getTextureTint(const std::string& name) {
     if (name.empty()) return {255, 255, 255};
     // Grass-tinted blocks (BlockColors.java:22-24,41) — plains default. Matches
@@ -93,9 +97,9 @@ static TintRGB getTextureTint(const std::string& name) {
         name == "large_fern_top"       || name == "large_fern_bottom"        ||
         name == "bush"                 || name == "sugar_cane"               ||
         name == "pink_petals"          || name == "wildflowers")
-        return {121, 192, 90};   // #79BD59 plains grass
+        return {145, 189, 89};   // #91BD59 plains grass (ColorMapColorUtil grassGet(0.8, 0.4))
     if (name == "water_still" || name == "water_flow")
-        return {63, 118, 228};   // #3F76E4 water
+        return {63, 118, 228};   // #3F76E4 plains water (plains.json:effects.water_color)
     // leaf_litter uses dryFoliage() tint (BlockColors.java:37), same constant
     if (name == "short_dry_grass" || name == "tall_dry_grass" || name == "leaf_litter")
         return {92, 60, 50};      // DryFoliageColor.FOLIAGE_DRY_DEFAULT (#5C3C32)
@@ -109,7 +113,7 @@ static TintRGB getTextureTint(const std::string& name) {
     // cherry/azalea/pale_oak leaves are NOT tinted (their textures are pre-coloured).
     if (name == "oak_leaves" || name == "jungle_leaves" || name == "acacia_leaves" ||
         name == "dark_oak_leaves" || name == "mangrove_leaves" || name == "vine")
-        return {89, 174, 48}; // #59AE30 plains foliage
+        return {119, 171, 47}; // #77AB2F plains foliage (ColorMapColorUtil foliageGet(0.8, 0.4))
     return {255, 255, 255};
 }
 
