@@ -271,7 +271,7 @@ void DebugOverlay::renderInfoTab(render::GuiGraphics& g, render::Font& font, Min
     y = drawText(g, font, "F1=Close  1/2/3=Tabs  F2=Cycle", 15, y, gray);
 }
 
-void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY) {
+void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY, int panelW, int panelH) {
     int y = 44;
 
     // Search button (disabled while running)
