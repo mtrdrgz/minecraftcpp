@@ -2602,6 +2602,26 @@ std::size_t Runtime::placeJigsawStartInChunk(const JigsawConfig& cfg, ChunkPos s
     return blocks;
 }
 
+// DIMENSION GATE. Vanilla gates structures by biome, and the overworld biome source
+// never produces nether/end biomes, so nether/end structures cannot place in the
+// overworld. Here that biome gate is currently a NO-OP: the embedded worldgen data
+// ships only block/fluid tags, so the `#has_structure/*` worldgen/biome tags are
+// missing, every structure's biome set resolves EMPTY, and validBiome() passes
+// everything (the RULE #0 "pass everything" hazard). Until those biome tags are
+// restored, explicitly skip the non-overworld structure SETS so nether_fossils /
+// bastions / fortresses / end cities stop spawning in the overworld. These sets are
+// Nether/End in vanilla by construction. (Within-overworld biome gating — e.g.
+// desert pyramid only in desert — also needs the missing tags; tracked separately.)
+static bool isNonOverworldStructureSet(const std::string& setId) {
+    static const std::set<std::string> kNonOverworld = {
+        "minecraft:nether_complexes",   // bastion remnants — Nether
+        "minecraft:nether_fossils",     // nether fossils — Nether
+        "minecraft:fortresses",         // nether fortress — Nether
+        "minecraft:end_cities",         // end cities — End
+    };
+    return kNonOverworld.count(setId) != 0;
+}
+
 void Runtime::generate(ChunkPos active, const StructureWorld& world,
                        const std::function<std::string(int, int, int)>& biomeGetter) {
     // Phase 3: lock the entire generate() call. This serializes structure
@@ -2622,6 +2642,7 @@ void Runtime::generate(ChunkPos active, const StructureWorld& world,
     };
 
     for (const StructureSetDef& set : structureSets) {
+        if (isNonOverworldStructureSet(set.id)) continue;   // nether/end — not in overworld
         auto pit = placementState.sets.find(set.id);
         if (pit == placementState.sets.end()) continue;
         const StructurePlacement& placement = pit->second;
@@ -2771,6 +2792,7 @@ mc::levelgen::Beardifier Runtime::buildBeardifier(
     };
 
     for (const StructureSetDef& set : structureSets) {
+        if (isNonOverworldStructureSet(set.id)) continue;   // nether/end — not in overworld
         auto pit = placementState.sets.find(set.id);
         if (pit == placementState.sets.end()) continue;
         const StructurePlacement& placement = pit->second;
