@@ -27,7 +27,10 @@ public:
 
         auto blockName = [](uint32_t state) -> std::string {
             const mc::BlockState* bs = mc::getBlockState(state);
-            return (bs && bs->block) ? bs->block->name : std::string();
+            if (!bs || !bs->block) return {};
+            std::string name = bs->block->name;
+            if (name.rfind("minecraft:", 0) == 0) name.erase(0, 10);
+            return name;
         };
         auto isAir = [](uint32_t state) {
             const mc::BlockState* bs = mc::getBlockState(state);
