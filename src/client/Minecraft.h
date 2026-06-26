@@ -68,6 +68,22 @@ public:
     PlayerState&       player()       { return m_localPlayer.state(); }
     const PlayerState& player() const { return m_localPlayer.state(); }
 
+    // Debug teleport. The free-fly camera (LevelRenderer::m_camPos) is the real
+    // position authority — it overwrites player() every frame — so setting
+    // player().x/z alone does nothing. The debug overlay calls requestTeleport();
+    // the camera consumes it once per frame and jumps m_camPos there. Streaming
+    // then loads chunks around the new position on its own (no manual chunk clear,
+    // which would race the decoration worker).
+    void requestTeleport(double x, double y, double z) {
+        m_pendingTpX = x; m_pendingTpY = y; m_pendingTpZ = z; m_hasPendingTeleport = true;
+    }
+    bool consumeTeleport(double& x, double& y, double& z) {
+        if (!m_hasPendingTeleport) return false;
+        x = m_pendingTpX; y = m_pendingTpY; z = m_pendingTpZ;
+        m_hasPendingTeleport = false;
+        return true;
+    }
+
     Window*            window()       { return m_window; }
     render::IRenderDevice* device()   { return m_device; }
 
@@ -140,6 +156,10 @@ private:
     int32_t     m_pendingTeleportId = -1;
     uint32_t    m_tickCounter = 0;
     uint64_t    m_worldSeed = 0;
+
+    // Debug-overlay teleport request, consumed by LevelRenderer::updateCamera.
+    bool        m_hasPendingTeleport = false;
+    double      m_pendingTpX = 0.0, m_pendingTpY = 0.0, m_pendingTpZ = 0.0;
 
     std::unique_ptr<levelgen::NoiseBasedChunkGenerator> m_localGenerator;
     std::unique_ptr<levelgen::feature::BiomeFeatures>    m_biomeFeatures;

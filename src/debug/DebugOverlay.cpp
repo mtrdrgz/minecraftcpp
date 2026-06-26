@@ -4,6 +4,10 @@
 #include "DebugOverlay.h"
 #include "../core/Log.h"
 
+#include <algorithm>
+#include <cmath>
+#include <mutex>
+
 namespace mc {
 
 DebugOverlay::~DebugOverlay() {
@@ -41,27 +45,27 @@ int DebugOverlay::drawText(render::GuiGraphics& g, render::Font& font,
 }
 
 void DebugOverlay::teleport(Minecraft& mc, double x, double y, double z) {
-    PlayerState& state = mc.player();
-    state.x = x;
-    state.z = z;
+    (void)y;  // callers pass 0; Y is resolved from the destination surface below.
+    // Pick a safe Y at the destination column (surface + 1), falling back to 100.
+    double ty = 100.0;
     if (mc.m_localGenerator) {
-        int h = mc.m_localGenerator->getBaseHeight((int)x, (int)z);
-        state.y = (double)h + 1.0;
-    } else {
-        state.y = 100.0;
+        ty = (double)mc.m_localGenerator->getBaseHeight((int)x, (int)z) + 1.0;
     }
-    // Clear loaded chunks to force reload at new position
-    mc.m_chunks.clear();
-    mc.m_generationTasks.clear();
-    mc.m_queuedChunks.clear();
-    MC_LOG_INFO("[DEBUG] Teleported to ({:.1f}, {:.1f}, {:.1f})", x, state.y, z);
+    // Route through the camera (the real position authority). Do NOT clear m_chunks
+    // here: this runs on the render path and would race the decoration worker; the
+    // streaming pass unloads far chunks and loads the new area on its own.
+    mc.requestTeleport(x, ty, z);
+    MC_LOG_INFO("[DEBUG] Teleport requested to ({:.1f}, {:.1f}, {:.1f})", x, ty, z);
 }
 
 void DebugOverlay::startStructureSearch(Minecraft& mc) {
     if (searchRunning) return;
     if (searchThread.joinable()) searchThread.join();
 
-    foundStructures.clear();
+    {
+        std::lock_guard<std::mutex> lk(foundMutex);
+        foundStructures.clear();
+    }
     searchRunning = true;
     searchProgress = 0;
     searchFound = 0;
@@ -73,8 +77,13 @@ void DebugOverlay::startStructureSearch(Minecraft& mc) {
     int px = (int)std::floor(mc.player().x / 16.0);
     int pz = (int)std::floor(mc.player().z / 16.0);
 
-    // 2M blocks = 125000 chunks radius
-    const int searchRadius = 125000;
+    // Bounded so the search actually TERMINATES (the old 125000-chunk = 2M-block
+    // radius scanned ~10^12 cells and never finished, so results never appeared).
+    // We scan outward ring-by-ring and stop each set once we've found the nearest
+    // few — that is what a "locate" needs. ~1200 chunks ≈ 19k blocks covers every
+    // overworld structure's spacing many times over.
+    const int searchRadius = 1200;
+    const int maxPerSet = 4;   // nearest N of each structure set
 
     static const char* structureSetIds[] = {
         "minecraft:villages", "minecraft:pillager_outposts",
@@ -90,13 +99,27 @@ void DebugOverlay::startStructureSearch(Minecraft& mc) {
     };
     constexpr int numSets = sizeof(structureSetIds) / sizeof(structureSetIds[0]);
 
-    searchThread = std::thread([this, seed, dataDir, px, pz, searchRadius]() {
+    searchThread = std::thread([this, seed, dataDir, px, pz, searchRadius, maxPerSet, numSets]() {
         levelgen::structure::StructureState state =
             levelgen::structure::StructureState::loadFromDirectory(
                 dataDir + "/worldgen/structure_set", (int64_t)seed);
 
-        std::vector<StructureLoc> localFound;
+        int total = 0;
         int setIdx = 0;
+
+        // Publish one find immediately (kept distance-sorted) so results appear
+        // live instead of only at the very end.
+        auto publish = [this, px, pz](const StructureLoc& loc) {
+            std::lock_guard<std::mutex> lk(foundMutex);
+            foundStructures.push_back(loc);
+            std::sort(foundStructures.begin(), foundStructures.end(),
+                      [px, pz](const StructureLoc& a, const StructureLoc& b) {
+                          long da = (long)(a.chunkX - px) * (a.chunkX - px) + (long)(a.chunkZ - pz) * (a.chunkZ - pz);
+                          long db = (long)(b.chunkX - px) * (b.chunkX - px) + (long)(b.chunkZ - pz) * (b.chunkZ - pz);
+                          return da < db;
+                      });
+            searchFound = (int)foundStructures.size();
+        };
 
         for (const char* setId : structureSetIds) {
             if (!searchRunning) break;
@@ -111,68 +134,42 @@ void DebugOverlay::startStructureSearch(Minecraft& mc) {
             if (name.starts_with("minecraft:")) name = name.substr(10);
             searchCurrentSet = name;
 
-            // For each ring, scan the perimeter
-            for (int r = 0; r <= searchRadius && searchRunning; ++r) {
-                // Update progress: each set gets a slice of the progress bar
-                int setProgress = (int)((float)r / searchRadius * (100.0f / numSets));
-                searchProgress = setIdx * (100 / numSets) + setProgress;
+            int foundForSet = 0;
+            auto check = [&](int cx, int cz) {
+                if (state.isStructureChunk(placement, cx, cz)) {
+                    StructureLoc loc;
+                    loc.name = name;
+                    loc.chunkX = cx; loc.chunkZ = cz;
+                    loc.blockX = cx * 16 + 8; loc.blockZ = cz * 16 + 8;
+                    publish(loc);
+                    ++foundForSet; ++total;
+                }
+            };
 
-                // Only scan the ring (not the full square) for efficiency
-                // For large radii, step by 1 (structure placement is per-chunk)
-                for (int dx = -r; dx <= r && searchRunning; ++dx) {
-                    // Top and bottom edges of the ring
+            // Scan outward ring-by-ring; stop this set once we've found the nearest
+            // maxPerSet (or hit the radius cap). Nearest-first because rings grow.
+            for (int r = 0; r <= searchRadius && searchRunning && foundForSet < maxPerSet; ++r) {
+                searchProgress = (int)(((float)setIdx + (float)r / searchRadius) / numSets * 100.0f);
+                // Top & bottom edges of the ring.
+                for (int dx = -r; dx <= r && searchRunning && foundForSet < maxPerSet; ++dx) {
                     for (int dz : { -r, r }) {
                         if (r == 0 && dz != 0) continue;
-                        int cx = px + dx;
-                        int cz = pz + dz;
-                        if (state.isStructureChunk(placement, cx, cz)) {
-                            StructureLoc loc;
-                            loc.name = name;
-                            loc.chunkX = cx;
-                            loc.chunkZ = cz;
-                            loc.blockX = cx * 16 + 8;
-                            loc.blockZ = cz * 16 + 8;
-                            localFound.push_back(loc);
-                            searchFound = (int)localFound.size();
-                        }
+                        check(px + dx, pz + dz);
                     }
-                    // Left and right edges (only for non-corner cells to avoid double-checking corners)
-                    if (r > 0) {
-                        for (int dz = -r + 1; dz <= r - 1 && searchRunning; ++dz) {
-                            for (int dx2 : { -r, r }) {
-                                int cx = px + dx2;
-                                int cz = pz + dz;
-                                if (state.isStructureChunk(placement, cx, cz)) {
-                                    StructureLoc loc;
-                                    loc.name = name;
-                                    loc.chunkX = cx;
-                                    loc.chunkZ = cz;
-                                    loc.blockX = cx * 16 + 8;
-                                    loc.blockZ = cz * 16 + 8;
-                                    localFound.push_back(loc);
-                                    searchFound = (int)localFound.size();
-                                }
-                            }
-                        }
-                    }
+                }
+                // Left & right edges (excluding the corners already done above).
+                for (int dz = -r + 1; dz <= r - 1 && searchRunning && foundForSet < maxPerSet; ++dz) {
+                    check(px - r, pz + dz);
+                    check(px + r, pz + dz);
                 }
             }
             ++setIdx;
         }
 
-        // Sort by distance from player
-        std::sort(localFound.begin(), localFound.end(), [px, pz](const StructureLoc& a, const StructureLoc& b) {
-            int da = (a.chunkX - px) * (a.chunkX - px) + (a.chunkZ - pz) * (a.chunkZ - pz);
-            int db = (b.chunkX - px) * (b.chunkX - px) + (b.chunkZ - pz) * (b.chunkZ - pz);
-            return da < db;
-        });
-
-        // Copy results to main thread visible vector
-        foundStructures = std::move(localFound);
         searchProgress = 100;
         searchRunning = false;
-        searchStatus = "Found " + std::to_string(foundStructures.size()) +
-                       " structures within 2M blocks";
+        searchStatus = "Found " + std::to_string(total) +
+                       " structures within " + std::to_string(searchRadius * 16) + " blocks";
         searchCurrentSet.clear();
     });
 }
@@ -183,6 +180,7 @@ void DebugOverlay::startBiomeSearch(Minecraft& mc, const std::string& targetBiom
 
     biomeSearchRunning = true;
     biomeFound = false;
+    biomeNotFound = false;
     biomeSearchProgress = 0;
     biomeSearchRadius = 0;
     biomeSearchStatus = "Searching for " + targetBiome + "...";
@@ -193,7 +191,10 @@ void DebugOverlay::startBiomeSearch(Minecraft& mc, const std::string& targetBiom
     uint64_t seed = mc.m_worldSeed;
     int px = (int)mc.player().x;
     int pz = (int)mc.player().z;
-    const int maxRadius = 2000000;  // 2M blocks
+    // Bounded so the search TERMINATES — the biome list includes nether/end biomes
+    // that the overworld generator never produces; an unbounded scan would run
+    // forever. 200k blocks covers any overworld biome's realistic distance.
+    const int maxRadius = 200000;
     const int step = 64;            // check every 64 blocks for speed
 
     biomeThread = std::thread([this, seed, px, pz, targetBiome, maxRadius, step]() {
@@ -238,6 +239,7 @@ void DebugOverlay::startBiomeSearch(Minecraft& mc, const std::string& targetBiom
             }
         }
 
+        biomeNotFound = true;       // finished the whole radius without a match
         biomeSearchRunning = false;
     });
 }
@@ -274,9 +276,9 @@ void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& fon
 
     // Search button (disabled while running)
     if (searchRunning) {
-        button(g, font, 15, y, 180, 18, "Searching... (" + std::to_string(searchProgress.load()) + "%)", mouseX, mouseY);
+        button(g, font, 15, y, 200, 18, "Searching... (" + std::to_string(searchProgress.load()) + "%)", mouseX, mouseY);
     } else {
-        if (button(g, font, 15, y, 180, 18, "Search Structures (2M radius)", mouseX, mouseY)) {
+        if (button(g, font, 15, y, 200, 18, "Search nearest structures", mouseX, mouseY)) {
             startStructureSearch(mc);
         }
     }
@@ -301,28 +303,33 @@ void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& fon
         y += 4;
     }
 
+    // Snapshot + iterate under the lock (the worker publishes finds concurrently).
+    std::lock_guard<std::mutex> lk(foundMutex);
+
     if (foundStructures.empty() && !searchRunning) {
-        drawText(g, font, "Click 'Search' to find structures.", 15, y, glm::vec4(0.6f, 0.6f, 0.6f, 1));
+        drawText(g, font, "Click 'Search' to find the nearest structures.", 15, y, glm::vec4(0.6f, 0.6f, 0.6f, 1));
         return;
     }
 
-    // List structures sorted by distance, with TP buttons
-    int btnW = 300;
-    int btnH = 16;
+    // List structures (already distance-sorted by the worker), with TP buttons.
+    // Bound the visible count to the panel height so entries never overflow.
+    const int btnW = 300;
+    const int btnH = 16;
+    const int rowH = btnH + 2;
+    int maxList = (panelH - 8 - y) / rowH;
+    if (maxList < 1) maxList = 1;
     int listCount = 0;
-    int maxList = 40;  // limit visible entries
 
     for (auto& loc : foundStructures) {
         if (listCount >= maxList) {
-            y = drawText(g, font, "... and " + std::to_string(foundStructures.size() - maxList) +
-                         " more (narrow search by moving closer)", 15, y, glm::vec4(0.6f, 0.6f, 0.6f, 1));
+            drawText(g, font, "... and " + std::to_string((int)foundStructures.size() - maxList) +
+                     " more", 15, y, glm::vec4(0.6f, 0.6f, 0.6f, 1));
             break;
         }
 
-        // Format: name @ blockX,blockZ (dist blocks)
         int distBlocks = (int)std::sqrt(
-            (double)(loc.chunkX * 16 - (int)mc.player().x) * (loc.chunkX * 16 - (int)mc.player().x) +
-            (double)(loc.chunkZ * 16 - (int)mc.player().z) * (loc.chunkZ * 16 - (int)mc.player().z));
+            (double)(loc.blockX - (int)mc.player().x) * (loc.blockX - (int)mc.player().x) +
+            (double)(loc.blockZ - (int)mc.player().z) * (loc.blockZ - (int)mc.player().z));
 
         std::string label = loc.name + " @ " + std::to_string(loc.blockX) + "," +
                             std::to_string(loc.blockZ) + " (" + std::to_string(distBlocks) + "m)";
@@ -332,19 +339,22 @@ void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& fon
             teleport(mc, (double)loc.blockX, 0, (double)loc.blockZ);
             loc.visited = true;
         }
-        y += btnH + 2;
+        y += rowH;
         ++listCount;
     }
 }
 
-void DebugOverlay::renderBiomesTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY) {
+void DebugOverlay::renderBiomesTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY, int panelW, int panelH) {
     int y = 44;
 
-    // If biome search just finished, teleport
+    // If biome search just finished, teleport (or report not-found).
     if (!biomeSearchRunning && biomeFound) {
         biomeFound = false;
         teleport(mc, (double)biomeFoundX, 0, (double)biomeFoundZ);
         biomeSearchStatus = "Found! Teleported to " + std::to_string(biomeFoundX) + ", " + std::to_string(biomeFoundZ);
+    } else if (!biomeSearchRunning && biomeNotFound) {
+        biomeNotFound = false;
+        biomeSearchStatus = "Not found within search radius.";
     }
 
     // Live status
@@ -385,19 +395,34 @@ void DebugOverlay::renderBiomesTab(render::GuiGraphics& g, render::Font& font, M
     };
     constexpr int biomeCount = sizeof(biomes) / sizeof(biomes[0]);
 
-    // 3-column layout
-    int colW = 160;
+    // Adaptive grid that always fits the actual panel (the old layout used a
+    // hardcoded 680px height, so on shorter screens rows overflowed off the panel
+    // and became unclickable). Derive the column count from the panel WIDTH and the
+    // rows-per-column from the panel HEIGHT, then size buttons to fit both.
+    const int margin = 15;
+    const int colGap = 6;
+    const int gap = 2;
+    const int startY = y;
+    const int availW = panelW - margin * 2;
+    const int availH = panelH - startY - margin;
+
+    // As many ~150px columns as the width allows (at least 1), capped so we never
+    // need more rows than fit the height.
+    int numCols = std::max(1, (availW + colGap) / (150 + colGap));
+    numCols = std::min(numCols, biomeCount);
+    int colW = (availW - (numCols - 1) * colGap) / numCols;
+
     int btnH = 15;
-    int gap = 2;
-    int startY = y;
-    int availH = 680 - startY;
-    int perCol = availH / (btnH + gap);
-    if (perCol < 1) perCol = 1;
+    int perCol = (biomeCount + numCols - 1) / numCols;        // ceil
+    // Shrink the row height if the columns are still too tall for the panel.
+    if (perCol * (btnH + gap) > availH && perCol > 0) {
+        btnH = std::max(9, availH / perCol - gap);
+    }
 
     for (int i = 0; i < biomeCount; ++i) {
         int col = i / perCol;
         int row = i % perCol;
-        int bx = 15 + col * (colW + 6);
+        int bx = margin + col * (colW + colGap);
         int by = startY + row * (btnH + gap);
 
         std::string name = biomes[i];
@@ -490,8 +515,8 @@ void DebugOverlay::render(render::GuiGraphics& g, render::Font& font, Minecraft&
 
     switch (currentTab) {
         case 0: renderInfoTab(g, font, mc, mouseX - panelX, mouseY - panelY); break;
-        case 1: renderStructuresTab(g, font, mc, mouseX - panelX, mouseY - panelY); break;
-        case 2: renderBiomesTab(g, font, mc, mouseX - panelX, mouseY - panelY); break;
+        case 1: renderStructuresTab(g, font, mc, mouseX - panelX, mouseY - panelY, panelW, panelH); break;
+        case 2: renderBiomesTab(g, font, mc, mouseX - panelX, mouseY - panelY, panelW, panelH); break;
     }
 
     g.pop();
