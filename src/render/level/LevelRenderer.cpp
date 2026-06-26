@@ -235,6 +235,15 @@ void LevelRenderer::updateCamera(float dtSec) {
     if (m_window->isKeyDown(VK_SPACE)) m_camPos.y += speed * dtSec;
     if (m_window->isKeyDown(VK_CONTROL)) m_camPos.y -= speed * dtSec;
 
+    // Headless-testing aid: when MCPP_AUTOWALK=<speed> is set, drive the camera
+    // forward automatically so chunks stream/unload/restore without a real input
+    // device (used to exercise the streaming path under xvfb+llvmpipe). No effect
+    // unless the env var is set.
+    if (const char* aw = std::getenv("MCPP_AUTOWALK")) {
+        float spd = (float)atof(aw); if (spd == 0.0f) spd = 8.0f;
+        m_camPos.x += spd * dtSec;
+    }
+
     if (m_mc->isInGame() && !m_mc->isConnected()) {
         m_mc->player().x = m_camPos.x;
         m_mc->player().y = m_camPos.y - 1.62f;
