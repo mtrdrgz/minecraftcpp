@@ -85,4 +85,8 @@ logs/
 
 # Linux parity-only build dir
 /build-linux/
+# Local Linux build/run/sanitizer dirs (headless testing)
+build-run/
+build-asan/
+build-*/
 vendor/glfw/
