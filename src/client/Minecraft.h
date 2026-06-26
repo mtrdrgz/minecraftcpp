@@ -96,6 +96,18 @@ public:
     void        restoreCachedChunksInRadius(int px, int pz, int radius);
     const auto& chunks() const { return m_chunks; }
 
+    // Guards chunk BLOCK DATA against concurrent read/write between the decoration
+    // worker (writes blocks cross-chunk during a turn) and the render thread's
+    // mesh-snapshot copy (reads/copies a chunk's blocks). Without this, copying a
+    // LevelChunk while decoration mutates its PalettedContainer (palette realloc)
+    // is a data race → heap corruption → crash on fast GPUs (where meshing runs
+    // hot). m_chunksMutex only protects the MAP structure, not per-chunk blocks.
+    // Lock order is deadlock-free: the mesher takes this then only ever takes
+    // m_chunksMutex SHARED (compatible with the decoration worker's shared hold);
+    // exclusive m_chunksMutex holders are main-thread-only and cannot run while the
+    // main-thread mesher runs.
+    std::mutex& chunkWriteMutex() { return m_chunkWriteMutex; }
+
     // Biome id at QUART coordinates from the local generator's biome source. Empty
     // if no local generator. Used on the main thread to build per-chunk biome
     // snapshots for the mesher (the underlying noise router has mutable caches, so
@@ -246,6 +258,7 @@ private:
     // Main-thread reads (render, player physics) take it shared too — they
     // don't block each other or the worker.
     std::shared_mutex                      m_chunksMutex;
+    std::mutex                             m_chunkWriteMutex;  // see chunkWriteMutex()
     std::vector<ChunkPos>                  m_decorationQueue;
     std::mutex                             m_decorationQueueMutex;
     std::condition_variable                m_decorationQueueCv;

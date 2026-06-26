@@ -657,6 +657,11 @@ void Minecraft::decorationWorkerLoop() {
         auto it = m_chunks.find(chunkKey(cp));
         LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
         if (!c) continue;
+        // Exclude the render thread's mesh-snapshot copy while we write block data
+        // (this turn writes cross-chunk: features overhang, fossils ±16, structure
+        // pieces span chunks). Copying a LevelChunk while we mutate its blocks is a
+        // data race → crash. See Minecraft::chunkWriteMutex().
+        std::lock_guard<std::mutex> writeLk(m_chunkWriteMutex);
         try {
             // Java ChunkGenerator.applyFeaturesAndStructures starts the FEATURES
             // turn by priming non-WG heightmaps, then runs structures for each

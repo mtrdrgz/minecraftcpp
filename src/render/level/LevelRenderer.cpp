@@ -321,17 +321,26 @@ void LevelRenderer::rebuildDirtyChunks() {
         if (!chunk || !chunk->isLoaded() || !chunk->meshDirty) continue;
 
         ChunkPos cp = chunk->pos();
-        LevelChunk* east = m_mc->getChunk({cp.x + 1, cp.z});
-        LevelChunk* west = m_mc->getChunk({cp.x - 1, cp.z});
-        LevelChunk* south = m_mc->getChunk({cp.x, cp.z + 1});
-        LevelChunk* north = m_mc->getChunk({cp.x, cp.z - 1});
-        auto center = std::make_shared<LevelChunk>(*chunk);
-        std::array<std::shared_ptr<LevelChunk>, 4> neighbors = {
-            east ? std::make_shared<LevelChunk>(*east) : nullptr,
-            west ? std::make_shared<LevelChunk>(*west) : nullptr,
-            south ? std::make_shared<LevelChunk>(*south) : nullptr,
-            north ? std::make_shared<LevelChunk>(*north) : nullptr
-        };
+        // Snapshot the chunk + neighbours under chunkWriteMutex so the decoration
+        // worker cannot mutate their block data while we copy it (copying a
+        // LevelChunk mid-write corrupts the heap → crash). The copies are cheap;
+        // the lock is released before the off-thread mesh build runs.
+        std::shared_ptr<LevelChunk> center;
+        std::array<std::shared_ptr<LevelChunk>, 4> neighbors;
+        {
+            std::lock_guard<std::mutex> writeLk(m_mc->chunkWriteMutex());
+            LevelChunk* east = m_mc->getChunk({cp.x + 1, cp.z});
+            LevelChunk* west = m_mc->getChunk({cp.x - 1, cp.z});
+            LevelChunk* south = m_mc->getChunk({cp.x, cp.z + 1});
+            LevelChunk* north = m_mc->getChunk({cp.x, cp.z - 1});
+            center = std::make_shared<LevelChunk>(*chunk);
+            neighbors = {
+                east ? std::make_shared<LevelChunk>(*east) : nullptr,
+                west ? std::make_shared<LevelChunk>(*west) : nullptr,
+                south ? std::make_shared<LevelChunk>(*south) : nullptr,
+                north ? std::make_shared<LevelChunk>(*north) : nullptr
+            };
+        }
         chunk->meshDirty = false;
         m_meshBuildQueued.insert(cand.key);
         const TextureAtlas* atlas = m_atlas.isLoaded() ? &m_atlas : nullptr;
