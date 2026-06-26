@@ -27,6 +27,24 @@
 ## Rendimiento / race conditions
 
 - [ ] Hay race conditions que hacen que el chunk que se genere esté corrupto. Solo pasa al ir rápido, y a peor CPU más pasa.
+  - [ ] DIAGNÓSTICO 2026-06-26 (causa raíz de la "frecuencia absurda y artificial"
+        de features): **no hay persistencia de chunks**. En `Minecraft.cpp` los chunks
+        fuera de `RADIUS = 6` se **borran** (`unloadChunk` → `m_chunks.erase`) y al
+        revisitarlos se **regeneran y RE-DECORAN** desde cero (no hay caché ni
+        guardado en disco). La decoración de un chunk N escribe features que se
+        derraman a sus vecinos (árboles que sobresalen, fósiles en ±16, piezas de
+        estructura). Si el jugador se aleja (N se descarga) y vuelve (N se regenera y
+        re-decora), N vuelve a derramar sus features sobre los vecinos que SÍ
+        persistieron → **duplicación acumulativa** en la zona de solape; a la vez el
+        chunk regenerado pierde el derrame que recibió de SUS vecinos. Ir y venir por
+        el borde de streaming acumula features. La decoración de un chunk individual
+        SÍ está protegida (flag `decorated` + un único worker), así que no es doble
+        decoración dentro de una residencia — es la regeneración-al-revisitar.
+        "A peor CPU más pasa" encaja: más lag de generación → el borde se mueve más →
+        más churn de descarga/regeneración. Arreglo 1:1 correcto: **persistencia**
+        (no regenerar chunks ya decorados — caché LRU en memoria que sobreviva al
+        radio de descarga, o guardado tipo región como vanilla). Pendiente de
+        implementar + build-test en el engine de Windows.
 - [ ] Hay que compilar todo a un solo ejecutable. Si el ejecutable se saca de la carpeta funciona, pero no se generan árboles ni nada; supongo que hay otros ejecutables en la carpeta de `/build` de los que depende `mcpp.exe`. Compila todo a uno. Además, seguramente el tener un proceso de generación de decoración esté quitando rendimiento y causando los problemas de chunks corruptos.
 - [ ] La generación de terreno presenta problemas de rendimiento, debe ser optimizada; hace que el juego tenga stutters.
   - [ ] Perfil 2026-06-20 22:40 UTC: `terrain_engine_perf --radius 4 --seed 1` bajó de `fillFromNoise` 190.5 ms/chunk + `buildSurface` 105.8 ms/chunk a 138.3 + 76.4 ms/chunk tras cachear generadores/RandomState/SurfaceSystem, usar setter de fase NOISE y cachear modelos vanilla por `stateId`. Sigue abierta: density functions/surface rules son aún demasiado lentos.
