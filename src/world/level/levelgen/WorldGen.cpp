@@ -26,9 +26,19 @@
 #include "OreVeinifier.h"
 #include "RandomSource.h"
 #include <vector>
+// These three came from RandomSource.cpp's `#if defined(_WIN32)` block; the merge
+// script hoisted them out of that guard, which broke every non-Windows build of
+// this TU (windows.h/bcrypt.h don't exist on Linux, and platform/Platform.h pulls
+// in GLFW). They carry no symbols actually used here, so restore the original
+// _WIN32 guard. (merge_worldgen.py is fixed to keep these guarded on re-merge.)
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include "platform/Platform.h"
 #include <bcrypt.h>
+#endif
 #include "RandomState.h"
 #include "TerrainProvider.h"
 #include "NoiseRouterData.h"
