@@ -1,4 +1,6 @@
 #include "CrashHandler.h"
+#include "FrameProfiler.h"
+#include "Log.h"
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -15,6 +17,7 @@
 #else
 #include <execinfo.h>
 #include <unistd.h>
+#include <syscall.h>
 #endif
 
 namespace mc::debug {
@@ -196,10 +199,9 @@ static void watchdogLoop() {
                 "HANG DETECTED: no frame for %lld ms, phase='%s'",
                 (long long)delta, phase ? phase : "?");
             mc::log::FileLogger::instance().writeRaw(buf);
-            // Write stack trace of the watchdog thread (not super useful, but
-            // shows the watchdog is alive).
-            // Don't write the main thread's stack — we can't safely walk it
-            // from here without a debugger.
+            // Dump the frame profiler immediately so we can see which section
+            // was running when the hang occurred.
+            mc::debug::FrameProfiler::instance().dumpNow();
         }
     }
 }

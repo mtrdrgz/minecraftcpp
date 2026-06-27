@@ -3,6 +3,7 @@
 #include "../../world/level/biome/BiomeColor.h"
 #include "../../assets/resource_ids.h"
 #include "../../core/Log.h"
+#include "../../core/FrameProfiler.h"
 #include "../../assets/AssetManager.h"
 #include "../../../profiling/include/Profiler.h"
 #include <stb_image.h>
@@ -478,27 +479,28 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
 
     // Advance animated block textures (water/lava/fire/...) and re-upload if changed.
     if (m_atlas.isLoaded()) {
+        mc::debug::FrameProfiler::begin("atlas.tickAnimations");
         static const Clock::time_point animStart = Clock::now();
         m_atlas.tickAnimations(cmd, std::chrono::duration<double>(Clock::now() - animStart).count());
+        mc::debug::FrameProfiler::end("atlas.tickAnimations");
     }
 
     auto now = Clock::now();
-    // Cap dt at 50ms (20 FPS minimum). The previous 100ms cap caused "lagback":
-    // when a heavy frame took >100ms, the player only moved 100ms worth while
-    // 100ms+ of real time passed, so they appeared to jump backwards relative
-    // to their expected position. 50ms is tight enough to prevent huge camera
-    // jumps but loose enough that a single 50ms frame doesn't lose movement.
     float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.05f);
-    m_lastFrame = now; updateCamera(dtSec);
+    m_lastFrame = now;
+
+    mc::debug::FrameProfiler::begin("updateCamera");
+    updateCamera(dtSec);
+    mc::debug::FrameProfiler::end("updateCamera");
+
+    mc::debug::FrameProfiler::begin("rebuildDirtyChunks");
     rebuildDirtyChunks();
-    // GPU buffer upload budget per frame. The previous value (2) meant a single
-    // chunk (up to 24 sections) took 12 frames to fully upload at 60fps — visible
-    // as chunks "popping in" over 200ms. With multi-threaded meshing producing
-    // results faster, we need to upload faster too. 8 uploads/frame lets a full
-    // chunk upload in 3 frames (~50ms at 60fps), which feels near-instant.
+    mc::debug::FrameProfiler::end("rebuildDirtyChunks");
+
     m_sectionUploadsThisFrame = 8;
 
     // Clean up render data for unloaded chunks to prevent memory leaks
+    mc::debug::FrameProfiler::begin("cleanupUnloaded");
     {
         std::vector<int64_t> toRemove;
         for (const auto& [key, rd] : m_renderData) {
@@ -517,9 +519,11 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
             }
         }
     }
+    mc::debug::FrameProfiler::end("cleanupUnloaded");
 
     if (!m_pipeline) return;
 
+    mc::debug::FrameProfiler::begin("renderScene");
     glm::vec3 f = vanillaViewVector(m_camPitch, m_camYaw);
     glm::mat4 view = glm::lookAt(m_camPos, m_camPos + f, {0,1,0});
     int w = m_window ? m_window->width() : 1280, h = m_window ? m_window->height() : 720;
@@ -535,37 +539,35 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
 
     if (m_atlas.isLoaded()) cmd->bindTexture(m_atlas.texture(), 0);
 
-    // Frustum cull at chunk level: skip chunks whose center is behind the camera
-    // or outside the far plane. A full frustum test (6 planes) is ideal but even
-    // a simple dot-product check against the camera forward vector eliminates
-    // ~half the draw calls (everything behind the player).
+    // Frustum cull at chunk level
     const glm::vec3 camForward = vanillaViewVector(m_camPitch, m_camYaw);
     const float farPlane = 512.0f;
     int drawCalls = 0;
+    int chunksDrawn = 0;
     for (auto& [key, rd] : m_renderData) {
         if (!rd.built) continue;
-        // Reconstruct chunk world position from key
         const ChunkPos cp{ (int)(key >> 32), (int)(key & 0xFFFFFFFF) };
         const glm::vec3 chunkCenter(cp.x * 16 + 8.0f, m_camPos.y, cp.z * 16 + 8.0f);
         const glm::vec3 toChunk = chunkCenter - m_camPos;
         const float dist = glm::length(toChunk);
-        // Skip if beyond far plane
         if (dist > farPlane) continue;
-        // Skip if behind camera (dot < 0 means more than 90° off-axis)
-        // Use a slightly relaxed threshold (dot < -0.2) so chunks at the edge
-        // of the FOV are still drawn.
-        if (dist > 16.0f) {  // Don't cull chunks right next to the player
+        if (dist > 16.0f) {
             const float dot = glm::dot(toChunk / dist, camForward);
             if (dot < -0.3f) continue;
         }
+        ++chunksDrawn;
         for (auto& m : rd.sections) {
             uploadAndDrawSection(cmd, m);
             ++drawCalls;
         }
     }
+    mc::debug::FrameProfiler::end("renderScene");
+
+    mc::debug::FrameProfiler::begin("renderEntities");
     if (m_entityRenderer) {
         m_entityRenderer->renderEntities(cmd, vp);
     }
+    mc::debug::FrameProfiler::end("renderEntities");
 }
 
 } // namespace mc::render

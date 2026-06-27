@@ -13,6 +13,7 @@
 
 #include "core/Log.h"
 #include "core/CrashHandler.h"
+#include "core/FrameProfiler.h"
 #include "platform/Window.h"
 #include "assets/AssetPack.h"
 #include "render/RenderBackend.h"
@@ -163,8 +164,10 @@ int main(int argc, char** argv) {
     bool escWasDown = false;
 
     while (window.pollEvents()) {
+        mc::debug::FrameProfiler::instance().begin("frame.total");
         mc::debug::frameHeartbeat();  // tell the watchdog we're alive
         mc::debug::setPhase("input");
+
         const bool escDown = window.isKeyDown(VK_ESCAPE);
         if (escDown && !escWasDown) {
             if (mc.screen()) {
@@ -220,7 +223,6 @@ int main(int argc, char** argv) {
                 mc.screen()->mouseReleased(mc.guiMouseX(), mc.guiMouseY(), 0);
             }
         }
-        // Mouse wheel scroll — dispatch to the active screen (for scrolling lists).
         {
             double sx, sy;
             if (mc.screen() && window.consumeScroll(sx, sy)) {
@@ -239,8 +241,11 @@ int main(int argc, char** argv) {
         if (tickAccum > MAX_TICK_ACCUM_MS) tickAccum = MAX_TICK_ACCUM_MS;
         int ticksThisFrame = 0;
         mc::debug::setPhase("tick");
+        { mc::debug::FrameProfiler::Section prof("tick"); }
         while (tickAccum >= TICK_MS && ticksThisFrame < MAX_TICKS_PER_FRAME) {
+            mc::debug::FrameProfiler::begin("tick");
             mc.tick();
+            mc::debug::FrameProfiler::end("tick");
             tickAccum -= TICK_MS;
             ++ticksThisFrame;
         }
@@ -248,16 +253,19 @@ int main(int argc, char** argv) {
         float partialTick = (float)(tickAccum / TICK_MS);
         mc::debug::setPhase("render");
         mc.resizeGui();
+        { mc::debug::FrameProfiler::Section prof("mc.render"); }
+        mc::debug::FrameProfiler::begin("mc.render");
         mc.render(partialTick);
+        mc::debug::FrameProfiler::end("mc.render");
 
         static int frames = 0;
         if (++frames % 100 == 0) MC_LOG_INFO("Main loop ticking, frames={}", frames);
 
         // Log slow frames (>100ms) with the phase so we can see what's slow.
-        // The watchdog checks for >2s hangs; this catches the "slow but not
-        // frozen" case that makes the game feel terrible.
         if (dtMs > 100.0) {
             MC_LOG_WARN("Slow frame: {:.1f}ms (phase=render, frames={})", dtMs, frames);
+            // Dump the profiler immediately on a slow frame so we see what's slow.
+            mc::debug::FrameProfiler::instance().dumpNow();
         }
 
         mc::debug::setPhase("gpu");
@@ -267,10 +275,13 @@ int main(int argc, char** argv) {
 
             if (mc.isInGame()) {
                 mc::debug::setPhase("renderLevel");
+                mc::debug::FrameProfiler::begin("renderLevel");
                 levelRenderer.renderLevel(cmd, partialTick);
+                mc::debug::FrameProfiler::end("renderLevel");
 
                 if (mc.gui() && mc.guiGraphics()) {
                     mc::debug::setPhase("gui");
+                    mc::debug::FrameProfiler::begin("gui");
                     if (mc.screen()) {
                         mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
                     } else {
@@ -282,17 +293,25 @@ int main(int argc, char** argv) {
                                              (float)(dtMs / 1000.0));
                     }
                     mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
+                    mc::debug::FrameProfiler::end("gui");
                 }
             } else if (mc.screen()) {
                 mc::debug::setPhase("panorama");
+                mc::debug::FrameProfiler::begin("panorama");
                 mc.renderPanorama(cmd, window.width(), window.height(), (float)(dtMs / 1000.0));
                 mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
                 mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
+                mc::debug::FrameProfiler::end("panorama");
             }
 
             mc::debug::setPhase("endFrame");
+            mc::debug::FrameProfiler::begin("gpu.endFrame");
             device->endFrame();
+            mc::debug::FrameProfiler::end("gpu.endFrame");
         }
+
+        mc::debug::FrameProfiler::end("frame.total");
+        mc::debug::FrameProfiler::instance().endFrame();
     }
 
     mc::debug::setPhase("shutdown");
