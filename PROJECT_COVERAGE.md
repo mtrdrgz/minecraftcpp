@@ -118,6 +118,89 @@ For a full 1:1 port every actionable Java file must reach `ported` or `partial` 
 
 ## Devlog
 
+### 2026-06-27 b — Unified asset system (auto-linked, no hardcoded paths)
+
+**Agent**: Super Z (Claude Code web session, headless Linux)
+
+- **Problem**: many textures missing in the CI-built Linux binary — flowers,
+  igloo pieces, dinosaur fossils, tall seagrass, etc. all rendered as the
+  magenta/black missing-texture checker. The pure colour math (BiomeColor.h,
+  BiomeTint.h) and biome-tint wiring were correct, but the underlying textures
+  + models were never reaching the runtime.
+
+- **Root cause**: `tools/asset_packer/main.cpp` was selectively packing only
+  `minecraft/textures/block/` (block PNGs) from the extracted client.jar. It
+  was NOT packing `minecraft/blockstates/` (the JSON that tells ChunkMesh which
+  model to use for each block state) or `minecraft/models/` (the JSON that
+  defines the geometry + texture references). Without those JSONs, the mesher's
+  `loadModel()` returned an empty Model for every block that depends on its
+  blockstate JSON (flowers, tall_grass, seagrass, doors, fences, ...), and the
+  block fell back to the missing-texture checker.
+  Compounding this, `ChunkMesh.cpp`'s `readAssetOrLocal()` had a disk fallback
+  to `assets/client-extract/assets/<path>` that only worked on dev machines
+  that had run `tools/provision_runtime.sh`. The CI-built standalone exe had
+  no such directory, so every model load failed silently.
+
+- **Fix — "assets auto-linked, no hardcoded paths"**:
+  - `tools/asset_packer/main.cpp`: rewrote step 4 to pack EVERYTHING the engine
+    references from the extracted client.jar `assets/minecraft/` tree:
+    - `minecraft/textures/` (recursive — block, gui, entity, environment,
+      particle, colormap, font, painting, ...) — ~17MB, ~5000 files
+    - `minecraft/blockstates/` (recursive — 1170 JSON)
+    - `minecraft/models/` (recursive — 3676 JSON)
+    Excludes only sounds (~430MB, audio engine not wired) and lang (i18n not
+    ported). assets.bin went from 350MB → **22MB**.
+  - `src/assets/TextureAtlas.cpp` `collectBlockTextureNames()`: now walks ALL
+    of `minecraft/textures/` (not just `block/`) and registers each PNG by its
+    path-relative name. For `minecraft/textures/block/<name>.png` it registers
+    BOTH the short name (`<name>`) and the full subpath (`block/<name>`) so
+    both the mesher's `normalizeTexture()` (which strips `block/`) and model
+    loaders (which use the full path) resolve correctly. Atlas went from 1112
+    textures → **4776 textures**, **109 animated**.
+  - `src/render/level/ChunkMesh.cpp` `readAssetOrLocal()`: removed the disk
+    fallback. Now reads ONLY from `assets.bin` via `AssetManager::readRaw`.
+    The standalone exe is now truly self-contained.
+  - `src/world/level/levelgen/structure/StructureGen.cpp` `ensureTemplate()`:
+    added a new step that reads `.nbt` templates from `assets.bin` (key
+    `data/minecraft/structure/<loc>.nbt`) when the disk paths don't exist.
+    The 1202 structure templates were already being packed by the worldgen
+    step (step 3), but the runtime never looked in `assets.bin` for them.
+    Now igloo/village/bastion/etc. templates resolve on the standalone exe
+    without needing `26.1.2/data/minecraft/structure/` on disk.
+
+- **Principle established**: as new blocks/systems are implemented, their
+  assets are already packed automatically — no need to touch the packer for
+  each new block. If a block references a texture that doesn't exist, the
+  atlas assigns it the "missingno" tile (magenta checker) and it's immediately
+  visible in runtime. This is the "auto-linked" behavior the user asked for.
+
+- **Verification — Linux headless smoke** (Xvfb + Mesa llvmpipe GL 4.6):
+  - `./build/mcpp --quickPlaySingleplayer --seed 1 --backend opengl` logs:
+    `[INF] TextureAtlas: built 512x2400 atlas from assets.bin, 4776 of 4794
+    textures loaded (109 animated)`
+  - `[INF] Biome colouring active (65 biomes)` — no regression
+  - Screenshot capture shows 311 unique colors (greens/browns/blues) instead
+    of the previous checker-only pattern.
+
+- **Files touched**:
+  - `tools/asset_packer/main.cpp` — rewrote step 4 (auto-pack textures +
+    blockstates + models from client.jar)
+  - `src/assets/TextureAtlas.cpp` — collectBlockTextureNames walks all
+    minecraft/textures/ subdirs
+  - `src/render/level/ChunkMesh.cpp` — readAssetOrLocal no disk fallback
+  - `src/world/level/levelgen/structure/StructureGen.cpp` — ensureTemplate
+    reads .nbt from assets.bin
+  - `TASKLIST.md` — documented the fix + the Linux-vs-Windows perf suspicion
+
+- **Linux vs Windows perf suspicion (documented, NOT fixed)**: the user
+  reports the Linux build renders "suspiciously fast" compared to Windows.
+  Same OpenGL code path, same `vsync=false`. Possible causes documented in
+  TASKLIST.md under "Rendimiento / race conditions": driver vsync override
+  on Windows, Mesa llvmpipe (software renderer) on the Linux laptop, or
+  simply less work per frame on Linux because models weren't loading (now
+  fixed — re-measure). Action: measure FPS with the debug overlay (F1) on
+  both platforms, same seed/position, before touching anything.
+
 ### 2026-06-27 — Biome colouring wired end-to-end (runtime verified on Linux headless)
 
 **Agent**: Super Z (Claude Code web session, headless Linux)

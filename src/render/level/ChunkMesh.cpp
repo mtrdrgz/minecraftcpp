@@ -597,13 +597,14 @@ std::string normalizeTexture(std::string id) {
     return id;
 }
 
+// Read an asset from the embedded MCAS pack (assets.bin). No disk fallback —
+// the standalone exe must ship everything it needs inside assets.bin. The
+// previous disk fallback (assets/client-extract/assets/...) only worked on
+// dev machines that had run tools/provision_runtime.sh, which silently broke
+// the CI-built Linux/Windows binaries (no models → no real textures → every
+// block using its blockstate JSON rendered as the missing-texture checker).
 std::vector<uint8_t> readAssetOrLocal(const std::string& path) {
-    if (auto bytes = mc::AssetManager::instance().readRaw(path); !bytes.empty()) {
-        return bytes;
-    }
-    std::ifstream in("assets/client-extract/assets/" + path, std::ios::binary);
-    if (!in) return {};
-    return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), {});
+    return mc::AssetManager::instance().readRaw(path);
 }
 
 std::optional<nlohmann::json> loadJson(const std::string& path) {

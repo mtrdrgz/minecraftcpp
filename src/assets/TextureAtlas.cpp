@@ -21,15 +21,33 @@ void addTextureName(std::set<std::string>& names, const std::string& name) {
 
 std::vector<std::string> collectBlockTextureNames() {
     std::set<std::string> names;
-    // Every packed block texture — so ANY model-referenced sprite resolves and no
-    // block renders as the magenta checker (missingno). Falls back to the per-block
-    // texture hints below if the pack can't be enumerated.
-    for (const std::string& path : AssetManager::instance().list("minecraft/textures/block/")) {
+    // Walk every PNG under minecraft/textures/ (not just block/) and add it to
+    // the atlas by its path-relative name. The mesher's normalizeTexture()
+    // already strips the "block/" prefix for block textures, but for non-block
+    // textures (entity, gui, particle, ...) it preserves the subpath. So we
+    // register TWO keys for each texture under minecraft/textures/block/<name>.png:
+    //   - "<name>"            (the block-texture short name, used by ChunkMesh)
+    //   - "block/<name>"      (the full subpath, used by entity/particle/model loaders)
+    // And for textures under other subdirs (entity/, gui/, ...) we register the
+    // full subpath key only.
+    for (const std::string& path : AssetManager::instance().list("minecraft/textures/")) {
         if (!path.ends_with(".png")) continue;
-        std::string name = path.substr(std::string("minecraft/textures/block/").size());
-        name.resize(name.size() - 4);  // strip ".png"
-        addTextureName(names, name);
+        // path = "minecraft/textures/<sub>/<...>.png"
+        const std::string prefix = "minecraft/textures/";
+        std::string rel = path.substr(prefix.size());              // "<sub>/<...>.png"
+        rel.resize(rel.size() - 4);                                 // strip ".png"
+        // Always register the full subpath key (e.g. "block/dandelion",
+        // "entity/creeper/creeper"). The atlas UV lookup uses this when the
+        // caller passes a namespaced path.
+        addTextureName(names, rel);
+        // For block textures specifically, ALSO register the short name (no
+        // "block/" prefix) because the mesher's normalizeTexture() strips it.
+        if (rel.starts_with("block/")) {
+            addTextureName(names, rel.substr(6));  // "dandelion"
+        }
     }
+    // Hardcoded fallbacks the engine references directly (in case the asset pack
+    // is incomplete — these resolve to the missing-texture tile if absent).
     for (const auto& blockPtr : g_blockStorage) {
         if (!blockPtr) continue;
         addTextureName(names, blockPtr->textures.all);
@@ -166,9 +184,22 @@ bool TextureAtlas::loadFromAssetPack(render::IRenderDevice* dev, render::IComman
         const int x0 = col * TILE_SIZE;
         const int y0 = row * TILE_SIZE;
 
+        // Resolve the asset path. `name` may be:
+        //   - "dandelion"              → minecraft/textures/block/dandelion.png
+        //   - "block/dandelion"        → minecraft/textures/block/dandelion.png
+        //   - "entity/creeper/creeper" → minecraft/textures/entity/creeper/creeper.png
+        // Try the full subpath first; if not found and `name` has no slash, try
+        // under block/ (back-compat with the old short-name convention).
+        std::string assetPath = "minecraft/textures/" + name + ".png";
+        std::vector<uint8_t> bytes = AssetManager::instance().readRaw(assetPath);
+        if (bytes.empty() && name.find('/') == std::string::npos) {
+            assetPath = "minecraft/textures/block/" + name + ".png";
+            bytes = AssetManager::instance().readRaw(assetPath);
+        }
+        const std::string mcmetaPath = assetPath + ".mcmeta";
+
         int tw = 0, th = 0;
         std::vector<uint8_t> rgba;
-        const std::vector<uint8_t> bytes = AssetManager::instance().readRaw("minecraft/textures/block/" + name + ".png");
         if (decodePng(bytes, tw, th, rgba)) {
             copyTopLeftTile(atlas, atlasW, x0, y0, rgba, tw, th);
             ++loaded;
@@ -188,8 +219,7 @@ bool TextureAtlas::loadFromAssetPack(render::IRenderDevice* dev, render::IComman
                     sp.frames.push_back(std::move(frame));
                 }
                 int frametime = 1;
-                const std::vector<uint8_t> meta =
-                    AssetManager::instance().readRaw("minecraft/textures/block/" + name + ".png.mcmeta");
+                const std::vector<uint8_t> meta = AssetManager::instance().readRaw(mcmetaPath);
                 if (!meta.empty()) {
                     try {
                         auto j = nlohmann::json::parse(meta.begin(), meta.end());

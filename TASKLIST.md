@@ -35,6 +35,32 @@
 
 ## Rendimiento / race conditions
 
+- [ ] **SOSPECHA (2026-06-27): el build de Linux rinde EXTREMADAMENTE bien en
+      comparación con el de Windows** — sospechosamente bien. Mismo código OpenGL
+      (`DeviceGL.cpp` Windows vs `DeviceGL_linux.cpp`), mismo `vsync=false` en
+      `RenderBackend::createDevice`, mismo loop principal en `main.cpp`. Posibles
+      causas a investigar (NO arreglar hasta confirmar):
+  1. **Driver override de vsync en Windows**: aunque `wglSwapIntervalEXT(0)`
+     desactiva vsync en el contexto, drivers NVIDIA/AMD/Intel en Windows suelen
+     tener un override global "Adaptive VSync" / "Vertical Sync = On" que reactiva
+     el sync. En Linux con Mesa el override es menos común. → medir FPS real en
+     ambos con el debug overlay (F1 → tab 1).
+  2. **`wglMakeCurrent` + `glFinish` overhead**: el path Windows hace más
+     validación de contexto. Difícil de medir sin profiler.
+  3. **Mesa llvmpipe en el portátil**: si el portátil Linux está usando el
+     renderer software (llvmpipe), el "rendimiento sospechoso" puede ser que el
+     GPU real (NVIDIA/AMD) NO se está usando — el frame rate se ve alto porque
+     llvmpipe no hace vsync. → `glxinfo | grep "renderer string"` para confirmar.
+  4. **Menos trabajo por frame en Linux**: si los modelos JSON / blockstates NO
+     se cargaban (bug arreglado 2026-06-27), los bloques renderizaban como
+     checker magenta — un quad plano sin modelo. Eso es MENOS geometría por
+     chunk → más FPS. Con el fix del asset packing, los modelos ahora cargan
+     y la geometría por chunk sube. Volver a medir FPS después del fix para
+     comparar.
+  Acción: NO tocar nada hasta tener una medición de FPS con el debug overlay en
+  AMBAS plataformas, mismo seed, misma posición de cámara. Documentar el resultado
+  y luego decidir si es un bug real o solo percepción.
+
 - [ ] Hay race conditions que hacen que el chunk que se genere esté corrupto. Solo pasa al ir rápido, y a peor CPU más pasa.
   - [ ] DIAGNÓSTICO 2026-06-26 (causa raíz de la "frecuencia absurda y artificial"
         de features): **no hay persistencia de chunks**. En `Minecraft.cpp` los chunks
@@ -183,6 +209,43 @@
       `stronghold` fabricado de arriba. Confirmar en el engine de Windows.
 
 ## Texturas / coloreado
+
+- [x] **SISTEMA UNIFICADO DE ASSETS (2026-06-27): muchas texturas faltantes en el
+      build de Linux — flores, igloo, huesos de dinosaurio (fossils), algas dobles
+      (tall seagrass), etc. se veían como el checker magenta.** Causa raíz:
+      `asset_packer` solo empaquetaba `minecraft/textures/block/` (texturas de
+      bloques) pero NO empaquetaba `minecraft/blockstates/` ni `minecraft/models/`
+      (los JSON que el motor necesita para saber qué modelo + textura usar por bloque).
+      El `ChunkMesh` tenía un fallback a disco (`assets/client-extract/assets/`) que
+      solo funcionaba en máquinas dev con `tools/provision_runtime.sh` ejecutado.
+      En CI, el exe standalone no encontraba los modelos → todo bloque con variantes
+      (flores, hierba alta, seagrass, puertas, vallas, ...) caía al checker.
+  - **Fix aplicado** — "assets auto-linked, no hardcodeados":
+    - `tools/asset_packer/main.cpp` ahora empaqueta automáticamente TODO lo que el
+      motor referencia desde el `client.jar` extraído: `minecraft/textures/` completo
+      (block, gui, entity, environment, particle, colormap, font, painting, ...),
+      `minecraft/blockstates/` (1170 JSON), `minecraft/models/` (3676 JSON). Solo
+      excluye sonidos (~430MB, audio no wired) y lang (i18n no portado). El assets.bin
+      bajó de 350MB a **22MB**.
+    - `src/assets/TextureAtlas.cpp` `collectBlockTextureNames()` ahora recorre TODO
+      `minecraft/textures/` (no solo `block/`) y registra cada textura por su path
+      relativo. Atlas resultante: **4776 texturas** (antes 1112), **109 animated**.
+    - `src/render/level/ChunkMesh.cpp` `readAssetOrLocal()` eliminó el fallback a
+      disco — solo lee desde `assets.bin`. El exe standalone ya no depende de tener
+      `assets/client-extract/` en disco.
+    - `src/world/level/levelgen/structure/StructureGen.cpp` `ensureTemplate()`
+      ahora también busca plantillas .nbt en `assets.bin` (clave
+      `data/minecraft/structure/<loc>.nbt`) — antes solo buscaba en disco. Las 1202
+      plantillas .nbt de estructuras ya estaban empaquetadas pero el runtime no las
+      leía desde ahí.
+  - **Principio establecido**: según implementemos nuevos bloques/sistemas, sus
+    assets ya estarán empaquetados automáticamente — no hay que tocar el packer para
+    cada bloque nuevo. Si un bloque referencia una textura que no existe, el atlas
+    le asigna el tile "missingno" (checker magenta) y se ve claramente en runtime.
+  - Verificado por smoke Linux headless: log "TextureAtlas: built 512x2400 atlas
+    from assets.bin, 4776 of 4794 textures loaded (109 animated)" + captura de
+    pantalla muestra 311 colores únicos (verdes/marrones/azules) en vez de solo
+    el checker pattern.
 
 - [x] Formas de bloque / texturas boca abajo o mal puestas: el path de modelos JSON
       del mesher (`tryEmitVanillaBlockModel`) leía los elementos del modelo pero

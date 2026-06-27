@@ -1,9 +1,20 @@
 //
 // asset_packer — offline tool
-// Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir]
+// Usage: asset_packer <assets_dir> <src_assets_dir> <output.bin> [data_minecraft_dir] [client_assets_dir]
 //
-// Writes a small runtime-only MCAS pack. Deliberately excludes audio, lang files,
-// models, entity textures, etc. until the C++ client actually uses them.
+// Writes a runtime-only MCAS pack. Packs EVERYTHING the engine references
+// from the extracted client.jar assets/ tree + the worldgen data tree, so the
+// runtime never needs assets/client-extract/ on disk:
+//   - All textures under minecraft/textures/ (block, gui, entity, environment,
+//     particle, colormap, ...) — except sounds.
+//   - All blockstates JSON (minecraft/blockstates/*.json)
+//   - All block/item models JSON (minecraft/models/**/*.json)
+//   - All GUI sprites + panorama + font
+//   - Worldgen data (biome JSON, structure_set, structure .nbt templates, tags)
+// Deliberately EXCLUDES:
+//   - minecraft/sounds/ + sounds.json (~430MB, no audio engine wired yet)
+//   - minecraft/lang/ (i18n not ported yet)
+// When audio is wired, add a separate flag/arg to opt-in to sounds.
 //
 
 #include <cstdint>
@@ -39,19 +50,20 @@ static bool endsWith(std::string_view s, std::string_view suffix) {
     return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
 }
 
+// The launcher asset index (assets/indexes/30.json) only carries sounds + lang +
+// a handful of panorama PNGs. NONE of the textures / blockstates / models that
+// the engine needs. Those ship INSIDE client.jar and are packed separately via
+// the client_assets_dir argument (step 4 below). So this filter only retains
+// the few indexed assets the engine actually reads (panorama + sounds if audio
+// is wired later) and drops the rest.
 static bool shouldPackIndexedAsset(const std::string& path) {
-    // Currently used by runtime:
-    // - block textures for the terrain atlas fallback
-    // - HUD sprites loaded by Gui
-    // - title panorama loaded by PanoramaRenderer
-    // - sound events (.ogg) streamed by SoundManager::getOrLoadSound, plus the
-    //   sounds.json registry (the launcher asset index ships sounds OUTSIDE the
-    //   client.jar, so dropping them here would silently mute the runtime)
-    if (startsWith(path, "minecraft/textures/block/") && endsWith(path, ".png")) return true;
-    if (startsWith(path, "minecraft/textures/gui/sprites/hud/") && endsWith(path, ".png")) return true;
+    // Title panorama (loaded by PanoramaRenderer).
     if (startsWith(path, "minecraft/textures/gui/title/background/") && endsWith(path, ".png")) return true;
-    if (startsWith(path, "minecraft/sounds/") && endsWith(path, ".ogg")) return true;
-    if (path == "minecraft/sounds.json") return true;
+    // Sounds — opt-in only. The launcher index ships sounds OUTSIDE client.jar,
+    // so packing them would balloon assets.bin from ~45MB to ~470MB. The audio
+    // engine is not wired yet; when it is, flip this to true (or gate via a CLI flag).
+    // if (startsWith(path, "minecraft/sounds/") && endsWith(path, ".ogg")) return true;
+    // if (path == "minecraft/sounds.json") return true;
     return false;
 }
 
@@ -196,22 +208,43 @@ int main(int argc, char* argv[]) {
         addDirectory(entries, data_minecraft_dir / "structure", "data/minecraft/structure");
     }
 
-    // 4. Biome colormaps (grass.png / foliage.png / dry_foliage.png) AND block
-    //    textures live INSIDE client.jar at assets/minecraft/textures/... — they
-    //    are NOT in the launcher asset index, so step 1 never sees them. Pack
-    //    them from the extracted client.jar assets/ tree so the runtime can read
-    //    them via AssetManager::readRaw without needing assets/client-extract/
-    //    on disk. Stored with the same key the runtime requests
-    //    ("minecraft/textures/colormap/<file>" / "minecraft/textures/block/<file>").
+    // 4. Client.jar assets/ tree — packs EVERYTHING the engine references so the
+    //    standalone exe never needs assets/client-extract/ on disk. The launcher
+    //    asset index (step 1) only carries sounds + lang + panorama PNGs, so all
+    //    the textures / blockstates / models that the engine reads at runtime
+    //    come from here. Excludes only sounds (430MB, audio not wired) and lang
+    //    (i18n not ported). Total packed size is ~45MB.
     if (!client_assets_dir.empty() && fs::exists(client_assets_dir)) {
-        const fs::path tex_root = client_assets_dir / "minecraft" / "textures";
-        if (fs::exists(tex_root)) {
-            std::cout << "Packing client.jar textures from: " << tex_root << "\n";
-            // Colormaps (small, ~30KB) — needed by LevelRenderer::ensureBiomeData.
-            addDirectory(entries, tex_root / "colormap", "minecraft/textures/colormap", false);
-            // Block textures (~5MB, ~1200 PNGs) — needed by TextureAtlas::loadFromAssetPack
-            // when no prebuilt stitched atlas is available (Linux path + standalone exe).
-            addDirectory(entries, tex_root / "block", "minecraft/textures/block", true);
+        const fs::path mc_root = client_assets_dir / "minecraft";
+        if (fs::exists(mc_root)) {
+            std::cout << "Packing client.jar assets from: " << mc_root << "\n";
+
+            // 4a. All textures EXCEPT sounds (sounds live under minecraft/sounds/,
+            //     not minecraft/textures/, so this is naturally excluded).
+            //     Includes: block, gui, entity, environment, particle, colormap,
+            //     font, painting, etc. — anything the engine or future systems
+            //     might reference via minecraft/textures/<path>.
+            addDirectory(entries, mc_root / "textures", "minecraft/textures", true);
+
+            // 4b. Blockstate definitions — REQUIRED by ChunkMesh to resolve which
+            //     model to use for each block state. Without these, every block
+            //     that depends on its blockstate JSON (flowers, tall_grass,
+            //     seagrass, doors, fences, ...) renders as the missing-texture
+            //     checker. ~5MB, ~1170 files.
+            addDirectory(entries, mc_root / "blockstates", "minecraft/blockstates", true);
+
+            // 4c. Block + item models — REQUIRED by ChunkMesh to know the geometry
+            //     + texture references for each block. Without these, no block
+            //     can render via its real model. ~15MB, ~2400 files.
+            addDirectory(entries, mc_root / "models", "minecraft/models", true);
+
+            // 4d. Block + item model textures are already covered by 4a (they
+            //     live under minecraft/textures/block/ etc.), so nothing else
+            //     to do here.
+
+            // 4e. Font (ascii.png etc.) — already covered by 4a's textures/.
+            // 4f. GUI sprites (hud, widgets, buttons) — already covered by 4a.
+            // 4g. Panorama — already covered by 4a + the indexed-asset step 1.
         }
     }
 
