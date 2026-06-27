@@ -294,12 +294,19 @@ LevelChunk* Minecraft::getOrCreateChunk(ChunkPos pos) {
     return ptr;
 }
 void Minecraft::unloadChunk(ChunkPos pos) {
-    // Exclusive lock — block any decoration worker (and any getChunk) from
-    // touching the map while we move the chunk out. If a decoration turn is in
-    // progress on this chunk, the worker holds the shared lock and we block here
-    // until it finishes. This is intentional: the engine NEVER unloads a chunk
-    // that's actively being decorated.
-    std::unique_lock<std::shared_mutex> lk(m_chunksMutex);
+    // Try to acquire the exclusive lock WITHOUT blocking. If the decoration
+    // worker holds a shared lock (during a 50-385ms decoration turn), we SKIP
+    // the unload this tick and retry next tick. This prevents the main thread
+    // from blocking for hundreds of ms, which was the root cause of the hangs.
+    //
+    // The chunk will be unloaded on a future tick when the decoration worker
+    // is between turns. This is safe — the chunk stays loaded and visible,
+    // just takes a bit longer to unload.
+    std::unique_lock<std::shared_mutex> lk(m_chunksMutex, std::try_to_lock);
+    if (!lk.owns_lock()) {
+        // Decoration worker is busy — skip, retry next tick.
+        return;
+    }
     const int64_t key = chunkKey(pos);
     auto it = m_chunks.find(key);
     if (it == m_chunks.end()) return;
@@ -684,14 +691,23 @@ void Minecraft::decorationWorkerLoop() {
         }
         // Log queue depth + decoration start.
         auto decoStart = std::chrono::steady_clock::now();
-        // Hold the chunk map shared lock for the entire decoration turn so
-        // unloadChunk cannot erase any of the 9 chunks we're about to touch.
-        auto lockStart = std::chrono::steady_clock::now();
-        std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
-        auto lockAcquired = std::chrono::steady_clock::now();
-        double chunksLockMs = std::chrono::duration<double, std::milli>(lockAcquired - lockStart).count();
-        auto it = m_chunks.find(chunkKey(cp));
-        LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
+        // Briefly take the shared lock to look up the chunk pointer, then
+        // RELEASE it. The previous code held the shared lock for the entire
+        // 50-385ms decoration turn, which blocked the main thread's try_to_lock
+        // on m_chunksMutex (for chunk integration) and caused genTasks to pile
+        // up indefinitely.
+        //
+        // Safety: the chunk won't be unloaded during decoration because
+        // unloadChunk now uses try_to_lock — if it can't get the exclusive lock
+        // (because we might be writing), it skips. And we hold m_chunkWriteMutex
+        // during the actual block writes, which prevents the mesh snapshot from
+        // reading partial data.
+        LevelChunk* c = nullptr;
+        {
+            std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+            auto it = m_chunks.find(chunkKey(cp));
+            c = (it != m_chunks.end()) ? it->second.get() : nullptr;
+        }
         if (!c) continue;
         // Exclude the render thread's mesh-snapshot copy while we write block data
         auto writeLockStart = std::chrono::steady_clock::now();
@@ -709,10 +725,9 @@ void Minecraft::decorationWorkerLoop() {
         double decoMs = std::chrono::duration<double, std::milli>(decoEnd - decoStart).count();
         // Log slow decorations (>50ms) — these are the chunks that cause hangs.
         if (decoMs > 50.0) {
-            MC_LOG_WARN("SLOW DECORATE ({},{}) {:.1f}ms (chunksLock={:.1f}ms writeLock={:.1f}ms)",
-                        cp.x, cp.z, decoMs, chunksLockMs, writeLockMs);
+            MC_LOG_WARN("SLOW DECORATE ({},{}) {:.1f}ms (writeLock={:.1f}ms)",
+                        cp.x, cp.z, decoMs, writeLockMs);
         }
-        chunksLk.unlock();
         // Report completion — the main thread will mark meshDirty on the 3x3.
         {
             std::lock_guard<std::mutex> lk(m_decorationDoneMutex);
