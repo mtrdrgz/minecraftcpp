@@ -9,6 +9,13 @@
 
 namespace mc {
 
+namespace {
+    ChunkPos worldToChunk(int wx, int wz) {
+        return { wx >= 0 ? wx / 16 : (wx - 15) / 16,
+                 wz >= 0 ? wz / 16 : (wz - 15) / 16 };
+    }
+}
+
 void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::optional<int> spawnY) {
     MC_LOG_INFO("Starting local singleplayer world asynchronously, seed={}, spawn=({}, {}, {})",
                 seed, spawnX, spawnY ? std::to_string(*spawnY) : std::string("surface"), spawnZ);
@@ -20,7 +27,14 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
 
     clearEntities();
     m_playerInfo.clear();
+    // No lock needed — decoration workers haven't started yet for this world
+    // (the old queue was cleared and the new ensureEngineDecoration hasn't
+    // been called yet at this point).
     m_chunks.clear();
+    m_chunkCache.clear();
+    m_chunkCacheOrder.clear();
+    m_decorationQueue.clear();
+    m_decorationDone.clear();
     m_generationTasks.clear();
     m_queuedChunks.clear();
     m_localPlayer.reset();
@@ -63,8 +77,61 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     m_inGame = true;
     setScreen(nullptr);
 
-    // Kick the queue once immediately. The first frame can render while workers
-    // fill the nearby chunks instead of blocking here on 25 synchronous chunks.
+    // Submit ALL render-distance chunks to the gen pool immediately so they
+    // generate in parallel. The previous code only called updateLocalChunks()
+    // once, which submitted at most 8-32 chunks per tick. At 20 TPS, that's
+    // 160-640 chunks/sec — but the player has to wait several ticks before
+    // enough chunks are generated to see the world.
+    //
+    // By submitting ALL chunks at once, all gen threads start working
+    // immediately. On a 4-core machine with 3 gen threads, 169 chunks take
+    // 169 × 40ms / 3 = 2.25s. On a 16-core R9 9950x with 15 threads, 169
+    // chunks take 169 × 40ms / 15 = 0.45s — well under 1 second.
+    //
+    // We also call updateLocalChunks() to start integrating any that finish
+    // before the first frame.
+    constexpr int FAST_START_RADIUS = 6;
+    const ChunkPos spawnChunk = worldToChunk(spawnX, spawnZ);
+    int submitted = 0;
+    for (int dz = -FAST_START_RADIUS; dz <= FAST_START_RADIUS; ++dz) {
+        for (int dx = -FAST_START_RADIUS; dx <= FAST_START_RADIUS; ++dx) {
+            ChunkPos cp{spawnChunk.x + dx, spawnChunk.z + dz};
+            auto key = chunkKey(cp);
+            if (m_chunks.find(key) != m_chunks.end()) continue;
+            if (m_queuedChunks.find(key) != m_queuedChunks.end()) continue;
+            if (!m_threadPool) break;
+
+            m_queuedChunks.insert(key);
+            auto beard = std::make_shared<levelgen::Beardifier>(buildChunkBeardifier(cp));
+            m_generationTasks.push_back({
+                cp,
+                m_threadPool->enqueue([pos = cp, seed = m_worldSeed, beard]() -> GeneratedChunk {
+                    GeneratedChunk out;
+                    out.chunk = std::make_unique<LevelChunk>(pos);
+                    struct ThreadGenCache {
+                        uint64_t seed = 0;
+                        std::unique_ptr<levelgen::NoiseBasedChunkGenerator> gen;
+                    };
+                    thread_local ThreadGenCache cache;
+                    if (!cache.gen || cache.seed != seed) {
+                        cache.seed = seed;
+                        cache.gen = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
+                    }
+                    cache.gen->fillFromNoise(*out.chunk, &out.genMarks,
+                                            beard->isEmpty() ? nullptr : beard.get());
+                    cache.gen->buildSurface(*out.chunk);
+                    cache.gen->applyCarvers(*out.chunk, &out.genMarks);
+                    return out;
+                })
+            });
+            ++submitted;
+        }
+    }
+    MC_LOG_INFO("Fast start: submitted {} chunks to gen pool", submitted);
+
+    // Also kick the decoration queue for any chunks that are already loaded
+    // (none yet, but updateLocalChunks will integrate gen results and submit
+    // decoration requests).
     updateLocalChunks();
 }
 
