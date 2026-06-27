@@ -189,6 +189,14 @@ int main(int argc, char** argv) {
                 mc.screen()->mouseReleased(mc.guiMouseX(), mc.guiMouseY(), 0);
             }
         }
+        // Mouse wheel scroll — dispatch to the active screen (for scrolling lists).
+        {
+            double sx, sy;
+            if (mc.screen() && window.consumeScroll(sx, sy)) {
+                const double scale = (double)mc.guiScale();
+                mc.screen()->mouseScrolled(mc.guiMouseX(), mc.guiMouseY(), sx / scale, sy / scale);
+            }
+        }
 
         auto now = Clock::now();
         double dtMs = std::chrono::duration<double, std::milli>(now - lastTick).count();

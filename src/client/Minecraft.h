@@ -143,6 +143,12 @@ public:
     render::ITexture* sliderTrackTex()    { return m_sliderTrackTex; }
     render::ITexture* sliderHandleTex()   { return m_sliderHandleTex; }
     render::ITexture* sliderHandleHlTex() { return m_sliderHandleHlTex; }
+    // List textures for OptionsSubScreen (separators + scrollbar + background).
+    render::ITexture* headerSepTex()  { return m_headerSepTex; }
+    render::ITexture* footerSepTex()  { return m_footerSepTex; }
+    render::ITexture* scrollerTex()   { return m_scrollerTex; }
+    render::ITexture* scrollerBgTex() { return m_scrollerBgTex; }
+    render::ITexture* listBgTex()     { return m_listBgTex; }
 
 private:
     friend struct DebugOverlay;  // Development tool — not part of 1:1 port
@@ -239,6 +245,12 @@ private:
     render::ITexture* m_sliderTrackTex = nullptr;
     render::ITexture* m_sliderHandleTex = nullptr;
     render::ITexture* m_sliderHandleHlTex = nullptr;
+    // List textures (header/footer separators + scrollbar + list background).
+    render::ITexture* m_headerSepTex = nullptr;
+    render::ITexture* m_footerSepTex = nullptr;
+    render::ITexture* m_scrollerTex = nullptr;
+    render::ITexture* m_scrollerBgTex = nullptr;
+    render::ITexture* m_listBgTex = nullptr;
     std::string       m_splashText;
     GameOptions       m_options;
     int               m_cachedGuiScale = 1;

@@ -66,6 +66,14 @@ public:
         m_mouseDx = m_mouseDy = 0;
     }
 
+    // Mouse wheel scroll. Returns true if there was scroll since last consume.
+    // dx/dy are the scroll deltas (dy > 0 = scroll up, dy < 0 = scroll down).
+    bool consumeScroll(double& dx, double& dy) {
+        dx = m_scrollDx; dy = m_scrollDy;
+        m_scrollDx = m_scrollDy = 0.0;
+        return dx != 0.0 || dy != 0.0;
+    }
+
     void captureMouse(bool capture);
     bool isMouseCaptured() const { return m_mouseCaptured; }
 
@@ -77,6 +85,7 @@ public:
     void onMouseMove(int x, int y);
     void onLButtonDown();
     void onLButtonUp();
+    void onScroll(double dx, double dy) { m_scrollDx += dx; m_scrollDy += dy; }
     void clearLButtonState();
 
 private:
@@ -101,6 +110,7 @@ private:
     bool m_lButtonDown = false;
     bool m_mouseCaptured  = false;
     bool m_ignoreNextMove = false;
+    double m_scrollDx = 0.0, m_scrollDy = 0.0;
 
 #ifdef _WIN32
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);

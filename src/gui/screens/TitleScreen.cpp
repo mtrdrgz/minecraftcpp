@@ -60,6 +60,8 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
         auto s = std::make_unique<gui::screens::LanguageSelectScreen>("Language", [this]() { m_minecraft->openTitleScreen(); });
         s->setButtonTextures(m_btnNormal, m_btnHighlight);
         s->setSliderTextures(m_minecraft->sliderTrackTex(), m_minecraft->sliderHandleTex(), m_minecraft->sliderHandleHlTex());
+        s->setListTextures(m_minecraft->headerSepTex(), m_minecraft->footerSepTex(),
+                           m_minecraft->scrollerTex(), m_minecraft->scrollerBgTex(), m_minecraft->listBgTex());
         m_minecraft->setScreen(std::move(s));
     });
     addButton(w / 2 - 100, topPos, 98, 20, "Options...", [this]() { m_minecraft->openOptionsScreen(); });
@@ -76,6 +78,8 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
         auto s = std::make_unique<gui::screens::AccessibilityOptionsScreen>("Accessibility", [this]() { m_minecraft->openTitleScreen(); });
         s->setButtonTextures(m_btnNormal, m_btnHighlight);
         s->setSliderTextures(m_minecraft->sliderTrackTex(), m_minecraft->sliderHandleTex(), m_minecraft->sliderHandleHlTex());
+        s->setListTextures(m_minecraft->headerSepTex(), m_minecraft->footerSepTex(),
+                           m_minecraft->scrollerTex(), m_minecraft->scrollerBgTex(), m_minecraft->listBgTex());
         m_minecraft->setScreen(std::move(s));
     });
 }

@@ -10,7 +10,17 @@ namespace mc::gui::screens {
 
 // Base for the option category sub-screens (port of OptionsSubScreen + OptionsList).
 // Subclasses override addOptions() and build controls with the add* helpers; the base
-// lays them out (big = 1 col 310px, small = 2 cols 150px) and adds the Done button.
+// lays them out (big = 1 col 310px, small = 2 cols 150px), handles scrolling, and
+// adds the Done button.
+//
+// Layout (1:1 with OptionsSubScreen.java + HeaderAndFooterLayout):
+//   - Header (33px): title text centered
+//   - Header separator (2px): header_separator.png tiled across list width
+//   - Contents (scrollable): OptionsList — big rows = 310px, small rows = 150px×2
+//   - Footer separator (2px): footer_separator.png tiled across list width
+//   - Footer (33px): Done button centered
+// When the list content exceeds the available height, a scrollbar appears on the
+// right (scroller.png + scroller_background.png). Mouse wheel scrolls the list.
 class OptionsSubScreen : public Screen {
 public:
     OptionsSubScreen(const std::string& title, std::function<void()> back);
@@ -19,9 +29,19 @@ public:
     void mouseClicked(double x, double y, int button) override;
     void mouseReleased(double x, double y, int button) override;
     void mouseDragged(double x, double y, int button, double dx, double dy) override;
+    void mouseScrolled(double x, double y, double dx, double dy) override;
     void setButtonTextures(render::ITexture* n, render::ITexture* h) { m_btnN = n; m_btnH = h; }
     void setSliderTextures(render::ITexture* track, render::ITexture* handle, render::ITexture* handleHl) {
         m_sliderTrack = track; m_sliderHandle = handle; m_sliderHandleHl = handleHl;
+    }
+    // Separator + scrollbar textures. Loaded by Minecraft.cpp and passed to
+    // every OptionsSubScreen so the list can draw header/footer separators +
+    // the scrollbar. When null, the list draws grey lines as fallback.
+    void setListTextures(render::ITexture* headerSep, render::ITexture* footerSep,
+                         render::ITexture* scroller, render::ITexture* scrollerBg,
+                         render::ITexture* listBg) {
+        m_headerSep = headerSep; m_footerSep = footerSep;
+        m_scroller = scroller; m_scrollerBg = scrollerBg; m_listBg = listBg;
     }
 
 protected:
@@ -31,6 +51,9 @@ protected:
     void addCycle(const std::string& label, std::vector<std::string> choices, int idx,
                   std::function<void(int)> onCh, bool big = false);
     void addToggle(const std::string& label, bool val, std::function<void(bool)> onCh, bool big = false);
+    // Add a section header (like "Display" / "Quality" / "Preferences" in
+    // VideoSettingsScreen). 1:1 with OptionsList.addHeader.
+    void addHeader(const std::string& text);
     Minecraft* mc() { return m_minecraft; }
 
     render::ITexture* m_btnN = nullptr;
@@ -41,9 +64,36 @@ protected:
 
 private:
     struct Pending { std::unique_ptr<components::AbstractWidget> w; bool big; };
+    struct Row {
+        std::unique_ptr<components::AbstractWidget> left;
+        std::unique_ptr<components::AbstractWidget> right;  // null for big/header
+        bool isHeader = false;
+        std::string headerText;
+        int height = 25;  // DEFAULT_ITEM_HEIGHT from OptionsList.java
+    };
     std::vector<Pending> m_pending;
-    std::vector<std::unique_ptr<components::AbstractWidget>> m_widgets;
+    std::vector<Row> m_rows;
+    std::unique_ptr<components::AbstractWidget> m_doneBtn;
     std::function<void()> m_back;
+
+    // Scrolling state
+    double m_scrollAmount = 0.0;
+    bool m_scrollingBar = false;
+
+    // List geometry (computed in init)
+    int m_listX = 0, m_listY = 0, m_listW = 0, m_listH = 0;
+    int m_headerHeight = 33, m_footerHeight = 33;
+
+    // List textures
+    render::ITexture* m_headerSep = nullptr;
+    render::ITexture* m_footerSep = nullptr;
+    render::ITexture* m_scroller = nullptr;
+    render::ITexture* m_scrollerBg = nullptr;
+    render::ITexture* m_listBg = nullptr;
+
+    int maxScroll() const;
+    int contentHeight() const;
+    void clampScroll();
 };
 
 // OptionsScreen: the 2-column category grid + FOV slider + Done.

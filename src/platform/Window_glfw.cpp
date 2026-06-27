@@ -38,6 +38,12 @@ static void glfwCursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
     w->onMouseMove((int)xpos, (int)ypos);
 }
 
+static void glfwScrollCallback(GLFWwindow* win, double xoffset, double yoffset) {
+    Window* w = static_cast<Window*>(glfwGetWindowUserPointer(win));
+    if (!w) return;
+    w->onScroll(xoffset, yoffset);
+}
+
 static void glfwFramebufferSizeCallback(GLFWwindow* win, int width, int height) {
     Window* w = static_cast<Window*>(glfwGetWindowUserPointer(win));
     if (!w) return;
@@ -82,6 +88,7 @@ Window::Window(const WindowDesc& desc) {
     glfwSetKeyCallback(static_cast<GLFWwindow*>(m_native), glfwKeyCallback);
     glfwSetMouseButtonCallback(static_cast<GLFWwindow*>(m_native), glfwMouseButtonCallback);
     glfwSetCursorPosCallback(static_cast<GLFWwindow*>(m_native), glfwCursorPosCallback);
+    glfwSetScrollCallback(static_cast<GLFWwindow*>(m_native), glfwScrollCallback);
     glfwSetFramebufferSizeCallback(static_cast<GLFWwindow*>(m_native), glfwFramebufferSizeCallback);
     glfwSetWindowCloseCallback(static_cast<GLFWwindow*>(m_native), glfwWindowCloseCallback);
 

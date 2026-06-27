@@ -1158,6 +1158,15 @@ void Minecraft::render(float pt) {
         m_sliderHandleTex   = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/slider_handle.png");
         m_sliderHandleHlTex = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/slider_handle_highlighted.png");
 
+        // List textures (header/footer separators + scrollbar + list background).
+        // Used by OptionsSubScreen to draw the scrolling option list 1:1 with vanilla.
+        m_headerSepTex   = loadAssetTex(m_device, cmd, "minecraft/textures/gui/header_separator.png");
+        m_footerSepTex   = loadAssetTex(m_device, cmd, "minecraft/textures/gui/footer_separator.png");
+        m_scrollerTex    = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/scroller.png");
+        m_scrollerBgTex  = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/scroller_background.png");
+        // menu_list_background.png is a 32x32 tiled dark texture for list backgrounds.
+        m_listBgTex      = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/list_background.png");
+
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
         m_gui->setCrosshairTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/crosshair.png"));

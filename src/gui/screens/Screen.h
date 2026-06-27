@@ -26,6 +26,7 @@ public:
     virtual void mouseClicked(double x, double y, int button) {}
     virtual void mouseReleased(double x, double y, int button) {}
     virtual void mouseDragged(double x, double y, int button, double dx, double dy) {}
+    virtual void mouseScrolled(double x, double y, double dx, double dy) {}
 
     const std::string& title() const { return m_title; }
 
