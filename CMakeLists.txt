@@ -91,14 +91,12 @@ set(MCPP_ASSET_PACK_COMMAND
     "${MCPP_SRC_ASSETS_DIR}"
     "${MCPP_RUNTIME_ASSET_PACK}"
 )
-if(EXISTS "${MCPP_WORLDGEN_DATA_DIR}")
-    list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_WORLDGEN_DATA_DIR}")
-    # Colormaps ship inside client.jar; pack them when the extracted tree is present
-    # so the standalone exe can resolve biome tints without assets/client-extract/ on disk.
-    if(EXISTS "${MCPP_CLIENT_ASSETS_DIR}/minecraft/textures/colormap")
-        list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_CLIENT_ASSETS_DIR}")
-    endif()
-endif()
+# Always pass both data_minecraft_dir and client_assets_dir; asset_packer checks
+# fs::exists at BUILD time (not configure time). On CI, PrepareRuntimeAssets.cmake
+# creates assets/client-extract/ during the build — so these paths may not exist
+# when cmake configure runs, but WILL exist when asset_packer runs. If either path
+# doesn't exist at build time, asset_packer skips it gracefully.
+list(APPEND MCPP_ASSET_PACK_COMMAND "${MCPP_WORLDGEN_DATA_DIR}" "${MCPP_CLIENT_ASSETS_DIR}")
 
 option(MCPP_SKIP_ASSET_PACK "Use pre-existing assets.bin without re-running asset_packer" OFF)
 

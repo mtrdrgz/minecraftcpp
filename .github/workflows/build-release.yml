@@ -1,4 +1,4 @@
-name: Build Windows
+name: Build (Windows + Linux)
 
 on:
   workflow_dispatch:
@@ -16,12 +16,19 @@ on:
 permissions:
   contents: write
 
+# Single concurrency group for ALL platforms — a new push cancels any in-progress
+# run (windows + linux-binary + linux-appimage) so we never waste runner minutes
+# on a superseded commit.
 concurrency:
-  group: windows-build-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1 / 3 — Windows x64 (existing, unchanged build; release moved to :release)
+  # ──────────────────────────────────────────────────────────────────────────
+  build-windows:
+    name: Windows x64
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -48,24 +55,14 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $dir = 'src/assets'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          # These files are needed for the asset_packer to run; the real
-          # content is produced by PrepareRuntimeAssets.cmake which downloads
-          # client.jar from the Mojang CDN and extracts worldgen data +
-          # textures into src/assets/. The placeholders here are fallbacks
-          # ONLY if MCPP_SKIP_ASSET_PACK=ON is set; otherwise the asset_packer
-          # overwrites them with real packed content.
           @('block_atlas.png','block_atlas.json','block_states.json','items.json','ascii.png','gui_logo.png','gui_button.png','gui_button_hl.png','gui_dirt.png','gui_edition.png','splashes.txt','gui_lang.png','gui_access.png') | ForEach-Object {
             if (!(Test-Path (Join-Path $dir $_))) { Set-Content -Path (Join-Path $dir $_) -Encoding ASCII -Value 'ci' }
           }
 
       - name: Configure
-        # MCPP_SKIP_ASSET_PACK=OFF (default) runs PrepareRuntimeAssets.cmake,
-        # which downloads client.jar from the Mojang CDN, extracts worldgen
-        # data + textures, then runs asset_packer to bundle everything into
-        # src/assets/assets.bin. The .rc embeds assets.bin into mcpp.exe.
         run: cmake -S . -B build -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
 
-      - name: Build mcpp only
+      - name: Build mcpp
         run: |
           $ErrorActionPreference = 'Continue'
           cmake --build build --config Release --target mcpp --parallel 4 *> build-output.log
@@ -77,16 +74,14 @@ jobs:
           }
           if ($code -ne 0) { exit $code }
 
-      - name: Upload failed build log to GitHub Release
+      - name: Upload failure log
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Continue'
-          if (!(Test-Path build-output.log)) { 'missing build-output.log' | Set-Content build-output.log }
-          $tag = 'ci-failure-latest'
-          gh release delete $tag --cleanup-tag -y 2>$null
-          gh release create $tag build-output.log --target '${{ github.sha }}' --title 'Latest failed CI build log' --notes 'Latest failed Windows CI build log.' --prerelease
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-build-log
+          path: build-output.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Package
         run: |
@@ -101,45 +96,315 @@ jobs:
           Compress-Archive -Path 'dist/mcpp.exe','dist/mcpp.exe.sha256' -DestinationPath "dist/mcpp-$short-windows-x64.zip" -Force
           Get-ChildItem dist | Format-Table -AutoSize
 
-      - name: Upload build to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $tag = 'ci-latest'
-          gh release delete $tag --cleanup-tag -y 2>$null
-          gh release create $tag dist/*.zip --target '${{ github.sha }}' --title 'Latest CI build' --notes 'Automated Windows build from CI.' --prerelease
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/*.zip
+          retention-days: 7
 
-      - name: Publish alpha release
-        # Also publish under the 'alpha' tag so users have a stable URL to
-        # grab the latest playable build. Updated on every successful CI run.
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 2 / 3 — Linux x64 binary (tarball: mcpp + assets.bin + run.sh)
+  # ──────────────────────────────────────────────────────────────────────────
+  build-linux-binary:
+    name: Linux x64 (binary)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            src
+            cmake
+            vendor
+            tools/asset_packer
+            tools/structure_gen_probe
+            profiling
+            .github/workflows/build-release.yml
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build \
+            libgl1-mesa-dev libssl-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+
+      - name: Clone GLFW source (static build — no runtime libglfw dependency)
+        run: |
+          if [ ! -f vendor/glfw/CMakeLists.txt ]; then
+            git clone --depth 1 https://github.com/glfw/glfw.git vendor/glfw
+          fi
+
+      - name: Prepare transient asset dependency files
+        run: |
+          mkdir -p src/assets
+          for f in block_atlas.png block_atlas.json block_states.json items.json ascii.png gui_logo.png gui_button.png gui_button_hl.png gui_dirt.png gui_edition.png splashes.txt gui_lang.png gui_access.png; do
+            [ -f "src/assets/$f" ] || echo "ci" > "src/assets/$f"
+          done
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build mcpp
+        run: |
+          cmake --build build --target mcpp --parallel "$(nproc)" 2>&1 | tee build-output.log
+
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-binary-build-log
+          path: build-output.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Package (tarball with binary + assets.bin + run.sh)
+        run: |
+          set -e
+          short="${GITHUB_SHA::7}"
+          mkdir -p dist
+          cp build/mcpp dist/
+          cp src/assets/assets.bin dist/
+          cat > dist/run.sh << 'WRAPPER'
+          #!/bin/bash
+          # Wrapper script for the MinecraftCPP Linux binary.
+          # Sets MCPP_ASSETS_BIN so the binary finds the bundled asset pack,
+          # then execs mcpp with all forwarded arguments.
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          export MCPP_ASSETS_BIN="$DIR/assets.bin"
+          exec "$DIR/mcpp" "$@"
+          WRAPPER
+          chmod +x dist/run.sh
+          sha256sum dist/mcpp > dist/mcpp.sha256
+          tar czf "dist/mcpp-$short-linux-x64.tar.gz" \
+            -C dist mcpp assets.bin run.sh mcpp.sha256
+          ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-binary
+          path: dist/*.tar.gz
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 3 / 3 — Linux x64 AppImage (self-contained, no runtime deps)
+  # ──────────────────────────────────────────────────────────────────────────
+  build-linux-appimage:
+    name: Linux x64 (AppImage)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            src
+            cmake
+            vendor
+            tools/asset_packer
+            tools/structure_gen_probe
+            profiling
+            .github/workflows/build-release.yml
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build \
+            libgl1-mesa-dev libssl-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            wget file
+
+      - name: Clone GLFW source (static build — no runtime libglfw dependency)
+        run: |
+          if [ ! -f vendor/glfw/CMakeLists.txt ]; then
+            git clone --depth 1 https://github.com/glfw/glfw.git vendor/glfw
+          fi
+
+      - name: Prepare transient asset dependency files
+        run: |
+          mkdir -p src/assets
+          for f in block_atlas.png block_atlas.json block_states.json items.json ascii.png gui_logo.png gui_button.png gui_button_hl.png gui_dirt.png gui_edition.png splashes.txt gui_lang.png gui_access.png; do
+            [ -f "src/assets/$f" ] || echo "ci" > "src/assets/$f"
+          done
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build mcpp
+        run: |
+          cmake --build build --target mcpp --parallel "$(nproc)" 2>&1 | tee build-output.log
+
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-appimage-build-log
+          path: build-output.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Create AppImage
+        run: |
+          set -e
+          short="${GITHUB_SHA::7}"
+          mkdir -p dist AppDir/usr/bin
+
+          # Binary + assets.bin (loaded via MCPP_ASSETS_BIN at runtime)
+          cp build/mcpp AppDir/usr/bin/
+          cp src/assets/assets.bin AppDir/usr/bin/
+
+          # Wrapper script — linuxdeploy's AppRun sets $APPDIR, then execs this.
+          cat > AppDir/usr/bin/mcpp-wrapper.sh << 'WRAPPER'
+          #!/bin/bash
+          export MCPP_ASSETS_BIN="$APPDIR/usr/bin/assets.bin"
+          exec "$APPDIR/usr/bin/mcpp" "$@"
+          WRAPPER
+          chmod +x AppDir/usr/bin/mcpp-wrapper.sh
+
+          # Desktop entry (linuxdeploy uses this for the AppImage filename + menu integration)
+          cat > AppDir/mcpp.desktop << 'DESKTOP'
+          [Desktop Entry]
+          Name=MinecraftCPP
+          Exec=mcpp-wrapper.sh
+          Type=Application
+          Icon=mcpp
+          Categories=Game;
+          Terminal=false
+          DESKTOP
+
+          # Generate a simple 256x256 solid-green PNG icon (no ImageMagick dependency)
+          python3 -c "
+          import struct, zlib
+          w,h=256,256
+          raw=b''.join(b'\x00'+b'\x50\xC8\x32\xFF'*w for _ in range(h))
+          sig=b'\x89PNG\r\n\x1a\n'
+          def chunk(t,d):
+              c=t+d
+              return struct.pack('>I',len(d))+c+struct.pack('>I',zlib.crc32(c)&0xFFFFFFFF)
+          ihdr=chunk(b'IHDR',struct.pack('>IHHBBBBB',w,h,8,6,0,0,0))
+          idat=chunk(b'IDAT',zlib.compress(raw))
+          iend=chunk(b'IEND',b'')
+          open('AppDir/mcpp.png','wb').write(sig+ihdr+idat+iend)
+          "
+
+          # Download linuxdeploy (the standard AppImage builder)
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+          # Build the AppImage.
+          # APPIMAGE_EXTRACT_AND_RUN=1: extract on CI runners where FUSE may not be available.
+          # ARCH=x86_64: target architecture.
+          # OUTPUT: explicit output filename (overrides the default Name-based name).
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export ARCH=x86_64
+          OUTPUT="dist/mcpp-$short-linux-x64.AppImage" ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/mcpp.desktop \
+            --icon-file AppDir/mcpp.png \
+            --output appimage
+
+          sha256sum "dist/mcpp-$short-linux-x64.AppImage" > "dist/mcpp-$short-linux-x64.AppImage.sha256"
+          ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-appimage
+          path: |
+            dist/*.AppImage
+            dist/*.sha256
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # RELEASE — collects artifacts from all 3 build jobs and pushes to GitHub
+  # Releases under two tags: ci-latest (rolling) and alpha (stable URL).
+  # Runs only if ALL 3 builds succeed (default needs behavior).
+  # ──────────────────────────────────────────────────────────────────────────
+  release:
+    name: Publish to GitHub Releases
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux-binary, build-linux-appimage]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Collect release assets
+        run: |
+          set -e
+          mkdir -p release-assets
+          # Flatten all artifacts into one directory
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.AppImage' -o -name '*.sha256' \) -exec cp {} release-assets/ \;
+          echo "=== Release assets ==="
+          ls -la release-assets/
+
+      - name: Publish to ci-latest (rolling tag)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          $tag = 'alpha'
-          gh release delete $tag --cleanup-tag -y 2>$null
-          $short = '${{ github.sha }}'.Substring(0, 7)
-          gh release create $tag dist/*.zip --target '${{ github.sha }}' `
-            --title "Alpha build ($short)" `
-            --notes "Automated Windows alpha build from commit $short.
+          set -e
+          gh release delete ci-latest --cleanup-tag -y 2>/dev/null || true
+          gh release create ci-latest release-assets/* \
+            --target '${{ github.sha }}' \
+            --title 'Latest CI build' \
+            --notes 'Automated build from CI — Windows x64, Linux x64 (binary + AppImage).' \
+            --prerelease
+
+      - name: Publish to alpha (stable URL tag)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          short="${GITHUB_SHA::7}"
+          gh release delete alpha --cleanup-tag -y 2>/dev/null || true
+          gh release create alpha release-assets/* \
+            --target '${{ github.sha }}' \
+            --title "Alpha build ($short)" \
+            --notes "Automated alpha build from commit $short.
 
           This is an in-development port of Minecraft 26.1.2's world generation engine to C++.
-          The executable is a standalone Windows x64 binary with all assets (textures, worldgen data) embedded.
 
-          **Known issues:**
+          ## Downloads
+
+          | File | Platform | Type |
+          |------|----------|------|
+          | \`mcpp-$short-windows-x64.zip\` | Windows | Standalone exe (assets embedded) |
+          | \`mcpp-$short-linux-x64.tar.gz\` | Linux | Tarball (mcpp + assets.bin + run.sh) |
+          | \`mcpp-$short-linux-x64.AppImage\` | Linux | Self-contained AppImage (no deps) |
+
+          ## Linux requirements
+
+          **AppImage** (recommended): just \`chmod +x\` and run. All dependencies bundled.
+
+          **Tarball**: requires \`libssl3\` and \`libGL\` (mesa or proprietary driver) installed.
+          Run \`./run.sh\` to start (sets \`MCPP_ASSETS_BIN\` automatically).
+
+          ## Known issues
           - Performance still rough (~50 ms/chunk terrain + mesh)
           - Race conditions can corrupt chunks when moving fast
           - Many structures only partially ported (SwampHut 1:1, DesertPyramid visible surface 1:1, others pending)
           - Many biomes/features still missing or visually broken (see TASKLIST.md)
+          - Linux build is OpenGL-only (no Vulkan/D3D12)
+          - Sounds not included in CI builds (asset index not packed)
 
-          **What works:**
+          ## What works
           - Terrain generation byte-exact to Java (12.3M cells verified, 0 mismatches)
           - All 65 overworld biomes registered
           - All 199 overworld placed features certified
           - 42/42 structure parity tests pass (SwampHutPiece 144k placements / 0 mismatches)
-          - OpenGL/Vulkan/D3D12 render backends
+          - OpenGL render backend (Vulkan/D3D12 Windows-only)
           - Single-player world creation + exploration
-
-          To run: extract mcpp.exe and double-click. No installation required." `
+          - Biome-aware grass/foliage/water tinting (1:1 with Java colormap)" \
             --prerelease
