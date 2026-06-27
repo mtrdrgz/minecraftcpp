@@ -1946,10 +1946,22 @@ bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bo
     // ShipwreckStructure.findGenerationPoint:
     //   onTopOfChunkCenter(context, isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG, ...)
     //   generatePieces:
-    //     rotation = Rotation.getRandom(context.random())  // nextInt(4)
+    //     rotation = Rotation.getRandom(context.random())
     //     offset = (chunkX*16, 90, chunkZ*16)
-    //     template = Util.getRandom(isBeached ? BEACHED : OCEAN, random)  // nextInt(len)
-    //     place template at offset with rotation
+    //     template = Util.getRandom(isBeached ? BEACHED : OCEAN, random)
+    //
+    // Then in ShipwreckPieces.ShipwreckPiece.postProcess (the ACTUAL Y adjustment):
+    //   if (!heightAdjusted && !isTooBigToFitInWorldGenRegion()):
+    //     heightmapType = isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG
+    //     sample heightmap at every column of the template footprint
+    //     mean = average of all heightmap values
+    //     minY = minimum of all heightmap values
+    //     if isBeached: adjustPositionHeight(calculateBeachedPosition(minY, random))
+    //                   = minY - templateHeight/2 - nextInt(3)
+    //     else:         adjustPositionHeight(mean)
+    //
+    // The previous C++ code just placed at Y=90 and never adjusted → shipwrecks
+    // floated when Y=90 was above the terrain/ocean floor.
     auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
         std::make_shared<mc::levelgen::LegacyRandomSource>(0));
     random->setLargeFeatureSeed(seed, active.x, active.z);
@@ -1984,11 +1996,54 @@ bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bo
     const int listLen = isBeached ? 11 : 20;
     const std::string templateLocation = std::string("minecraft:") + list[random->nextInt(listLen)];
 
-    // Place at (chunkX*16, 90, chunkZ*16) — Java uses y=90 as the base
-    BlockPos pos{ active.x * 16, 90, active.z * 16 };
+    // Get the template size to know the footprint for heightmap sampling.
+    Vec3i templateSize = sizeOf(templateLocation);
+    const int templateW = templateSize.x;
+    const int templateD = templateSize.z;
+    const int templateH = templateSize.y;
+
+    // Sample the heightmap at the chunk center + template footprint.
+    // 1:1 with ShipwreckPieces.ShipwreckPiece.postProcess:
+    //   heightmapType = isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG
+    //   for each column in [templatePosition, templatePosition + (sizeX-1, 0, sizeZ-1)]:
+    //     height = level.getHeight(heightmapType, x, z)
+    //     mean += height; minY = min(minY, height)
+    //   mean /= (sizeX * sizeZ)
+    const int baseX = active.x * 16;
+    const int baseZ = active.z * 16;
+    int meanY = 0;
+    int minY = 999999;
+    int sampleCount = 0;
+    const int footprintW = std::max(1, templateW);
+    const int footprintD = std::max(1, templateD);
+    for (int dx = 0; dx < footprintW; ++dx) {
+        for (int dz = 0; dz < footprintD; ++dz) {
+            int h = world.heightAt ? world.heightAt(baseX + dx, baseZ + dz) : 63;
+            meanY += h;
+            if (h < minY) minY = h;
+            ++sampleCount;
+        }
+    }
+    if (sampleCount > 0) meanY /= sampleCount;
+
+    // Compute final Y:
+    //   isBeached: calculateBeachedPosition(minY, random) = minY - templateH/2 - nextInt(3)
+    //   ocean:     meanY (average ocean floor height)
+    int placeY;
+    if (isBeached) {
+        placeY = minY - templateH / 2 - random->nextInt(3);
+    } else {
+        placeY = meanY;
+    }
+
+    // Clamp to reasonable range (don't place above build limit or below 0).
+    placeY = std::max(0, std::min(placeY, 255 - templateH));
+
+    BlockPos pos{ baseX, placeY, baseZ };
     std::size_t placed = placeTemplate(templateLocation, pos, rot, world);
-    MC_LOG_INFO("Structure shipwreck{} placed at chunk ({},{}), template={}, rot={}, blocks={}",
-                isBeached ? "_beached" : "", active.x, active.z, templateLocation, rotIdx, placed);
+    MC_LOG_INFO("Structure shipwreck{} placed at chunk ({},{}), pos=({},{},{}) template={} rot={} blocks={}",
+                isBeached ? "_beached" : "", active.x, active.z,
+                pos.x, pos.y, pos.z, templateLocation, rotIdx, placed);
     return placed > 0;
 }
 
