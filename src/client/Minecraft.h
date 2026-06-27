@@ -286,8 +286,13 @@ private:
     std::vector<ChunkPos>                  m_decorationQueue;
     std::mutex                             m_decorationQueueMutex;
     std::condition_variable                m_decorationQueueCv;
-    std::thread                            m_decorationThread;
+    // Multiple decoration workers for parallel chunk decoration.
+    // The EngineDecorationContext uses thread_local globals (g_biomeCtx,
+    // g_level, g_regionRandom, etc.) so each worker gets its own copy.
+    // MultiChunkLevel writes are protected by m_chunkWriteMutex.
+    std::vector<std::thread>               m_decorationThreads;
     std::atomic<bool>                      m_decorationStop{false};
+    std::atomic<int>                       m_activeDecorations{0};
     // Chunks finished by the worker, awaiting main-thread integration
     // (meshDirty marking on the 3x3 neighborhood, etc.)
     std::vector<ChunkPos>                  m_decorationDone;

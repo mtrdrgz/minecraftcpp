@@ -168,10 +168,17 @@ Minecraft::Minecraft(Window* window, render::IRenderDevice* device)
     m_threadPool = std::make_unique<ThreadPool>(numThreads);
     MC_LOG_INFO("ThreadPool initialized with {} threads", numThreads);
 
-    // Start the decoration worker thread (Phase 2 of Option B refactor).
-    // The worker runs engineDecorateChunk off the main thread so the main
-    // thread never blocks on decoration (each chunk is hundreds of ms).
-    m_decorationThread = std::thread([this] { decorationWorkerLoop(); });
+    // Start multiple decoration worker threads for parallel chunk decoration.
+    // The EngineDecorationContext uses thread_local globals so each worker
+    // gets its own copy. MultiChunkLevel writes are protected by
+    // m_chunkWriteMutex. Use half the cores for decoration (leave the other
+    // half for generation + rendering).
+    unsigned int decoThreads = std::max(1u, std::thread::hardware_concurrency() / 2);
+    if (decoThreads > 4) decoThreads = 4;  // cap at 4 — more isn't helpful due to write lock contention
+    MC_LOG_INFO("Starting {} decoration worker threads", decoThreads);
+    for (unsigned int i = 0; i < decoThreads; ++i) {
+        m_decorationThreads.emplace_back([this] { decorationWorkerLoop(); });
+    }
 
     // Explicitly set the TitleScreen
     auto ts = std::make_unique<gui::screens::TitleScreen>();
@@ -179,10 +186,12 @@ Minecraft::Minecraft(Window* window, render::IRenderDevice* device)
 }
 
 Minecraft::~Minecraft() {
-    // Signal the decoration worker to stop and wait for it to finish.
+    // Signal the decoration workers to stop and wait for them to finish.
     m_decorationStop.store(true);
     m_decorationQueueCv.notify_all();
-    if (m_decorationThread.joinable()) m_decorationThread.join();
+    for (auto& t : m_decorationThreads) {
+        if (t.joinable()) t.join();
+    }
 
     disconnect();
     // Cancel or wait on any active generation tasks
@@ -664,7 +673,7 @@ void Minecraft::tryDecorate(ChunkPos cp) {
         std::lock_guard<std::mutex> lk(m_decorationQueueMutex);
         m_decorationQueue.push_back(cp);
     }
-    m_decorationQueueCv.notify_one();
+    m_decorationQueueCv.notify_all();  // wake all workers for parallel decoration
 }
 
 void Minecraft::decorationWorkerLoop() {
@@ -709,8 +718,17 @@ void Minecraft::decorationWorkerLoop() {
             c = (it != m_chunks.end()) ? it->second.get() : nullptr;
         }
         if (!c) continue;
-        // Exclude the render thread's mesh-snapshot copy while we write block data
-        std::lock_guard<std::mutex> writeLk(m_chunkWriteMutex);
+        // Exclude the render thread's mesh-snapshot copy while we write block data.
+        // Use try_lock: if the render thread holds it (snapshotting), skip this
+        // chunk and retry next iteration. This prevents workers from blocking
+        // on each other (the previous blocking lock serialized ALL workers).
+        std::unique_lock<std::mutex> writeLk(m_chunkWriteMutex, std::try_to_lock);
+        if (!writeLk.owns_lock()) {
+            // Render thread is snapshotting — put the chunk back in the queue.
+            std::lock_guard<std::mutex> qlk(m_decorationQueueMutex);
+            m_decorationQueue.push_back(cp);
+            continue;
+        }
         try {
             auto t0 = std::chrono::steady_clock::now();
             levelgen::feature::beginFeatureTurn(*c);
@@ -865,7 +883,7 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
         PROFILE_SCOPE("startup_terrain_generation");
         // Only generate the spawn chunk + its 8 immediate neighbours (3×3) so the
         // player can see terrain in all directions. The rest streams in async.
-        constexpr int STARTUP_RADIUS = 1;
+        constexpr int STARTUP_RADIUS = 2;
         for (int dz = -STARTUP_RADIUS; dz <= STARTUP_RADIUS; ++dz) {
             for (int dx = -STARTUP_RADIUS; dx <= STARTUP_RADIUS; ++dx) {
                 const int cx = spawnChunk.x + dx;
@@ -1298,7 +1316,7 @@ void Minecraft::updateLocalChunks() {
     // regardless of player movement — the worker handles them async.
     (void)now;  // suppress unused warning if m_lastLocalMovement isn't read elsewhere
     
-    constexpr int RADIUS = 10;
+    constexpr int RADIUS = 6;
     
     // 1. Unload chunks outside RADIUS
     std::vector<ChunkPos> toUnload;
@@ -1396,15 +1414,14 @@ void Minecraft::updateLocalChunks() {
             return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
                  < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
         });
-        // Submit up to 3 decoration requests per tick — the worker drains
-        // the queue at its own pace. tryDecorate marks the chunk decorated=true
-        // synchronously so we don't resubmit it.
+        // Submit up to 8 decoration requests per tick — with multiple parallel
+        // decoration workers, we can feed the queue faster.
         int decoSubmitted = 0;
         for (ChunkPos cp : ready) {
             LevelChunk* c = getChunk(cp);
             if (!c || c->decorated) continue;
             tryDecorate(cp);
-            if (++decoSubmitted >= 3) break;
+            if (++decoSubmitted >= 8) break;
         }
     }
 
