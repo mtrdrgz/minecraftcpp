@@ -78,14 +78,34 @@ bool PanoramaRenderer::ensureLoaded(ICommandList* cmd) {
     if (m_tried) return m_loaded;
     m_tried = true;
 
-    // Cube face -> panorama_N (CubeMapTexture order): +X=1,-X=3,+Y=5,-Y=4,+Z=0,-Z=2.
+    // Cube face → panorama image mapping.
+    //
+    // Vanilla Minecraft (CubeMapTexture.java) loads the 6 images in this order
+    // into GL cubemap faces 0..5 (+X, -X, +Y, -Y, +Z, -Z):
+    //   SUFFIXES = {"_1.png", "_3.png", "_5.png", "_4.png", "_0.png", "_2.png"}
+    //
+    // Vanilla CubeMap.render() then applies rotationX(PI) to the model-view
+    // matrix, which swaps +Y↔-Y and +Z↔-Z (the view direction flips). So the
+    // effective mapping the player sees (after rotation) is:
+    //   +X (right)  = panorama_1
+    //   -X (left)   = panorama_3
+    //   +Y (top)    = panorama_4   (was _5 before rotation)
+    //   -Y (bottom) = panorama_5   (was _4 before rotation)
+    //   +Z (back)   = panorama_2   (was _0 before rotation)
+    //   -Z (front)  = panorama_0   (was _2 before rotation)
+    //
+    // Our C++ cube has NO rotationX(PI) (adding it flipped the images upside
+    // down because our UVs are already +Y-up). Instead, we assign textures to
+    // match the vanilla POST-rotation appearance directly. This is equivalent
+    // to swapping +Y↔-Y and +Z↔-Z face assignments relative to the Java
+    // SUFFIXES order.
     static const char* kFaces[6] = {
-        "minecraft/textures/gui/title/background/panorama_1.png",
-        "minecraft/textures/gui/title/background/panorama_3.png",
-        "minecraft/textures/gui/title/background/panorama_5.png",
-        "minecraft/textures/gui/title/background/panorama_4.png",
-        "minecraft/textures/gui/title/background/panorama_0.png",
-        "minecraft/textures/gui/title/background/panorama_2.png",
+        "minecraft/textures/gui/title/background/panorama_1.png",  // +X (right)
+        "minecraft/textures/gui/title/background/panorama_3.png",  // -X (left)
+        "minecraft/textures/gui/title/background/panorama_4.png",  // +Y (top)
+        "minecraft/textures/gui/title/background/panorama_5.png",  // -Y (bottom)
+        "minecraft/textures/gui/title/background/panorama_2.png",  // +Z (back)
+        "minecraft/textures/gui/title/background/panorama_0.png",  // -Z (front)
     };
     bool ok = true;
     for (int i = 0; i < 6; ++i) {

@@ -238,13 +238,8 @@ int main(int argc, char* argv[]) {
             //     can render via its real model. ~15MB, ~2400 files.
             addDirectory(entries, mc_root / "models", "minecraft/models", true);
 
-            // 4d. Block + item model textures are already covered by 4a (they
-            //     live under minecraft/textures/block/ etc.), so nothing else
-            //     to do here.
-
-            // 4e. Font (ascii.png etc.) — already covered by 4a's textures/.
-            // 4f. GUI sprites (hud, widgets, buttons) — already covered by 4a.
-            // 4g. Panorama — already covered by 4a + the indexed-asset step 1.
+            // 4d. Text files (splashes.txt etc.) — tiny, needed by the title screen.
+            addDirectory(entries, mc_root / "texts", "minecraft/texts", false);
         }
     }
 

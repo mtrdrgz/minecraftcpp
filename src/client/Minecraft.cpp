@@ -74,35 +74,66 @@ namespace {
     }
 
     // Load a PNG embedded as an RCDATA resource (font / GUI textures from client.jar).
+    // On Windows these come from the .exe's .rc section. On Linux there is no .rc
+    // mechanism, so we fall back to reading the same asset from assets.bin (which
+    // the asset_packer bundles from the extracted client.jar). The IDR_* → asset path
+    // mapping comes from cmake/PrepareRuntimeAssets.cmake's copy_resource calls.
     render::ITexture* loadResourceTex(render::IRenderDevice* dev, render::ICommandList* cmd, int resourceId) {
+        // Map resource IDs to their asset paths in assets.bin. These MUST match
+        // the copy_resource() calls in cmake/PrepareRuntimeAssets.cmake.
+        const char* assetPath = nullptr;
+        switch (resourceId) {
+            case IDR_FONT_ASCII:    assetPath = "minecraft/textures/font/ascii.png"; break;
+            case IDR_GUI_LOGO:      assetPath = "minecraft/textures/gui/title/minecraft.png"; break;
+            case IDR_GUI_EDITION:   assetPath = "minecraft/textures/gui/title/edition.png"; break;
+            case IDR_GUI_DIRT:      assetPath = "minecraft/textures/block/dirt.png"; break;
+            case IDR_GUI_BUTTON:    assetPath = "minecraft/textures/gui/sprites/widget/button.png"; break;
+            case IDR_GUI_BUTTON_HL: assetPath = "minecraft/textures/gui/sprites/widget/button_highlighted.png"; break;
+            case IDR_GUI_LANG:      assetPath = "minecraft/textures/gui/sprites/icon/language.png"; break;
+            case IDR_GUI_ACCESS:    assetPath = "minecraft/textures/gui/sprites/icon/accessibility.png"; break;
+        }
 #ifdef _WIN32
         HMODULE hmod = GetModuleHandleW(nullptr);
         HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
-        if (!hres) return nullptr;
-        HGLOBAL hg = LoadResource(hmod, hres);
-        const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
-        DWORD size = SizeofResource(hmod, hres);
-        return decodeTex(dev, cmd, data, (int)size);
-#else
-        (void)dev; (void)cmd; (void)resourceId;
-        return nullptr;
+        if (hres) {
+            HGLOBAL hg = LoadResource(hmod, hres);
+            const uint8_t* data = static_cast<const uint8_t*>(LockResource(hg));
+            DWORD size = SizeofResource(hmod, hres);
+            if (data && size > 0) return decodeTex(dev, cmd, data, (int)size);
+        }
+        // RCDATA not found (e.g. CI build where PrepareRuntimeAssets.cmake didn't
+        // run) — fall through to the assets.bin path below.
 #endif
+        if (assetPath) {
+            auto b = AssetManager::instance().readRaw(assetPath);
+            if (!b.empty()) return decodeTex(dev, cmd, b.data(), (int)b.size());
+        }
+        return nullptr;
     }
 
     // Read a text resource (e.g. splashes.txt) embedded as RCDATA.
+    // Same pattern as loadResourceTex: Windows RCDATA first, then assets.bin.
     std::string loadResourceText(int resourceId) {
+        const char* assetPath = nullptr;
+        switch (resourceId) {
+            case IDR_SPLASHES: assetPath = "minecraft/texts/splashes.txt"; break;
+        }
 #ifdef _WIN32
         HMODULE hmod = GetModuleHandleW(nullptr);
         HRSRC hres = FindResourceW(hmod, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
-        if (!hres) return {};
-        HGLOBAL hg = LoadResource(hmod, hres);
-        const char* data = static_cast<const char*>(LockResource(hg));
-        DWORD size = SizeofResource(hmod, hres);
-        return data ? std::string(data, data + size) : std::string{};
-#else
-        (void)resourceId;
-        return {};
+        if (hres) {
+            HGLOBAL hg = LoadResource(hmod, hres);
+            const char* data = static_cast<const char*>(LockResource(hg));
+            DWORD size = SizeofResource(hmod, hres);
+            if (data && size > 0) return std::string(data, data + size);
+        }
+        // RCDATA not found — fall through to assets.bin.
 #endif
+        if (assetPath) {
+            auto b = AssetManager::instance().readRaw(assetPath);
+            if (!b.empty()) return std::string(b.begin(), b.end());
+        }
+        return {};
     }
 
     // SplashManager: pick a random non-empty line from splashes.txt.
