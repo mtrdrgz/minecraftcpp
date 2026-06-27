@@ -241,7 +241,6 @@ int main(int argc, char** argv) {
         if (tickAccum > MAX_TICK_ACCUM_MS) tickAccum = MAX_TICK_ACCUM_MS;
         int ticksThisFrame = 0;
         mc::debug::setPhase("tick");
-        { mc::debug::FrameProfiler::Section prof("tick"); }
         while (tickAccum >= TICK_MS && ticksThisFrame < MAX_TICKS_PER_FRAME) {
             mc::debug::FrameProfiler::begin("tick");
             mc.tick();
@@ -253,7 +252,6 @@ int main(int argc, char** argv) {
         float partialTick = (float)(tickAccum / TICK_MS);
         mc::debug::setPhase("render");
         mc.resizeGui();
-        { mc::debug::FrameProfiler::Section prof("mc.render"); }
         mc::debug::FrameProfiler::begin("mc.render");
         mc.render(partialTick);
         mc::debug::FrameProfiler::end("mc.render");

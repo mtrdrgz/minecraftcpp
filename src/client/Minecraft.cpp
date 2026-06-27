@@ -682,30 +682,35 @@ void Minecraft::decorationWorkerLoop() {
             cp = m_decorationQueue.front();
             m_decorationQueue.erase(m_decorationQueue.begin());
         }
+        // Log queue depth + decoration start.
+        auto decoStart = std::chrono::steady_clock::now();
         // Hold the chunk map shared lock for the entire decoration turn so
         // unloadChunk cannot erase any of the 9 chunks we're about to touch.
+        auto lockStart = std::chrono::steady_clock::now();
         std::shared_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+        auto lockAcquired = std::chrono::steady_clock::now();
+        double chunksLockMs = std::chrono::duration<double, std::milli>(lockAcquired - lockStart).count();
         auto it = m_chunks.find(chunkKey(cp));
         LevelChunk* c = (it != m_chunks.end()) ? it->second.get() : nullptr;
         if (!c) continue;
         // Exclude the render thread's mesh-snapshot copy while we write block data
-        // (this turn writes cross-chunk: features overhang, fossils ±16, structure
-        // pieces span chunks). Copying a LevelChunk while we mutate its blocks is a
-        // data race → crash. See Minecraft::chunkWriteMutex().
+        auto writeLockStart = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> writeLk(m_chunkWriteMutex);
+        auto writeLockAcquired = std::chrono::steady_clock::now();
+        double writeLockMs = std::chrono::duration<double, std::milli>(writeLockAcquired - writeLockStart).count();
         try {
-            // Java ChunkGenerator.applyFeaturesAndStructures starts the FEATURES
-            // turn by priming non-WG heightmaps, then runs structures for each
-            // step before the biome features in that same step.
             levelgen::feature::beginFeatureTurn(*c);
-            {
-                PROFILE_SCOPE_CHUNK("runStructures", cp.x, cp.z);
-                runStructures(cp);
-            }
+            runStructures(cp);
             decorateChunk(*c);
         } catch (const std::exception& e) {
-            MC_LOG_WARN("decorationWorker failed at ({},{}): {}",
-                        cp.x, cp.z, e.what());
+            MC_LOG_WARN("decorationWorker failed at ({},{}): {}", cp.x, cp.z, e.what());
+        }
+        auto decoEnd = std::chrono::steady_clock::now();
+        double decoMs = std::chrono::duration<double, std::milli>(decoEnd - decoStart).count();
+        // Log slow decorations (>50ms) — these are the chunks that cause hangs.
+        if (decoMs > 50.0) {
+            MC_LOG_WARN("SLOW DECORATE ({},{}) {:.1f}ms (chunksLock={:.1f}ms writeLock={:.1f}ms)",
+                        cp.x, cp.z, decoMs, chunksLockMs, writeLockMs);
         }
         chunksLk.unlock();
         // Report completion — the main thread will mark meshDirty on the 3x3.
@@ -1095,6 +1100,25 @@ void Minecraft::handlePlayPacket(int32_t id, net::PacketBuffer& buf) {
 void Minecraft::tick() {
     handlePackets();
 
+    // Periodic state logging — every 100 ticks (~5s at 20 TPS), log the queue
+    // depths + chunk count so we can see if the game is backing up.
+    static int s_tickCounter = 0;
+    if (m_inGame && ++s_tickCounter % 100 == 0) {
+        size_t decoQueueSize = 0;
+        size_t decoDoneSize = 0;
+        {
+            std::lock_guard<std::mutex> qlk(m_decorationQueueMutex);
+            decoQueueSize = m_decorationQueue.size();
+        }
+        {
+            std::lock_guard<std::mutex> dlk(m_decorationDoneMutex);
+            decoDoneSize = m_decorationDone.size();
+        }
+        MC_LOG_INFO("STATE chunks={} genTasks={} queuedChunks={} decoQueue={} decoDone={}",
+                    m_chunks.size(), m_generationTasks.size(), m_queuedChunks.size(),
+                    decoQueueSize, decoDoneSize);
+    }
+
     if (m_inGame) {
         if (m_connection && m_connection->isConnected()
             && m_connection->state == net::ConnectionState::Play) {
@@ -1300,7 +1324,14 @@ void Minecraft::updateLocalChunks() {
                     // Exclusive lock — we're about to mutate m_chunks. This
                     // also blocks the decoration worker from starting a new
                     // turn while we integrate. Integration is fast (no I/O).
+                    auto integLockStart = std::chrono::steady_clock::now();
                     std::unique_lock<std::shared_mutex> chunksLk(m_chunksMutex);
+                    auto integLockEnd = std::chrono::steady_clock::now();
+                    double integLockMs = std::chrono::duration<double, std::milli>(integLockEnd - integLockStart).count();
+                    if (integLockMs > 10.0) {
+                        MC_LOG_WARN("SLOW INTEG LOCK ({},{}) {:.1f}ms (waiting for m_chunksMutex exclusive)",
+                                    cp.x, cp.z, integLockMs);
+                    }
                     if (m_chunks.find(key) == m_chunks.end()) {
                         LevelChunk* ptr = chunk.get();
                         // Store terrain now; decoration is DEFERRED until all 8

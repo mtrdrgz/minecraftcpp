@@ -342,6 +342,7 @@ void LevelRenderer::rebuildDirtyChunks() {
         // worker cannot mutate their block data while we copy it (copying a
         // LevelChunk mid-write corrupts the heap → crash). The copies are cheap;
         // the lock is released before the off-thread mesh build runs.
+        auto snapshotStart = std::chrono::steady_clock::now();
         std::shared_ptr<LevelChunk> center;
         std::array<std::shared_ptr<LevelChunk>, 4> neighbors;
         {
@@ -357,6 +358,12 @@ void LevelRenderer::rebuildDirtyChunks() {
                 south ? std::make_shared<LevelChunk>(*south) : nullptr,
                 north ? std::make_shared<LevelChunk>(*north) : nullptr
             };
+        }
+        auto snapshotEnd = std::chrono::steady_clock::now();
+        double snapshotMs = std::chrono::duration<double, std::milli>(snapshotEnd - snapshotStart).count();
+        if (snapshotMs > 10.0) {
+            MC_LOG_WARN("SLOW MESH SNAPSHOT ({},{}) {:.1f}ms (waiting for chunkWriteMutex)",
+                        cp.x, cp.z, snapshotMs);
         }
         chunk->meshDirty = false;
         m_meshBuildQueued.insert(cand.key);
