@@ -55,7 +55,7 @@ private:
     IBuffer*       m_hotbarSelVbo = nullptr;
     IBuffer*       m_hotbarSelIbo = nullptr;
     TextureAtlas   m_atlas;
-    bool           m_atlasLoading = false;
+    bool           m_atlasStitchStarted = false;
     std::future<void> m_atlasStitchFuture;
     std::unique_ptr<EntityRenderDispatcher> m_entityRenderer;
 

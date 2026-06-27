@@ -166,6 +166,119 @@ void TextureAtlas::load(render::IRenderDevice* dev, render::ICommandList* cmd,
     MC_LOG_INFO("TextureAtlas: loaded {}x{} atlas, {} entries", w, h, m_uvMap.size());
 }
 
+bool TextureAtlas::stitchFromAssetPack() {
+    std::vector<std::string> names = collectBlockTextureNames();
+    if (names.empty()) return false;
+
+    const int rows = std::max(1, (static_cast<int>(names.size()) + ATLAS_COLS - 1) / ATLAS_COLS);
+    const int atlasW = ATLAS_COLS * TILE_SIZE;
+    const int atlasH = rows * TILE_SIZE;
+    std::vector<uint8_t> atlas(static_cast<std::size_t>(atlasW) * static_cast<std::size_t>(atlasH) * 4u, 0);
+
+    m_uvMap.clear();
+    m_animated.clear();
+    int loaded = 0;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        const std::string& name = names[i];
+        const int col = static_cast<int>(i % ATLAS_COLS);
+        const int row = static_cast<int>(i / ATLAS_COLS);
+        const int x0 = col * TILE_SIZE;
+        const int y0 = row * TILE_SIZE;
+
+        std::string assetPath = "minecraft/textures/" + name + ".png";
+        std::vector<uint8_t> bytes = AssetManager::instance().readRaw(assetPath);
+        if (bytes.empty() && name.find('/') == std::string::npos) {
+            assetPath = "minecraft/textures/block/" + name + ".png";
+            bytes = AssetManager::instance().readRaw(assetPath);
+        }
+        const std::string mcmetaPath = assetPath + ".mcmeta";
+
+        int tw = 0, th = 0;
+        std::vector<uint8_t> rgba;
+        if (decodePng(bytes, tw, th, rgba)) {
+            copyTopLeftTile(atlas, atlasW, x0, y0, rgba, tw, th);
+            ++loaded;
+            if (tw == TILE_SIZE && th > TILE_SIZE && th % TILE_SIZE == 0) {
+                const int frameCount = th / TILE_SIZE;
+                AnimatedSprite sp;
+                sp.x0 = x0; sp.y0 = y0;
+                sp.frames.reserve(frameCount);
+                for (int f = 0; f < frameCount; ++f) {
+                    std::vector<uint8_t> frame(static_cast<std::size_t>(TILE_SIZE) * TILE_SIZE * 4u);
+                    for (int yy = 0; yy < TILE_SIZE; ++yy) {
+                        const uint8_t* src = rgba.data() + (static_cast<std::size_t>(f * TILE_SIZE + yy) * tw) * 4u;
+                        std::copy(src, src + TILE_SIZE * 4, frame.data() + static_cast<std::size_t>(yy) * TILE_SIZE * 4u);
+                    }
+                    sp.frames.push_back(std::move(frame));
+                }
+                int frametime = 1;
+                const std::vector<uint8_t> meta = AssetManager::instance().readRaw(mcmetaPath);
+                if (!meta.empty()) {
+                    try {
+                        auto j = nlohmann::json::parse(meta.begin(), meta.end());
+                        if (auto a = j.find("animation"); a != j.end() && a->is_object()) {
+                            frametime = std::max(1, a->value("frametime", 1));
+                            if (auto fr = a->find("frames"); fr != a->end() && fr->is_array()) {
+                                for (const auto& e : *fr) {
+                                    if (e.is_number_integer()) sp.seq.emplace_back(e.get<int>(), frametime);
+                                    else if (e.is_object()) sp.seq.emplace_back(e.value("index", 0), e.value("time", frametime));
+                                }
+                            }
+                        }
+                    } catch (...) {}
+                }
+                if (sp.seq.empty())
+                    for (int f = 0; f < frameCount; ++f) sp.seq.emplace_back(f, frametime);
+                sp.totalTicks = 0;
+                for (auto& kv : sp.seq) {
+                    if (kv.first < 0 || kv.first >= frameCount) kv.first = 0;
+                    if (kv.second < 1) kv.second = 1;
+                    sp.totalTicks += kv.second;
+                }
+                if (sp.totalTicks < 1) sp.totalTicks = 1;
+                m_animated.push_back(std::move(sp));
+            }
+        } else {
+            writeMissingTile(atlas, atlasW, x0, y0);
+        }
+
+        AtlasUV uv;
+        uv.u0 = static_cast<float>(x0) / static_cast<float>(atlasW);
+        uv.v0 = static_cast<float>(y0) / static_cast<float>(atlasH);
+        uv.u1 = static_cast<float>(x0 + TILE_SIZE) / static_cast<float>(atlasW);
+        uv.v1 = static_cast<float>(y0 + TILE_SIZE) / static_cast<float>(atlasH);
+        m_uvMap[name] = uv;
+        if (name == "missingno") m_missing = uv;
+    }
+
+    if (loaded == 0) {
+        MC_LOG_WARN("TextureAtlas: assets.bin fallback found no block textures");
+        return false;
+    }
+
+    m_atlasW = atlasW;
+    m_atlasH = atlasH;
+    m_atlasPixels = std::move(atlas);
+    MC_LOG_INFO("TextureAtlas: built {}x{} atlas from assets.bin, {} of {} textures loaded ({} animated)",
+                atlasW, atlasH, loaded, names.size(), (int)m_animated.size());
+    return true;
+}
+
+bool TextureAtlas::uploadStitched(render::IRenderDevice* dev, render::ICommandList* cmd) {
+    if (m_atlasPixels.empty() || !dev || !cmd) return false;
+    render::TextureDesc desc;
+    desc.width = static_cast<uint32_t>(m_atlasW);
+    desc.height = static_cast<uint32_t>(m_atlasH);
+    desc.format = render::TextureFormat::RGBA8;
+    desc.filter = render::FilterMode::Nearest;
+    desc.genMipmaps = false;
+    m_texture = dev->createTexture(desc);
+    if (!m_texture) return false;
+    cmd->uploadTexture(m_texture, m_atlasPixels.data());
+    m_loaded = true;
+    return true;
+}
+
 bool TextureAtlas::loadFromAssetPack(render::IRenderDevice* dev, render::ICommandList* cmd) {
     std::vector<std::string> names = collectBlockTextureNames();
     if (names.empty()) return false;

@@ -55,10 +55,10 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     // click-to-ingame path without changing final terrain output.
     m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
 
-    // Defer decoration context creation to a background thread. It takes ~250ms
-    // (loading all placed features from JSON). The streaming pipeline will
-    // submit decoration requests, but the worker will no-op until the context
-    // is ready (ensureEngineDecoration is called below in a background thread).
+    // Defer ALL worldgen data init to background threads. The gen threads only
+    // need block_states.json (already loaded in initBlocks) and the
+    // NoiseBasedChunkGenerator (just created). Chunks can generate while the
+    // worldgen data extracts and the decoration context loads in parallel.
     m_worldgenReady = false;
     m_worldgenTried = false;
     m_biomeFeatures.reset();
@@ -68,15 +68,15 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     m_haveLastStreamPlayerPos = false;
     m_lastLocalMovement = std::chrono::steady_clock::now();
 
-    ensureWorldgenData();
-    // Create decoration context in a background thread — don't block the main
-    // thread on the 250ms feature resolution. The decoration workers will
-    // pick up chunks once the context is ready.
+    // Run ensureWorldgenData + decoration context init in a SINGLE background
+    // thread (ensureWorldgenData sets m_dataMinecraftDir which the deco context
+    // needs). This takes ~350ms total but runs entirely off the main thread.
     levelgen::feature::resetEngineDecoration();
-    std::thread decoInitThread([this]() {
+    std::thread worldgenInitThread([this]() {
+        ensureWorldgenData();
         levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
     });
-    decoInitThread.detach();
+    worldgenInitThread.detach();
 
     PlayerState& state = m_localPlayer.state();
     state.entityId = 0;
@@ -105,7 +105,7 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     //
     // We also call updateLocalChunks() to start integrating any that finish
     // before the first frame.
-    constexpr int FAST_START_RADIUS = 4;
+    constexpr int FAST_START_RADIUS = 2;
     const ChunkPos spawnChunk = worldToChunk(spawnX, spawnZ);
     int submitted = 0;
     for (int dz = -FAST_START_RADIUS; dz <= FAST_START_RADIUS; ++dz) {

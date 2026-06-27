@@ -485,19 +485,24 @@ void LevelRenderer::uploadAndDrawSection(ICommandList* cmd, SectionMesh& mesh) {
 }
 
 void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
-    // Defer atlas loading to frame 2+. The atlas stitch takes ~400ms (4776 PNGs).
-    // Previously this blocked frame 1, delaying the first visible frame by 400ms.
-    // Now frame 1 renders immediately (sky only — no atlas = chunks skip rendering),
-    // and frame 2 does the atlas stitch. The player sees the sky on frame 1 (~5ms)
-    // instead of a frozen screen for 400ms.
-    static int atlasLoadFrame = 0;
+    // Background atlas stitching: the 400ms PNG decode runs on a background
+    // thread. The main thread renders sky (no textures) until the stitch
+    // completes, then uploads to GPU and starts rendering textured chunks.
+    // This eliminates the 400ms freeze that was blocking the first frame.
     if (!m_atlas.isLoaded()) {
-        if (atlasLoadFrame < 1) {
-            // Frame 0: skip atlas, just render sky. Fast.
-            atlasLoadFrame++;
-        } else {
-            // Frame 1+: stitch atlas (blocks this frame, but frame 0 already showed sky).
-            loadAtlas(cmd);
+        if (!m_atlasStitchStarted) {
+            m_atlasStitchStarted = true;
+            m_atlasStitchFuture = std::async(std::launch::async, [this]() {
+                m_atlas.stitchFromAssetPack();
+            });
+        }
+        // Check if background stitch is done.
+        if (m_atlasStitchFuture.valid() &&
+            m_atlasStitchFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            m_atlasStitchFuture.get();
+            // Stitch is done — upload to GPU on the main thread (needs cmd).
+            m_atlas.uploadStitched(m_device, cmd);
+            MC_LOG_INFO("Atlas uploaded to GPU (background stitch complete)");
         }
     }
 

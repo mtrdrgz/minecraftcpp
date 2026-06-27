@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <thread>
 #include <unordered_map>
 #include <set>
 #include <string>
@@ -621,8 +622,16 @@ void initBlocks() {
     blocks::OAK_LEAVES  = getBlockByName("oak_leaves");
     blocks::GLASS       = getBlockByName("glass");
 
-    assignKnownBlockTextures();
-    MC_LOG_INFO("Blocks: loaded {} block states, {} blocks", g_blockStates.size(), g_blockRegistry.size());
+    // Defer vanilla model texture hints to a background thread. This loads
+    // 1168 blockstate JSONs + their model JSONs (with parent traversal) and
+    // takes ~400ms. The textures are only needed for meshing, not for chunk
+    // generation — so we can safely defer this until after the first chunks
+    // are generated.
+    std::thread textureHintThread([]() {
+        assignKnownBlockTextures();
+        MC_LOG_INFO("Blocks: loaded {} block states, {} blocks", g_blockStates.size(), g_blockRegistry.size());
+    });
+    textureHintThread.detach();
 }
 
 const Block* getBlock(uint32_t stateId) {

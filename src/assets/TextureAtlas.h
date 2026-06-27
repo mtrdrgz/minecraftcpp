@@ -23,6 +23,14 @@ public:
               std::span<const uint8_t> pngData,
               std::span<const uint8_t> jsonData);
 
+    // Stitch only (no GPU upload): builds m_atlasPixels + m_uvMap + m_animated.
+    // Thread-safe (reads from AssetManager, writes to own members only).
+    // Returns true on success. Call uploadStitched() after to upload to GPU.
+    bool stitchFromAssetPack();
+
+    // Upload the pre-stitched atlas to the GPU. Call after stitchFromAssetPack().
+    bool uploadStitched(render::IRenderDevice* dev, render::ICommandList* cmd);
+
     bool              isLoaded() const { return m_loaded; }
     render::ITexture* texture()  const { return m_texture; }
 
