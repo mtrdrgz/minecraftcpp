@@ -7557,6 +7557,12 @@ void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::
         oreVeinifier.emplace(m_router.veinToggle, m_router.veinRidged, m_router.veinGap, m_oreRandom);
     }
     NoiseChunkSharedCache sharedCache;
+    // Pre-reserve the shared cache to avoid rehashing during the hot loop.
+    // Each chunk has ~4×4=16 unique (x,z) pairs for cache2d and ~8×8=64 for
+    // flatCache (quantized at /4). With ~5-10 distinct density functions,
+    // that's ~80 cache2d entries and ~320 flatCache entries.
+    sharedCache.cache2d.reserve(128);
+    sharedCache.flatCache.reserve(512);
 
     for (int cellXIndex = 0; cellXIndex < cellCountX; ++cellXIndex) {
         for (int cellZIndex = 0; cellZIndex < cellCountZ; ++cellZIndex) {
@@ -11534,13 +11540,23 @@ void fillBiomeStoreChunk(const NoiseBasedChunkGenerator& gen,
                          int ncx, int ncz) {
     const int minY = mc::CHUNK_MIN_Y, maxY = mc::CHUNK_MAX_Y;
     const int qyMin = minY >> 2, qyMax = (maxY >> 2) - 1;
+    const size_t expectedSize = static_cast<std::size_t>(qyMax - qyMin + 1) * 16;
     std::vector<std::string>& cell = biomeStore[packChunk(ncx, ncz)];
-    cell.resize(static_cast<std::size_t>(qyMax - qyMin + 1) * 16);
-    for (int sy = minY >> 4; sy <= (maxY - 1) >> 4; ++sy) {           // sections ascending
-        const int quartMinY = sy << 2;                                 // QuartPos.fromSection
-        for (int x = 0; x < 4; ++x) for (int y = 0; y < 4; ++y) for (int z = 0; z < 4; ++z) {
-            const int qx = ncx * 4 + x, qy = quartMinY + y, qz = ncz * 4 + z;
-            cell[static_cast<std::size_t>(qy - qyMin) * 16 + x * 4 + z] = gen.getNoiseBiome(qx, qy, qz);
+    cell.resize(expectedSize);
+    // Reorder loops: iterate qx outer, qz inner, then qy innermost.
+    // This maximizes 2D cache hit rate: for each (qx,qz) pair, all qy values
+    // hit the 2D cache (set in the previous round), so the inner loop only
+    // computes depth.
+    for (int x = 0; x < 4; ++x) {
+        for (int z = 0; z < 4; ++z) {
+            const int qx = ncx * 4 + x, qz = ncz * 4 + z;
+            for (int sy = minY >> 4; sy <= (maxY - 1) >> 4; ++sy) {
+                const int quartMinY = sy << 2;
+                for (int y = 0; y < 4; ++y) {
+                    const int qy = quartMinY + y;
+                    cell[static_cast<std::size_t>(qy - qyMin) * 16 + x * 4 + z] = gen.getNoiseBiome(qx, qy, qz);
+                }
+            }
         }
     }
 }
