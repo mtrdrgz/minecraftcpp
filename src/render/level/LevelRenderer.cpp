@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <thread>
 #include <vector>
 #ifdef _WIN32
 #include <windows.h>
@@ -41,7 +42,17 @@ namespace {
 LevelRenderer::LevelRenderer(IRenderDevice* device, Minecraft* mc, Window* window)
     : m_device(device), m_mc(mc), m_window(window)
 {
-    m_meshPool = std::make_unique<ThreadPool>(1);
+    // Mesh build pool: use (cores - 2) threads, leaving 1 for the render thread
+    // and 1 for the decoration worker. The previous code hardcoded 1 thread,
+    // which serialized all chunk meshing regardless of CPU cores. On a 16-core
+    // R9 9950x, 1 mesh thread = 14 idle cores. On a 2-core Celeron, 1 mesh
+    // thread = 1 idle core (same as before, no regression).
+    unsigned int hwThreads = std::thread::hardware_concurrency();
+    if (hwThreads <= 2) hwThreads = 2;  // minimum 1 worker (+1 render)
+    const size_t meshThreads = std::max<size_t>(1, hwThreads - 2);
+    m_meshPool = std::make_unique<ThreadPool>(meshThreads);
+    m_meshPoolSize = meshThreads;
+    MC_LOG_INFO("LevelRenderer: mesh pool with {} threads (hw_threads={})", meshThreads, hwThreads);
     setupChunkPipeline();
     setupSkyPipeline();
     setupHudPipeline();
@@ -308,8 +319,13 @@ void LevelRenderer::rebuildDirtyChunks() {
 
     // Schedule mesh builds off-thread; ready results are integrated above and
     // section uploads are budgeted during draw.
-    constexpr int maxPendingBuilds = 8;
-    constexpr int maxSchedulesPerFrame = 2;
+    // The previous limits (8 pending, 2 schedules/frame) were set for a 1-thread
+    // mesh pool. With multiple mesh threads, we can schedule more aggressively.
+    // maxPendingBuilds: scale with mesh thread count so the pool stays busy.
+    // maxSchedulesPerFrame: allow up to 4 schedules/frame (was 2) — the pool
+    // can handle the parallelism, and more schedules = chunks mesh faster.
+    const int maxPendingBuilds = std::max(8, (int)m_meshPoolSize * 2);
+    constexpr int maxSchedulesPerFrame = 4;
     int scheduled = 0;
     for (const DirtyCandidate& cand : dirty) {
         if ((int)m_pendingMeshBuilds.size() >= maxPendingBuilds) break;
@@ -475,7 +491,12 @@ void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
     float dtSec = std::fmin(std::chrono::duration<float>(now - m_lastFrame).count(), 0.05f);
     m_lastFrame = now; updateCamera(dtSec);
     rebuildDirtyChunks();
-    m_sectionUploadsThisFrame = 2;
+    // GPU buffer upload budget per frame. The previous value (2) meant a single
+    // chunk (up to 24 sections) took 12 frames to fully upload at 60fps — visible
+    // as chunks "popping in" over 200ms. With multi-threaded meshing producing
+    // results faster, we need to upload faster too. 8 uploads/frame lets a full
+    // chunk upload in 3 frames (~50ms at 60fps), which feels near-instant.
+    m_sectionUploadsThisFrame = 8;
 
     // Clean up render data for unloaded chunks to prevent memory leaks
     {

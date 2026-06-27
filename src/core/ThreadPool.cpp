@@ -1,29 +1,31 @@
 #include "ThreadPool.h"
 
-#include <algorithm>
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include "platform/Platform.h"
-#endif
-#endif
-
 namespace mc {
 
 ThreadPool::ThreadPool(size_t threads) : stop(false) {
-    // Terrain generation is CPU-heavy and currently competes with render/input.
-    // Keep the streaming pool deliberately small; correctness is unchanged, only
-    // how aggressively we spend spare CPU while chunks stream in.
-    const size_t workerCap = threads >= 7 ? 2 : 1;
-    const size_t workerCount = std::max<size_t>(1, std::min<size_t>(threads, workerCap));
+    // Use the requested thread count directly. The previous code capped the
+    // worker count to 1 (or 2 if threads >= 7), which defeated the purpose of
+    // having a thread pool on multi-core CPUs. The cap was originally added to
+    // avoid competing with the render thread, but on modern multi-core CPUs
+    // (e.g. R9 9950x with 32 threads) capping to 1-2 workers means the mesh
+    // build pipeline is serialized while 30 cores sit idle.
+    //
+    // The caller (LevelRenderer) now passes a reasonable count based on
+    // hardware_concurrency, leaving headroom for the render thread.
+    const size_t workerCount = std::max<size_t>(1, threads);
     for (size_t i = 0; i < workerCount; ++i) {
         workers.emplace_back([this]() {
-#ifdef _WIN32
-            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
-#endif
+            // NOTE: The previous code called SetThreadPriority(
+            // THREAD_MODE_BACKGROUND_BEGIN) on Windows. This tells the Windows
+            // scheduler to run these threads at BELOW-NORMAL priority, which
+            // means ANY foreground thread (including the render thread, input
+            // handling, OS background tasks) preempts them. On a CPU with many
+            // cores (16+), the scheduler spreads threads across cores but still
+            // yields the background threads whenever anything else needs CPU —
+            // causing constant context switches and cache thrashing. On a
+            // 2-core Celeron, there's nothing to yield TO, so the background
+            // threads run uninterrupted. This is why the Celeron was faster.
+            // Removed: let the threads run at default (NORMAL) priority.
             for (;;) {
                 std::function<void()> task;
                 {

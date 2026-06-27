@@ -89,6 +89,7 @@ private:
         std::future<std::vector<SectionMesh>> future;
     };
     std::unique_ptr<ThreadPool> m_meshPool;
+    size_t m_meshPoolSize = 1;  // cached for budget calculations
     std::vector<PendingMeshBuild> m_pendingMeshBuilds;
     std::unordered_set<int64_t> m_meshBuildQueued;
 

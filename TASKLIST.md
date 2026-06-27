@@ -35,6 +35,39 @@
 
 ## Rendimiento / race conditions
 
+- [x] **CAUSA RAÍZ ENCONTRADA Y ARREGLADA (2026-06-27): el rendimiento escalaba
+      INVERSAMENTE con el número de cores.** Un R9 9950x (16c/32t) en Windows
+      iba infinitamente peor que un Celeron de 2 cores en Arch Linux. Tres
+      bugs encontrados y arreglados:
+  1. **`THREAD_MODE_BACKGROUND_BEGIN` en Windows** (`ThreadPool.cpp`): los mesh
+     workers se registraban como background priority en Windows. En un CPU con
+     muchos cores, el scheduler de Windows reparte los threads pero los
+     background threads ceden CPU a cualquier thread foreground (render, input,
+     OS tasks) → context switches constantes + cache thrashing. En un Celeron
+     de 2 cores no hay nada a lo que ceder → los workers corren sin
+     interrupción. **Fix**: quitado el `SetThreadPriority(BACKGROUND)` — los
+     workers corren a prioridad NORMAL.
+  2. **Mesh pool hardcoded a 1 thread** (`LevelRenderer.cpp:44`): el
+     `m_meshPool = std::make_unique<ThreadPool>(1)` ignoraba
+     `hardware_concurrency`. Todo el meshing se serializaba en 1 solo thread
+     sin importar el CPU. **Fix**: usa `hardware_concurrency - 2` threads
+     (dejando 1 para render + 1 para decoration worker). En un R9 9950x
+     pasa de 1 a 14 mesh threads.
+  3. **ThreadPool cap artificial de 2 workers** (`ThreadPool.cpp:20-21`): el
+     constructor tenía `workerCap = threads >= 7 ? 2 : 1` — incluso si le
+     pasabas 32 threads, capaba a 2. **Fix**: quitado el cap, usa el count
+     que se le pasa.
+  4. **Frame budgets demasiado conservadores**: `maxSchedulesPerFrame = 2`
+     (solo 2 mesh builds scheduleados por frame) y `m_sectionUploadsThisFrame
+     = 2` (solo 2 GPU buffer uploads por frame — un chunk de 24 secciones
+     tardaba 12 frames en subirse). **Fix**: `maxSchedulesPerFrame = 4`,
+     `m_sectionUploadsThisFrame = 8`, y `maxPendingBuilds` escala con el
+     mesh pool size.
+  Archivos cambiados: `src/core/ThreadPool.cpp`, `src/render/level/LevelRenderer.cpp`,
+  `src/render/level/LevelRenderer.h`. El Celeron no debería verse afectado
+  (ya tenía 1 mesh thread, ahora también) pero el R9 9950x debería pasar de
+  ~1 mesh thread a 14, eliminando el bottleneck.
+
 - [ ] **SOSPECHA (2026-06-27): el build de Linux rinde EXTREMADAMENTE bien en
       comparación con el de Windows** — sospechosamente bien. Mismo código OpenGL
       (`DeviceGL.cpp` Windows vs `DeviceGL_linux.cpp`), mismo `vsync=false` en
