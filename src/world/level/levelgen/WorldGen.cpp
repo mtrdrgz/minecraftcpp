@@ -6546,17 +6546,58 @@ std::string BiomeSource::getNoiseBiome(int quartX, int quartY, int quartZ) const
         return "";
     }
 
+    // ── 2D noise parameter cache ─────────────────────────────────────────────
+    // In the overworld, temperature/vegetation/continents/erosion/ridges are ALL
+    // 2D noise (shiftedNoise2d + flatCache) — they only depend on (quartX, quartZ),
+    // NOT on quartY. Only depth depends on Y. When sampling biomes for a chunk
+    // (4×4 XZ × 96 Y = 1536 samples), the 5 2D params are recomputed 96 times
+    // per (qx,qz) pair even though they return the same value. This thread-local
+    // cache stores the 5 2D values keyed by (quartX, quartZ), so only depth
+    // needs to be recomputed for each Y. This reduces noise evaluations from
+    // 6×1536 = 9216 to 5×16 + 1×1536 = 1616 per chunk — a 5.7× reduction.
+    struct BiomeNoise2DCache {
+        int qx = 0x7FFFFFFF, qz = 0x7FFFFFFF;
+        float temperature = 0, vegetation = 0, continents = 0, erosion = 0, ridges = 0;
+        bool valid = false;
+    };
+    thread_local BiomeNoise2DCache cache;
+
     const int sampleX = quartX << 2;
-    const int sampleY = quartY << 2;
     const int sampleZ = quartZ << 2;
-    DensityFunctionContext context{ sampleX, sampleY, sampleZ };
+
+    float tempVal, vegVal, conVal, eroVal, ridVal;
+    if (cache.valid && cache.qx == quartX && cache.qz == quartZ) {
+        // Cache hit — reuse the 5 2D parameters.
+        tempVal = cache.temperature;
+        vegVal = cache.vegetation;
+        conVal = cache.continents;
+        eroVal = cache.erosion;
+        ridVal = cache.ridges;
+    } else {
+        // Cache miss — compute the 5 2D parameters and cache them.
+        DensityFunctionContext xzContext{ sampleX, 0, sampleZ };
+        tempVal = static_cast<float>(m_router.temperature->compute(xzContext));
+        vegVal = static_cast<float>(m_router.vegetation->compute(xzContext));
+        conVal = static_cast<float>(m_router.continents->compute(xzContext));
+        eroVal = static_cast<float>(m_router.erosion->compute(xzContext));
+        ridVal = static_cast<float>(m_router.ridges->compute(xzContext));
+        cache.qx = quartX;
+        cache.qz = quartZ;
+        cache.temperature = tempVal;
+        cache.vegetation = vegVal;
+        cache.continents = conVal;
+        cache.erosion = eroVal;
+        cache.ridges = ridVal;
+        cache.valid = true;
+    }
+
+    // Only depth depends on Y — compute it fresh.
+    const int sampleY = quartY << 2;
+    DensityFunctionContext yContext{ sampleX, sampleY, sampleZ };
+    const float depthVal = static_cast<float>(m_router.depth->compute(yContext));
+
     const Climate::TargetPoint target = Climate::target(
-        static_cast<float>(m_router.temperature->compute(context)),
-        static_cast<float>(m_router.vegetation->compute(context)),
-        static_cast<float>(m_router.continents->compute(context)),
-        static_cast<float>(m_router.erosion->compute(context)),
-        static_cast<float>(m_router.depth->compute(context)),
-        static_cast<float>(m_router.ridges->compute(context)));
+        tempVal, vegVal, conVal, eroVal, depthVal, ridVal);
 
     return m_parameters.findValue(target);
 }
@@ -7864,9 +7905,17 @@ bool placeStructurePoolFeature(const std::string& featureId, mc::levelgen::Rando
 }
 
 } // namespace mc::levelgen::feature
+
 // ═════════════════════════════════════════════════════════════════════════
 // END feature/BiomeDecorator.cpp
 // ═════════════════════════════════════════════════════════════════════════
+
+// Forward declaration: defined inside namespace mc::levelgen::feature (after
+// EngineDecorationContext). Used by decorateOneChunk to scan the biome store
+// directly instead of 13824 hashmap lookups.
+namespace mc::levelgen::feature {
+const std::unordered_map<std::int64_t, std::vector<std::string>>* getEngineBiomeStore();
+} // namespace mc::levelgen::feature
 
 // ═════════════════════════════════════════════════════════════════════════
 // BEGIN feature/FullChunkDecorateParityTest.cpp
@@ -11480,6 +11529,7 @@ struct DecorationResolver {
 // PASS-A comment in main. The harness fills a fixed 7x7 in dx OUTER / dz INNER
 // order; the ENGINE fills chunks on demand in neighbour-availability order, so
 // tie quarts at chunk borders may differ from the batch fill (documented delta).
+
 void fillBiomeStoreChunk(const NoiseBasedChunkGenerator& gen,
                          std::unordered_map<std::int64_t, std::vector<std::string>>& biomeStore,
                          int ncx, int ncz) {
@@ -11541,15 +11591,31 @@ void decorateOneChunk(MultiChunkLevel& level, int nx, int nz, long long seed,
 
     // possibleBiomes for chunk N = distinct section biomes over the 3x3 around N
     // (ChunkPos.rangeClosed(N,1)) intersected with the overworld possible set.
+    // OPTIMIZATION: iterate the biome store vectors DIRECTLY instead of calling
+    // storeNoiseBiome 13824 times (hashmap lookup + string copy per call). The
+    // biome store was already filled in prepareFeatureTurn — we just scan the 9
+    // chunk vectors and collect unique entries.
     std::set<std::string> pbSet;
-    for (int ddz = -1; ddz <= 1; ++ddz) for (int ddx = -1; ddx <= 1; ++ddx) {
-        const int qx0 = (nx + ddx) * 4, qz0 = (nz + ddz) * 4;
-        for (int qy = (minY >> 2); qy < (maxY >> 2); ++qy)
-            for (int qx = qx0; qx < qx0 + 4; ++qx)
-                for (int qz = qz0; qz < qz0 + 4; ++qz) {
-                    const std::string b = storeNoiseBiome(qx, qy, qz);
-                    if (resolver.sourcesSet.count(b)) pbSet.insert(b);
-                }
+    const auto* biomeStore = mc::levelgen::feature::getEngineBiomeStore();
+    if (biomeStore) {
+        for (int ddz = -1; ddz <= 1; ++ddz) for (int ddx = -1; ddx <= 1; ++ddx) {
+            const auto it = biomeStore->find(packChunk(nx + ddx, nz + ddz));
+            if (it == biomeStore->end()) continue;
+            for (const std::string& b : it->second) {
+                if (resolver.sourcesSet.count(b)) pbSet.insert(b);
+            }
+        }
+    } else {
+        // Fallback: use storeNoiseBiome callback (parity test path).
+        for (int ddz = -1; ddz <= 1; ++ddz) for (int ddx = -1; ddx <= 1; ++ddx) {
+            const int qx0 = (nx + ddx) * 4, qz0 = (nz + ddz) * 4;
+            for (int qy = (minY >> 2); qy < (maxY >> 2); ++qy)
+                for (int qx = qx0; qx < qx0 + 4; ++qx)
+                    for (int qz = qz0; qz < qz0 + 4; ++qz) {
+                        const std::string b = storeNoiseBiome(qx, qy, qz);
+                        if (resolver.sourcesSet.count(b)) pbSet.insert(b);
+                    }
+        }
     }
     const std::vector<std::string> possibleBiomes(pbSet.begin(), pbSet.end());
 
@@ -12031,6 +12097,13 @@ void engineDecorationDestroy(EngineDecorationContext* ctx) {
     g_fluidTags = nullptr;
     g_regionRandom.reset();
     delete ctx;
+}
+
+// Expose biome store for the current engine context. Used by decorateOneChunk
+// to scan possibleBiomes directly from the pre-filled biome store instead of
+// doing 13824 hashmap lookups via storeNoiseBiome.
+const std::unordered_map<std::int64_t, std::vector<std::string>>* getEngineBiomeStore() {
+    return mc::levelgen::feature::g_ctx ? &mc::levelgen::feature::g_ctx->biomeStore : nullptr;
 }
 
 void engineFreezeWgHeights(EngineDecorationContext* ctx, mc::LevelChunk* chunk, int cx, int cz,
