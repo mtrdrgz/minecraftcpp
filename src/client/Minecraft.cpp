@@ -881,21 +881,55 @@ void Minecraft::startLocalGame(uint64_t seed, int spawnX, int spawnZ, std::optio
 
     {
         PROFILE_SCOPE("startup_terrain_generation");
-        // Only generate the spawn chunk + its 8 immediate neighbours (3×3) so the
-        // player can see terrain in all directions. The rest streams in async.
+        // Generate the spawn chunk + neighbours (5×5 = 25 chunks) IN PARALLEL
+        // using the thread pool. The previous code did this synchronously on
+        // the main thread, which took 25 × 40ms = 1 second of frozen screen.
         constexpr int STARTUP_RADIUS = 2;
+        const int totalChunks = (2 * STARTUP_RADIUS + 1) * (2 * STARTUP_RADIUS + 1);
+        struct StartupResult {
+            ChunkPos pos;
+            std::unique_ptr<LevelChunk> chunk;
+            std::vector<BlockPos> genMarks;
+        };
+        std::vector<std::future<StartupResult>> futures;
+        futures.reserve(totalChunks);
         for (int dz = -STARTUP_RADIUS; dz <= STARTUP_RADIUS; ++dz) {
             for (int dx = -STARTUP_RADIUS; dx <= STARTUP_RADIUS; ++dx) {
                 const int cx = spawnChunk.x + dx;
                 const int cz = spawnChunk.z + dz;
-                LevelChunk* chunk = getOrCreateChunk({cx, cz});
-                std::vector<BlockPos> genMarks;
-                levelgen::Beardifier beard = buildChunkBeardifier({cx, cz});
-                m_localGenerator->fillFromNoise(*chunk, &genMarks, beard.isEmpty() ? nullptr : &beard);
-                m_localGenerator->buildSurface(*chunk);
-                m_localGenerator->applyCarvers(*chunk, &genMarks);
-                levelgen::feature::freezeWorldgenHeights(*chunk, &genMarks);
-                chunk->meshDirty = true;
+                futures.push_back(m_threadPool->enqueue(
+                    [this, cx, cz, seed = m_worldSeed]() -> StartupResult {
+                        StartupResult out;
+                        out.pos = {cx, cz};
+                        out.chunk = std::make_unique<LevelChunk>(ChunkPos{cx, cz});
+                        levelgen::Beardifier beard = buildChunkBeardifier({cx, cz});
+                        struct ThreadGenCache {
+                            uint64_t seed = 0;
+                            std::unique_ptr<levelgen::NoiseBasedChunkGenerator> gen;
+                        };
+                        thread_local ThreadGenCache cache;
+                        if (!cache.gen || cache.seed != seed) {
+                            cache.seed = seed;
+                            cache.gen = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
+                        }
+                        cache.gen->fillFromNoise(*out.chunk, &out.genMarks,
+                                                  beard.isEmpty() ? nullptr : &beard);
+                        cache.gen->buildSurface(*out.chunk);
+                        cache.gen->applyCarvers(*out.chunk, &out.genMarks);
+                        return out;
+                    }));
+            }
+        }
+        // Collect results and integrate into the chunk map.
+        for (auto& f : futures) {
+            StartupResult res = f.get();
+            if (res.chunk) {
+                LevelChunk* ptr = res.chunk.get();
+                auto key = chunkKey(res.pos);
+                std::unique_lock<std::shared_mutex> lk(m_chunksMutex);
+                m_chunks[key] = std::move(res.chunk);
+                levelgen::feature::freezeWorldgenHeights(*ptr, &res.genMarks);
+                ptr->meshDirty = true;
             }
         }
     }
