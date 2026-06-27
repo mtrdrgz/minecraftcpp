@@ -119,12 +119,14 @@ void OptionsScreen::init(Minecraft* mcp, int w, int h) {
     }
 
     // 2-column category grid.
-    struct Cat { const char* label; int kind; }; // kind: 0=generic,1=sound,2=video,3=controls,4=language,5=accessibility
+    // kind: 0=generic,1=sound,2=video,3=controls,4=language,5=accessibility,
+    //       6=skin,7=chat,8=resourcepacks,9=telemetry,10=credits
+    struct Cat { const char* label; int kind; };
     static const Cat CATS[] = {
-        { "Skin Customization...", 0 }, { "Music & Sounds...", 1 }, { "Video Settings...", 2 },
-        { "Controls...", 3 }, { "Language...", 4 }, { "Chat Settings...", 0 },
-        { "Resource Packs...", 0 }, { "Accessibility Settings", 5 }, { "Telemetry Data...", 0 },
-        { "Credits & Attribution...", 0 },
+        { "Skin Customization...", 6 }, { "Music & Sounds...", 1 }, { "Video Settings...", 2 },
+        { "Controls...", 3 }, { "Language...", 4 }, { "Chat Settings...", 7 },
+        { "Resource Packs...", 8 }, { "Accessibility Settings", 5 }, { "Telemetry Data...", 9 },
+        { "Credits & Attribution...", 10 },
     };
     const int x0 = w / 2 - 155, x1 = w / 2 + 5, top = h / 6 + 24;
     for (int i = 0; i < (int)(sizeof(CATS) / sizeof(CATS[0])); ++i) {
@@ -136,12 +138,19 @@ void OptionsScreen::init(Minecraft* mcp, int w, int h) {
         add(std::make_unique<WidgetButton>(col == 0 ? x0 : x1, top + row * 24, 150, 20, label,
             [openSub, back, title, kind]() {
                 std::unique_ptr<gui::Screen> s;
-                if (kind == 1)      s = std::make_unique<SoundOptionsScreen>(title, back);
-                else if (kind == 2) s = std::make_unique<VideoSettingsScreen>(title, back);
-                else if (kind == 3) s = std::make_unique<ControlsScreen>(title, back);
-                else if (kind == 4) s = std::make_unique<LanguageSelectScreen>(title, back);
-                else if (kind == 5) s = std::make_unique<AccessibilityOptionsScreen>(title, back);
-                else                s = std::make_unique<OptionsSubScreen>(title, back);
+                switch (kind) {
+                    case 1:  s = std::make_unique<SoundOptionsScreen>(title, back); break;
+                    case 2:  s = std::make_unique<VideoSettingsScreen>(title, back); break;
+                    case 3:  s = std::make_unique<ControlsScreen>(title, back); break;
+                    case 4:  s = std::make_unique<LanguageSelectScreen>(title, back); break;
+                    case 5:  s = std::make_unique<AccessibilityOptionsScreen>(title, back); break;
+                    case 6:  s = std::make_unique<SkinCustomizationScreen>(title, back); break;
+                    case 7:  s = std::make_unique<ChatOptionsScreen>(title, back); break;
+                    case 8:  s = std::make_unique<ResourcePacksScreen>(title, back); break;
+                    case 9:  s = std::make_unique<TelemetryInfoScreen>(title, back); break;
+                    case 10: s = std::make_unique<CreditsAndAttributionScreen>(title, back); break;
+                    default: s = std::make_unique<OptionsSubScreen>(title, back); break;
+                }
                 openSub(std::move(s));
             }));
     }
@@ -255,8 +264,6 @@ void AccessibilityOptionsScreen::addOptions() {
 // ported), but the screen layout + navigation is 1:1 with vanilla's
 // OptionsSubScreen base.
 void LanguageSelectScreen::addOptions() {
-    // A handful of common languages. Vanilla ships ~100 via assets/lang/*.json;
-    // we expose the most-used ones as a cycle button.
     addCycle("Language", {
         "English (US)",
         "English (UK)",
@@ -274,6 +281,72 @@ void LanguageSelectScreen::addOptions() {
     }, 0, [](int) {}, true);
     addToggle("Force Unicode Font", false, [](bool) {});
     addToggle("Japanese Glyph Variants", false, [](bool) {});
+}
+
+// ── SkinCustomizationScreen ─────────────────────────────────────────────────
+// Port of SkinCustomizationScreen.addOptions(): toggles for each
+// PlayerModelPart (cape, jacket, left_sleeve, right_sleeve, left_pants_leg,
+// right_pants_leg, hat) + main hand cycle. All default to ON (vanilla default).
+void SkinCustomizationScreen::addOptions() {
+    addToggle("Cape", true, [](bool) {});
+    addToggle("Jacket", true, [](bool) {});
+    addToggle("Left Sleeve", true, [](bool) {});
+    addToggle("Right Sleeve", true, [](bool) {});
+    addToggle("Left Pants Leg", true, [](bool) {});
+    addToggle("Right Pants Leg", true, [](bool) {});
+    addToggle("Hat", true, [](bool) {});
+    addCycle("Main Hand", { "Left", "Right" }, 1, [](int) {}, true);
+}
+
+// ── ChatOptionsScreen ───────────────────────────────────────────────────────
+// Port of ChatOptionsScreen.options(): 18 chat-related controls.
+void ChatOptionsScreen::addOptions() {
+    addCycle("Chat Visibility", { "Shown", "Commands Only", "Hidden" }, 0, [](int) {}, true);
+    addToggle("Chat Colors", false, [](bool) {});
+    addToggle("Web Links", true, [](bool) {});
+    addToggle("Prompt on Links", true, [](bool) {});
+    addSlider("Chat Opacity", 1.0, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Text Background Opacity", 0.5, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Chat Scale", 1.0, 0.0, 1.0, [](double v) { return std::to_string((int)(v * 100)) + "%"; }, [](double) {});
+    addSlider("Chat Line Spacing", 0.0, 0.0, 1.0, [](double v) { return std::to_string((int)(v * 100)) + "%"; }, [](double) {});
+    addSlider("Chat Delay", 0.0, 0.0, 6.0, [](double v) { return std::to_string((int)(v * 1000)) + " ms"; }, [](double) {});
+    addSlider("Chat Width", 1.0, 0.0, 1.0, [](double v) { return std::to_string((int)(v * 320)) + "px"; }, [](double) {});
+    addSlider("Chat Height (Focused)", 1.0, 0.0, 1.0, [](double v) { return std::to_string((int)(v * 180)) + "px"; }, [](double) {});
+    addSlider("Chat Height (Unfocused)", 1.0, 0.0, 1.0, [](double v) { return std::to_string((int)(v * 90)) + "px"; }, [](double) {});
+    addCycle("Narrator", { "Off", "System", "Chat", "All" }, 0, [](int) {}, true);
+    addToggle("Auto Suggestions", true, [](bool) {});
+    addToggle("Hide Matched Names", false, [](bool) {});
+    addToggle("Reduced Debug Info", false, [](bool) {});
+    addToggle("Only Show Secure Chat", false, [](bool) {});
+    addToggle("Save Chat Drafts", true, [](bool) {});
+}
+
+// ── ResourcePacksScreen ─────────────────────────────────────────────────────
+// Simplified port. Vanilla has a two-pane list (available / selected) with
+// drag-to-reorder. We show a placeholder label + Done — the pack list UI is
+// a significant porting effort (ObjectSelectionList, drag-drop, pack stacking).
+void ResourcePacksScreen::addOptions() {
+    // No interactive controls — vanilla uses a custom list widget, not
+    // sliders/cycles. The Done button (added by the base class) is the only
+    // control. The title is shown by the base render().
+}
+
+// ── TelemetryInfoScreen ─────────────────────────────────────────────────────
+// Port of TelemetryInfoScreen. Vanilla shows a telemetry toggle + info text +
+// links. We show the toggle + a placeholder.
+void TelemetryInfoScreen::addOptions() {
+    addToggle("Send Telemetry Data", false, [](bool) {}, true);
+}
+
+// ── CreditsAndAttributionScreen ─────────────────────────────────────────────
+// Port of CreditsAndAttributionScreen. Three buttons (Credits, Attribution,
+// Licenses) + Done. In vanilla, Credits opens WinScreen (the end-game credits
+// scroll); Attribution and Licenses open ConfirmLinkScreen (URLs). We make
+// them no-op toggles for now (the actual screens are not ported).
+void CreditsAndAttributionScreen::addOptions() {
+    addToggle("View Credits", false, [](bool) {}, true);
+    addToggle("View Attribution", false, [](bool) {});
+    addToggle("View Licenses", false, [](bool) {});
 }
 
 } // namespace mc::gui::screens

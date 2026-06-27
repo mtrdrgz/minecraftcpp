@@ -85,20 +85,53 @@ public: using OptionsSubScreen::OptionsSubScreen;
 protected: void addOptions() override;
 };
 
-// AccessibilityOptionsScreen: port of the Java screen of the same name.
-// Lists the accessibility-related toggles/sliders (narrator, subtitles, high
-// contrast, chat opacity, etc.). Opens from the title screen's accessibility
-// icon button.
+// AccessibilityOptionsScreen: port of AccessibilityOptionsScreen.options().
 class AccessibilityOptionsScreen final : public OptionsSubScreen {
 public: using OptionsSubScreen::OptionsSubScreen;
 protected: void addOptions() override;
 };
 
-// LanguageSelectScreen: simplified port of the Java screen. The vanilla screen
-// has a scrolling list + search box; this prototype shows the available
-// languages as cycle buttons + a Done button. Opens from the title screen's
-// language icon button.
+// LanguageSelectScreen: simplified port (cycle button, not scrolling list).
 class LanguageSelectScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// SkinCustomizationScreen: port of SkinCustomizationScreen.addOptions().
+// Vanilla toggles PlayerModelPart values (cape, jacket, left_sleeve,
+// right_sleeve, left_pants_leg, right_pants_leg, hat) + main hand cycle.
+class SkinCustomizationScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// ChatOptionsScreen: port of ChatOptionsScreen.options(). 18 chat-related
+// controls (visibility, colors, links, opacity, scale, spacing, delay, width,
+// height, narrator, suggestions, hide names, reduced debug, secure chat, save
+// drafts).
+class ChatOptionsScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// ResourcePacksScreen: simplified port. Vanilla has a two-pane list of
+// available/selected resource packs. We show a placeholder message + Done.
+class ResourcePacksScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// TelemetryInfoScreen: port of TelemetryInfoScreen. Vanilla shows telemetry
+// toggle + info text + links. We show the toggle + Done.
+class TelemetryInfoScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// CreditsAndAttributionScreen: port of CreditsAndAttributionScreen. Three
+// buttons (Credits, Attribution, Licenses) + Done. The Credits button in
+// vanilla opens WinScreen (the end-game credits scroll); we make it a no-op.
+class CreditsAndAttributionScreen final : public OptionsSubScreen {
 public: using OptionsSubScreen::OptionsSubScreen;
 protected: void addOptions() override;
 };

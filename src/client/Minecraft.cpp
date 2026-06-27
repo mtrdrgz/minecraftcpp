@@ -1161,8 +1161,15 @@ void Minecraft::render(float pt) {
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
         m_gui->setCrosshairTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/crosshair.png"));
-        m_gui->setHeartTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/full.png"));
-        m_gui->setFoodTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
+        // Heart sprites: container (outline bg) + full + half. 1:1 with the
+        // sprites referenced in Gui.java (HEART_*_SPRITE constants).
+        m_gui->setHeartContainerTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/container.png"));
+        m_gui->setHeartFullTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/full.png"));
+        m_gui->setHeartHalfTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/heart/half.png"));
+        // Food sprites: empty (bg) + full + half. 1:1 with FOOD_*_SPRITE.
+        m_gui->setFoodEmptyTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_empty.png"));
+        m_gui->setFoodFullTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_full.png"));
+        m_gui->setFoodHalfTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/food_half.png"));
 
         if (!m_inGame) {
             openTitleScreen();

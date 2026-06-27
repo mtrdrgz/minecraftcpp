@@ -190,11 +190,21 @@ void GuiGraphics::blitNineSlice(ITexture* tex, int x, int y, int dstW, int dstH,
         sub(x + dstW - borderR, y + borderT, borderR, centerH, texW - borderR, borderT, borderR, centerSrcH);
     }
 
-    // Center — tiled/stretched to fill the inner area. Vanilla tiles the center
-    // if the dest is larger than the source center; we stretch for simplicity
-    // (visually identical for the 200x20 button at typical widget sizes).
+    // Center — TILED (not stretched) to match vanilla's default behavior.
+    // GuiSpriteScaling.NineSlice defaults stretch_inner=false, which routes
+    // through blitTiledSprite → innerTiledBlit (GL_REPEAT on the center UV
+    // rect). We replicate this by drawing the center source rect repeatedly
+    // across the destination center area. If the dest center is smaller than
+    // one source tile, we just draw one (clipped by the dest rect).
     if (centerW > 0 && centerH > 0 && centerSrcW > 0 && centerSrcH > 0) {
-        sub(x + borderL, y + borderT, centerW, centerH, borderL, borderT, centerSrcW, centerSrcH);
+        for (int ty = 0; ty < centerH; ty += centerSrcH) {
+            for (int tx = 0; tx < centerW; tx += centerSrcW) {
+                const int dw = std::min(centerSrcW, centerW - tx);
+                const int dh = std::min(centerSrcH, centerH - ty);
+                sub(x + borderL + tx, y + borderT + ty, dw, dh,
+                    borderL, borderT, dw, dh);
+            }
+        }
     }
 }
 
