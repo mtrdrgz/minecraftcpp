@@ -1090,19 +1090,24 @@ namespace {
     class TwoArgument final : public DensityFunction {
     public:
         TwoArgument(TwoArgType type, DensityFunctionPtr a, DensityFunctionPtr b, double minValue, double maxValue)
-            : m_type(type), m_a(std::move(a)), m_b(std::move(b)), m_minValue(minValue), m_maxValue(maxValue) {}
+            : m_type(type), m_a(std::move(a)), m_b(std::move(b)), m_minValue(minValue), m_maxValue(maxValue) {
+            m_aRaw = m_a.get();
+            m_bRaw = m_b.get();
+            m_bMinValue = m_b->minValue();
+            m_bMaxValue = m_b->maxValue();
+        }
 
         double compute(const DensityFunctionContext& context) const override {
-            double v1 = m_a->compute(context);
+            double v1 = m_aRaw->compute(context);
             switch (m_type) {
             case TwoArgType::Add:
-                return v1 + m_b->compute(context);
+                return v1 + m_bRaw->compute(context);
             case TwoArgType::Mul:
-                return v1 == 0.0 ? 0.0 : v1 * m_b->compute(context);
+                return v1 == 0.0 ? 0.0 : v1 * m_bRaw->compute(context);
             case TwoArgType::Min:
-                return v1 < m_b->minValue() ? v1 : std::min(v1, m_b->compute(context));
+                return v1 < m_bMinValue ? v1 : std::min(v1, m_bRaw->compute(context));
             case TwoArgType::Max:
-                return v1 > m_b->maxValue() ? v1 : std::max(v1, m_b->compute(context));
+                return v1 > m_bMaxValue ? v1 : std::max(v1, m_bRaw->compute(context));
             }
             return 0.0;
         }
@@ -1114,14 +1119,21 @@ namespace {
         TwoArgType m_type;
         DensityFunctionPtr m_a;
         DensityFunctionPtr m_b;
+        const DensityFunction* m_aRaw = nullptr;
+        const DensityFunction* m_bRaw = nullptr;
         double m_minValue;
         double m_maxValue;
+        // Cache b's min/max to avoid virtual calls in Min/Max short-circuit
+        double m_bMinValue = 0;
+        double m_bMaxValue = 0;
     };
 
     class Mapped final : public DensityFunction {
     public:
         Mapped(DensityFunctions::MapType type, DensityFunctionPtr input, double minValue, double maxValue)
-            : m_type(type), m_input(std::move(input)), m_minValue(minValue), m_maxValue(maxValue) {}
+            : m_type(type), m_input(std::move(input)), m_minValue(minValue), m_maxValue(maxValue) {
+            m_inputRaw = m_input.get();
+        }
 
         static double transform(DensityFunctions::MapType type, double input) {
             switch (type) {
@@ -1146,7 +1158,7 @@ namespace {
         }
 
         double compute(const DensityFunctionContext& context) const override {
-            return transform(m_type, m_input->compute(context));
+            return transform(m_type, m_inputRaw->compute(context));
         }
 
         double minValue() const override { return m_minValue; }
@@ -1155,6 +1167,7 @@ namespace {
     private:
         DensityFunctions::MapType m_type;
         DensityFunctionPtr m_input;
+        const DensityFunction* m_inputRaw = nullptr;
         double m_minValue;
         double m_maxValue;
     };
@@ -1162,10 +1175,12 @@ namespace {
     class Clamp final : public DensityFunction {
     public:
         Clamp(DensityFunctionPtr input, double minValue, double maxValue)
-            : m_input(std::move(input)), m_minValue(minValue), m_maxValue(maxValue) {}
+            : m_input(std::move(input)), m_minValue(minValue), m_maxValue(maxValue) {
+            m_inputRaw = m_input.get();
+        }
 
         double compute(const DensityFunctionContext& context) const override {
-            return std::clamp(m_input->compute(context), m_minValue, m_maxValue);
+            return std::clamp(m_inputRaw->compute(context), m_minValue, m_maxValue);
         }
 
         double minValue() const override { return m_minValue; }
@@ -1173,6 +1188,7 @@ namespace {
 
     private:
         DensityFunctionPtr m_input;
+        const DensityFunction* m_inputRaw = nullptr;
         double m_minValue;
         double m_maxValue;
     };
@@ -1264,13 +1280,28 @@ namespace {
     public:
         ShiftedNoiseFunction(DensityFunctionPtr shiftX, DensityFunctionPtr shiftY, DensityFunctionPtr shiftZ, double xzScale, double yScale, std::shared_ptr<const NormalNoise> noise)
             : m_shiftX(std::move(shiftX)), m_shiftY(std::move(shiftY)), m_shiftZ(std::move(shiftZ)),
-              m_xzScale(xzScale), m_yScale(yScale), m_noise(std::move(noise)) {}
+              m_xzScale(xzScale), m_yScale(yScale), m_noise(std::move(noise)) {
+            // Cache raw pointers to avoid shared_ptr atomic ref-count overhead
+            // on every compute() call. The shared_ptrs above keep the objects
+            // alive, so these raw pointers stay valid for this object's lifetime.
+            m_shiftXRaw = m_shiftX.get();
+            m_shiftYRaw = m_shiftY.get();
+            m_shiftZRaw = m_shiftZ.get();
+            m_noiseRaw = m_noise.get();
+        }
 
         double compute(const DensityFunctionContext& context) const override {
-            double x = context.blockX * m_xzScale + m_shiftX->compute(context);
-            double y = context.blockY * m_yScale + m_shiftY->compute(context);
-            double z = context.blockZ * m_xzScale + m_shiftZ->compute(context);
-            return m_noise->getValue(x, y, z);
+            // Fast path: if we have an interpolationResolver and the shift
+            // functions are flatCache'd (2D), we can cache the shift values
+            // per (X,Z) column. But since we don't know the cell boundaries
+            // here, we rely on the caller's 2D cache in getNoiseBiome instead.
+            //
+            // The main optimization here is avoiding the shared_ptr dereference
+            // overhead by caching raw pointers.
+            double x = context.blockX * m_xzScale + m_shiftXRaw->compute(context);
+            double y = context.blockY * m_yScale + m_shiftYRaw->compute(context);
+            double z = context.blockZ * m_xzScale + m_shiftZRaw->compute(context);
+            return m_noiseRaw->getValue(x, y, z);
         }
 
         double minValue() const override { return -maxValue(); }
@@ -1283,6 +1314,17 @@ namespace {
         double m_xzScale;
         double m_yScale;
         std::shared_ptr<const NormalNoise> m_noise;
+        // Raw pointers for fast access (avoid shared_ptr atomic ref-count
+        // overhead on every compute() call). These point to the same objects
+        // as the shared_ptrs above, so they stay valid as long as this object
+        // holds the shared_ptrs.
+        const DensityFunction* m_shiftXRaw = nullptr;
+        const DensityFunction* m_shiftYRaw = nullptr;
+        const DensityFunction* m_shiftZRaw = nullptr;
+        const NormalNoise* m_noiseRaw = nullptr;
+        const Constant* m_shiftXConst;
+        const Constant* m_shiftYConst;
+        const Constant* m_shiftZConst;
     };
 
     class WeirdScaledSamplerFunction final : public DensityFunction {
