@@ -340,13 +340,22 @@ void LevelRenderer::rebuildDirtyChunks() {
         ChunkPos cp = chunk->pos();
         // Snapshot the chunk + neighbours under chunkWriteMutex so the decoration
         // worker cannot mutate their block data while we copy it (copying a
-        // LevelChunk mid-write corrupts the heap → crash). The copies are cheap;
-        // the lock is released before the off-thread mesh build runs.
-        auto snapshotStart = std::chrono::steady_clock::now();
+        // LevelChunk mid-write corrupts the heap → crash).
+        //
+        // IMPORTANT: Use try_lock instead of blocking lock. If the decoration
+        // worker is holding the lock (during a 50-180ms decoration turn), we
+        // SKIP this chunk this frame and retry next frame (meshDirty stays true).
+        // This prevents the render thread from blocking for 50-180ms, which was
+        // the root cause of the hangs/stuttering.
         std::shared_ptr<LevelChunk> center;
         std::array<std::shared_ptr<LevelChunk>, 4> neighbors;
+        std::unique_lock<std::mutex> writeLk(m_mc->chunkWriteMutex(), std::try_to_lock);
+        if (!writeLk.owns_lock()) {
+            // Decoration worker is busy — skip this chunk, retry next frame.
+            // Don't clear meshDirty so it gets retried.
+            continue;
+        }
         {
-            std::lock_guard<std::mutex> writeLk(m_mc->chunkWriteMutex());
             LevelChunk* east = m_mc->getChunk({cp.x + 1, cp.z});
             LevelChunk* west = m_mc->getChunk({cp.x - 1, cp.z});
             LevelChunk* south = m_mc->getChunk({cp.x, cp.z + 1});
@@ -359,12 +368,7 @@ void LevelRenderer::rebuildDirtyChunks() {
                 north ? std::make_shared<LevelChunk>(*north) : nullptr
             };
         }
-        auto snapshotEnd = std::chrono::steady_clock::now();
-        double snapshotMs = std::chrono::duration<double, std::milli>(snapshotEnd - snapshotStart).count();
-        if (snapshotMs > 10.0) {
-            MC_LOG_WARN("SLOW MESH SNAPSHOT ({},{}) {:.1f}ms (waiting for chunkWriteMutex)",
-                        cp.x, cp.z, snapshotMs);
-        }
+        // Lock released here (writeLk goes out of scope at end of iteration).
         chunk->meshDirty = false;
         m_meshBuildQueued.insert(cand.key);
         const TextureAtlas* atlas = m_atlas.isLoaded() ? &m_atlas : nullptr;

@@ -1313,56 +1313,51 @@ void Minecraft::updateLocalChunks() {
     constexpr int MAX_INTEGRATE_PER_TICK = 2;
     for (auto it = m_generationTasks.begin(); it != m_generationTasks.end(); ) {
         if (integrated >= MAX_INTEGRATE_PER_TICK) break;
-        if (it->future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            GeneratedChunk generated = it->future.get();
-            std::unique_ptr<LevelChunk> chunk = std::move(generated.chunk);
-            if (chunk) {
-                ChunkPos cp = chunk->pos();
-                // Check if still within radius
-                if (std::abs(cp.x - px) <= RADIUS && std::abs(cp.z - pz) <= RADIUS) {
-                    auto key = chunkKey(cp);
-                    // Exclusive lock — we're about to mutate m_chunks. This
-                    // also blocks the decoration worker from starting a new
-                    // turn while we integrate. Integration is fast (no I/O).
-                    auto integLockStart = std::chrono::steady_clock::now();
-                    std::unique_lock<std::shared_mutex> chunksLk(m_chunksMutex);
-                    auto integLockEnd = std::chrono::steady_clock::now();
-                    double integLockMs = std::chrono::duration<double, std::milli>(integLockEnd - integLockStart).count();
-                    if (integLockMs > 10.0) {
-                        MC_LOG_WARN("SLOW INTEG LOCK ({},{}) {:.1f}ms (waiting for m_chunksMutex exclusive)",
-                                    cp.x, cp.z, integLockMs);
-                    }
-                    if (m_chunks.find(key) == m_chunks.end()) {
-                        LevelChunk* ptr = chunk.get();
-                        // Store terrain now; decoration is DEFERRED until all 8
-                        // neighbours exist (the tryDecorate pass below) so trees/
-                        // ores/structures write across borders without clipping.
-                        m_chunks[key] = std::move(chunk);
-                        // Freeze the chunk's *_WG heightmaps + inject its generation
-                        // marks into the decoration context — on the MAIN thread, at
-                        // integration time (post-carvers, pre-decoration).
-                        levelgen::feature::freezeWorldgenHeights(*ptr, &generated.genMarks);
-                        ptr->meshDirty = true;
-                        // Cardinal neighbours only: seam faces update without
-                        // marking the full 3×3 (which flooded the mesh queue).
-                        static constexpr int kCardinal[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
-                        for (const auto& d : kCardinal) {
-                            // No need to lock getChunk here — we already hold the
-                            // exclusive lock, so the lookup is safe.
-                            auto itN = m_chunks.find(chunkKey({ cp.x + d[0], cp.z + d[1] }));
-                            if (itN != m_chunks.end() && itN->second) {
-                                itN->second->meshDirty = true;
-                            }
+        // Only check if the future is ready. Do NOT call get() yet — get()
+        // consumes the future, and if we can't get the lock below, we'd need
+        // to put the result back, which is impossible with std::future.
+        if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            ++it;
+            continue;
+        }
+        // Try to acquire the exclusive lock BEFORE consuming the future.
+        // If the decoration worker holds a shared lock (50-180ms decoration
+        // turn), we skip this chunk this tick and retry next tick.
+        std::unique_lock<std::shared_mutex> chunksLk(m_chunksMutex, std::try_to_lock);
+        if (!chunksLk.owns_lock()) {
+            // Decoration worker is busy — skip, retry next tick.
+            // Don't consume the future; it'll still be ready next tick.
+            ++it;
+            continue;
+        }
+        // Now safe to consume the future — we hold the lock.
+        GeneratedChunk generated = it->future.get();
+        std::unique_ptr<LevelChunk> chunk = std::move(generated.chunk);
+        bool consumed = false;
+        if (chunk) {
+            ChunkPos cp = chunk->pos();
+            if (std::abs(cp.x - px) <= RADIUS && std::abs(cp.z - pz) <= RADIUS) {
+                auto key = chunkKey(cp);
+                if (m_chunks.find(key) == m_chunks.end()) {
+                    LevelChunk* ptr = chunk.get();
+                    m_chunks[key] = std::move(chunk);
+                    levelgen::feature::freezeWorldgenHeights(*ptr, &generated.genMarks);
+                    ptr->meshDirty = true;
+                    static constexpr int kCardinal[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+                    for (const auto& d : kCardinal) {
+                        auto itN = m_chunks.find(chunkKey({ cp.x + d[0], cp.z + d[1] }));
+                        if (itN != m_chunks.end() && itN->second) {
+                            itN->second->meshDirty = true;
                         }
-                        ++integrated;
                     }
+                    ++integrated;
+                    consumed = true;
                 }
             }
-            m_queuedChunks.erase(chunkKey(it->pos));
-            it = m_generationTasks.erase(it);
-        } else {
-            ++it;
         }
+        // Always clean up the task — the future was consumed by get() above.
+        m_queuedChunks.erase(chunkKey(it->pos));
+        it = m_generationTasks.erase(it);
     }
 
     // 2b. Submit decoration requests to the worker thread.
