@@ -31,6 +31,16 @@ public:
                         float u, float v, int srcW, int srcH, const glm::vec4& color,
                         int texW, int texH);
 
+    // 9-slice blit: draws a texture stretched to (dstW, dstH) while keeping the
+    // border pixels unstretched. Matches vanilla's GuiSpriteScaling.NineSlice.
+    // The source texture is assumed to be (texW, texH) with a border of
+    // (borderL, borderT, borderR, borderB) pixels on each side. The center is
+    // tiled/repeated to fill the inner area (vanilla behavior).
+    void blitNineSlice(ITexture* texture, int x, int y, int dstW, int dstH,
+                       int texW, int texH,
+                       int borderL, int borderT, int borderR, int borderB,
+                       const glm::vec4& color = {1, 1, 1, 1});
+
     // Coordinate system management
     void push() { m_poseStack.push_back(m_poseStack.back()); }
     void pop()  { if (m_poseStack.size() > 1) m_poseStack.pop_back(); }

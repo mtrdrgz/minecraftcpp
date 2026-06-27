@@ -52,6 +52,7 @@ void OptionsSubScreen::init(Minecraft* mcp, int w, int h) {
             if (smallCol == 1) { y += 24; smallCol = 0; } else { smallCol = 1; }
         }
         p.w->setTextures(m_btnN, m_btnH);
+        p.w->setSliderTextures(m_sliderTrack, m_sliderHandle, m_sliderHandleHl);
         m_widgets.push_back(std::move(p.w));
     }
     m_pending.clear();
@@ -93,10 +94,17 @@ void OptionsScreen::init(Minecraft* mcp, int w, int h) {
     Screen::init(mcp, w, h);
     m_widgets.clear();
 
-    auto add = [&](std::unique_ptr<AbstractWidget> wgt) { wgt->setTextures(m_btnN, m_btnH); m_widgets.push_back(std::move(wgt)); };
+    auto add = [&](std::unique_ptr<AbstractWidget> wgt) {
+        wgt->setTextures(m_btnN, m_btnH);
+        wgt->setSliderTextures(m_sliderTrack, m_sliderHandle, m_sliderHandleHl);
+        m_widgets.push_back(std::move(wgt));
+    };
     Minecraft* mc = m_minecraft;
     auto openSub = [mc, this](std::unique_ptr<gui::Screen> s) {
-        if (auto* sub = dynamic_cast<OptionsSubScreen*>(s.get())) sub->setButtonTextures(m_btnN, m_btnH);
+        if (auto* sub = dynamic_cast<OptionsSubScreen*>(s.get())) {
+            sub->setButtonTextures(m_btnN, m_btnH);
+            sub->setSliderTextures(m_sliderTrack, m_sliderHandle, m_sliderHandleHl);
+        }
         mc->setScreen(std::move(s));
     };
     auto back = [mc]() { mc->openOptionsScreen(); };
@@ -111,11 +119,11 @@ void OptionsScreen::init(Minecraft* mcp, int w, int h) {
     }
 
     // 2-column category grid.
-    struct Cat { const char* label; int kind; }; // kind: 0=generic,1=sound,2=video,3=controls
+    struct Cat { const char* label; int kind; }; // kind: 0=generic,1=sound,2=video,3=controls,4=language,5=accessibility
     static const Cat CATS[] = {
         { "Skin Customization...", 0 }, { "Music & Sounds...", 1 }, { "Video Settings...", 2 },
-        { "Controls...", 3 }, { "Language...", 0 }, { "Chat Settings...", 0 },
-        { "Resource Packs...", 0 }, { "Accessibility Settings", 0 }, { "Telemetry Data...", 0 },
+        { "Controls...", 3 }, { "Language...", 4 }, { "Chat Settings...", 0 },
+        { "Resource Packs...", 0 }, { "Accessibility Settings", 5 }, { "Telemetry Data...", 0 },
         { "Credits & Attribution...", 0 },
     };
     const int x0 = w / 2 - 155, x1 = w / 2 + 5, top = h / 6 + 24;
@@ -131,6 +139,8 @@ void OptionsScreen::init(Minecraft* mcp, int w, int h) {
                 if (kind == 1)      s = std::make_unique<SoundOptionsScreen>(title, back);
                 else if (kind == 2) s = std::make_unique<VideoSettingsScreen>(title, back);
                 else if (kind == 3) s = std::make_unique<ControlsScreen>(title, back);
+                else if (kind == 4) s = std::make_unique<LanguageSelectScreen>(title, back);
+                else if (kind == 5) s = std::make_unique<AccessibilityOptionsScreen>(title, back);
                 else                s = std::make_unique<OptionsSubScreen>(title, back);
                 openSub(std::move(s));
             }));
@@ -201,6 +211,69 @@ void ControlsScreen::addOptions() {
     addToggle("Auto-Jump", o.autoJump, [&o](bool b) { o.autoJump = b; });
     addToggle("Discrete Scrolling", o.discreteMouseScroll, [&o](bool b) { o.discreteMouseScroll = b; });
     addToggle("Touchscreen Mode", o.touchscreen, [&o](bool b) { o.touchscreen = b; });
+}
+
+// ── AccessibilityOptionsScreen ──────────────────────────────────────────────
+// Port of AccessibilityOptionsScreen.options(): the accessibility-related
+// toggles/sliders. Real vanilla has 24 OptionInstance entries; we expose the
+// ones that exist in our GameOptions. The rest are stubbed as no-op toggles
+// so the screen layout matches vanilla (each row is a real control).
+void AccessibilityOptionsScreen::addOptions() {
+    GameOptions& o = mc()->options();
+    // Real toggles from GameOptions.
+    addToggle("Show Subtitles", o.showSubtitles, [&o](bool b) { o.showSubtitles = b; });
+    addToggle("View Bobbing", o.viewBobbing, [&o](bool b) { o.viewBobbing = b; });
+    addToggle("Dark Mojang Studios Background", false, [](bool) {});
+    addToggle("Hide Lightning Flashes", false, [](bool) {});
+    addToggle("Hide Splash Texts", false, [](bool) {});
+    addToggle("Narrator Hotkey", false, [](bool) {});
+    addToggle("High Contrast", false, [](bool) {});
+    addToggle("Rotate With Minecart", false, [](bool) {});
+    addToggle("High Contrast Block Outline", false, [](bool) {});
+    // Sliders for effect scales (no-op onChange — real values not wired yet).
+    addSlider("Text Background Opacity", 0.5, 0.0, 1.0, pct100, [](double) {}, true);
+    addSlider("Chat Opacity", 0.5, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Chat Line Spacing", 0.0, 0.0, 1.0, [](double v) { return std::to_string((int)(v * 100)) + "%"; }, [](double) {});
+    addSlider("Chat Delay", 0.0, 0.0, 6.0, [](double v) { return std::to_string((int)(v * 1000)) + " ms"; }, [](double) {});
+    addSlider("Notification Display Time", 1.0, 0.5, 12.0, [](double v) { return std::to_string(v).substr(0, 4) + "s"; }, [](double) {});
+    addSlider("Menu Background Blurriness", 0.0, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Screen Effect Scale", 1.0, 0.0, 1.0, pct100, [](double) {});
+    addSlider("FOV Effect Scale", 1.0, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Darkness Effect Scale", 1.0, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Damage Tilt Strength", 1.0, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Glint Speed", 0.5, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Glint Strength", 0.75, 0.0, 1.0, pct100, [](double) {});
+    addSlider("Panorama Speed", 1.0, 0.1, 4.0, [](double v) { return std::to_string((int)(v * 100)) + "%"; }, [](double) {});
+    // Narrator cycle (Off/System/Chat/All).
+    addCycle("Narrator", { "Off", "System", "Chat", "All" }, 0, [](int) {}, true);
+}
+
+// ── LanguageSelectScreen ────────────────────────────────────────────────────
+// Simplified port: vanilla has a scrolling ObjectSelectionList of all installed
+// languages + a search box. We show the common languages as cycle buttons +
+// a "Done" button. The language actually applied doesn't change (i18n not
+// ported), but the screen layout + navigation is 1:1 with vanilla's
+// OptionsSubScreen base.
+void LanguageSelectScreen::addOptions() {
+    // A handful of common languages. Vanilla ships ~100 via assets/lang/*.json;
+    // we expose the most-used ones as a cycle button.
+    addCycle("Language", {
+        "English (US)",
+        "English (UK)",
+        "Español (España)",
+        "Español (México)",
+        "Français",
+        "Deutsch",
+        "Italiano",
+        "Português (Brasil)",
+        "Русский",
+        "日本語",
+        "中文(简体)",
+        "中文(繁體)",
+        "한국어",
+    }, 0, [](int) {}, true);
+    addToggle("Force Unicode Font", false, [](bool) {});
+    addToggle("Japanese Glyph Variants", false, [](bool) {});
 }
 
 } // namespace mc::gui::screens

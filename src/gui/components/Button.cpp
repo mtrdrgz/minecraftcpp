@@ -11,10 +11,12 @@ void Button::render(render::GuiGraphics& g, render::Font& font, int mouseX, int 
 
     render::ITexture* tex = m_hovered ? m_texHighlight : m_texNormal;
     if (tex) {
-        // Destination can be 204x20, but the vanilla button texture source is
-        // 200x20. Sample only the real source rect and stretch it to m_w/m_h;
-        // sampling 204 pixels from a 200-pixel texture caused edge artifacts.
-        g.blitSized(tex, m_x, m_y, m_w, m_h, 0, 0, 200, 20, 200, 20);
+        // 1:1 with vanilla AbstractButton.extractDefaultSprite: the button.png
+        // sprite is 200x20 with a 3px nine-slice border (button.png.mcmeta).
+        // blitNineSlice keeps the 3px bevel crisp at any widget size while
+        // stretching the center — the simple stretch used before distorted the
+        // corners and the highlighted variant showed edge artifacts.
+        g.blitNineSlice(tex, m_x, m_y, m_w, m_h, 200, 20, 3, 3, 3, 3);
     } else {
         // Fallback
         g.fill(m_x, m_y, m_x + m_w, m_y + m_h, m_hovered ? glm::vec4{0.7f, 0.7f, 1.0f, 1.0f} : glm::vec4{0.4f, 0.4f, 0.4f, 1.0f});

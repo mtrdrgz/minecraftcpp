@@ -26,6 +26,13 @@ public:
     void setPos(int x, int y) { m_x = x; m_y = y; }
     void setSize(int w, int h) { m_w = w; m_h = h; }
     void setTextures(render::ITexture* n, render::ITexture* hl) { m_texN = n; m_texH = hl; }
+    // Slider-specific textures: slider.png (200x20, 9-slice border 1) for the
+    // track, slider_handle.png (8x20, 9-slice border 2,2,2,3) for the handle.
+    // When null, the slider falls back to the button texture for the track and
+    // a grey fill for the handle.
+    void setSliderTextures(render::ITexture* track, render::ITexture* handle, render::ITexture* handleHl) {
+        m_sliderTrack = track; m_sliderHandle = handle; m_sliderHandleHl = handleHl;
+    }
     int w() const { return m_w; }
     int h() const { return m_h; }
 
@@ -37,6 +44,9 @@ protected:
     int m_x, m_y, m_w, m_h;
     render::ITexture* m_texN = nullptr;
     render::ITexture* m_texH = nullptr;
+    render::ITexture* m_sliderTrack = nullptr;
+    render::ITexture* m_sliderHandle = nullptr;
+    render::ITexture* m_sliderHandleHl = nullptr;
 };
 
 // A plain button (Done, category links). Port of Button used on option screens.

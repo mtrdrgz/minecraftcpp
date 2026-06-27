@@ -40,6 +40,7 @@ void PauseScreen::init(Minecraft* mc, int w, int h) {
                   Minecraft* mc = m_minecraft;
                   auto options = std::make_unique<OptionsScreen>();
                   options->setButtonTextures(m_btnNormal, m_btnHighlight);
+                  options->setSliderTextures(mc->sliderTrackTex(), mc->sliderHandleTex(), mc->sliderHandleHlTex());
                   options->setBackAction([mc]() { mc->openPauseScreen(); });
                   mc->setScreen(std::move(options));
               });

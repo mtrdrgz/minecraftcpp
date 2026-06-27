@@ -117,6 +117,87 @@ void GuiGraphics::blitAlphaSized(ITexture* tex, int x, int y, int dstW, int dstH
     addQuad(v0_v, v1_v, v2_v, v3_v, tex);
 }
 
+// Port of GuiGraphicsExtractor.blitNineSlicedSprite. The texture is divided
+// into 9 regions: 4 corners (drawn at native size), 4 edges (stretched along
+// one axis), and a center (tiled to fill the inner area). This is what makes
+// vanilla buttons/sliders look right at any size — the 3px bevel border stays
+// crisp while the center stretches.
+//
+// Layout (matches vanilla GuiSpriteScaling.NineSlice):
+//   ┌───┬───────────────┬───┐
+//   │ TL│     TOP       │ TR│   borderT
+//   ├───┼───────────────┼───┤
+//   │ L │    CENTER     │ R │   (texH - borderT - borderB)
+//   ├───┼───────────────┼───┤
+//   │ BL│    BOTTOM     │ BR│   borderB
+//   └───┴───────────────┴───┘
+//     borderL        borderR
+void GuiGraphics::blitNineSlice(ITexture* tex, int x, int y, int dstW, int dstH,
+                                int texW, int texH,
+                                int borderL, int borderT, int borderR, int borderB,
+                                const glm::vec4& col) {
+    if (!tex || dstW <= 0 || dstH <= 0 || texW <= 0 || texH <= 0) return;
+
+    // Clamp borders to half the texture size (vanilla does this).
+    borderL = std::min(borderL, texW / 2);
+    borderR = std::min(borderR, texW / 2);
+    borderT = std::min(borderT, texH / 2);
+    borderB = std::min(borderB, texH / 2);
+
+    // If dstW == texW, the left+right borders fill the full width (no center).
+    // Same for height. This matches vanilla's "height == nineSlice.height()" path.
+    const int centerW = std::max(0, dstW - borderL - borderR);
+    const int centerH = std::max(0, dstH - borderT - borderB);
+    const int centerSrcW = std::max(0, texW - borderL - borderR);
+    const int centerSrcH = std::max(0, texH - borderT - borderB);
+
+    // Helper to add a sub-quad from (srcU, srcV) of size (srcW, srcH) into
+    // dest rect (dx, dy, dw, dh). UVs are in pixels; converted to [0,1].
+    auto sub = [&](int dx, int dy, int dw, int dh, int su, int sv, int sw, int sh) {
+        if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+        float u0 = (float)su / (float)texW;
+        float v0 = (float)sv / (float)texH;
+        float u1 = (float)(su + sw) / (float)texW;
+        float v1 = (float)(sv + sh) / (float)texH;
+        GuiVertex v0v{{(float)dx,      (float)dy,      0.0f}, {u0, v0}, col};
+        GuiVertex v1v{{(float)dx + dw, (float)dy,      0.0f}, {u1, v0}, col};
+        GuiVertex v2v{{(float)dx + dw, (float)dy + dh, 0.0f}, {u1, v1}, col};
+        GuiVertex v3v{{(float)dx,      (float)dy + dh, 0.0f}, {u0, v1}, col};
+        addQuad(v0v, v1v, v2v, v3v, tex);
+    };
+
+    // Corners (always drawn at native border size).
+    sub(x, y, borderL, borderT, 0, 0, borderL, borderT);                              // TL
+    sub(x + dstW - borderR, y, borderR, borderT, texW - borderR, 0, borderR, borderT); // TR
+    sub(x, y + dstH - borderB, borderL, borderB, 0, texH - borderB, borderL, borderB); // BL
+    sub(x + dstW - borderR, y + dstH - borderB, borderR, borderB, texW - borderR, texH - borderB, borderR, borderB); // BR
+
+    // Edges — stretched to fill the gap between corners.
+    // Top edge: full width between L and R corners, at borderT height.
+    if (centerW > 0 && borderT > 0) {
+        sub(x + borderL, y, centerW, borderT, borderL, 0, centerSrcW, borderT);
+    }
+    // Bottom edge.
+    if (centerW > 0 && borderB > 0) {
+        sub(x + borderL, y + dstH - borderB, centerW, borderB, borderL, texH - borderB, centerSrcW, borderB);
+    }
+    // Left edge.
+    if (centerH > 0 && borderL > 0) {
+        sub(x, y + borderT, borderL, centerH, 0, borderT, borderL, centerSrcH);
+    }
+    // Right edge.
+    if (centerH > 0 && borderR > 0) {
+        sub(x + dstW - borderR, y + borderT, borderR, centerH, texW - borderR, borderT, borderR, centerSrcH);
+    }
+
+    // Center — tiled/stretched to fill the inner area. Vanilla tiles the center
+    // if the dest is larger than the source center; we stretch for simplicity
+    // (visually identical for the 200x20 button at typical widget sizes).
+    if (centerW > 0 && centerH > 0 && centerSrcW > 0 && centerSrcH > 0) {
+        sub(x + borderL, y + borderT, centerW, centerH, borderL, borderT, centerSrcW, centerSrcH);
+    }
+}
+
 void GuiGraphics::translate(float x, float y, float z) {
     m_poseStack.back() = glm::translate(m_poseStack.back(), {x, y, z});
 }

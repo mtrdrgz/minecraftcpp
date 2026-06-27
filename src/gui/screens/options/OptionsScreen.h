@@ -20,6 +20,9 @@ public:
     void mouseReleased(double x, double y, int button) override;
     void mouseDragged(double x, double y, int button, double dx, double dy) override;
     void setButtonTextures(render::ITexture* n, render::ITexture* h) { m_btnN = n; m_btnH = h; }
+    void setSliderTextures(render::ITexture* track, render::ITexture* handle, render::ITexture* handleHl) {
+        m_sliderTrack = track; m_sliderHandle = handle; m_sliderHandleHl = handleHl;
+    }
 
 protected:
     virtual void addOptions() {}
@@ -32,6 +35,9 @@ protected:
 
     render::ITexture* m_btnN = nullptr;
     render::ITexture* m_btnH = nullptr;
+    render::ITexture* m_sliderTrack = nullptr;
+    render::ITexture* m_sliderHandle = nullptr;
+    render::ITexture* m_sliderHandleHl = nullptr;
 
 private:
     struct Pending { std::unique_ptr<components::AbstractWidget> w; bool big; };
@@ -50,12 +56,18 @@ public:
     void mouseReleased(double x, double y, int button) override;
     void mouseDragged(double x, double y, int button, double dx, double dy) override;
     void setButtonTextures(render::ITexture* n, render::ITexture* h) { m_btnN = n; m_btnH = h; }
+    void setSliderTextures(render::ITexture* track, render::ITexture* handle, render::ITexture* handleHl) {
+        m_sliderTrack = track; m_sliderHandle = handle; m_sliderHandleHl = handleHl;
+    }
     void setBackAction(std::function<void()> f) { m_back = std::move(f); }
 
 private:
     std::vector<std::unique_ptr<components::AbstractWidget>> m_widgets;
     render::ITexture* m_btnN = nullptr;
     render::ITexture* m_btnH = nullptr;
+    render::ITexture* m_sliderTrack = nullptr;
+    render::ITexture* m_sliderHandle = nullptr;
+    render::ITexture* m_sliderHandleHl = nullptr;
     std::function<void()> m_back;
 };
 
@@ -69,6 +81,24 @@ public: using OptionsSubScreen::OptionsSubScreen;
 protected: void addOptions() override;
 };
 class ControlsScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// AccessibilityOptionsScreen: port of the Java screen of the same name.
+// Lists the accessibility-related toggles/sliders (narrator, subtitles, high
+// contrast, chat opacity, etc.). Opens from the title screen's accessibility
+// icon button.
+class AccessibilityOptionsScreen final : public OptionsSubScreen {
+public: using OptionsSubScreen::OptionsSubScreen;
+protected: void addOptions() override;
+};
+
+// LanguageSelectScreen: simplified port of the Java screen. The vanilla screen
+// has a scrolling list + search box; this prototype shows the available
+// languages as cycle buttons + a Done button. Opens from the title screen's
+// language icon button.
+class LanguageSelectScreen final : public OptionsSubScreen {
 public: using OptionsSubScreen::OptionsSubScreen;
 protected: void addOptions() override;
 };

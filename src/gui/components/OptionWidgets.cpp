@@ -6,7 +6,9 @@ namespace mc::gui::components {
 void AbstractWidget::drawBg(render::GuiGraphics& g, bool hover) {
     render::ITexture* tex = hover ? (m_texH ? m_texH : m_texN) : m_texN;
     if (tex) {
-        g.blit(tex, m_x, m_y, 0.0f, 0.0f, m_w, m_h, 200, 20);
+        // 1:1 with vanilla AbstractButton: button.png is 200x20 with a 3px
+        // nine-slice border. Using blitNineSlice keeps the bevel crisp.
+        g.blitNineSlice(tex, m_x, m_y, m_w, m_h, 200, 20, 3, 3, 3, 3);
     } else {
         g.fill(m_x, m_y, m_x + m_w, m_y + m_h, hover ? glm::vec4{ 0.4f, 0.4f, 0.5f, 1.0f } : glm::vec4{ 0.25f, 0.25f, 0.25f, 1.0f });
     }
@@ -35,12 +37,33 @@ std::function<void()> WidgetButton::clickAction(double x, double y, int button) 
 
 // ── Slider ───────────────────────────────────────────────────────────────────
 void Slider::render(render::GuiGraphics& g, render::Font& font, int mx, int my) {
-    drawBg(g, false);
-    // Handle (8px) at the value fraction.
+    // 1:1 with vanilla AbstractSliderButton.renderWidget:
+    //   - track: widget/slider.png (200x20, 9-slice border 1) — drawn at full widget size
+    //   - handle: widget/slider_handle.png (8x20, 9-slice border 2,2,2,3) — drawn at the
+    //     value fraction, 8px wide (or wider if the widget is tiny)
+    //   - label: centered, "Label: value"
+    // When the slider textures are null (CI without gui sprites), fall back to
+    // the button texture for the track and a grey fill for the handle.
+    if (m_sliderTrack) {
+        g.blitNineSlice(m_sliderTrack, m_x, m_y, m_w, m_h, 200, 20, 1, 1, 1, 1);
+    } else {
+        drawBg(g, false);
+    }
+
     const double frac = m_max > m_min ? std::clamp((m_value - m_min) / (m_max - m_min), 0.0, 1.0) : 0.0;
-    const int hx = m_x + (int)(frac * (m_w - 8));
+    const int handleW = 8;
+    const int hx = m_x + (int)(frac * (m_w - handleW));
     const bool hover = hovered(mx, my) || m_dragging;
-    g.fill(hx, m_y, hx + 8, m_y + m_h, hover ? glm::vec4{ 0.75f, 0.75f, 0.75f, 1.0f } : glm::vec4{ 0.55f, 0.55f, 0.55f, 1.0f });
+
+    if (m_sliderHandle) {
+        // slider_handle.png is 8x20 with border 2,2,2,3. Use 9-slice so the
+        // handle's bevel stays crisp even if we ever widen it.
+        render::ITexture* hTex = (hover && m_sliderHandleHl) ? m_sliderHandleHl : m_sliderHandle;
+        g.blitNineSlice(hTex, hx, m_y, handleW, m_h, 8, 20, 2, 2, 2, 3);
+    } else {
+        g.fill(hx, m_y, hx + handleW, m_y + m_h, hover ? glm::vec4{ 0.75f, 0.75f, 0.75f, 1.0f } : glm::vec4{ 0.55f, 0.55f, 0.55f, 1.0f });
+    }
+
     drawLabel(g, font, m_label + ": " + m_fmt(m_value));
 }
 bool Slider::mouseClicked(double x, double y, int button) {

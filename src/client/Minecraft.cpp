@@ -1149,6 +1149,15 @@ void Minecraft::render(float pt) {
         m_accessTex  = loadResourceTex(m_device, cmd, IDR_GUI_ACCESS);
         m_splashText = pickSplash();
 
+        // Slider widget textures — loaded from assets.bin (widget/slider.png +
+        // widget/slider_handle.png + widget/slider_handle_highlighted.png).
+        // These are NOT in the .rc resource IDs because they're only used by the
+        // option-screen sliders, not the title screen. loadAssetTex reads them
+        // directly from the MCAS pack.
+        m_sliderTrackTex    = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/slider.png");
+        m_sliderHandleTex   = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/slider_handle.png");
+        m_sliderHandleHlTex = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/slider_handle_highlighted.png");
+
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
         m_gui->setCrosshairTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/crosshair.png"));
@@ -1178,6 +1187,7 @@ void Minecraft::openTitleScreen() {
 void Minecraft::openOptionsScreen() {
     auto os = std::make_unique<gui::screens::OptionsScreen>();
     os->setButtonTextures(m_btnTex, m_btnHlTex);
+    os->setSliderTextures(m_sliderTrackTex, m_sliderHandleTex, m_sliderHandleHlTex);
     os->setBackAction([this]() { openTitleScreen(); });
     setScreen(std::move(os));
 }

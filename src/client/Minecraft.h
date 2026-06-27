@@ -138,6 +138,11 @@ public:
     void renderPanorama(render::ICommandList* cmd, int w, int h, float dtSeconds);
     render::ITexture* panoramaOverlay();
     bool panoramaLoaded() const;
+    // Slider widget textures — exposed so PauseScreen/OptionsScreen can pass them
+    // to the OptionsSubScreen they create (which forwards to Slider widgets).
+    render::ITexture* sliderTrackTex()    { return m_sliderTrackTex; }
+    render::ITexture* sliderHandleTex()   { return m_sliderHandleTex; }
+    render::ITexture* sliderHandleHlTex() { return m_sliderHandleHlTex; }
 
 private:
     friend struct DebugOverlay;  // Development tool — not part of 1:1 port
@@ -227,6 +232,13 @@ private:
     render::ITexture* m_btnHlTex = nullptr;
     render::ITexture* m_langTex = nullptr;
     render::ITexture* m_accessTex = nullptr;
+    // Slider widget textures (widget/slider.png + widget/slider_handle.png +
+    // widget/slider_handle_highlighted.png). Loaded once at first render and
+    // passed to every OptionsSubScreen so sliders render with their real track
+    // + handle instead of falling back to the button texture + grey fill.
+    render::ITexture* m_sliderTrackTex = nullptr;
+    render::ITexture* m_sliderHandleTex = nullptr;
+    render::ITexture* m_sliderHandleHlTex = nullptr;
     std::string       m_splashText;
     GameOptions       m_options;
     int               m_cachedGuiScale = 1;

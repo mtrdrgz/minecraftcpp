@@ -1,4 +1,5 @@
 #include "TitleScreen.h"
+#include "options/OptionsScreen.h"
 #include "../../client/Minecraft.h"
 #include <chrono>
 #include <cmath>
@@ -53,7 +54,14 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
 
     // Language icon, then Options / Quit, then Accessibility icon — one row.
     topPos += 36;
-    addButton(w / 2 - 124, topPos, 20, 20, "", []() {});                              // CommonButtons.language — not ported
+    // Language button → opens LanguageSelectScreen (1:1 with vanilla
+    // TitleScreen: CommonButtons.language → setScreen(new LanguageSelectScreen(...))).
+    addButton(w / 2 - 124, topPos, 20, 20, "", [this]() {
+        auto s = std::make_unique<gui::screens::LanguageSelectScreen>("Language", [this]() { m_minecraft->openTitleScreen(); });
+        s->setButtonTextures(m_btnNormal, m_btnHighlight);
+        s->setSliderTextures(m_minecraft->sliderTrackTex(), m_minecraft->sliderHandleTex(), m_minecraft->sliderHandleHlTex());
+        m_minecraft->setScreen(std::move(s));
+    });
     addButton(w / 2 - 100, topPos, 98, 20, "Options...", [this]() { m_minecraft->openOptionsScreen(); });
     addButton(w / 2 + 2, topPos, 98, 20, "Quit Game", []() {
 #ifdef _WIN32
@@ -62,7 +70,14 @@ void TitleScreen::init(Minecraft* mc, int w, int h) {
         std::exit(0);
 #endif
     });
-    addButton(w / 2 + 104, topPos, 20, 20, "", []() {});                              // CommonButtons.accessibility — not ported
+    // Accessibility button → opens AccessibilityOptionsScreen (1:1 with vanilla
+    // TitleScreen: CommonButtons.accessibility → setScreen(new AccessibilityOptionsScreen(...))).
+    addButton(w / 2 + 104, topPos, 20, 20, "", [this]() {
+        auto s = std::make_unique<gui::screens::AccessibilityOptionsScreen>("Accessibility", [this]() { m_minecraft->openTitleScreen(); });
+        s->setButtonTextures(m_btnNormal, m_btnHighlight);
+        s->setSliderTextures(m_minecraft->sliderTrackTex(), m_minecraft->sliderHandleTex(), m_minecraft->sliderHandleHlTex());
+        m_minecraft->setScreen(std::move(s));
+    });
 }
 
 void TitleScreen::renderDirtBackground(render::GuiGraphics& g) {
@@ -123,10 +138,16 @@ void TitleScreen::render(render::GuiGraphics& g, int mx, int my, float pt) {
         b->render(g, *font, mx, my);
     }
 
-    // Language / accessibility icons on their 20x20 buttons (16x16 sprite, centred).
+    // Language / accessibility icons on their 20x20 buttons.
+    // CommonButtons.java: both sprites are 15x15 (icon/language.png,
+    // icon/accessibility.png). Vanilla centers them in the 20x20 button with
+    // (20-15)/2 = 2.5 → 2px inset. The previous code blitted 16x16 from a 15x15
+    // texture, which sampled 1px past the edge and cut off the icon's right/
+    // bottom side. Using the real 15x15 source size + 9-slice-style centering
+    // fixes the "cut off" look.
     const int rowY = m_height / 4 + 132;
-    if (m_langTex)   g.blit(m_langTex,   m_width / 2 - 124 + 2, rowY + 2, 0.0f, 0.0f, 16, 16, 16, 16);
-    if (m_accessTex) g.blit(m_accessTex, m_width / 2 + 104 + 2, rowY + 2, 0.0f, 0.0f, 16, 16, 16, 16);
+    if (m_langTex)   g.blitSized(m_langTex,   m_width / 2 - 124 + 2, rowY + 2, 16, 16, 0, 0, 15, 15, 15, 15);
+    if (m_accessTex) g.blitSized(m_accessTex, m_width / 2 + 104 + 2, rowY + 2, 16, 16, 0, 0, 15, 15, 15, 15);
 
     // Version (bottom-left) and copyright (bottom-right), like TitleScreen.java.
     font->drawString(g, "Minecraft 26.1.2", 2, m_height - 10, { 1, 1, 1, 1 });
