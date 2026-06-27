@@ -1376,12 +1376,23 @@ void Minecraft::updateLocalChunks() {
     // regenerated/re-decorated (which would re-spill their cross-chunk features).
     restoreCachedChunksInRadius(px, pz, RADIUS);
 
-    // 2. Poll completed generation tasks (bounded — integrating many at once
-    // marks huge mesh-dirty regions and stalls the frame).
+    // 2. Poll completed generation tasks. Scale the integration budget with
+    // how many chunks are missing — when the world is loading (few chunks),
+    // integrate aggressively so the player sees terrain fast. When steady-state
+    // (most chunks loaded), keep it low to avoid frame stalls.
+    const size_t targetCount = static_cast<size_t>((2 * RADIUS + 1) * (2 * RADIUS + 1));
+    const size_t loadedCount = m_chunks.size();
+    int maxIntegrate;
+    if (loadedCount < targetCount / 2) {
+        maxIntegrate = 16;  // aggressive: up to 16 chunks/tick during initial load
+    } else if (loadedCount < targetCount * 3 / 4) {
+        maxIntegrate = 8;   // moderate: 8 chunks/tick during mid-load
+    } else {
+        maxIntegrate = 4;   // conservative: 4 chunks/tick steady-state
+    }
     int integrated = 0;
-    constexpr int MAX_INTEGRATE_PER_TICK = 4;
     for (auto it = m_generationTasks.begin(); it != m_generationTasks.end(); ) {
-        if (integrated >= MAX_INTEGRATE_PER_TICK) break;
+        if (integrated >= maxIntegrate) break;
         // Only check if the future is ready. Do NOT call get() yet — get()
         // consumes the future, and if we can't get the lock below, we'd need
         // to put the result back, which is impossible with std::future.
@@ -1494,13 +1505,17 @@ void Minecraft::updateLocalChunks() {
     });
     
     int queued = 0;
-    // Keep the async queue shallow so completed chunks do not arrive in huge
-    // bursts that stall integration + decoration on the main thread.
-    constexpr int MAX_QUEUE_PER_TICK = 8;
-    int queueBudget = MAX_QUEUE_PER_TICK;
-    const size_t loadedCount = m_chunks.size();
-    const size_t targetCount = static_cast<size_t>((2 * RADIUS + 1) * (2 * RADIUS + 1));
-    if (loadedCount < targetCount / 2) queueBudget = MAX_QUEUE_PER_TICK * 2;
+    // Scale the generation queue budget with how many chunks are missing.
+    // During initial load, submit many chunks so all gen threads stay busy.
+    // During steady-state, keep it low to avoid frame stalls.
+    int queueBudget;
+    if (loadedCount < targetCount / 2) {
+        queueBudget = 32;  // aggressive: flood the gen pool during initial load
+    } else if (loadedCount < targetCount * 3 / 4) {
+        queueBudget = 16;  // moderate
+    } else {
+        queueBudget = 8;   // conservative steady-state
+    }
     for (const auto& cand : candidates) {
         if (!m_threadPool) break;
         
