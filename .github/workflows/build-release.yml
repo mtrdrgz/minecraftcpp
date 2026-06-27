@@ -291,7 +291,8 @@ jobs:
           def chunk(t,d):
               c=t+d
               return struct.pack('>I',len(d))+c+struct.pack('>I',zlib.crc32(c)&0xFFFFFFFF)
-          ihdr=chunk(b'IHDR',struct.pack('>IHHBBBBB',w,h,8,6,0,0,0))
+          # IHDR: width(I) height(I) bit_depth(B) color_type(B) compression(B) filter(B) interlace(B)
+          ihdr=chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))
           idat=chunk(b'IDAT',zlib.compress(raw))
           iend=chunk(b'IEND',b'')
           open('AppDir/mcpp.png','wb').write(sig+ihdr+idat+iend)
