@@ -12,6 +12,7 @@
 #endif
 
 #include "core/Log.h"
+#include "core/CrashHandler.h"
 #include "platform/Window.h"
 #include "assets/AssetPack.h"
 #include "render/RenderBackend.h"
@@ -55,8 +56,36 @@ static void parseCommandLine(int argc, char** argv,
 }
 
 int main(int argc, char** argv) {
+    // ── Open the log file FIRST, before anything else ──
+    // The log file is mcpp.log, placed next to the executable (or in cwd).
+    // Every MC_LOG_* call writes to both stdout and this file, with auto-flush
+    // so a crash never loses the last few lines.
+    {
+        std::string logPath = "mcpp.log";
+#ifdef _WIN32
+        // On Windows, put the log next to the .exe (not in cwd, which might be
+        // a system dir if launched from a shortcut).
+        char exePath[MAX_PATH];
+        DWORD len = GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+        if (len > 0) {
+            std::string p(exePath, len);
+            size_t slash = p.find_last_of("\\/");
+            if (slash != std::string::npos) {
+                logPath = p.substr(0, slash + 1) + "mcpp.log";
+            }
+        }
+#endif
+        mc::log::FileLogger::instance().open(logPath);
+        MC_LOG_INFO("mcpp starting — Minecraft 26.1.2 C++ port");
+        MC_LOG_INFO("log file: {}", mc::log::FileLogger::instance().path());
+    }
 
-    MC_LOG_INFO("mcpp starting — Minecraft 26.1.2 C++ port");
+    // ── Install crash handlers + hang watchdog ──
+    // These write crash dumps (signal code + stack trace + phase) to mcpp.log
+    // before the process dies, so we can debug crashes/hangs from the log.
+    mc::debug::initCrashHandlers();
+    mc::debug::startWatchdog();
+    MC_LOG_INFO("crash handlers + hang watchdog installed");
 
     if (!mc::AssetPack::init()) {
         MC_LOG_ERROR("Critical Error: assets.bin not found or invalid");
@@ -134,6 +163,8 @@ int main(int argc, char** argv) {
     bool escWasDown = false;
 
     while (window.pollEvents()) {
+        mc::debug::frameHeartbeat();  // tell the watchdog we're alive
+        mc::debug::setPhase("input");
         const bool escDown = window.isKeyDown(VK_ESCAPE);
         if (escDown && !escWasDown) {
             if (mc.screen()) {
@@ -207,6 +238,7 @@ int main(int argc, char** argv) {
         constexpr double MAX_TICK_ACCUM_MS = TICK_MS * 5.0;
         if (tickAccum > MAX_TICK_ACCUM_MS) tickAccum = MAX_TICK_ACCUM_MS;
         int ticksThisFrame = 0;
+        mc::debug::setPhase("tick");
         while (tickAccum >= TICK_MS && ticksThisFrame < MAX_TICKS_PER_FRAME) {
             mc.tick();
             tickAccum -= TICK_MS;
@@ -214,20 +246,31 @@ int main(int argc, char** argv) {
         }
 
         float partialTick = (float)(tickAccum / TICK_MS);
+        mc::debug::setPhase("render");
         mc.resizeGui();
         mc.render(partialTick);
 
         static int frames = 0;
         if (++frames % 100 == 0) MC_LOG_INFO("Main loop ticking, frames={}", frames);
 
+        // Log slow frames (>100ms) with the phase so we can see what's slow.
+        // The watchdog checks for >2s hangs; this catches the "slow but not
+        // frozen" case that makes the game feel terrible.
+        if (dtMs > 100.0) {
+            MC_LOG_WARN("Slow frame: {:.1f}ms (phase=render, frames={})", dtMs, frames);
+        }
+
+        mc::debug::setPhase("gpu");
         auto* cmd = device->beginFrame(window.width(), window.height());
         if (cmd) {
             cmd->clear(SKY_R, SKY_G, SKY_B, 1.0f, true);
 
             if (mc.isInGame()) {
+                mc::debug::setPhase("renderLevel");
                 levelRenderer.renderLevel(cmd, partialTick);
 
                 if (mc.gui() && mc.guiGraphics()) {
+                    mc::debug::setPhase("gui");
                     if (mc.screen()) {
                         mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
                     } else {
@@ -241,17 +284,22 @@ int main(int argc, char** argv) {
                     mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
                 }
             } else if (mc.screen()) {
+                mc::debug::setPhase("panorama");
                 mc.renderPanorama(cmd, window.width(), window.height(), (float)(dtMs / 1000.0));
                 mc.screen()->render(*mc.guiGraphics(), (int)mc.guiMouseX(), (int)mc.guiMouseY(), partialTick);
                 mc.guiGraphics()->render(cmd, (float)mc.guiScaledWidth(), (float)mc.guiScaledHeight());
             }
 
+            mc::debug::setPhase("endFrame");
             device->endFrame();
         }
     }
 
+    mc::debug::setPhase("shutdown");
+    mc::debug::stopWatchdog();
     device->waitIdle();
     mc.disconnect();
     mc::AssetPack::shutdown();
+    MC_LOG_INFO("mcpp shutdown complete");
     return 0;
 }

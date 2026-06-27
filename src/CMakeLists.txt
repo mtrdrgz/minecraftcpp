@@ -9,6 +9,7 @@ set(MC_SOURCES
     # Core
     core/StbImpl.cpp
     core/ThreadPool.cpp
+    core/CrashHandler.cpp
     # Debug overlay (development tool, not part of 1:1 port)
     debug/DebugOverlay.cpp
     # Profiling

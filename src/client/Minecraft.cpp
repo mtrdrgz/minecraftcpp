@@ -1165,7 +1165,10 @@ void Minecraft::render(float pt) {
         m_scrollerTex    = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/scroller.png");
         m_scrollerBgTex  = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/widget/scroller_background.png");
         // menu_list_background.png is a 32x32 tiled dark texture for list backgrounds.
-        m_listBgTex      = loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/list_background.png");
+        // Vanilla has 2 variants: menu_list_background (out-of-world) and
+        // inworld_menu_list_background (in-game). We use the in-world variant
+        // since most option screens are opened from the pause menu.
+        m_listBgTex      = loadAssetTex(m_device, cmd, "minecraft/textures/gui/inworld_menu_list_background.png");
 
         m_gui->setHotbarTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar.png"));
         m_gui->setSelectionTexture(loadAssetTex(m_device, cmd, "minecraft/textures/gui/sprites/hud/hotbar_selection.png"));
