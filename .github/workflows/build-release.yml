@@ -305,15 +305,19 @@ jobs:
           # Build the AppImage.
           # APPIMAGE_EXTRACT_AND_RUN=1: extract on CI runners where FUSE may not be available.
           # ARCH=x86_64: target architecture.
-          # OUTPUT: explicit output filename (overrides the default Name-based name).
+          # linuxdeploy names the output <Name>-<arch>.AppImage based on the desktop
+          # file's Name field; we rename it to our preferred name afterwards.
           export APPIMAGE_EXTRACT_AND_RUN=1
           export ARCH=x86_64
-          OUTPUT="dist/mcpp-$short-linux-x64.AppImage" ./linuxdeploy-x86_64.AppImage \
+          ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --desktop-file AppDir/mcpp.desktop \
             --icon-file AppDir/mcpp.png \
             --output appimage
 
+          # linuxdeploy produces MinecraftCPP-x86_64.AppImage in the CWD; move it.
+          mv MinecraftCPP-x86_64.AppImage "dist/mcpp-$short-linux-x64.AppImage" 2>/dev/null || \
+            mv *.AppImage "dist/mcpp-$short-linux-x64.AppImage" 2>/dev/null || true
           sha256sum "dist/mcpp-$short-linux-x64.AppImage" > "dist/mcpp-$short-linux-x64.AppImage.sha256"
           ls -la dist/
 
@@ -337,6 +341,12 @@ jobs:
     needs: [build-windows, build-linux-binary, build-linux-appimage]
     timeout-minutes: 5
     steps:
+      # gh CLI needs a git repo to resolve the owner/repo. Checkout with depth=1
+      # is enough — we don't build anything here, just collect artifacts + publish.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
