@@ -485,8 +485,21 @@ void LevelRenderer::uploadAndDrawSection(ICommandList* cmd, SectionMesh& mesh) {
 }
 
 void LevelRenderer::renderLevel(ICommandList* cmd, float partialTick) {
-    static bool atlasLoaded = false;
-    if (!atlasLoaded) { loadAtlas(cmd); atlasLoaded = true; }
+    // Defer atlas loading to frame 2+. The atlas stitch takes ~400ms (4776 PNGs).
+    // Previously this blocked frame 1, delaying the first visible frame by 400ms.
+    // Now frame 1 renders immediately (sky only — no atlas = chunks skip rendering),
+    // and frame 2 does the atlas stitch. The player sees the sky on frame 1 (~5ms)
+    // instead of a frozen screen for 400ms.
+    static int atlasLoadFrame = 0;
+    if (!m_atlas.isLoaded()) {
+        if (atlasLoadFrame < 1) {
+            // Frame 0: skip atlas, just render sky. Fast.
+            atlasLoadFrame++;
+        } else {
+            // Frame 1+: stitch atlas (blocks this frame, but frame 0 already showed sky).
+            loadAtlas(cmd);
+        }
+    }
 
     // Advance animated block textures (water/lava/fire/...) and re-upload if changed.
     if (m_atlas.isLoaded()) {

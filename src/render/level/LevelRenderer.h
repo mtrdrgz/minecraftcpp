@@ -12,7 +12,6 @@
 #include <memory>
 #include <future>
 #include <chrono>
-#include <vector>
 #include <glm/glm.hpp>
 
 namespace mc::render {
@@ -56,6 +55,8 @@ private:
     IBuffer*       m_hotbarSelVbo = nullptr;
     IBuffer*       m_hotbarSelIbo = nullptr;
     TextureAtlas   m_atlas;
+    bool           m_atlasLoading = false;
+    std::future<void> m_atlasStitchFuture;
     std::unique_ptr<EntityRenderDispatcher> m_entityRenderer;
 
     // Per-biome block colouring (grass/foliage/water). Loaded once when a world is

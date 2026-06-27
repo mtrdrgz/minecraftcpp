@@ -55,13 +55,28 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     // click-to-ingame path without changing final terrain output.
     m_localGenerator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
 
-    // Decoration context (certified machinery; loads worldgen data from disk).
-    // Created up front so the streaming path can freeze each generated chunk's
-    // WG heightmaps at integration time — the chunk map was just cleared, so the
-    // old context (if any) must go with it.
+    // Defer decoration context creation to a background thread. It takes ~250ms
+    // (loading all placed features from JSON). The streaming pipeline will
+    // submit decoration requests, but the worker will no-op until the context
+    // is ready (ensureEngineDecoration is called below in a background thread).
+    m_worldgenReady = false;
+    m_worldgenTried = false;
+    m_biomeFeatures.reset();
+    m_blockTags.reset();
+    m_worldgenDir.clear();
+    m_dataMinecraftDir.clear();
+    m_haveLastStreamPlayerPos = false;
+    m_lastLocalMovement = std::chrono::steady_clock::now();
+
     ensureWorldgenData();
+    // Create decoration context in a background thread — don't block the main
+    // thread on the 250ms feature resolution. The decoration workers will
+    // pick up chunks once the context is ready.
     levelgen::feature::resetEngineDecoration();
-    levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
+    std::thread decoInitThread([this]() {
+        levelgen::feature::ensureEngineDecoration(m_dataMinecraftDir, m_worldSeed, &m_chunks);
+    });
+    decoInitThread.detach();
 
     PlayerState& state = m_localPlayer.state();
     state.entityId = 0;
@@ -90,7 +105,7 @@ void Minecraft::startLocalGameFast(uint64_t seed, int spawnX, int spawnZ, std::o
     //
     // We also call updateLocalChunks() to start integrating any that finish
     // before the first frame.
-    constexpr int FAST_START_RADIUS = 6;
+    constexpr int FAST_START_RADIUS = 4;
     const ChunkPos spawnChunk = worldToChunk(spawnX, spawnZ);
     int submitted = 0;
     for (int dz = -FAST_START_RADIUS; dz <= FAST_START_RADIUS; ++dz) {

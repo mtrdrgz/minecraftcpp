@@ -1350,7 +1350,7 @@ void Minecraft::updateLocalChunks() {
     // regardless of player movement — the worker handles them async.
     (void)now;  // suppress unused warning if m_lastLocalMovement isn't read elsewhere
     
-    constexpr int RADIUS = 6;
+    constexpr int RADIUS = 4;
     
     // 1. Unload chunks outside RADIUS
     std::vector<ChunkPos> toUnload;
