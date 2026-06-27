@@ -7937,6 +7937,7 @@ namespace {
 int floorDiv(int x, int y) { int q = x / y, r = x % y; if (r != 0 && ((r < 0) != (y < 0))) --q; return q; }
 std::string stripNs(const std::string& id) { auto c = id.find(':'); return c == std::string::npos ? id : id.substr(c + 1); }
 std::int64_t packChunk(int cx, int cz) { return (static_cast<std::int64_t>(static_cast<std::uint32_t>(cx)) << 32) | static_cast<std::uint32_t>(cz); }
+void unpackChunk(std::int64_t key, int& cx, int& cz) { cx = static_cast<std::int32_t>(key >> 32); cz = static_cast<std::int32_t>(key); }
 
 bool endsWith(std::string_view s, std::string_view suffix) {
     return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
@@ -11963,10 +11964,26 @@ static void prepareFeatureTurn(EngineDecorationContext* ctx, int cx, int cz) {
     if (!ctx) return;
     // PASS-A store for the 3x3 around the decorated chunk (possibleBiomes scan +
     // every zoomed biome read of this turn stays inside it), filled on demand.
+    // The biomeStore is a cache — if a chunk's biomes were already sampled
+    // (by a previous decoration turn that overlapped), they're reused. This
+    // saves 8/9 of the biome sampling for interior chunks (only the 1 new
+    // edge chunk needs sampling when moving by 1).
     for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
         const std::int64_t key = packChunk(cx + dx, cz + dz);
         if (ctx->biomeStore.find(key) == ctx->biomeStore.end())
             fillBiomeStoreChunk(ctx->gen, ctx->biomeStore, cx + dx, cz + dz);
+    }
+    // Evict biome store entries that are more than 2 chunks outside the current
+    // 3×3 to prevent unbounded memory growth. Keep a 5×5 window (3×3 + 1 ring).
+    {
+        std::vector<std::int64_t> toErase;
+        for (const auto& [k, v] : ctx->biomeStore) {
+            int bcx, bcz;
+            unpackChunk(k, bcx, bcz);
+            if (std::abs(bcx - cx) > 2 || std::abs(bcz - cz) > 2)
+                toErase.push_back(k);
+        }
+        for (auto k : toErase) ctx->biomeStore.erase(k);
     }
     g_biomeCtx = &ctx->biomeCtx;
     g_level = &ctx->level;

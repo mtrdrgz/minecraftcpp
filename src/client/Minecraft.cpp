@@ -710,23 +710,25 @@ void Minecraft::decorationWorkerLoop() {
         }
         if (!c) continue;
         // Exclude the render thread's mesh-snapshot copy while we write block data
-        auto writeLockStart = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> writeLk(m_chunkWriteMutex);
-        auto writeLockAcquired = std::chrono::steady_clock::now();
-        double writeLockMs = std::chrono::duration<double, std::milli>(writeLockAcquired - writeLockStart).count();
         try {
+            auto t0 = std::chrono::steady_clock::now();
             levelgen::feature::beginFeatureTurn(*c);
+            auto t1 = std::chrono::steady_clock::now();
             runStructures(cp);
+            auto t2 = std::chrono::steady_clock::now();
             decorateChunk(*c);
+            auto t3 = std::chrono::steady_clock::now();
+            double featureMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            double structMs = std::chrono::duration<double, std::milli>(t2 - t1).count();
+            double decoMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
+            double totalMs = std::chrono::duration<double, std::milli>(t3 - t0).count();
+            if (totalMs > 50.0) {
+                MC_LOG_WARN("SLOW DECORATE ({},{}) total={:.1f}ms (feature={:.1f} struct={:.1f} deco={:.1f})",
+                            cp.x, cp.z, totalMs, featureMs, structMs, decoMs);
+            }
         } catch (const std::exception& e) {
             MC_LOG_WARN("decorationWorker failed at ({},{}): {}", cp.x, cp.z, e.what());
-        }
-        auto decoEnd = std::chrono::steady_clock::now();
-        double decoMs = std::chrono::duration<double, std::milli>(decoEnd - decoStart).count();
-        // Log slow decorations (>50ms) — these are the chunks that cause hangs.
-        if (decoMs > 50.0) {
-            MC_LOG_WARN("SLOW DECORATE ({},{}) {:.1f}ms (writeLock={:.1f}ms)",
-                        cp.x, cp.z, decoMs, writeLockMs);
         }
         // Report completion — the main thread will mark meshDirty on the 3x3.
         {
@@ -1296,7 +1298,7 @@ void Minecraft::updateLocalChunks() {
     // regardless of player movement — the worker handles them async.
     (void)now;  // suppress unused warning if m_lastLocalMovement isn't read elsewhere
     
-    constexpr int RADIUS = 6;
+    constexpr int RADIUS = 10;
     
     // 1. Unload chunks outside RADIUS
     std::vector<ChunkPos> toUnload;
@@ -1325,7 +1327,7 @@ void Minecraft::updateLocalChunks() {
     // 2. Poll completed generation tasks (bounded — integrating many at once
     // marks huge mesh-dirty regions and stalls the frame).
     int integrated = 0;
-    constexpr int MAX_INTEGRATE_PER_TICK = 2;
+    constexpr int MAX_INTEGRATE_PER_TICK = 4;
     for (auto it = m_generationTasks.begin(); it != m_generationTasks.end(); ) {
         if (integrated >= MAX_INTEGRATE_PER_TICK) break;
         // Only check if the future is ready. Do NOT call get() yet — get()
@@ -1394,14 +1396,15 @@ void Minecraft::updateLocalChunks() {
             return (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz)
                  < (b.x - px) * (b.x - px) + (b.z - pz) * (b.z - pz);
         });
-        // Submit at most one new decoration request per tick — the worker
-        // drains the queue at its own pace. tryDecorate marks the chunk
-        // decorated=true synchronously so we don't resubmit it.
+        // Submit up to 3 decoration requests per tick — the worker drains
+        // the queue at its own pace. tryDecorate marks the chunk decorated=true
+        // synchronously so we don't resubmit it.
+        int decoSubmitted = 0;
         for (ChunkPos cp : ready) {
             LevelChunk* c = getChunk(cp);
             if (!c || c->decorated) continue;
             tryDecorate(cp);
-            break;  // one per tick
+            if (++decoSubmitted >= 3) break;
         }
     }
 
@@ -1442,7 +1445,7 @@ void Minecraft::updateLocalChunks() {
     int queued = 0;
     // Keep the async queue shallow so completed chunks do not arrive in huge
     // bursts that stall integration + decoration on the main thread.
-    constexpr int MAX_QUEUE_PER_TICK = 4;
+    constexpr int MAX_QUEUE_PER_TICK = 8;
     int queueBudget = MAX_QUEUE_PER_TICK;
     const size_t loadedCount = m_chunks.size();
     const size_t targetCount = static_cast<size_t>((2 * RADIUS + 1) * (2 * RADIUS + 1));
@@ -1466,23 +1469,25 @@ void Minecraft::updateLocalChunks() {
                 };
                 thread_local ThreadGeneratorCache cache;
                 if (!cache.generator || cache.seed != seed) {
-                    PROFILE_SCOPE_CHUNK("generator_threadlocal_setup", pos.x, pos.z);
                     cache.seed = seed;
                     cache.generator = std::make_unique<levelgen::NoiseBasedChunkGenerator>(seed);
                 }
                 levelgen::NoiseBasedChunkGenerator& generator = *cache.generator;
-                {
-                    PROFILE_SCOPE_CHUNK("fillFromNoise", pos.x, pos.z);
-                    generator.fillFromNoise(*out.chunk, &out.genMarks,
-                                            beard->isEmpty() ? nullptr : beard.get());
-                }
-                {
-                    PROFILE_SCOPE_CHUNK("buildSurface", pos.x, pos.z);
-                    generator.buildSurface(*out.chunk);
-                }
-                {
-                    PROFILE_SCOPE_CHUNK("applyCarvers", pos.x, pos.z);
-                    generator.applyCarvers(*out.chunk, &out.genMarks);
+                auto gt0 = std::chrono::steady_clock::now();
+                generator.fillFromNoise(*out.chunk, &out.genMarks,
+                                        beard->isEmpty() ? nullptr : beard.get());
+                auto gt1 = std::chrono::steady_clock::now();
+                generator.buildSurface(*out.chunk);
+                auto gt2 = std::chrono::steady_clock::now();
+                generator.applyCarvers(*out.chunk, &out.genMarks);
+                auto gt3 = std::chrono::steady_clock::now();
+                double noiseMs = std::chrono::duration<double, std::milli>(gt1 - gt0).count();
+                double surfMs = std::chrono::duration<double, std::milli>(gt2 - gt1).count();
+                double carveMs = std::chrono::duration<double, std::milli>(gt3 - gt2).count();
+                double genTotal = std::chrono::duration<double, std::milli>(gt3 - gt0).count();
+                if (genTotal > 30.0) {
+                    MC_LOG_WARN("SLOW GEN ({},{}) total={:.1f}ms (noise={:.1f} surf={:.1f} carve={:.1f})",
+                                pos.x, pos.z, genTotal, noiseMs, surfMs, carveMs);
                 }
                 return out;
             })
