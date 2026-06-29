@@ -13,6 +13,7 @@
 #include "pools/PoolAlias.h"
 #include "pools/StructureTemplatePool.h"
 #include "templatesystem/StructureTemplateLoader.h"
+#include "templatesystem/StructureTransforms.h"
 
 #include "core/Log.h"
 #include "nbt/NbtIo.h"
@@ -3151,10 +3152,133 @@ std::vector<DumpStart> dumpStructureStarts(
                     ds.pieces.push_back(std::move(dp));
                 }
             }
+            else if (cfg.structureType == "minecraft:ocean_ruin") {
+                // OceanRuinStructure.generatePieces + OceanRuinPieces.addPieces.
+                // Replicates the exact RNG sequence and computes piece BBs from
+                // template sizes via structureGetBoundingBox (the 1:1 port of
+                // StructureTemplate.getBoundingBox). Y=90 is fixed (no terrain
+                // height needed — the piece BB is the INITIAL BB, not postProcess).
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                const int rotIdx = random->nextInt(4);
+                const Rotation rot = static_cast<Rotation>(rotIdx);
+                const BlockPos offset{ active.x * 16, 90, active.z * 16 };
+                const bool isLarge = random->nextFloat() <= cfg.largeProbability;
+                const float baseIntegrity = isLarge ? 0.9f : 0.8f;
+                const bool warm = cfg.oceanRuinWarm;
+
+                // Helper: compute BB for a template at (pos, rot) using the Java formula.
+                auto computeBB = [&](const std::string& loc, const BlockPos& pos, Rotation r) -> BoundingBox {
+                    Vec3i sz = runtime->sizeOf(loc);
+                    return mc::levelgen::structure::structureGetBoundingBox(
+                        pos, r, mc::levelgen::structure::kBlockPosZero, mc::levelgen::structure::Mirror::NONE, sz);
+                };
+
+                // addOceanRuinPiece: cold → 3 pieces (brick/cracked/mossy), warm → 1 piece
+                static const char* WARM_RUINS_S[]   = { "warm_1","warm_2","warm_3","warm_4","warm_5","warm_6","warm_7","warm_8" };
+                static const char* BIG_WARM_RUINS[] = { "big_warm_4","big_warm_5","big_warm_6","big_warm_7" };
+                static const char* RUINS_BRICK[]    = { "brick_1","brick_2","brick_3","brick_4","brick_5","brick_6","brick_7","brick_8" };
+                static const char* RUINS_CRACKED[]  = { "cracked_1","cracked_2","cracked_3","cracked_4","cracked_5","cracked_6","cracked_7","cracked_8" };
+                static const char* RUINS_MOSSY[]    = { "mossy_1","mossy_2","mossy_3","mossy_4","mossy_5","mossy_6","mossy_7","mossy_8" };
+                static const char* BIG_RUINS_BRICK[]= { "big_brick_1","big_brick_2","big_brick_3","big_brick_8" };
+                static const char* BIG_RUINS_CRACKED[]= { "big_cracked_1","big_cracked_2","big_cracked_3","big_cracked_8" };
+                static const char* BIG_RUINS_MOSSY[]= { "big_mossy_1","big_mossy_2","big_mossy_3","big_mossy_8" };
+
+                auto addRuinPiece = [&](const BlockPos& pos, Rotation r, bool large, float /*integrity*/) {
+                    if (warm) {
+                        const char* leaf = large ? BIG_WARM_RUINS[random->nextInt(4)]
+                                                  : WARM_RUINS_S[random->nextInt(8)];
+                        std::string loc = std::string("minecraft:underwater_ruin/") + leaf;
+                        BoundingBox bb = computeBB(loc, pos, r);
+                        DumpPiece dp;
+                        dp.id = "minecraft:orp";
+                        dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
+                        dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
+                        dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                        dp.genDepth = 0;
+                        ds.pieces.push_back(std::move(dp));
+                    } else {
+                        const char** bricks  = large ? BIG_RUINS_BRICK   : RUINS_BRICK;
+                        const char** cracked = large ? BIG_RUINS_CRACKED : RUINS_CRACKED;
+                        const char** mossy   = large ? BIG_RUINS_MOSSY   : RUINS_MOSSY;
+                        const int len = large ? 4 : 8;
+                        const int idx = random->nextInt(len);
+                        // 3 pieces: brick, cracked, mossy — all at same pos/rot, same BB
+                        for (const char* suffix : { bricks[idx], cracked[idx], mossy[idx] }) {
+                            std::string loc = std::string("minecraft:underwater_ruin/") + suffix;
+                            BoundingBox bb = computeBB(loc, pos, r);
+                            DumpPiece dp;
+                            dp.id = "minecraft:orp";
+                            dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
+                            dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
+                            dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                            dp.genDepth = 0;
+                            ds.pieces.push_back(std::move(dp));
+                        }
+                    }
+                };
+
+                addRuinPiece(offset, rot, isLarge, baseIntegrity);
+
+                // Optional cluster: 4-8 child ruins at random positions
+                if (isLarge && random->nextFloat() <= cfg.clusterProbability) {
+                    // Replicate addClusterRuins + allPositions
+                    const auto orot = static_cast<mc::levelgen::structure::oceanruin::Rotation>(static_cast<int>(rot));
+                    const mc::levelgen::structure::oceanruin::BlockPos parentPos{ offset.x, 90, offset.z };
+                    const mc::levelgen::structure::oceanruin::BlockPos parentCorner =
+                        mc::levelgen::structure::oceanruin::transform(
+                            mc::levelgen::structure::oceanruin::BlockPos{15, 0, 15},
+                            mc::levelgen::structure::oceanruin::Mirror::NONE, orot,
+                            mc::levelgen::structure::oceanruin::BlockPos{0, 0, 0})
+                        .offset(parentPos.x, parentPos.y, parentPos.z);
+                    const mc::levelgen::structure::oceanruin::BlockPos parentBottomLeft{
+                        std::min(parentPos.x, parentCorner.x), parentPos.y,
+                        std::min(parentPos.z, parentCorner.z) };
+
+                    // allPositions: 16 raw nextInt draws (x then z per position)
+                    static const int32_t boundsX[8] = { 8, 8, 8, 7, 7, 7, 7, 7 };
+                    static const int32_t boundsZ[8] = { 7, 7, 5, 7, 3, 6, 7, 5 };
+                    mc::levelgen::structure::oceanruin::ClusterCandidateDraws draws{};
+                    for (int i = 0; i < 8; ++i) {
+                        draws.raw[2 * i]     = random->nextInt(boundsX[i]);
+                        draws.raw[2 * i + 1] = random->nextInt(boundsZ[i]);
+                    }
+                    std::array<mc::levelgen::structure::oceanruin::BlockPos, 8> arr =
+                        mc::levelgen::structure::oceanruin::allPositions(parentBottomLeft, draws);
+                    std::vector<mc::levelgen::structure::oceanruin::BlockPos> positions(arr.begin(), arr.end());
+
+                    const int ruins = 4 + random->nextInt(5);  // Mth.nextInt(random, 4, 8)
+                    for (int i = 0; i < ruins; ++i) {
+                        if (positions.empty()) continue;
+                        const int idx = random->nextInt(static_cast<int>(positions.size()));
+                        const auto rp = positions[idx];
+                        positions.erase(positions.begin() + idx);
+                        const int nextRotIdx = random->nextInt(4);
+                        const auto nextOrot = static_cast<mc::levelgen::structure::oceanruin::Rotation>(nextRotIdx);
+                        const auto nextRot = static_cast<Rotation>(nextRotIdx);
+                        const mc::levelgen::structure::oceanruin::BlockPos nextCorner =
+                            mc::levelgen::structure::oceanruin::transform(
+                                mc::levelgen::structure::oceanruin::BlockPos{5, 0, 6},
+                                mc::levelgen::structure::oceanruin::Mirror::NONE, nextOrot,
+                                mc::levelgen::structure::oceanruin::BlockPos{0, 0, 0})
+                            .offset(rp.x, rp.y, rp.z);
+                        const mc::levelgen::structure::oceanruin::BoundingBox nextBB =
+                            mc::levelgen::structure::oceanruin::BoundingBox::fromCorners(rp, nextCorner);
+                        const mc::levelgen::structure::oceanruin::BoundingBox parentBB =
+                            mc::levelgen::structure::oceanruin::BoundingBox::fromCorners(parentPos, parentCorner);
+                        if (!nextBB.intersects(parentBB)) {
+                            // Child piece (always small, 0.8 integrity)
+                            BlockPos childPos{ rp.x, rp.y, rp.z };
+                            addRuinPiece(childPos, nextRot, /*isLarge*/ false, 0.8f);
+                        }
+                    }
+                }
+            }
             // TODO: add assembly for swamp_hut, desert_pyramid, jungle_temple,
-            // igloo, shipwreck, ocean_ruin, ruined_portal, buried_treasure,
-            // nether_fossil. For now these return empty piece lists (skipped
-            // by the `if (!ds.pieces.empty())` check below).
+            // igloo, shipwreck, ruined_portal, buried_treasure, nether_fossil.
+            // These need either terrain height (buried_treasure, shipwreck Y) or
+            // piece-specific BB computation. For now they return empty piece lists.
 
             if (ds.pieces.empty()) return false;
             out.push_back(std::move(ds));

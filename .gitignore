@@ -90,3 +90,4 @@ build-run/
 build-asan/
 build-*/
 vendor/glfw/
+libraries/
