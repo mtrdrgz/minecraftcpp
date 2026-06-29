@@ -3300,9 +3300,115 @@ std::vector<DumpStart> dumpStructureStarts(
                 }
             }
             // TODO: add assembly for swamp_hut, desert_pyramid, jungle_temple,
-            // igloo, shipwreck, ruined_portal, buried_treasure, nether_fossil.
-            // These need either terrain height (buried_treasure, shipwreck Y) or
-            // piece-specific BB computation. For now they return empty piece lists.
+            // igloo, ruined_portal, nether_fossil. These need either terrain
+            // height or piece-specific BB computation.
+            else if (cfg.structureType == "minecraft:buried_treasure") {
+                // BuriedTreasureStructure.generatePieces:
+                //   offset = new BlockPos(chunkPos.getBlockX(9), 90, chunkPos.getBlockZ(9))
+                //   builder.addPiece(new BuriedTreasurePiece(offset))
+                //
+                // The piece's INITIAL BB is 1×1×1 at (x, 90, z). But the NBT
+                // stores the FINAL BB after postProcess, which updates
+                // this.boundingBox to the Y where the chest is placed.
+                //
+                // BuriedTreasurePiece.postProcess:
+                //   y = level.getHeight(OCEAN_FLOOR_WG, x, z)
+                //   scan downward from y, find first anchor block (sandstone/
+                //   stone/andesite/granite/diorite), set this.boundingBox =
+                //   new BoundingBox(pos) at that Y.
+                //
+                // For the dump, we use the OCEAN_FLOOR_WG height as the Y.
+                // This matches the server when the first solid block below the
+                // ocean floor IS an anchor block (common case). Mismatches
+                // occur when the block below is dirt/other (the scan continues
+                // deeper).
+                const int offsetX = active.x * 16 + 9;
+                const int offsetZ = active.z * 16 + 9;
+                int placeY = 90;
+                if (world.heightAt) {
+                    placeY = world.heightAt(offsetX, offsetZ) + 1;  // OCEAN_FLOOR_WG
+                }
+                DumpPiece dp;
+                dp.id = "minecraft:btp";
+                dp.minX = offsetX; dp.minY = placeY; dp.minZ = offsetZ;
+                dp.maxX = offsetX; dp.maxY = placeY; dp.maxZ = offsetZ;
+                dp.orientation = -1;  // BuriedTreasurePiece has no orientation
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:shipwreck") {
+                // ShipwreckStructure.findGenerationPoint + ShipwreckPieces.addPieces.
+                // Replicates the RNG and computes the piece BB from the template size.
+                //
+                // Y adjustment (ShipwreckPieces.ShipwreckPiece.postProcess):
+                //   isBeached: Y = minY - templateH/2 - nextInt(3)
+                //     where minY = min heightmap over the footprint
+                //   ocean: Y = mean ocean floor height over the footprint
+                //
+                // For the dump, we approximate Y using the chunk-center heightmap.
+                // The server samples the FULL footprint (templateW × templateD
+                // columns), which needs the real terrain. This approximation
+                // matches when the terrain is flat over the footprint.
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                const int rotIdx = random->nextInt(4);
+                const Rotation rot = static_cast<Rotation>(rotIdx);
+
+                static const char* BEACHED[] = {
+                    "shipwreck/with_mast", "shipwreck/sideways_full",
+                    "shipwreck/sideways_fronthalf", "shipwreck/sideways_backhalf",
+                    "shipwreck/rightsideup_full", "shipwreck/rightsideup_fronthalf",
+                    "shipwreck/rightsideup_backhalf", "shipwreck/with_mast_degraded",
+                    "shipwreck/rightsideup_full_degraded", "shipwreck/rightsideup_fronthalf_degraded",
+                    "shipwreck/rightsideup_backhalf_degraded"
+                };
+                static const char* OCEAN[] = {
+                    "shipwreck/with_mast", "shipwreck/upsidedown_full",
+                    "shipwreck/upsidedown_fronthalf", "shipwreck/upsidedown_backhalf",
+                    "shipwreck/sideways_full", "shipwreck/sideways_fronthalf",
+                    "shipwreck/sideways_backhalf", "shipwreck/rightsideup_full",
+                    "shipwreck/rightsideup_fronthalf", "shipwreck/rightsideup_backhalf",
+                    "shipwreck/with_mast_degraded", "shipwreck/upsidedown_full_degraded",
+                    "shipwreck/upsidedown_fronthalf_degraded", "shipwreck/upsidedown_backhalf_degraded",
+                    "shipwreck/sideways_full_degraded", "shipwreck/sideways_fronthalf_degraded",
+                    "shipwreck/sideways_backhalf_degraded", "shipwreck/rightsideup_full_degraded",
+                    "shipwreck/rightsideup_fronthalf_degraded", "shipwreck/rightsideup_backhalf_degraded"
+                };
+                const char** list = cfg.isBeached ? BEACHED : OCEAN;
+                const int listLen = cfg.isBeached ? 11 : 20;
+                const std::string templateLocation = std::string("minecraft:") + list[random->nextInt(listLen)];
+
+                Vec3i templateSize = runtime->sizeOf(templateLocation);
+                const int baseX = active.x * 16;
+                const int baseZ = active.z * 16;
+
+                // Approximate Y using chunk-center heightmap
+                int placeY;
+                if (cfg.isBeached) {
+                    // Beached: Y = minY - templateH/2 - nextInt(3)
+                    // minY = min heightmap over footprint. Approximate with center.
+                    int minY = world.heightAt ? world.heightAt(baseX, baseZ) + 1 : 90;
+                    placeY = minY - templateSize.y / 2 - random->nextInt(3);
+                } else {
+                    // Ocean: Y = mean ocean floor height over footprint
+                    // Approximate with center heightmap
+                    placeY = world.heightAt ? world.heightAt(baseX, baseZ) + 1 : 90;
+                }
+                placeY = std::max(0, std::min(placeY, 255 - templateSize.y));
+
+                BlockPos pos{ baseX, placeY, baseZ };
+                BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
+                    pos, rot, mc::levelgen::structure::kBlockPosZero,
+                    mc::levelgen::structure::Mirror::NONE, templateSize);
+                DumpPiece dp;
+                dp.id = "minecraft:shipwreck";
+                dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
+                dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
+                dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
 
             if (ds.pieces.empty()) return false;
             out.push_back(std::move(ds));
