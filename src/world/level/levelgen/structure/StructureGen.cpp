@@ -3397,9 +3397,13 @@ std::vector<DumpStart> dumpStructureStarts(
                 }
                 placeY = std::max(0, std::min(placeY, 255 - templateSize.y));
 
+                // ShipwreckPiece uses a custom rotation pivot: PIVOT = BlockPos(4, 0, 15)
+                // (ShipwreckPieces.java:16). The BB is computed with this pivot, NOT
+                // BlockPos.ZERO. This is critical for the X/Z coordinates of the BB.
                 BlockPos pos{ baseX, placeY, baseZ };
+                BlockPos pivot{ 4, 0, 15 };
                 BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
-                    pos, rot, mc::levelgen::structure::kBlockPosZero,
+                    pos, rot, pivot,
                     mc::levelgen::structure::Mirror::NONE, templateSize);
                 DumpPiece dp;
                 dp.id = "minecraft:shipwreck";
