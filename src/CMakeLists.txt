@@ -7180,3 +7180,41 @@ set_target_properties(terrain_engine_perf PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+add_executable(test_height ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/test_height.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/phys/AABB.cpp
+    world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
+    nbt/Tag.cpp
+    nbt/NbtIo.cpp
+)
+target_include_directories(test_height PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_height PRIVATE glm nlohmann_json miniz)
+set_target_properties(test_height PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

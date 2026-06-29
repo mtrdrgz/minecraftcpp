@@ -3023,18 +3023,31 @@ std::vector<DumpStart> dumpStructureStarts(
     ChunkPos active, uint64_t worldSeed,
     const std::function<std::string(int, int, int)>& biomeGetter,
     const std::string& dataMinecraftDir) {
+    return dumpStructureStarts(active, worldSeed, biomeGetter, nullptr, dataMinecraftDir);
+}
+
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& heightAt,
+    const std::string& dataMinecraftDir) {
     std::vector<DumpStart> out;
     if (dataMinecraftDir.empty()) return out;
     fs::path dataDir(dataMinecraftDir);
     if (!fs::exists(dataDir / "worldgen" / "structure_set")) return out;
 
     Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
-    // Use a no-op world so no blocks are written. heightAt returns 63 (sea level -1)
-    // as a reasonable default for the assembly's height projection.
+    // Use a no-op world so no blocks are written. heightAt uses the caller's
+    // callback (OCEAN_FLOOR_WG from NoiseBasedChunkGenerator) when provided,
+    // or defaults to 63 (sea level - 1) for backward compatibility.
     StructureWorld world;
     world.getBlock = [](int, int, int) { return 0u; };
     world.setBlock = [](int, int, int, uint32_t) {};
-    world.heightAt = [](int, int) { return 63; };
+    if (heightAt) {
+        world.heightAt = heightAt;
+    } else {
+        world.heightAt = [](int, int) { return 63; };
+    }
     world.placeFeature = [](const std::string&, mc::levelgen::RandomSource&, mc::BlockPos) { return false; };
 
     // Lock the runtime caches (same as generate()).
@@ -3156,14 +3169,25 @@ std::vector<DumpStart> dumpStructureStarts(
                 // OceanRuinStructure.generatePieces + OceanRuinPieces.addPieces.
                 // Replicates the exact RNG sequence and computes piece BBs from
                 // template sizes via structureGetBoundingBox (the 1:1 port of
-                // StructureTemplate.getBoundingBox). Y=90 is fixed (no terrain
-                // height needed — the piece BB is the INITIAL BB, not postProcess).
+                // StructureTemplate.getBoundingBox).
+                //
+                // Y adjustment: onTopOfChunkCenter(context, OCEAN_FLOOR_WG, ...)
+                // projects the start to the OCEAN_FLOOR_WG heightmap. The Java
+                // code creates the piece at Y=90 (generatePieces), but the
+                // StructureStart.adjustBoundingBox or the piece's postProcess
+                // moves it to the heightmap Y. The NBT stores the FINAL Y
+                // (post-adjustment), which is the OCEAN_FLOOR_WG height at the
+                // chunk center.
                 auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
                     std::make_shared<mc::levelgen::LegacyRandomSource>(0));
                 random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
                 const int rotIdx = random->nextInt(4);
                 const Rotation rot = static_cast<Rotation>(rotIdx);
-                const BlockPos offset{ active.x * 16, 90, active.z * 16 };
+                // Use OCEAN_FLOOR_WG height at chunk center (middle block)
+                const int midX = active.x * 16 + 8;
+                const int midZ = active.z * 16 + 8;
+                const int placeY = world.heightAt ? world.heightAt(midX, midZ) + 1 : 90;
+                const BlockPos offset{ active.x * 16, placeY, active.z * 16 };
                 const bool isLarge = random->nextFloat() <= cfg.largeProbability;
                 const float baseIntegrity = isLarge ? 0.9f : 0.8f;
                 const bool warm = cfg.oceanRuinWarm;

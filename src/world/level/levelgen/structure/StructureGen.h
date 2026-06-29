@@ -84,4 +84,14 @@ std::vector<DumpStart> dumpStructureStarts(
     const std::function<std::string(int, int, int)>& biomeGetter,
     const std::string& dataMinecraftDir);
 
+// Extended dump with terrain height support. The `heightAt` callback returns
+// the OCEAN_FLOOR_WG heightmap value at (x, z) — needed for structures that
+// project to the ocean floor (buried_treasure, shipwreck, ocean_ruin). When
+// `heightAt` is null, defaults to sea level - 1 (the original behavior).
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& heightAt,
+    const std::string& dataMinecraftDir);
+
 } // namespace mc::levelgen::structure

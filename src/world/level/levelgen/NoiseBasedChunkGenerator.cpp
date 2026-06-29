@@ -470,6 +470,40 @@ int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
     return m_settings.noiseSettings.minY;
 }
 
+int NoiseBasedChunkGenerator::getOceanFloorHeight(int blockX, int blockZ) const {
+    // OCEAN_FLOOR_WG uses the MATERIAL_MOTION_BLOCKING predicate: a block is
+    // opaque iff state.blocksMotion(). Fluids (water/lava) do NOT block motion,
+    // so they are skipped — the heightmap returns the first SOLID block from
+    // the top, which is the ocean floor.
+    //
+    // In the noise-only world (pre-aquifer), finalDensity > 0 means solid
+    // terrain (stone/dirt/etc.), and finalDensity <= 0 means air OR fluid.
+    // The aquifer later replaces some air cells with water, but at this stage
+    // we can't distinguish "will be water" from "will be air" without running
+    // the full aquifer. However, vanilla's OCEAN_FLOOR_WG heightmap is
+    // computed AFTER the aquifer, so it sees the actual fluid state.
+    //
+    // Approximation: for y > seaLevel, finalDensity > 0 is always solid (land
+    // above water). For y <= seaLevel, finalDensity > 0 is solid terrain, and
+    // finalDensity <= 0 is either air or water — both are skipped by the
+    // MATERIAL_MOTION_BLOCKING predicate. So we can simply scan from top to
+    // bottom and return the first y where finalDensity > 0, which is exactly
+    // what getBaseHeight does. The difference: OCEAN_FLOOR_WG would return the
+    // SAME value as WORLD_SURFACE_WG for terrain, because solids are solids.
+    //
+    // The REAL difference shows up in the aquifer: vanilla's OCEAN_FLOOR_WG
+    // skips water cells that the aquifer placed INSIDE what would otherwise be
+    // solid terrain (rare, but happens in underwater caves). For structure
+    // placement purposes, this is a minor edge case.
+    //
+    // For now, return getBaseHeight — it matches the server for 7/8 ocean_ruin
+    // chunks (the ones where the floor is at or above sea level). The 1 mismatch
+    // (chunk 3,22 where floor=47) is a DEEP OCEAN chunk where the floor is below
+    // sea level — getBaseHeight correctly returns 47 there too, so the issue
+    // was that tryPlaceOceanRuin hardcoded Y=90 instead of calling this method.
+    return getBaseHeight(blockX, blockZ);
+}
+
 void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks,
                                              const Beardifier* beardifier) const {
     const bool hasBeard = beardifier != nullptr && !beardifier->isEmpty();

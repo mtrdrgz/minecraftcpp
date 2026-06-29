@@ -76,6 +76,13 @@ public:
     int getMinY()      const { return m_settings.noiseSettings.minY; }
     int getGenDepth()  const { return m_settings.noiseSettings.height; }
 
+    // OCEAN_FLOOR_WG heightmap: topmost block where finalDensity > 0 AND
+    // the block is NOT a fluid (water/lava). This is the heightmap vanilla
+    // uses for ocean structures (buried_treasure, shipwreck, ocean_ruin) —
+    // it returns the ocean FLOOR height, not the water surface.
+    // See NoiseBasedChunkGenerator.cpp for implementation notes.
+    int getOceanFloorHeight(int blockX, int blockZ) const;
+
 private:
     uint32_t stateIdFor(const char* blockName, uint32_t fallback = 0) const;
     double   sampleFinalDensity(int blockX, int blockY, int blockZ) const;

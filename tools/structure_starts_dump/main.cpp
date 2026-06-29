@@ -126,6 +126,12 @@ int main(int argc, char** argv) {
     auto biomeGetter = [&gen](int x, int y, int z) -> std::string {
         return gen.getBiome(x, y, z);
     };
+    // OCEAN_FLOOR_WG heightmap for structures that project to the ocean floor
+    // (buried_treasure, shipwreck, ocean_ruin). This is the key missing piece
+    // for the Y adjustment that caused the ocean_ruin mismatch.
+    auto heightAt = [&gen](int x, int z) -> int {
+        return gen.getOceanFloorHeight(x, z) - 1;  // heightAt returns surface-1
+    };
 
     int startsDumped = 0;
     int piecesDumped = 0;
@@ -148,7 +154,7 @@ int main(int argc, char** argv) {
         }
 
         for (const auto& [cx, cz] : chunks) {
-            auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, data);
+            auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, heightAt, data);
             // Filter to only structures the server reported at this chunk
             std::set<std::string> serverIdsAtChunk;
             for (const auto& s : serverStarts)
@@ -168,7 +174,7 @@ int main(int argc, char** argv) {
         // Scan mode: find structure chunks and dump.
         for (int cz = fz; cz <= tz; ++cz) {
             for (int cx = fx; cx <= tx; ++cx) {
-                auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, data);
+                auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, heightAt, data);
                 for (const auto& s : starts) {
                     perType[s.structureId]++;
                     startsDumped++;
