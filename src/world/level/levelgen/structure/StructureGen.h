@@ -45,4 +45,43 @@ mc::levelgen::Beardifier generateBeardifier(
     const std::function<std::string(int, int, int)>& biomeGetter,
     const std::string& dataMinecraftDir);
 
+// ── Structure-starts dump API ───────────────────────────────────────────────
+// For the structure-starts parity gate: returns the same piece list the engine
+// would place at `active`, without actually writing any blocks. This is the
+// C++ counterpart of tools/StructureStartsDump.java — same TSV format, so the
+// two outputs can be byte-diffed to certify 1:1 structure assembly.
+//
+// One Piece per child of the StructureStart, in the engine's stored order. The
+// `id` is the NBT piece id ("minecraft:msroom", "minecraft:jigsaw", etc.) as
+// the server would write it. `orientation` is Direction.get2DDataValue() (the
+// "O" NBT field encoding: SOUTH=0, WEST=1, NORTH=2, EAST=3, -1 = none).
+struct DumpPiece {
+    std::string id;          // NBT piece id, e.g. "minecraft:msroom"
+    int minX, minY, minZ;    // bounding box min
+    int maxX, maxY, maxZ;    // bounding box max
+    int orientation = -1;    // 2D Direction data value (-1 if none)
+    int genDepth = 0;        // GD NBT field
+};
+
+struct DumpStart {
+    std::string structureId; // e.g. "minecraft:mineshaft"
+    int chunkX = 0, chunkZ = 0;
+    std::vector<DumpPiece> pieces;
+};
+
+// Dumps ALL structure starts whose origin is `active` (i.e. structures that
+// BEGIN at this chunk — same definition as StructureStartsDump.java's
+// `structures.starts` compound). The caller passes a biomeGetter that returns
+// the real biome at (x,y,z) so the biome gate matches the server.
+//
+// For jigsaw structures, this calls the same assembleJigsaw the engine uses
+// at runtime (no block placement). For non-jigsaw, it calls the per-structure
+// assembly function (assembleMineshaftNormal etc.) where available; structures
+// whose assembly is not exposed yet return an empty piece list with the
+// structure id only (coarse: just the start, no children).
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::string& dataMinecraftDir);
+
 } // namespace mc::levelgen::structure

@@ -2981,4 +2981,216 @@ mc::levelgen::Beardifier generateBeardifier(
     return runtime->buildBeardifier(active, columnHeight, biomeGetter);
 }
 
+// ── dumpStructureStarts ────────────────────────────────────────────────────
+// Implements the public dumpStructureStarts API declared in StructureGen.h.
+// Mirrors Runtime::generate's dispatch but collects DumpStart records instead
+// of placing blocks. For jigsaw, calls assembleJigsaw (no block writes); for
+// non-jigsaw, calls the per-structure assembly function where available.
+namespace {
+
+// Convert a 3D Direction ordinal to the 2D data value Java's StructurePiece
+// writes in the "O" NBT field (Direction.get2DDataValue): SOUTH=0, WEST=1,
+// NORTH=2, EAST=3, -1 = non-horizontal.
+int to2D(Direction d) {
+    switch (d) {
+        case Direction::SOUTH: return 0;
+        case Direction::WEST:  return 1;
+        case Direction::NORTH: return 2;
+        case Direction::EAST:  return 3;
+        default:               return -1;
+    }
+}
+
+// Convert a Rotation enum to the 2D data value (jigsaw pieces use Rotation,
+// not Direction, but the server writes the same "O" field — Rotation 0..3
+// maps to SOUTH/WEST/NORTH/EAST just like Direction). Currently unused since
+// jigsaw pieces write O=-1, but kept for future use when non-jigsaw template
+// structures are added to the dump.
+[[maybe_unused]] int rotationTo2D(mc::levelgen::structure::Rotation r) {
+    switch (r) {
+        case Rotation::NONE:        return 2;  // NORTH
+        case Rotation::CLOCKWISE_90: return 3;  // EAST
+        case Rotation::CLOCKWISE_180: return 0; // SOUTH
+        case Rotation::COUNTERCLOCKWISE_90: return 1; // WEST
+    }
+    return -1;
+}
+
+} // namespace
+
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::string& dataMinecraftDir) {
+    std::vector<DumpStart> out;
+    if (dataMinecraftDir.empty()) return out;
+    fs::path dataDir(dataMinecraftDir);
+    if (!fs::exists(dataDir / "worldgen" / "structure_set")) return out;
+
+    Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
+    // Use a no-op world so no blocks are written. heightAt returns 63 (sea level -1)
+    // as a reasonable default for the assembly's height projection.
+    StructureWorld world;
+    world.getBlock = [](int, int, int) { return 0u; };
+    world.setBlock = [](int, int, int, uint32_t) {};
+    world.heightAt = [](int, int) { return 63; };
+    world.placeFeature = [](const std::string&, mc::levelgen::RandomSource&, mc::BlockPos) { return false; };
+
+    // Lock the runtime caches (same as generate()).
+    std::lock_guard<std::shared_mutex> lk(runtime->cacheMutex);
+
+    for (const StructureSetDef& set : runtime->structureSets) {
+        if (isNonOverworldStructureSet(set.id)) continue;
+        auto pit = runtime->placementState.sets.find(set.id);
+        if (pit == runtime->placementState.sets.end()) continue;
+        const StructurePlacement& placement = pit->second;
+        if (!StructureState::isSupported(placement)) continue;
+
+        bool anyJigsaw = false;
+        int maxDistH = 0;
+        for (const StructureSelection& s : set.structures) {
+            auto cfgIt = runtime->structures.find(s.structureId);
+            if (cfgIt != runtime->structures.end() && cfgIt->second.supported
+                && cfgIt->second.structureType == "minecraft:jigsaw") {
+                anyJigsaw = true;
+                maxDistH = std::max(maxDistH, cfgIt->second.maxDistH);
+            }
+        }
+
+        if (anyJigsaw) {
+            // Jigsaw structures: scan the jigsaw radius for starts, assemble each,
+            // dump pieces whose origin is `active`. The server only stores starts
+            // AT `active` (not starts referenced by `active`), so we filter.
+            const int R = (maxDistH + 15) / 16 + 1;
+            for (int sx = active.x - R; sx <= active.x + R; ++sx) {
+                for (int sz = active.z - R; sz <= active.z + R; ++sz) {
+                    if (sx != active.x || sz != active.z) continue;  // only starts AT active
+                    if (!runtime->placementState.isStructureChunk(placement, sx, sz)) continue;
+                    // Find the jigsaw structure that selects at (sx, sz)
+                    for (const StructureSelection& s : set.structures) {
+                        auto cfgIt = runtime->structures.find(s.structureId);
+                        if (cfgIt == runtime->structures.end() || !cfgIt->second.supported) continue;
+                        const JigsawConfig& cfg = cfgIt->second;
+                        if (cfg.structureType != "minecraft:jigsaw") continue;
+                        // Biome gate
+                        int midX = sx * 16 + 8, midZ = sz * 16 + 8;
+                        int surfaceY = world.heightAt(midX, midZ);
+                        if (!runtime->validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) continue;
+                        // Assemble
+                        std::vector<Placed> pieces;
+                        BlockPos stub{};
+                        try {
+                            if (!runtime->assembleJigsaw(cfg, {sx, sz}, world, biomeGetter, pieces, stub)) continue;
+                        } catch (...) { continue; }
+                        if (pieces.empty()) continue;
+                        DumpStart ds;
+                        ds.structureId = s.structureId;
+                        ds.chunkX = sx; ds.chunkZ = sz;
+                        for (const Placed& p : pieces) {
+                            DumpPiece dp;
+                            // Java's jigsaw pieces all serialize with the NBT id
+                            // "minecraft:jigsaw" (the piece TYPE, not the template
+                            // location). The template location is stored separately
+                            // in the piece's NBT compound, not in the "id" field.
+                            dp.id = "minecraft:jigsaw";
+                            dp.minX = p.box.minX; dp.minY = p.box.minY; dp.minZ = p.box.minZ;
+                            dp.maxX = p.box.maxX; dp.maxY = p.box.maxY; dp.maxZ = p.box.maxZ;
+                            // Java's PoolElementStructurePiece does NOT set the
+                            // StructurePiece orientation (it stays null), so the
+                            // "O" NBT field is -1. The rotation is stored in a
+                            // separate "rotation" field, not in "O".
+                            dp.orientation = -1;
+                            dp.genDepth = 0;  // jigsaw pieces don't use genDepth
+                            ds.pieces.push_back(std::move(dp));
+                        }
+                        out.push_back(std::move(ds));
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Non-jigsaw: only check the chunk itself
+        if (!runtime->placementState.isStructureChunk(placement, active.x, active.z)) continue;
+
+        // Helper: assemble one non-jigsaw structure and append to `out`.
+        // Returns true if pieces were dumped.
+        auto assembleNonJigsaw = [&](const std::string& sid) -> bool {
+            auto cfgIt = runtime->structures.find(sid);
+            if (cfgIt == runtime->structures.end() || !cfgIt->second.supported) return false;
+            const JigsawConfig& cfg = cfgIt->second;
+            if (cfg.structureType == "minecraft:jigsaw") return false;
+
+            // Biome gate (Structure.isValidBiome). The server already validated
+            // this in mirror mode, but we check to match the engine's dispatch.
+            int midX = active.x * 16 + 8, midZ = active.z * 16 + 8;
+            int surfaceY = world.heightAt(midX, midZ);
+            if (!runtime->validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) return false;
+
+            DumpStart ds;
+            ds.structureId = sid;
+            ds.chunkX = active.x; ds.chunkZ = active.z;
+
+            // Per-structure assembly
+            if (cfg.structureType == "minecraft:mineshaft") {
+                auto msPieces = mc::levelgen::structure::structures::assembleMineshaftNormal(
+                    static_cast<int64_t>(worldSeed), active.x, active.z);
+                for (const auto& p : msPieces) {
+                    DumpPiece dp;
+                    using mk = mc::levelgen::structure::structures::MsKind;
+                    switch (p.kind) {
+                        case mk::ROOM:     dp.id = "minecraft:msroom"; break;
+                        case mk::CORRIDOR: dp.id = "minecraft:mscorridor"; break;
+                        case mk::CROSSING: dp.id = "minecraft:mscrossing"; break;
+                        case mk::STAIRS:   dp.id = "minecraft:msstairs"; break;
+                    }
+                    dp.minX = p.box.minX; dp.minY = p.box.minY; dp.minZ = p.box.minZ;
+                    dp.maxX = p.box.maxX; dp.maxY = p.box.maxY; dp.maxZ = p.box.maxZ;
+                    dp.orientation = p.hasOrientation ? to2D(p.orientation) : -1;
+                    dp.genDepth = p.genDepth;
+                    ds.pieces.push_back(std::move(dp));
+                }
+            }
+            // TODO: add assembly for swamp_hut, desert_pyramid, jungle_temple,
+            // igloo, shipwreck, ocean_ruin, ruined_portal, buried_treasure,
+            // nether_fossil. For now these return empty piece lists (skipped
+            // by the `if (!ds.pieces.empty())` check below).
+
+            if (ds.pieces.empty()) return false;
+            out.push_back(std::move(ds));
+            return true;
+        };
+
+        if (set.structures.size() == 1) {
+            assembleNonJigsaw(set.structures[0].structureId);
+            continue;
+        }
+
+        // Multi-structure set (e.g. mineshafts: mineshaft + mineshaft_mesa;
+        // shipwrecks: shipwreck + shipwreck_beached). Replicate the weighted-
+        // random selection from Runtime::generate: seed with setLargeFeatureSeed,
+        // pick weighted, try assemble, on failure remove and retry.
+        std::vector<StructureSelection> options = set.structures;
+        auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+            std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+        random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+        int total = 0;
+        for (const auto& o : options) total += o.weight;
+        while (!options.empty() && total > 0) {
+            int choice = random->nextInt(total);
+            std::size_t index = 0;
+            for (; index < options.size(); ++index) {
+                choice -= options[index].weight;
+                if (choice < 0) break;
+            }
+            if (index >= options.size()) index = options.size() - 1;
+            std::string selected = options[index].structureId;
+            if (assembleNonJigsaw(selected)) break;  // success
+            total -= options[index].weight;
+            options.erase(options.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+    }
+    return out;
+}
+
 } // namespace mc::levelgen::structure

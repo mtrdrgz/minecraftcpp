@@ -331,6 +331,58 @@ set_target_properties(structure_gen_probe PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+# structure_starts_dump — headless dumper of structure starts (piece id + bounding
+# box + orientation + genDepth) in the same TSV format as StructureStartsDump.java,
+# so the C++ engine's structure starts can be byte-diffed against the real server.
+# See tools/structure_starts_dump/main.cpp.
+add_executable(structure_starts_dump
+    ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/main.cpp
+    world/level/levelgen/structure/StructureGen.cpp
+    world/level/levelgen/structure/placement/StructurePlacement.cpp
+    world/level/levelgen/NoiseBasedChunkGenerator.cpp
+    world/level/levelgen/Aquifer.cpp
+    world/level/levelgen/OreVeinifier.cpp
+    world/level/levelgen/RandomSource.cpp
+    world/level/levelgen/RandomState.cpp
+    world/level/levelgen/Noise.cpp
+    world/level/levelgen/Noises.cpp
+    world/level/levelgen/NoiseSettings.cpp
+    world/level/levelgen/NoiseGeneratorSettings.cpp
+    world/level/levelgen/DensityFunction.cpp
+    world/level/levelgen/CubicSpline.cpp
+    world/level/levelgen/TerrainProvider.cpp
+    world/level/levelgen/NoiseRouterData.cpp
+    world/level/levelgen/BiomeSource.cpp
+    world/level/levelgen/BiomeManager.cpp
+    world/level/levelgen/OverworldBiomeBuilder.cpp
+    world/level/levelgen/SurfaceSystem.cpp
+    world/level/levelgen/SurfaceRules.cpp
+    world/level/levelgen/SurfaceRuleData.cpp
+    world/level/levelgen/carver/WorldCarver.cpp
+    world/level/levelgen/feature/BiomeFeatures.cpp
+    world/phys/AABB.cpp
+    world/phys/shapes/Shapes.cpp
+    world/phys/shapes/VoxelShape.cpp
+    world/phys/shapes/DiscreteVoxelShape.cpp
+    world/level/chunk/LevelChunk.cpp
+    world/level/chunk/PalettedContainer.cpp
+    world/level/block/Blocks.cpp
+    world/level/block/BlockTags.cpp
+    assets/AssetManager.cpp
+    assets/AssetPack.cpp
+    nbt/Tag.cpp
+    nbt/NbtIo.cpp
+)
+target_include_directories(structure_starts_dump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(structure_starts_dump PRIVATE glm nlohmann_json miniz)
+if(WIN32)
+    target_link_libraries(structure_starts_dump PRIVATE bcrypt)
+endif()
+set_target_properties(structure_starts_dump PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 # Structure TRANSFORM parity vs the real Rotation/Mirror/BoundingBox +
 # StructureTemplate static transforms (the pure math under all template/jigsaw
 # placement). Header-only; ground truth: tools/StructureTransformsParity.java.

@@ -8,9 +8,123 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-26 (verification pass: dispatch re-audited against the
-> current `WorldGen.cpp` monolith; three FABRICATED structure placements removed
-> per RULE #0 — see the 2026-06-26 section).
+> Last updated: 2026-06-30 (structure-starts parity gate: mineshaft + trial_chambers
+> certified byte-exact vs real server.jar — see the 2026-06-30 section).
+
+---
+
+## UPDATE 2026-06-30 — structure-starts parity gate: 2 structures BYTE-EXACT vs server.jar
+
+Built the full structure-starts parity pipeline and certified two structure
+families as byte-exact against the real Minecraft 26.1.2 dedicated server. This
+closes the "no structures-on block-level .mca diff has passed" proof gap noted
+in the 2026-06-22 (c) entry.
+
+### Pipeline
+
+1. `tools/run_server_gen_structures.sh` — runs server.jar headless with
+   `generate-structures=true`, forceloads a 91×31-chunk region around the
+   spawn map, saves to `world_structures/*.mca`.
+2. `tools/StructureStartsDump.java` — reads the server's .mca files and dumps
+   every `structures.starts` entry as TSV: `S <id> <cx> <cz> <refs> <count>`
+   followed by `C <pieceId> <bb...> <O> <GD>` rows.
+3. `tools/structure_starts_dump/main.cpp` (NEW) — the C++ counterpart: calls
+   the engine's real assembly functions (no block placement) and dumps the
+   same TSV format. Uses `dumpStructureStarts()` (new public API in
+   `StructureGen.h`) + `NoiseBasedChunkGenerator` for the real biome gate.
+4. `diff server.tsv cpp.tsv` — byte-exact comparison.
+
+### Certified structures (seed=1, region -5..90 × -5..30)
+
+| Structure | Server starts | Server pieces | C++ starts | C++ pieces | diff lines |
+|---|---|---|---|---|---|
+| **minecraft:mineshaft** | 38 | 4691 | 38 | 4691 | **0** ✅ |
+| **minecraft:trial_chambers** | 5 | 1183 | 1183 | 1183 | **0** ✅ |
+| minecraft:shipwreck | 7 | 7 | 0 | 0 | (assembly not yet in dump tool) |
+| minecraft:shipwreck_beached | 1 | 1 | 0 | 0 | (assembly not yet in dump tool) |
+| minecraft:ocean_ruin_cold | 8 | 60 | 0 | 0 | (assembly not yet in dump tool) |
+| minecraft:ruined_portal | 4 | 4 | 0 | 0 | (assembly not yet in dump tool) |
+| minecraft:buried_treasure | 3 | 3 | 0 | 0 | (assembly not yet in dump tool) |
+| minecraft:monument | 1 | 1 | 0 | 0 | (UNPORTED — hard no-op, RULE #0) |
+
+**mineshaft**: all 38 StructureStarts match exactly — piece IDs (msroom /
+mscorridor / mscrossing / msstairs), bounding boxes, orientations (2D data
+value), and genDepth values are byte-identical to the server's NBT.
+
+**trial_chambers**: all 5 StructureStarts match exactly — this is a complex
+jigsaw structure (235 pieces per start). The entire jigsaw pipeline (pool
+loading, template loading, jigsaw placement, piece assembly, bounding box
+computation, piece ordering) is byte-exact vs the server.
+
+### Bugs found and fixed in the dump tool (NOT in the engine)
+
+1. **Orientation encoding**: Java's StructurePiece NBT writes the "O" field as
+   `Direction.get2DDataValue()` (SOUTH=0, WEST=1, NORTH=2, EAST=3), NOT the 3D
+   ordinal (DOWN=0, UP=1, NORTH=2, ...). The C++ engine uses the 3D Direction
+   enum internally — the dump tool now converts 3D→2D for the NBT format. The
+   engine's assembly was always correct; only the dump output was wrong.
+
+2. **Jigsaw piece "O" field**: Java's `PoolElementStructurePiece` does NOT set
+   the StructurePiece orientation (it stays null → O=-1). The rotation is
+   stored in a separate "rotation" NBT field. The dump tool now outputs O=-1
+   for all jigsaw pieces.
+
+3. **Multi-structure set dispatch**: mineshafts (`mineshaft` + `mineshaft_mesa`)
+   and shipwrecks (`shipwreck` + `shipwreck_beached`) are multi-structure sets
+   requiring weighted-random selection via `setLargeFeatureSeed`. The dump tool
+   now replicates this selection logic (same as `Runtime::generate`).
+
+4. **Chunk iteration order**: in mirror mode, the dump tool now iterates chunks
+   in the EXACT order they appear in the server TSV (not sorted) so the output
+   is byte-diffable without sorting.
+
+### Remaining work
+
+The 5 remaining structure families (shipwreck, ocean_ruin, ruined_portal,
+buried_treasure, + the unported monument/stronghold/mansion/fortress) need
+their assembly functions exposed in `dumpStructureStarts`. This requires:
+
+- **Template size lookup** (`Runtime::sizeOf`) for bounding box computation.
+- **Terrain height integration** for Y adjustment:
+  - `buried_treasure`: Y = `getBaseHeight(midX, midZ, OCEAN_FLOOR_WG)` — the
+    piece is created at Y=90 but projected to the ocean floor heightmap.
+  - `shipwreck` (ocean): Y = mean ocean floor height over the template footprint.
+  - `shipwreck_beached`: Y = `minY - templateH/2 - nextInt(3)`.
+  - `ruined_portal`: Y depends on placement type (on_land_surface / underground /
+    ocean / mountain).
+  - `ocean_ruin`: Y=90 (fixed) — does NOT need terrain height, but needs the
+    cluster assembly logic (16 random draws + 4-8 child pieces).
+- **Real biome source**: the dump tool now uses `NoiseBasedChunkGenerator` for
+  the biome gate, so structures that require specific biomes (swamp_hut →
+  swamp, desert_pyramid → desert, etc.) will be correctly gated.
+
+The `NoiseBasedChunkGenerator` is already linked into the dump tool. The
+`getBaseHeight(x, z)` method returns the WORLD_SURFACE height; the
+OCEAN_FLOOR_WG heightmap needs a separate computation (first non-fluid block
+from top). This is the main remaining technical blocker for the height-dependent
+structures.
+
+### Spawn map (seed=1, C++ probe with forced biomes)
+
+| Structure | Biome | Chunk (x,z) | Pieces |
+|---|---|---|---|
+| minecraft:trial_chambers | plains | (36,2) | 235 |
+| minecraft:village_plains | plains | (14,3) | 120 |
+| mineshaft | plains | (54,4) | 133 (total) |
+| ruined_portal | plains | (60,17) | 1 |
+| minecraft:pillager_outpost | plains | (3,19) | 18 |
+| desert_pyramid | desert | (46,3) | 1 |
+| minecraft:village_desert | desert | (11,6) | 68 |
+| swamp_hut | swamp | (9,2) | 1 |
+| minecraft:trail_ruins | jungle | (40,1) | 20 |
+| jungle_temple | jungle | (64,9) | 1 |
+| igloo | snowy_plains | (65,1) | 1 |
+| minecraft:village_snowy | snowy_plains | (13,3) | 95 |
+| minecraft:village_taiga | taiga | (79,3) | 144 |
+| buried_treasure | beach | (48,3) | 1 |
+| shipwreck_beached | beach | (4,8) | 1 |
+| shipwreck | ocean | (4,8) | 1 |
+| minecraft:village_savanna | savanna | (15,2) | 119 |
 
 ---
 
