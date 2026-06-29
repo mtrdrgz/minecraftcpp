@@ -39,12 +39,12 @@ in the 2026-06-22 (c) entry.
 | Structure | Server starts | Server pieces | C++ starts | C++ pieces | diff lines |
 |---|---|---|---|---|---|
 | **minecraft:mineshaft** | 38 | 4691 | 38 | 4691 | **0** ✅ |
-| **minecraft:trial_chambers** | 5 | 1183 | 1183 | 1183 | **0** ✅ |
-| minecraft:shipwreck | 7 | 7 | 0 | 0 | (assembly not yet in dump tool) |
-| minecraft:shipwreck_beached | 1 | 1 | 0 | 0 | (assembly not yet in dump tool) |
-| minecraft:ocean_ruin_cold | 8 | 60 | 0 | 0 | (assembly not yet in dump tool) |
-| minecraft:ruined_portal | 4 | 4 | 0 | 0 | (assembly not yet in dump tool) |
-| minecraft:buried_treasure | 3 | 3 | 0 | 0 | (assembly not yet in dump tool) |
+| **minecraft:trial_chambers** | 5 | 1183 | 5 | 1183 | **0** ✅ |
+| **minecraft:ocean_ruin_cold** | 8 | 60 | 8 | 60 | **8** ⚠️ (7/8 byte-exact; 1 has Y mismatch) |
+| minecraft:shipwreck | 7 | 7 | 0 | 0 | (needs OCEAN_FLOOR_WG heightmap) |
+| minecraft:shipwreck_beached | 1 | 1 | 0 | 0 | (needs WORLD_SURFACE_WG heightmap) |
+| minecraft:ruined_portal | 4 | 4 | 0 | 0 | (needs terrain height for Y projection) |
+| minecraft:buried_treasure | 3 | 3 | 0 | 0 | (needs OCEAN_FLOOR_WG + anchor block scan) |
 | minecraft:monument | 1 | 1 | 0 | 0 | (UNPORTED — hard no-op, RULE #0) |
 
 **mineshaft**: all 38 StructureStarts match exactly — piece IDs (msroom /
@@ -545,3 +545,65 @@ place from faithful piece ports, the jigsaw family assembles but without the two
 systems (Beardifier + processors) that make it match, and roughly half of the
 structure families are not placed at all. Reaching "same seed → same structures"
 requires items 3–8 above; it is multi-session work, not a tuning pass.
+
+## UPDATE 2026-06-30 (b) — ocean_ruin_cold: 7/8 byte-exact, engine Y bug found
+
+Extended `dumpStructureStarts()` to handle `minecraft:ocean_ruin` (cold + warm).
+Replicates the exact RNG sequence from `OceanRuinStructure.generatePieces` +
+`OceanRuinPieces.addPieces`:
+- `setLargeFeatureSeed(seed, cx, cz)` + `nextInt(4)` for rotation
+- `nextFloat() <= largeProbability` for isLarge gate
+- `nextFloat() <= clusterProbability` for cluster spawn
+- Cluster: 16 raw `nextInt` draws for positions + 4-8 child ruins
+
+Piece BBs are computed from template sizes via `structureGetBoundingBox` (the
+1:1 port of `StructureTemplate.getBoundingBox`), using the same
+`StructureTemplate.transform` formula the server uses. This is the first
+template-based structure (non-jigsaw, non-recursive) to be certified at the
+piece level.
+
+### Results
+
+| Start chunk | Server TPY | C++ Y | Match? |
+|---|---|---|---|
+| (-9,-17) | 90 | 90 | ✅ |
+| (-13,1) | 90 | 90 | ✅ |
+| (-12,22) | 90 | 90 | ✅ |
+| (22,-18) | 90 | 90 | ✅ |
+| (9,-16) | 90 | 90 | ✅ |
+| **(3,22)** | **47** | **90** | ❌ |
+| (43,-9) | 90 | 90 | ✅ |
+| (69,-18) | 90 | 90 | ✅ |
+
+7/8 starts are byte-exact. The 1 mismatch (chunk 3,22) has Y=47 (server) vs
+Y=90 (C++). Investigation via `DumpRawNbt.java` confirmed the server stores
+`TPY=47` for this chunk — the piece is projected to the OCEAN_FLOOR_WG
+heightmap (Y=47 at this chunk's center), not hardcoded Y=90.
+
+### Engine bug found
+
+`Runtime::tryPlaceOceanRuin` (StructureGen.cpp:1869) hardcodes `BlockPos
+offset{active.x * 16, 90, active.z * 16}`. The Java code's
+`onTopOfChunkCenter(context, OCEAN_FLOOR_WG, ...)` projects the start to the
+OCEAN_FLOOR_WG heightmap, and the piece's TPY is set to that height. When the
+ocean floor is at Y=90 (shallow water or land), the C++ matches. When it's
+below 90 (deep ocean, like chunk 3,22 where floor=47), the C++ leaves the piece
+floating at Y=90 while the server buries it at Y=47.
+
+**Fix needed**: `tryPlaceOceanRuin` should call `getBaseHeight(midX, midZ,
+OCEAN_FLOOR_WG)` and use that Y instead of hardcoded 90. This requires adding
+an OCEAN_FLOOR_WG heightmap method to `NoiseBasedChunkGenerator` (currently
+only WORLD_SURFACE is available via `getBaseHeight`).
+
+### Remaining structures blocker
+
+All remaining structures (shipwreck, ruined_portal, buried_treasure) need
+terrain height for Y adjustment:
+- **shipwreck** (ocean): Y = mean OCEAN_FLOOR_WG over template footprint
+- **shipwreck_beached**: Y = minY(WORLD_SURFACE_WG) - templateH/2 - nextInt(3)
+- **ruined_portal**: Y depends on placement (on_land_surface / underground / etc.)
+- **buried_treasure**: Y = first anchor block below OCEAN_FLOOR_WG height
+
+The C++ `NoiseBasedChunkGenerator::getBaseHeight(x, z)` returns WORLD_SURFACE
+height only. An OCEAN_FLOOR_WG method (first non-fluid block from top) needs
+to be added. This is the main technical blocker for the remaining structures.
