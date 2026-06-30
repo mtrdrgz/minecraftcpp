@@ -55,6 +55,7 @@ online-mode=false
 spawn-protection=0
 max-players=1
 view-distance=10
+max-tick-time=-1
 EOF
 rm -rf "$RUN/world_structures"
 

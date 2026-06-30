@@ -3183,11 +3183,17 @@ std::vector<DumpStart> dumpStructureStarts(
                 random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
                 const int rotIdx = random->nextInt(4);
                 const Rotation rot = static_cast<Rotation>(rotIdx);
-                // Use OCEAN_FLOOR_WG height at chunk center (middle block)
-                const int midX = active.x * 16 + 8;
-                const int midZ = active.z * 16 + 8;
-                const int placeY = world.heightAt ? world.heightAt(midX, midZ) + 1 : 90;
-                const BlockPos offset{ active.x * 16, placeY, active.z * 16 };
+                // Y adjustment — first step of OceanRuinPiece.postProcess:
+                //   height = level.getHeight(OCEAN_FLOOR_WG, templatePosition.x, templatePosition.z)
+                //   templatePosition.y = height
+                // The templatePosition is (chunkX*16, 90, chunkZ*16) — the chunk CORNER,
+                // not the center. The OCEAN_FLOOR_WG heightmap at that column gives the
+                // initial Y. (The second getHeight() step that scans the footprint is
+                // not yet replicated — it needs actual terrain blocks.)
+                const int tplX = active.x * 16;
+                const int tplZ = active.z * 16;
+                const int placeY = world.heightAt ? world.heightAt(tplX, tplZ) + 1 : 90;
+                const BlockPos offset{ tplX, placeY, tplZ };
                 const bool isLarge = random->nextFloat() <= cfg.largeProbability;
                 const float baseIntegrity = isLarge ? 0.9f : 0.8f;
                 const bool warm = cfg.oceanRuinWarm;
@@ -3383,17 +3389,42 @@ std::vector<DumpStart> dumpStructureStarts(
                 const int baseX = active.x * 16;
                 const int baseZ = active.z * 16;
 
-                // Approximate Y using chunk-center heightmap
+                // Y adjustment — EXACT replication of ShipwreckPiece.postProcess:
+                //   heightmapType = isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG
+                //   footprint = [templatePosition, templatePosition + (sizeX-1, 0, sizeZ-1)]
+                //   for each column in footprint: mean += getHeight(heightmapType, x, z)
+                //   mean /= (sizeX * sizeZ)
+                //   isBeached: Y = minY - templateH/2 - nextInt(3)
+                //   ocean: Y = mean
+                //
+                // The footprint uses templatePosition (= the original position, NOT rotated).
+                // The heightmap is sampled at each (x, z) column via world.heightAt.
+                // Our world.heightAt returns OCEAN_FLOOR_WG-1 (the dump tool passes
+                // getOceanFloorHeight-1). For beached we need WORLD_SURFACE_WG, but
+                // getBaseHeight returns WORLD_SURFACE_WG-1, so we can't distinguish
+                // here. For now, use the same heightAt for both (ocean floor ≈ world
+                // surface on land).
                 int placeY;
-                if (cfg.isBeached) {
-                    // Beached: Y = minY - templateH/2 - nextInt(3)
-                    // minY = min heightmap over footprint. Approximate with center.
-                    int minY = world.heightAt ? world.heightAt(baseX, baseZ) + 1 : 90;
-                    placeY = minY - templateSize.y / 2 - random->nextInt(3);
+                const int baseSize = templateSize.x * templateSize.z;
+                if (baseSize == 0 || !world.heightAt) {
+                    placeY = 90;  // fallback
                 } else {
-                    // Ocean: Y = mean ocean floor height over footprint
-                    // Approximate with center heightmap
-                    placeY = world.heightAt ? world.heightAt(baseX, baseZ) + 1 : 90;
+                    int mean = 0;
+                    int minY = 999999;
+                    // Footprint: [baseX, baseZ] to [baseX + sizeX-1, baseZ + sizeZ-1]
+                    for (int dx = 0; dx < templateSize.x; ++dx) {
+                        for (int dz = 0; dz < templateSize.z; ++dz) {
+                            int h = world.heightAt(baseX + dx, baseZ + dz) + 1;
+                            mean += h;
+                            if (h < minY) minY = h;
+                        }
+                    }
+                    mean /= baseSize;
+                    if (cfg.isBeached) {
+                        placeY = minY - templateSize.y / 2 - random->nextInt(3);
+                    } else {
+                        placeY = mean;
+                    }
                 }
                 placeY = std::max(0, std::min(placeY, 255 - templateSize.y));
 
