@@ -94,4 +94,15 @@ std::vector<DumpStart> dumpStructureStarts(
     const std::function<int(int, int)>& heightAt,
     const std::string& dataMinecraftDir);
 
+// Full dump with both heightmaps. `oceanFloorHeightAt` returns OCEAN_FLOOR_WG
+// and `worldSurfaceHeightAt` returns WORLD_SURFACE_WG. Jigsaw structures use
+// WORLD_SURFACE_WG (via project_start_to_heightmap); ocean structures use
+// OCEAN_FLOOR_WG. When a callback is null, falls back to sea level - 1.
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& oceanFloorHeightAt,
+    const std::function<int(int, int)>& worldSurfaceHeightAt,
+    const std::string& dataMinecraftDir);
+
 } // namespace mc::levelgen::structure

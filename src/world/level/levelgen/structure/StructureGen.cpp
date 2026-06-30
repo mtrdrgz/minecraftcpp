@@ -3031,6 +3031,15 @@ std::vector<DumpStart> dumpStructureStarts(
     const std::function<std::string(int, int, int)>& biomeGetter,
     const std::function<int(int, int)>& heightAt,
     const std::string& dataMinecraftDir) {
+    return dumpStructureStarts(active, worldSeed, biomeGetter, heightAt, nullptr, dataMinecraftDir);
+}
+
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& oceanFloorHeightAt,
+    const std::function<int(int, int)>& worldSurfaceHeightAt,
+    const std::string& dataMinecraftDir) {
     std::vector<DumpStart> out;
     if (dataMinecraftDir.empty()) return out;
     fs::path dataDir(dataMinecraftDir);
@@ -3038,13 +3047,16 @@ std::vector<DumpStart> dumpStructureStarts(
 
     Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
     // Use a no-op world so no blocks are written. heightAt uses the caller's
-    // callback (OCEAN_FLOOR_WG from NoiseBasedChunkGenerator) when provided,
-    // or defaults to 63 (sea level - 1) for backward compatibility.
+    // callback — for the 2-heightmap overload, we default to OCEAN_FLOOR_WG
+    // (ocean structures). The jigsaw path below overrides this to use
+    // WORLD_SURFACE_WG when project_start_to_heightmap is set.
     StructureWorld world;
     world.getBlock = [](int, int, int) { return 0u; };
     world.setBlock = [](int, int, int, uint32_t) {};
-    if (heightAt) {
-        world.heightAt = heightAt;
+    if (oceanFloorHeightAt) {
+        world.heightAt = oceanFloorHeightAt;
+    } else if (worldSurfaceHeightAt) {
+        world.heightAt = worldSurfaceHeightAt;
     } else {
         world.heightAt = [](int, int) { return 63; };
     }
@@ -3086,6 +3098,14 @@ std::vector<DumpStart> dumpStructureStarts(
                         if (cfgIt == runtime->structures.end() || !cfgIt->second.supported) continue;
                         const JigsawConfig& cfg = cfgIt->second;
                         if (cfg.structureType != "minecraft:jigsaw") continue;
+                        // Jigsaw structures with project_start_to_heightmap use
+                        // WORLD_SURFACE_WG, not OCEAN_FLOOR_WG. Swap the heightmap
+                        // callback for the duration of this assembly.
+                        if (cfg.projectStartToHeightmap && worldSurfaceHeightAt) {
+                            world.heightAt = worldSurfaceHeightAt;
+                        } else if (oceanFloorHeightAt) {
+                            world.heightAt = oceanFloorHeightAt;
+                        }
                         // Biome gate
                         int midX = sx * 16 + 8, midZ = sz * 16 + 8;
                         int surfaceY = world.heightAt(midX, midZ);
