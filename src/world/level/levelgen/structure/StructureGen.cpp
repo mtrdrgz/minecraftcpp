@@ -1008,6 +1008,11 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     if (supportedTypes.count(type) == 0) {
         cfg.supported = false;
         cfg.reason = "type " + type + " not yet ported (no piece placement) — hard no-op";
+        // Still parse the biome gate: the structure-starts parity dump assembles
+        // some placement-unported types (e.g. ocean_monument's single top piece)
+        // and needs the real Structure.isValidBiome set. In-game placement stays
+        // a hard no-op via cfg.supported = false.
+        if (j.contains("biomes")) resolveBiomeSpec(j.at("biomes"), cfg.biomes);
         return cfg;
     }
 
@@ -3040,6 +3045,17 @@ std::vector<DumpStart> dumpStructureStarts(
     const std::function<int(int, int)>& oceanFloorHeightAt,
     const std::function<int(int, int)>& worldSurfaceHeightAt,
     const std::string& dataMinecraftDir) {
+    return dumpStructureStarts(active, worldSeed, biomeGetter, oceanFloorHeightAt,
+                               worldSurfaceHeightAt, nullptr, dataMinecraftDir);
+}
+
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& oceanFloorHeightAt,
+    const std::function<int(int, int)>& worldSurfaceHeightAt,
+    const std::function<std::vector<uint32_t>(int, int)>& baseColumnAt,
+    const std::string& dataMinecraftDir) {
     std::vector<DumpStart> out;
     if (dataMinecraftDir.empty()) return out;
     fs::path dataDir(dataMinecraftDir);
@@ -3148,9 +3164,16 @@ std::vector<DumpStart> dumpStructureStarts(
         // Returns true if pieces were dumped.
         auto assembleNonJigsaw = [&](const std::string& sid) -> bool {
             auto cfgIt = runtime->structures.find(sid);
-            if (cfgIt == runtime->structures.end() || !cfgIt->second.supported) return false;
+            if (cfgIt == runtime->structures.end()) return false;
             const JigsawConfig& cfg = cfgIt->second;
             if (cfg.structureType == "minecraft:jigsaw") return false;
+            // Placement-unported types whose ASSEMBLY (StructureStart pieces) is
+            // still dumped for the parity gate. In-game placement remains a hard
+            // no-op (cfg.supported == false gates tryGenerateAndPlace).
+            static const std::set<std::string> assemblyOnlyTypes = {
+                "minecraft:ocean_monument",
+            };
+            if (!cfg.supported && assemblyOnlyTypes.count(cfg.structureType) == 0) return false;
 
             // Biome gate: Java validates AFTER findGenerationPoint, at the STUB
             // position that findGenerationPoint returns — per structure type:
@@ -3334,9 +3357,6 @@ std::vector<DumpStart> dumpStructureStarts(
                     }
                 }
             }
-            // TODO: add assembly for swamp_hut, desert_pyramid, jungle_temple,
-            // igloo, ruined_portal, nether_fossil. These need either terrain
-            // height or piece-specific BB computation.
             else if (cfg.structureType == "minecraft:buried_treasure") {
                 // BuriedTreasureStructure: onTopOfChunkCenter(OCEAN_FLOOR_WG) fixes
                 // the STUB the biome gate samples; generatePieces adds ONE piece at
@@ -3445,6 +3465,255 @@ std::vector<DumpStart> dumpStructureStarts(
                 dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
                 dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
                 dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:ruined_portal") {
+                // RuinedPortalStructure.findGenerationPoint, 1:1 draw order:
+                //   setup pick (nextFloat if >1 setup) → airPocket sample →
+                //   giant gate (nextFloat) → template (nextInt) → rotation
+                //   (nextInt 4) → mirror (nextFloat) → findSuitableY draws.
+                if (cfg.ruinedPortalSetups.empty() || !baseColumnAt) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+
+                const JigsawConfig::RuinedPortalSetup* setup = &cfg.ruinedPortalSetups[0];
+                if (cfg.ruinedPortalSetups.size() > 1) {
+                    float total = 0.0f;
+                    for (const auto& s : cfg.ruinedPortalSetups) total += s.weight;
+                    float pick = random->nextFloat();
+                    for (const auto& s : cfg.ruinedPortalSetups) {
+                        pick -= s.weight / total;
+                        if (pick < 0.0f) { setup = &s; break; }
+                    }
+                }
+                // sample(random, p): p==0 → false, p==1 → true (no draw), else nextFloat()<p
+                bool airPocket = false;
+                if (setup->airPocketProbability == 1.0f) airPocket = true;
+                else if (setup->airPocketProbability != 0.0f) airPocket = random->nextFloat() < setup->airPocketProbability;
+
+                static const char* RP_PORTALS[] = {
+                    "ruined_portal/portal_1", "ruined_portal/portal_2", "ruined_portal/portal_3",
+                    "ruined_portal/portal_4", "ruined_portal/portal_5", "ruined_portal/portal_6",
+                    "ruined_portal/portal_7", "ruined_portal/portal_8", "ruined_portal/portal_9",
+                    "ruined_portal/portal_10"
+                };
+                static const char* RP_GIANT[] = {
+                    "ruined_portal/giant_portal_1", "ruined_portal/giant_portal_2", "ruined_portal/giant_portal_3"
+                };
+                std::string templateLocation;
+                if (random->nextFloat() < 0.05f) {
+                    templateLocation = std::string("minecraft:") + RP_GIANT[random->nextInt(3)];
+                } else {
+                    templateLocation = std::string("minecraft:") + RP_PORTALS[random->nextInt(10)];
+                }
+                const Rotation rot = static_cast<Rotation>(random->nextInt(4));
+                const Mirror mirror = (random->nextFloat() < 0.5f) ? Mirror::NONE : Mirror::FRONT_BACK;
+                const Vec3i size = runtime->sizeOf(templateLocation);
+                const BlockPos pivot{ size.x / 2, 0, size.z / 2 };
+                const BlockPos basePos{ active.x * 16, 0, active.z * 16 };
+                const BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
+                    basePos, rot, pivot, mirror, size);
+                // BoundingBox.getCenter()
+                const int centerX = bb.minX + (bb.maxX - bb.minX + 1) / 2;
+                const int centerZ = bb.minZ + (bb.maxZ - bb.minZ + 1) / 2;
+                // RuinedPortalPiece.getHeightMapType: OCEAN_FLOOR_WG only for
+                // on_ocean_floor placement; WORLD_SURFACE_WG otherwise.
+                const std::string& placement = setup->placement;
+                const int surfaceY = (placement == "on_ocean_floor")
+                    ? occupiedOceanFloor(centerX, centerZ)
+                    : occupiedWorldSurface(centerX, centerZ);
+                // findSuitableY — 1:1 including the 4-corner noise-column scan.
+                auto randBetween = [&random](int lo, int hi) {  // Mth.randomBetweenInclusive
+                    return lo + random->nextInt(hi - lo + 1);
+                };
+                auto randWithinInterval = [&](int minPreferred, int max) {
+                    return minPreferred < max ? randBetween(minPreferred, max) : max;
+                };
+                const int scanMinY = kMinBuildY + 15;  // heightAccessor.getMinY() + MIN_Y_INDEX
+                const int ySpan = bb.maxY - bb.minY + 1;
+                int newY;
+                if (placement == "in_nether") {
+                    if (airPocket) newY = randBetween(32, 100);
+                    else if (random->nextFloat() < 0.5f) newY = randBetween(27, 29);
+                    else newY = randBetween(29, 100);
+                } else if (placement == "in_mountain") {
+                    newY = randWithinInterval(70, surfaceY - ySpan);
+                } else if (placement == "underground") {
+                    newY = randWithinInterval(scanMinY, surfaceY - ySpan);
+                } else if (placement == "partly_buried") {
+                    newY = surfaceY - ySpan + randBetween(2, 8);
+                } else {
+                    newY = surfaceY;
+                }
+                const std::vector<uint32_t> columns[4] = {
+                    baseColumnAt(bb.minX, bb.minZ),
+                    baseColumnAt(bb.maxX, bb.minZ),
+                    baseColumnAt(bb.minX, bb.maxZ),
+                    baseColumnAt(bb.maxX, bb.maxZ),
+                };
+                const uint32_t air   = mc::getDefaultBlockStateId("air", 0);
+                const uint32_t water = mc::getDefaultBlockStateId("water", UINT32_MAX);
+                const uint32_t lava  = mc::getDefaultBlockStateId("lava", UINT32_MAX);
+                const bool oceanFloorPred = (placement == "on_ocean_floor");
+                auto opaque = [&](uint32_t state) {
+                    return oceanFloorPred ? (state != air && state != water && state != lava)
+                                          : (state != air);
+                };
+                int projectedY = newY;
+                bool found = false;
+                for (; projectedY > scanMinY; --projectedY) {
+                    int cornersOnSolidGround = 0;
+                    for (const auto& column : columns) {
+                        const std::size_t idx = static_cast<std::size_t>(projectedY - kMinBuildY);
+                        if (idx >= column.size()) continue;
+                        if (opaque(column[idx]) && ++cornersOnSolidGround == 3) { found = true; break; }
+                    }
+                    if (found) break;
+                }
+                const BlockPos origin{ basePos.x, projectedY, basePos.z };
+                if (!runtime->validBiome(cfg, origin, biomeGetter)) return false;
+                const BoundingBox pieceBB = mc::levelgen::structure::structureGetBoundingBox(
+                    origin, rot, pivot, mirror, size);
+                DumpPiece dp;
+                dp.id = "minecraft:rupo";
+                dp.minX = pieceBB.minX; dp.minY = pieceBB.minY; dp.minZ = pieceBB.minZ;
+                dp.maxX = pieceBB.maxX; dp.maxY = pieceBB.maxY; dp.maxZ = pieceBB.maxZ;
+                dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:ocean_monument") {
+                // OceanMonumentStructure.findGenerationPoint:
+                //   1. every noise biome within radius 29 (3D quart box) of
+                //      (minBlockX+9, seaLevel, minBlockZ+9) must be in
+                //      #required_ocean_monument_surrounding (is_ocean + is_river);
+                //   2. onTopOfChunkCenter(OCEAN_FLOOR_WG) stub → biome gate;
+                //   3. generatePieces: ONE MonumentBuilding at
+                //      (minBlockX-29, 39, minBlockZ-29), 58×23×58, orientation =
+                //      Direction.Plane.HORIZONTAL.getRandomDirection(random).
+                static std::set<std::string> surrounding;  // resolved once
+                if (surrounding.empty()) {
+                    runtime->resolveBiomeTag("minecraft:required_ocean_monument_surrounding", surrounding);
+                    if (surrounding.empty()) return false;  // tag missing — refuse, no guessing
+                }
+                const int offX = active.x * 16 + 9, offZ = active.z * 16 + 9;
+                const int seaLevel = 63;
+                const int q0x = (offX - 29) >> 2, q1x = (offX + 29) >> 2;
+                const int q0y = (seaLevel - 29) >> 2, q1y = (seaLevel + 29) >> 2;
+                const int q0z = (offZ - 29) >> 2, q1z = (offZ + 29) >> 2;
+                for (int qz = q0z; qz <= q1z; ++qz)
+                    for (int qx = q0x; qx <= q1x; ++qx)
+                        for (int qy = q0y; qy <= q1y; ++qy) {
+                            // biomeGetter takes block coords and quart-resolves.
+                            std::string b = normalizeId(biomeGetter(qx << 2, qy << 2, qz << 2));
+                            if (surrounding.count(b) == 0) return false;
+                        }
+                BlockPos stubPos{midX, occupiedOceanFloor(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                // Direction.Plane.HORIZONTAL.faces = [NORTH, EAST, SOUTH, WEST]
+                static const Direction HORIZ[4] = { Direction::NORTH, Direction::EAST, Direction::SOUTH, Direction::WEST };
+                const Direction dir = HORIZ[random->nextInt(4)];
+                const int west = active.x * 16 - 29, north = active.z * 16 - 29;
+                // StructurePiece.makeBoundingBox(west, 39, north, dir, 58, 23, 58):
+                // width == depth so both axes give the same box.
+                DumpPiece dp;
+                dp.id = "minecraft:omb";
+                dp.minX = west; dp.minY = 39; dp.minZ = north;
+                dp.maxX = west + 57; dp.maxY = 61; dp.maxZ = north + 57;
+                dp.orientation = to2D(dir);
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:igloo") {
+                // IglooStructure: onTopOfChunkCenter(WORLD_SURFACE_WG) stub;
+                // generatePieces: startPos = (minBlockX, 90, minBlockZ), rotation =
+                // Rotation.getRandom; IglooPieces.addPieces:
+                //   nextDouble() < 0.5 → depth = nextInt(8)+4; add laboratory at
+                //   startPos+OFFSET(lab)-(0,depth*3,0), then depth-1 ladders at
+                //   startPos+OFFSET(ladder)-(0,i*3,0); always add top at startPos.
+                // Piece BB = template.getBoundingBox(pos, rotation, PIVOT[loc], NONE).
+                BlockPos stubPos{midX, occupiedWorldSurface(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                const BlockPos startPos{ active.x * 16, 90, active.z * 16 };
+                const Rotation rot = static_cast<Rotation>(random->nextInt(4));
+                struct IglooTpl { const char* loc; BlockPos pivot; BlockPos offset; };
+                static const IglooTpl TOP    = { "minecraft:igloo/top",    {3, 5, 5}, {0, 0, 0} };
+                static const IglooTpl LADDER = { "minecraft:igloo/middle", {1, 3, 1}, {2, -3, 4} };
+                static const IglooTpl LAB    = { "minecraft:igloo/bottom", {3, 6, 7}, {0, -3, -2} };
+                auto addIglooPiece = [&](const IglooTpl& tpl, int below) {
+                    const BlockPos pos{ startPos.x + tpl.offset.x,
+                                        startPos.y + tpl.offset.y - below,
+                                        startPos.z + tpl.offset.z };
+                    const Vec3i size = runtime->sizeOf(tpl.loc);
+                    const BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
+                        pos, rot, tpl.pivot, Mirror::NONE, size);
+                    DumpPiece dp;
+                    dp.id = "minecraft:iglu";
+                    dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
+                    dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
+                    dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                    dp.genDepth = 0;
+                    ds.pieces.push_back(std::move(dp));
+                };
+                if (random->nextDouble() < 0.5) {
+                    const int depth = random->nextInt(8) + 4;
+                    addIglooPiece(LAB, depth * 3);
+                    for (int i = 0; i < depth - 1; ++i) addIglooPiece(LADDER, i * 3);
+                }
+                addIglooPiece(TOP, 0);
+            }
+            else if (cfg.structureType == "minecraft:jungle_temple"
+                     || cfg.structureType == "minecraft:desert_pyramid"
+                     || cfg.structureType == "minecraft:swamp_hut") {
+                // SinglePieceStructure (jungle_temple 12×10×15, desert_pyramid
+                // 21×15×21) and SwampHutStructure (7×7×9). The SinglePieceStructure
+                // subclasses first require getLowestY(width, depth) >= seaLevel
+                // (4 WORLD_SURFACE_WG corner heights at the chunk origin); swamp_hut
+                // has no such gate. Then onTopOfChunkCenter(WORLD_SURFACE_WG) stub →
+                // biome gate → ONE ScatteredFeaturePiece at (minBlockX, 64,
+                // minBlockZ) with a random horizontal direction.
+                int width, height, depth;
+                const char* pieceId;
+                if (cfg.structureType == "minecraft:jungle_temple") {
+                    width = 12; height = 10; depth = 15; pieceId = "minecraft:tejp";
+                } else if (cfg.structureType == "minecraft:desert_pyramid") {
+                    width = 21; height = 15; depth = 21; pieceId = "minecraft:tedp";
+                } else {
+                    width = 7; height = 7; depth = 9; pieceId = "minecraft:tesh";
+                }
+                const int baseX = active.x * 16, baseZ = active.z * 16;
+                if (cfg.structureType != "minecraft:swamp_hut") {
+                    const int h0 = occupiedWorldSurface(baseX, baseZ);
+                    const int h1 = occupiedWorldSurface(baseX, baseZ + depth);
+                    const int h2 = occupiedWorldSurface(baseX + width, baseZ);
+                    const int h3 = occupiedWorldSurface(baseX + width, baseZ + depth);
+                    const int lowest = std::min(std::min(h0, h1), std::min(h2, h3));
+                    if (lowest < 63) return false;  // getLowestY < seaLevel → empty
+                }
+                BlockPos stubPos{midX, occupiedWorldSurface(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                static const Direction HORIZ[4] = { Direction::NORTH, Direction::EAST, Direction::SOUTH, Direction::WEST };
+                const Direction dir = HORIZ[random->nextInt(4)];
+                // StructurePiece.makeBoundingBox: Z axis keeps (width, depth); X axis swaps.
+                const bool axisZ = (dir == Direction::NORTH || dir == Direction::SOUTH);
+                const int dx = axisZ ? width : depth;
+                const int dz = axisZ ? depth : width;
+                DumpPiece dp;
+                dp.id = pieceId;
+                dp.minX = baseX; dp.minY = 64; dp.minZ = baseZ;
+                dp.maxX = baseX + dx - 1; dp.maxY = 64 + height - 1; dp.maxZ = baseZ + dz - 1;
+                dp.orientation = to2D(dir);
                 dp.genDepth = 0;
                 ds.pieces.push_back(std::move(dp));
             }

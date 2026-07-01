@@ -105,4 +105,15 @@ std::vector<DumpStart> dumpStructureStarts(
     const std::function<int(int, int)>& worldSurfaceHeightAt,
     const std::string& dataMinecraftDir);
 
+// Full dump with both heightmaps + the noise-only block column
+// (NoiseBasedChunkGenerator.getBaseColumn: state ids indexed by y - minBuildY).
+// Ruined portals need it (findSuitableY scans the 4 corner columns downward).
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& oceanFloorHeightAt,
+    const std::function<int(int, int)>& worldSurfaceHeightAt,
+    const std::function<std::vector<uint32_t>(int, int)>& baseColumnAt,
+    const std::string& dataMinecraftDir);
+
 } // namespace mc::levelgen::structure
