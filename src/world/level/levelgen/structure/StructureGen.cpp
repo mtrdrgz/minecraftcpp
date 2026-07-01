@@ -1202,7 +1202,6 @@ std::optional<std::vector<std::uint8_t>> Runtime::oracleTemplateBytes(const std:
 
 bool Runtime::ensureTemplate(const std::string& location) {
     if (jigsawTemplates.find(location) != jigsawTemplates.end()) return true;
-    if (missingTemplates.find(location) != missingTemplates.end()) return false;
 
     // 1. Try disk (dataDir / "structure" — the 26.1.2/data/minecraft/structure
     //    tree provisioned by tools/provision_runtime.sh). This is the dev path.
@@ -1262,8 +1261,19 @@ bool Runtime::ensureTemplate(const std::string& location) {
         }
     }
 
-    missingTemplates.insert(location);
-    return false;
+    // 4. StructureTemplateManager.getOrCreate semantics: a template that cannot
+    //    be loaded resolves to an EMPTY StructureTemplate (size 0, no blocks, no
+    //    jigsaw blocks). The shipped vanilla jars genuinely reference templates
+    //    that do not exist (e.g. ancient_city/walls/intact_horizontal_wall_stairs_5)
+    //    and the real server proceeds with the empty template — the element simply
+    //    never attaches. Throwing here aborted entire assemblies (ancient_city).
+    if (missingTemplates.insert(location).second) {
+        MC_LOG_WARN("Structures: template {} not found — EMPTY template (vanilla getOrCreate semantics)",
+                    location);
+    }
+    jigsawTemplates[location] = {};
+    placeTemplates[location] = {};
+    return true;
 }
 
 Vec3i Runtime::sizeOf(const std::string& location) {

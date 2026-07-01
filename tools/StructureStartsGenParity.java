@@ -105,7 +105,15 @@ public class StructureStartsGenParity {
             String entryName = "data/" + id.getNamespace() + "/structure/" + id.getPath() + ".nbt";
             try {
                 var entry = this.jar.getEntry(entryName);
-                if (entry == null) throw new IllegalStateException("template not in jar: " + entryName);
+                if (entry == null) {
+                    // StructureTemplateManager.getOrCreate: a missing template resolves
+                    // to an EMPTY StructureTemplate (size 0, no jigsaw blocks) — the
+                    // server does the same (e.g. ancient_city/walls/
+                    // intact_horizontal_wall_stairs_5.nbt is absent from the shipped
+                    // jars). Never throw here or seeds that roll such an element crash.
+                    ERR.println("[oracle] missing template (empty, as vanilla): " + entryName);
+                    return new StructureTemplate();
+                }
                 try (var in = this.jar.getInputStream(entry)) {
                     CompoundTag nbt = NbtIo.readCompressed(in, net.minecraft.nbt.NbtAccounter.unlimitedHeap());
                     StructureTemplate template = new StructureTemplate();
@@ -407,19 +415,26 @@ public class StructureStartsGenParity {
                     }
 
                     if (produced != null) {
-                        CompoundTag tag = produced.createTag(serializationContext, chunkPos);
-                        String id = tag.getStringOr("id", "");
-                        ListTag children = tag.getListOrEmpty("Children");
-                        out.println("S\t" + id + "\t" + cx + "\t" + cz + "\t0\t" + children.size());
-                        for (int ci = 0; ci < children.size(); ci++) {
-                            CompoundTag piece = children.getCompoundOrEmpty(ci);
-                            String pid = piece.getStringOr("id", "");
-                            int[] bb = piece.getIntArray("BB").orElse(new int[6]);
-                            int o = piece.getIntOr("O", 0);
-                            int gd = piece.getIntOr("GD", 0);
+                        // Read the TSV fields straight off the piece objects — the
+                        // SAME sources StructurePiece.createTag writes ("id" via
+                        // STRUCTURE_PIECE.getKey(getType()), "BB", "O" =
+                        // get2DDataValue or -1, "GD") — without running the NBT
+                        // codecs: pool elements from the datagen lookup reference
+                        // unbound block-tag HolderSets (e.g. ancient_city's
+                        // #ancient_city_replaceable) that crash serialization.
+                        String id = structureRegistry.getKey(produced.getStructure()).toString();
+                        java.util.List<net.minecraft.world.level.levelgen.structure.StructurePiece> pieces =
+                            produced.getPieces();
+                        out.println("S\t" + id + "\t" + cx + "\t" + cz + "\t0\t" + pieces.size());
+                        for (var piece : pieces) {
+                            Identifier pid = BuiltInRegistries.STRUCTURE_PIECE.getKey(piece.getType());
+                            var bb = piece.getBoundingBox();
+                            var o = piece.getOrientation();
                             StringBuilder sb = new StringBuilder("C\t").append(pid);
-                            for (int k = 0; k < 6; k++) sb.append('\t').append(k < bb.length ? bb[k] : 0);
-                            sb.append('\t').append(o).append('\t').append(gd);
+                            sb.append('\t').append(bb.minX()).append('\t').append(bb.minY()).append('\t').append(bb.minZ());
+                            sb.append('\t').append(bb.maxX()).append('\t').append(bb.maxY()).append('\t').append(bb.maxZ());
+                            sb.append('\t').append(o == null ? -1 : o.get2DDataValue());
+                            sb.append('\t').append(piece.getGenDepth());
                             out.println(sb);
                         }
                         tally.merge(id, 1, Integer::sum);
@@ -429,8 +444,8 @@ public class StructureStartsGenParity {
             }
         }
 
-        System.err.println("totalStarts=" + totalStarts);
-        for (var e : tally.entrySet()) System.err.println("  " + e.getKey() + " = " + e.getValue());
+        ERR.println("totalStarts=" + totalStarts);
+        for (var e : tally.entrySet()) ERR.println("  " + e.getKey() + " = " + e.getValue());
         jar.close();
     }
 
