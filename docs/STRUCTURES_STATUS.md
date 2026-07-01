@@ -65,6 +65,20 @@ recursive StrongholdPieces) and woodland mansion (1 start, 606 pieces — grid
 assembly).** Both have byte-exact certified geometry helpers; what is missing is
 the piece-recursion/assembly + placement, each a full-session port.
 
+Multi-seed re-certification (same gate, 452 oracle starts total):
+
+| Seed | Region | Result |
+|---|---|---|
+| 1 | (-60,-60)..(120,120) | 285/287 (missing: stronghold, mansion) |
+| 12345 | (-40,-40)..(60,60) | **64/64 BYTE-EXACT** incl. 7 ancient_city (~90-102 pieces each) |
+| -777 | (-40,-40)..(60,60) | 103/104 (missing: mineshaft_mesa — honest no-op) |
+
+Extra root cause found by the seed-12345 run: a referenced template that is
+absent from the shipped jars (ancient_city's intact_horizontal_wall_stairs_5)
+must resolve to an EMPTY template (`StructureTemplateManager.getOrCreate`
+semantics); the engine threw instead and a silent `catch(...)` killed every
+ancient_city assembly in-game with no trace. Fixed in `ensureTemplate`.
+
 ### Root causes fixed (these were THE user-visible bugs)
 
 1. **`getBaseHeight` was not Java's.** It scanned `finalDensity` at block
