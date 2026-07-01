@@ -32,6 +32,12 @@ public:
     ~NoiseBasedChunkGenerator();
 
 
+    // 1:1 port of NoiseBasedChunkGenerator.getBaseHeight(x, z, WORLD_SURFACE_WG, ...):
+    // iterateNoiseColumn over a single-cell NoiseChunk (cell-interpolated density +
+    // aquifer + ore veins), testing Heightmap.Types.WORLD_SURFACE_WG.isOpaque()
+    // (= !state.isAir(); fluids COUNT — over oceans this returns sea level, not the
+    // ocean floor). Returns firstFree (the y ABOVE the topmost opaque block), i.e.
+    // Java's getFirstFreeHeight; subtract 1 for getFirstOccupiedHeight.
     int getBaseHeight(int blockX, int blockZ) const;
     // `fluidUpdateMarks`, when non-null, collects the postprocess marks vanilla
     // records during the NOISE step (NoiseBasedChunkGenerator.java:442-446: every
@@ -76,14 +82,26 @@ public:
     int getMinY()      const { return m_settings.noiseSettings.minY; }
     int getGenDepth()  const { return m_settings.noiseSettings.height; }
 
-    // OCEAN_FLOOR_WG heightmap: topmost block where finalDensity > 0 AND
-    // the block is NOT a fluid (water/lava). This is the heightmap vanilla
-    // uses for ocean structures (buried_treasure, shipwreck, ocean_ruin) —
-    // it returns the ocean FLOOR height, not the water surface.
-    // See NoiseBasedChunkGenerator.cpp for implementation notes.
+    // 1:1 port of getBaseHeight(x, z, OCEAN_FLOOR_WG, ...): same iterateNoiseColumn,
+    // testing MATERIAL_MOTION_BLOCKING (= state.blocksMotion(); fluids do NOT count —
+    // over oceans this returns the ocean floor). Used by ocean structures
+    // (buried_treasure, shipwreck, ocean_ruin).
     int getOceanFloorHeight(int blockX, int blockZ) const;
 
+    // 1:1 port of NoiseBasedChunkGenerator.getBaseColumn: the full noise-only block
+    // column (defaultBlock / water / lava / ore / air) from minY (index 0) upward.
+    // Ruined portals scan it to pick their buried Y.
+    std::vector<uint32_t> getBaseColumn(int blockX, int blockZ) const;
+
 private:
+    // 1:1 port of NoiseBasedChunkGenerator.iterateNoiseColumn: walks one block
+    // column of the noise-only world top-down at cell resolution (a 1-cell-wide
+    // NoiseChunk: interpolated density from the 8 cell corners, the real aquifer
+    // anchored at the CONTAINING CHUNK's origin, ore veins), returning y+1 of the
+    // first state matching `tester`, and/or filling `column` (index = y - minY).
+    std::optional<int> iterateNoiseColumn(int blockX, int blockZ,
+                                          const std::function<bool(uint32_t)>* tester,
+                                          std::vector<uint32_t>* column) const;
     uint32_t stateIdFor(const char* blockName, uint32_t fallback = 0) const;
     double   sampleFinalDensity(int blockX, int blockY, int blockZ) const;
     int      samplePreliminarySurfaceLevel(int blockX, int blockZ) const;

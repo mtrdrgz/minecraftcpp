@@ -338,7 +338,8 @@ inline int32_t moveBelowSeaLevel(MsBuilder& b, int32_t seaLevel, int32_t minY,
 // Returns the assembled, sea-level-adjusted piece list for the start chunk.
 // random: WorldgenRandom over a LegacyRandomSource(0), seeded by
 // setLargeFeatureSeed(seed, chunkX, chunkZ) — exactly the structure context RNG.
-inline std::vector<MsPiece> assembleMineshaftNormal(int64_t seed, int32_t chunkX, int32_t chunkZ) {
+inline std::vector<MsPiece> assembleMineshaftNormal(int64_t seed, int32_t chunkX, int32_t chunkZ,
+                                                    int32_t* yOffsetOut = nullptr) {
     auto base = std::make_shared<mc::levelgen::LegacyRandomSource>(0);
     mc::levelgen::WorldgenRandom random(base);
     random.setLargeFeatureSeed(seed, chunkX, chunkZ);
@@ -353,7 +354,11 @@ inline std::vector<MsPiece> assembleMineshaftNormal(int64_t seed, int32_t chunkX
     b.pieces.push_back(room);
 
     detail::addChildren(b, 0, random);
-    detail::moveBelowSeaLevel(b, 63, -64, random, 10);
+    // MineshaftStructure.findGenerationPoint: the GenerationStub position is
+    // (middleBlockX, 50 + yOffset, minBlockZ) where yOffset is moveBelowSeaLevel's
+    // return — the stub the biome gate samples. Expose it for callers.
+    const int32_t dy = detail::moveBelowSeaLevel(b, 63, -64, random, 10);
+    if (yOffsetOut) *yOffsetOut = dy;
     return b.pieces;
 }
 
