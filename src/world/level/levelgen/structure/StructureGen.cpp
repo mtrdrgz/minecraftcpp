@@ -679,11 +679,15 @@ struct Runtime {
                               const std::string& processorsId = "minecraft:empty",
                               bool terrainMatching = false,
                               const BoundingBox* chunkBB = nullptr,
-                              float integrity = 1.0f);
+                              float integrity = 1.0f,
+                              Mirror mirror = Mirror::NONE,
+                              const BlockPos& pivot = kBlockPosZero);
 
     // OceanRuin (non-jigsaw, template-based with BlockRotProcessor integrity decay).
     bool tryPlaceOceanRuin(ChunkPos active, const StructureWorld& world,
                            bool warm, float largeProbability, float clusterProbability);
+    int adjustOceanRuinY(const BlockPos& pos, Rotation rot, const Vec3i& size,
+                         const StructureWorld& world) const;
     void addOceanRuinPiece(const BlockPos& pos, Rotation rot, bool isLarge, float integrity,
                            bool warm, mc::levelgen::WorldgenRandom& random,
                            const StructureWorld& world, std::size_t& placed);
@@ -1008,6 +1012,11 @@ JigsawConfig Runtime::loadOneStructure(const std::string& id, const json& j) {
     if (supportedTypes.count(type) == 0) {
         cfg.supported = false;
         cfg.reason = "type " + type + " not yet ported (no piece placement) — hard no-op";
+        // Still parse the biome gate: the structure-starts parity dump assembles
+        // some placement-unported types (e.g. ocean_monument's single top piece)
+        // and needs the real Structure.isValidBiome set. In-game placement stays
+        // a hard no-op via cfg.supported = false.
+        if (j.contains("biomes")) resolveBiomeSpec(j.at("biomes"), cfg.biomes);
         return cfg;
     }
 
@@ -1193,7 +1202,6 @@ std::optional<std::vector<std::uint8_t>> Runtime::oracleTemplateBytes(const std:
 
 bool Runtime::ensureTemplate(const std::string& location) {
     if (jigsawTemplates.find(location) != jigsawTemplates.end()) return true;
-    if (missingTemplates.find(location) != missingTemplates.end()) return false;
 
     // 1. Try disk (dataDir / "structure" — the 26.1.2/data/minecraft/structure
     //    tree provisioned by tools/provision_runtime.sh). This is the dev path.
@@ -1253,8 +1261,19 @@ bool Runtime::ensureTemplate(const std::string& location) {
         }
     }
 
-    missingTemplates.insert(location);
-    return false;
+    // 4. StructureTemplateManager.getOrCreate semantics: a template that cannot
+    //    be loaded resolves to an EMPTY StructureTemplate (size 0, no blocks, no
+    //    jigsaw blocks). The shipped vanilla jars genuinely reference templates
+    //    that do not exist (e.g. ancient_city/walls/intact_horizontal_wall_stairs_5)
+    //    and the real server proceeds with the empty template — the element simply
+    //    never attaches. Throwing here aborted entire assemblies (ancient_city).
+    if (missingTemplates.insert(location).second) {
+        MC_LOG_WARN("Structures: template {} not found — EMPTY template (vanilla getOrCreate semantics)",
+                    location);
+    }
+    jigsawTemplates[location] = {};
+    placeTemplates[location] = {};
+    return true;
 }
 
 Vec3i Runtime::sizeOf(const std::string& location) {
@@ -1537,13 +1556,14 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
                                    Rotation rot, const StructureWorld& world,
                                    bool legacy, const std::string& processorsId,
                                    bool terrainMatching,
-                                   const BoundingBox* chunkBB, float integrity) {
+                                   const BoundingBox* chunkBB, float integrity,
+                                   Mirror mirror, const BlockPos& pivot) {
     if (!ensureTemplate(location)) return 0;
     const PlaceTemplate& tpl = placeTemplates.at(location);
     const ProcList* rules = loadProcessorList(processorsId);
     std::size_t placed = 0;
     for (const PlaceBlock& block : tpl.blocks) {
-        BlockPos rp = structureTransform(block.pos, Mirror::NONE, rot, kBlockPosZero);
+        BlockPos rp = structureTransform(block.pos, mirror, rot, pivot);
         int wx = pos.x + rp.x, wy = pos.y + rp.y, wz = pos.z + rp.z;
 
         std::uint32_t state = block.state;  // un-rotated, resolved
@@ -1579,7 +1599,9 @@ std::size_t Runtime::placeTemplate(const std::string& location, const BlockPos& 
             if (rr->nextFloat() > integrity) continue;
         }
 
-        std::uint32_t finalState = resolver.rotateState(state, rot);
+        // Java StructureTemplate.placeInWorld: state.mirror(mirror).rotate(rotation).
+        std::uint32_t finalState = resolver.rotateState(
+            mirror == Mirror::NONE ? state : resolver.mirrorState(state, mirror), rot);
         if (world.setBlock) {
             if (chunkBB && !chunkBB->isInside(BlockPos{wx, wy, wz})) continue;
             world.setBlock(wx, wy, wz, finalState);
@@ -1635,17 +1657,36 @@ bool Runtime::tryGenerateAndPlace(const std::string& structureId, ChunkPos activ
 
     const JigsawConfig& cfg = it->second;
 
-    // Biome gate for the non-jigsaw families (Structure.isValidBiome). Vanilla's
-    // onTopOfChunkCenter validates the structure's biome at the chunk-centre
-    // surface column before placing; the jigsaw path validates inside
-    // assembleJigsaw. Without this, hand-built structures place in any biome —
-    // desert pyramids in plains, igloos in deserts, nether fossils all over the
-    // overworld. Sample at (midX, surfaceY, midZ); the biomeGetter quart-resolves.
+    // Biome gate for the non-jigsaw families (Structure.isValidBiome at the
+    // findGenerationPoint STUB). The stub Y is the first-occupied height of the
+    // heightmap each structure's onTopOfChunkCenter names: OCEAN_FLOOR_WG for the
+    // ocean structures (fluids skipped — the ocean floor), WORLD_SURFACE_WG for
+    // the rest (fluids count — sea level over oceans, which is what keeps ocean
+    // chunks from validating land biomes and vice versa). The jigsaw path
+    // validates inside assembleJigsaw at the Java stub position.
     if (cfg.structureType != "minecraft:jigsaw") {
-        int midX = active.x * 16 + 8;
-        int midZ = active.z * 16 + 8;
-        int surfaceY = world.heightAt ? world.heightAt(midX, midZ) : 0;
-        if (!validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) return false;
+        const int midX = active.x * 16 + 8;
+        const int midZ = active.z * 16 + 8;
+        const bool oceanStub =
+            cfg.structureType == "minecraft:ocean_ruin" ||
+            cfg.structureType == "minecraft:buried_treasure" ||
+            cfg.structureType == "minecraft:ocean_monument" ||
+            (cfg.structureType == "minecraft:shipwreck" && !cfg.isBeached);
+        const auto& stubHeight = (oceanStub && world.oceanFloorAt) ? world.oceanFloorAt
+                                                                   : world.heightAt;
+        int surfaceY = stubHeight ? stubHeight(midX, midZ) : 0;
+        if (cfg.structureType == "minecraft:mineshaft") {
+            // MineshaftStructure stub: (middleX, 50 + yOffset, minBlockZ), where
+            // yOffset comes from moveBelowSeaLevel during assembly (fresh seeded
+            // random — the gate itself consumes no draws).
+            if (cfg.mineshaftMesa) return false;  // MESA adjust unported — no-op
+            int32_t yOffset = 0;
+            mc::levelgen::structure::structures::assembleMineshaftNormal(
+                seed, active.x, active.z, &yOffset);
+            if (!validBiome(cfg, BlockPos{midX, 50 + yOffset, active.z * 16}, biomeGetter)) return false;
+        } else {
+            if (!validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) return false;
+        }
     }
 
     // Non-jigsaw structure dispatch
@@ -1774,7 +1815,13 @@ bool Runtime::tryPlaceBuriedTreasure(ChunkPos active, const StructureWorld& worl
     StructureWorldAccess access;
     access.getBlock = world.getBlock;
     access.setBlock = world.setBlock;
-    access.getHeight = world.heightAt;
+    // BuriedTreasurePiece.postProcess: y = level.getHeight(OCEAN_FLOOR_WG, x, z)
+    // — the FIRST-FREE height above the ocean floor (our callbacks return the
+    // occupied height, so +1). The downward anchor scan starts there.
+    access.getHeight = [&world](int x, int z) {
+        const auto& h = world.oceanFloorAt ? world.oceanFloorAt : world.heightAt;
+        return h ? h(x, z) + 1 : 90;
+    };
     access.minY = -64;
     access.isInsideBoundingBox = nullptr;  // allow all writes
 
@@ -1797,16 +1844,63 @@ const char* BIG_WARM_RUINS[]   = { "big_warm_4","big_warm_5","big_warm_6","big_w
 inline std::string ruinLoc(const char* leaf) { return std::string("minecraft:underwater_ruin/") + leaf; }
 }
 
+// OceanRuinPieces.OceanRuinPiece.postProcess Y adjustment, 1:1:
+//   1. templatePosition.y = level.getHeight(OCEAN_FLOOR_WG, x, z)  (first free)
+//   2. corner = transform(size-1, NONE, rot, ZERO) + templatePosition;
+//      templatePosition.y = getHeight(...): per footprint column scan DOWN from
+//      y-1 through air / water / ice blocks to the floor; if the footprint drops
+//      more than 2 blocks over most of its area, sink the ruin to minY + 1.
+int Runtime::adjustOceanRuinY(const BlockPos& pos, Rotation rot, const Vec3i& size,
+                              const StructureWorld& world) const {
+    const auto& floorHeight = world.oceanFloorAt ? world.oceanFloorAt : world.heightAt;
+    int y = (floorHeight ? floorHeight(pos.x, pos.z) : 89) + 1;
+    if (!world.getBlock) return y;
+    const BlockPos c = structureTransform(BlockPos{size.x - 1, 0, size.z - 1},
+                                          Mirror::NONE, rot, kBlockPosZero);
+    const int cornerX = pos.x + c.x, cornerZ = pos.z + c.z;
+    auto passable = [this](uint32_t state) {
+        const std::string& n = (state < resolver.states.size()) ? resolver.states[state].name
+                                                                : resolver.states[0].name;
+        // BlockState.isAir() || fluid.is(WATER) || state.is(BlockTags.ICE)
+        return n == "air" || n == "water" ||
+               n == "ice" || n == "frosted_ice" || n == "packed_ice" || n == "blue_ice";
+    };
+    int newY = y;
+    int minY = 512;
+    const int topY = y - 1;
+    int area = 0;
+    const int x0 = std::min(pos.x, cornerX), x1 = std::max(pos.x, cornerX);
+    const int z0 = std::min(pos.z, cornerZ), z1 = std::max(pos.z, cornerZ);
+    for (int x = x0; x <= x1; ++x) {
+        for (int z = z0; z <= z1; ++z) {
+            int floorY = y - 1;
+            uint32_t state = world.getBlock(x, floorY, z);
+            while (passable(state) && floorY > kMinBuildY + 1) {
+                state = world.getBlock(x, --floorY, z);
+            }
+            minY = std::min(minY, floorY);
+            if (floorY < topY - 2) ++area;
+        }
+    }
+    const int width = std::abs(pos.x - cornerX);
+    if (topY - minY > 2 && area > width - 2) newY = minY + 1;
+    return newY;
+}
+
 // OceanRuinPieces.addPiece — WARM: one warm ruin; COLD: brick(integrity) + cracked(0.7) + mossy(0.5)
 // (all sharing the same random index). Template placement uses BlockRot(integrity) +
-// STRUCTURE_AND_AIR (legacy=true skips air+structure_block).
+// STRUCTURE_AND_AIR (legacy=true skips air+structure_block). Each piece projects its
+// own Y in postProcess (adjustOceanRuinY) before writing blocks — previously the
+// pieces stayed at the assembly Y=90 and floated over deep oceans.
 void Runtime::addOceanRuinPiece(const BlockPos& pos, Rotation rot, bool isLarge, float integrity,
                                 bool warm, mc::levelgen::WorldgenRandom& random,
                                 const StructureWorld& world, std::size_t& placed) {
     if (warm) {
         const char* leaf = isLarge ? BIG_WARM_RUINS[random.nextInt(4)]
                                    : WARM_RUINS[random.nextInt(8)];
-        placed += placeTemplate(ruinLoc(leaf), pos, rot, world, /*legacy*/ true,
+        const std::string loc = ruinLoc(leaf);
+        const BlockPos adjusted{ pos.x, adjustOceanRuinY(pos, rot, sizeOf(loc), world), pos.z };
+        placed += placeTemplate(loc, adjusted, rot, world, /*legacy*/ true,
                                 "minecraft:empty", false, nullptr, integrity);
     } else {
         const char** bricks  = isLarge ? BIG_RUINS_BRICK   : RUINS_BRICK;
@@ -1814,9 +1908,12 @@ void Runtime::addOceanRuinPiece(const BlockPos& pos, Rotation rot, bool isLarge,
         const char** mossy   = isLarge ? BIG_RUINS_MOSSY   : RUINS_MOSSY;
         const int len = isLarge ? 4 : 8;
         const int idx = random.nextInt(len);
-        placed += placeTemplate(ruinLoc(bricks[idx]),  pos, rot, world, true, "minecraft:empty", false, nullptr, integrity);
-        placed += placeTemplate(ruinLoc(cracked[idx]), pos, rot, world, true, "minecraft:empty", false, nullptr, 0.7f);
-        placed += placeTemplate(ruinLoc(mossy[idx]),   pos, rot, world, true, "minecraft:empty", false, nullptr, 0.5f);
+        // The 3 overlaid variants share pos/rot/size → identical adjusted Y.
+        const std::string brickLoc = ruinLoc(bricks[idx]);
+        const BlockPos adjusted{ pos.x, adjustOceanRuinY(pos, rot, sizeOf(brickLoc), world), pos.z };
+        placed += placeTemplate(brickLoc,             adjusted, rot, world, true, "minecraft:empty", false, nullptr, integrity);
+        placed += placeTemplate(ruinLoc(cracked[idx]), adjusted, rot, world, true, "minecraft:empty", false, nullptr, 0.7f);
+        placed += placeTemplate(ruinLoc(mossy[idx]),   adjusted, rot, world, true, "minecraft:empty", false, nullptr, 0.5f);
     }
 }
 
@@ -2012,6 +2109,11 @@ bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bo
     //   mean /= (sizeX * sizeZ)
     const int baseX = active.x * 16;
     const int baseZ = active.z * 16;
+    // level.getHeight(type, x, z) is the FIRST-AVAILABLE height (occupied + 1);
+    // our callbacks return the occupied height, so +1. The ocean variant samples
+    // OCEAN_FLOOR_WG (fluids skipped), beached samples WORLD_SURFACE_WG.
+    const auto& footprintHeight = (!isBeached && world.oceanFloorAt) ? world.oceanFloorAt
+                                                                     : world.heightAt;
     int meanY = 0;
     int minY = 999999;
     int sampleCount = 0;
@@ -2019,7 +2121,7 @@ bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bo
     const int footprintD = std::max(1, templateD);
     for (int dx = 0; dx < footprintW; ++dx) {
         for (int dz = 0; dz < footprintD; ++dz) {
-            int h = world.heightAt ? world.heightAt(baseX + dx, baseZ + dz) : 63;
+            int h = (footprintHeight ? footprintHeight(baseX + dx, baseZ + dz) : 62) + 1;
             meanY += h;
             if (h < minY) minY = h;
             ++sampleCount;
@@ -2040,8 +2142,13 @@ bool Runtime::tryPlaceShipwreck(ChunkPos active, const StructureWorld& world, bo
     // Clamp to reasonable range (don't place above build limit or below 0).
     placeY = std::max(0, std::min(placeY, 255 - templateH));
 
+    // ShipwreckPieces.PIVOT = BlockPos(4, 0, 15): every shipwreck template rotates
+    // around this pivot, NOT the origin — without it rotated wrecks land shifted.
     BlockPos pos{ baseX, placeY, baseZ };
-    std::size_t placed = placeTemplate(templateLocation, pos, rot, world);
+    std::size_t placed = placeTemplate(templateLocation, pos, rot, world,
+                                       /*legacy*/ false, "minecraft:empty",
+                                       /*terrainMatching*/ false, nullptr, 1.0f,
+                                       Mirror::NONE, BlockPos{4, 0, 15});
     MC_LOG_INFO("Structure shipwreck{} placed at chunk ({},{}), pos=({},{},{}) template={} rot={} blocks={}",
                 isBeached ? "_beached" : "", active.x, active.z,
                 pos.x, pos.y, pos.z, templateLocation, rotIdx, placed);
@@ -2274,33 +2381,72 @@ bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
     const Rotation rot = static_cast<Rotation>(rotIdx);
     const Mirror mirror = (random->nextFloat() < 0.5f) ? Mirror::NONE : Mirror::FRONT_BACK;
 
-    // 5. Base position = chunk origin.
-    BlockPos basePos{ active.x * 16, 0, active.z * 16 };
+    // 5. Base position = chunk origin; pivot = (sizeX/2, 0, sizeZ/2); the piece
+    //    BB is computed with rotation + mirror around that pivot.
+    const BlockPos basePos{ active.x * 16, 0, active.z * 16 };
+    const Vec3i tplSize = sizeOf(templateLocation);
+    const BlockPos pivot{ tplSize.x / 2, 0, tplSize.z / 2 };
+    const BoundingBox bb0 = mc::levelgen::structure::structureGetBoundingBox(
+        basePos, rot, pivot, mirror, tplSize);
+    const int centerX = bb0.minX + (bb0.maxX - bb0.minX + 1) / 2;
+    const int centerZ = bb0.minZ + (bb0.maxZ - bb0.minZ + 1) / 2;
 
-    // 6. Find suitable Y (simplified: use surface height for overworld placements,
-    //    or the noise-column scan for nether). The full version walks 4 corner
-    //    columns; here we use the world.heightAt for the center.
-    // Mth.randomBetweenInclusive(random, min, max) = min + random.nextInt(max - min + 1).
-    auto randBetween = [&random](int min, int max) -> int {
-        if (max < min) return max;
+    // 6. findSuitableY — 1:1: per-placement heightmap at the BB centre, the
+    //    randomBetweenInclusive draws, then the 4-corner noise-column downward
+    //    scan for solid ground (3 of 4 corners solid).
+    auto randBetween = [&random](int min, int max) -> int {  // Mth.randomBetweenInclusive
         return min + random->nextInt(max - min + 1);
     };
-    int surfaceY = 0;
-    if (world.heightAt) surfaceY = world.heightAt(basePos.x + 8, basePos.z + 8) - 1;
-    int projectedY = surfaceY;
+    auto randWithinInterval = [&](int minPreferred, int max) {
+        return minPreferred < max ? randBetween(minPreferred, max) : max;
+    };
     const std::string& placement = chosenSetup->placement;
+    const auto& centerHeight = (placement == "on_ocean_floor" && world.oceanFloorAt)
+        ? world.oceanFloorAt : world.heightAt;
+    // getBaseHeight(...) - 1 == the first-occupied height our callbacks return.
+    const int surfaceY = centerHeight ? centerHeight(centerX, centerZ) : 62;
+    const int scanMinY = kMinBuildY + 15;  // heightAccessor.getMinY() + MIN_Y_INDEX
+    const int ySpan = bb0.maxY - bb0.minY + 1;
+    int newY;
     if (placement == "in_nether") {
-        if (airPocket) projectedY = randBetween(32, 100);
-        else if (random->nextFloat() < 0.5f) projectedY = randBetween(27, 29);
-        else projectedY = randBetween(29, 100);
+        if (airPocket) newY = randBetween(32, 100);
+        else if (random->nextFloat() < 0.5f) newY = randBetween(27, 29);
+        else newY = randBetween(29, 100);
     } else if (placement == "in_mountain") {
-        projectedY = surfaceY;  // simplified (no ySpan)
+        newY = randWithinInterval(70, surfaceY - ySpan);
     } else if (placement == "underground") {
-        projectedY = std::min(surfaceY, randBetween(-49, surfaceY));
+        newY = randWithinInterval(scanMinY, surfaceY - ySpan);
     } else if (placement == "partly_buried") {
-        projectedY = surfaceY - randBetween(2, 8);
+        newY = surfaceY - ySpan + randBetween(2, 8);
     } else {
-        projectedY = surfaceY;
+        newY = surfaceY;
+    }
+    int projectedY = newY;
+    if (world.baseColumnAt) {
+        const std::vector<uint32_t> columns[4] = {
+            world.baseColumnAt(bb0.minX, bb0.minZ),
+            world.baseColumnAt(bb0.maxX, bb0.minZ),
+            world.baseColumnAt(bb0.minX, bb0.maxZ),
+            world.baseColumnAt(bb0.maxX, bb0.maxZ),
+        };
+        const uint32_t airId   = mc::getDefaultBlockStateId("air", 0);
+        const uint32_t waterId = mc::getDefaultBlockStateId("water", UINT32_MAX);
+        const uint32_t lavaId  = mc::getDefaultBlockStateId("lava", UINT32_MAX);
+        const bool oceanFloorPred = (placement == "on_ocean_floor");
+        auto opaque = [&](uint32_t state) {
+            return oceanFloorPred ? (state != airId && state != waterId && state != lavaId)
+                                  : (state != airId);
+        };
+        bool found = false;
+        for (; projectedY > scanMinY; --projectedY) {
+            int cornersOnSolidGround = 0;
+            for (const auto& column : columns) {
+                const std::size_t idx = static_cast<std::size_t>(projectedY - kMinBuildY);
+                if (idx >= column.size()) continue;
+                if (opaque(column[idx]) && ++cornersOnSolidGround == 3) { found = true; break; }
+            }
+            if (found) break;
+        }
     }
 
     // 7. Place the template with the ruined-portal processor chain.
@@ -2309,12 +2455,13 @@ bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
     // gold/lava/netherrack rules) are all ported in templatesystem/. We use
     // legacy=true (STRUCTURE_AND_AIR ignore) when airPocket is false, legacy=false
     // (STRUCTURE_BLOCK ignore only) when airPocket is true — matching Java's
-    // BlockIgnoreProcessor selection.
+    // BlockIgnoreProcessor selection. Rotation is applied around the pivot with
+    // the drawn mirror — half of all ruined portals are FRONT_BACK mirrored.
     BlockPos origin{ basePos.x, projectedY, basePos.z };
     std::size_t placed = placeTemplate(templateLocation, origin, rot, world,
                                        /*legacy*/ !airPocket,
                                        "minecraft:empty", /*terrainMatching*/ false,
-                                       nullptr, /*integrity*/ 1.0f);
+                                       nullptr, /*integrity*/ 1.0f, mirror, pivot);
 
     // 8. spreadNetherrack (RuinedPortalPiece.java:228-262) — scatter netherrack/
     //    magma around the portal center, with drip columns below.
@@ -2325,12 +2472,7 @@ bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
         const uint32_t obsidian = mc::getDefaultBlockStateId("obsidian", 0);
         const uint32_t lava = mc::getDefaultBlockStateId("lava", 0);
 
-        // Template bounding box center (approximate — use origin + half template size).
-        // Java uses this.boundingBox.getCenter(); we approximate with origin + (size/2).
-        // The template sizes are small (portal_1..10 are 3-5 wide), so the center
-        // is close to origin + 2.
-        const int centerX = origin.x + 2;
-        const int centerZ = origin.z + 2;
+        // this.boundingBox.getCenter() — the real piece BB (bb0 X/Z, minY = origin.y).
         const int minY = origin.y;
 
         bool followGroundSurface = (placement == "on_land_surface" || placement == "on_ocean_floor");
@@ -2338,8 +2480,9 @@ bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
             1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
             0.9f, 0.9f, 0.8f, 0.7f, 0.6f, 0.4f, 0.2f
         };
-        const int maxDistance = 14;  // sizeof(netherrackProbByDist)
-        const int averageWidth = 8;  // approximate (template sizes vary)
+        const int maxDistance = 14;  // netherrackProbabilityByDistance.length
+        // averageWidth = (bb.getXSpan() + bb.getZSpan()) / 2
+        const int averageWidth = ((bb0.maxX - bb0.minX + 1) + (bb0.maxZ - bb0.minZ + 1)) / 2;
         const int distanceAdjustment = random->nextInt(std::max(1, 8 - averageWidth / 2));
 
         // placeNetherrackOrMagma (RuinedPortalPiece.java:282-287)
@@ -2388,11 +2531,12 @@ bool Runtime::tryPlaceRuinedPortal(ChunkPos active, const StructureWorld& world,
                 float probability = netherrackProbByDist[adjustedDistance];
                 if (random->nextDouble() >= probability) continue;
 
-                int surfaceY = 0;
-                if (world.heightAt) {
-                    surfaceY = world.heightAt(x, z) - 1;
-                }
-                int y = followGroundSurface ? surfaceY : std::min(minY, surfaceY);
+                // getSurfaceY = level.getHeight(getHeightMapType(placement), x, z) - 1
+                // == the first-occupied height our callbacks already return.
+                const auto& spreadHeight = (placement == "on_ocean_floor" && world.oceanFloorAt)
+                    ? world.oceanFloorAt : world.heightAt;
+                int colY = spreadHeight ? spreadHeight(x, z) : 62;
+                int y = followGroundSurface ? colY : std::min(minY, colY);
                 if (std::abs(y - minY) > 3) continue;
                 if (!canReplace(x, y, z)) continue;
 
@@ -3040,6 +3184,17 @@ std::vector<DumpStart> dumpStructureStarts(
     const std::function<int(int, int)>& oceanFloorHeightAt,
     const std::function<int(int, int)>& worldSurfaceHeightAt,
     const std::string& dataMinecraftDir) {
+    return dumpStructureStarts(active, worldSeed, biomeGetter, oceanFloorHeightAt,
+                               worldSurfaceHeightAt, nullptr, dataMinecraftDir);
+}
+
+std::vector<DumpStart> dumpStructureStarts(
+    ChunkPos active, uint64_t worldSeed,
+    const std::function<std::string(int, int, int)>& biomeGetter,
+    const std::function<int(int, int)>& oceanFloorHeightAt,
+    const std::function<int(int, int)>& worldSurfaceHeightAt,
+    const std::function<std::vector<uint32_t>(int, int)>& baseColumnAt,
+    const std::string& dataMinecraftDir) {
     std::vector<DumpStart> out;
     if (dataMinecraftDir.empty()) return out;
     fs::path dataDir(dataMinecraftDir);
@@ -3098,19 +3253,16 @@ std::vector<DumpStart> dumpStructureStarts(
                         if (cfgIt == runtime->structures.end() || !cfgIt->second.supported) continue;
                         const JigsawConfig& cfg = cfgIt->second;
                         if (cfg.structureType != "minecraft:jigsaw") continue;
-                        // Jigsaw structures with project_start_to_heightmap use
-                        // WORLD_SURFACE_WG, not OCEAN_FLOOR_WG. Swap the heightmap
-                        // callback for the duration of this assembly.
-                        if (cfg.projectStartToHeightmap && worldSurfaceHeightAt) {
+                        // JigsawPlacement always uses WORLD_SURFACE_WG — for the start
+                        // projection (getFirstFreeHeight) AND for non-rigid child
+                        // pieces. OCEAN_FLOOR_WG is never consulted by jigsaw.
+                        if (worldSurfaceHeightAt) {
                             world.heightAt = worldSurfaceHeightAt;
-                        } else if (oceanFloorHeightAt) {
-                            world.heightAt = oceanFloorHeightAt;
                         }
-                        // Biome gate
-                        int midX = sx * 16 + 8, midZ = sz * 16 + 8;
-                        int surfaceY = world.heightAt(midX, midZ);
-                        if (!runtime->validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) continue;
-                        // Assemble
+                        // No pre-gate here: Java validates the biome at the STUB
+                        // position (the assembled start piece's BB centre, heightmap-
+                        // projected Y) inside findValidGenerationPoint —
+                        // assembleJigsaw performs exactly that gate.
                         std::vector<Placed> pieces;
                         BlockPos stub{};
                         try {
@@ -3151,15 +3303,34 @@ std::vector<DumpStart> dumpStructureStarts(
         // Returns true if pieces were dumped.
         auto assembleNonJigsaw = [&](const std::string& sid) -> bool {
             auto cfgIt = runtime->structures.find(sid);
-            if (cfgIt == runtime->structures.end() || !cfgIt->second.supported) return false;
+            if (cfgIt == runtime->structures.end()) return false;
             const JigsawConfig& cfg = cfgIt->second;
             if (cfg.structureType == "minecraft:jigsaw") return false;
+            // Placement-unported types whose ASSEMBLY (StructureStart pieces) is
+            // still dumped for the parity gate. In-game placement remains a hard
+            // no-op (cfg.supported == false gates tryGenerateAndPlace).
+            static const std::set<std::string> assemblyOnlyTypes = {
+                "minecraft:ocean_monument",
+            };
+            if (!cfg.supported && assemblyOnlyTypes.count(cfg.structureType) == 0) return false;
 
-            // Biome gate (Structure.isValidBiome). The server already validated
-            // this in mirror mode, but we check to match the engine's dispatch.
-            int midX = active.x * 16 + 8, midZ = active.z * 16 + 8;
-            int surfaceY = world.heightAt(midX, midZ);
-            if (!runtime->validBiome(cfg, BlockPos{midX, surfaceY, midZ}, biomeGetter)) return false;
+            // Biome gate: Java validates AFTER findGenerationPoint, at the STUB
+            // position that findGenerationPoint returns — per structure type:
+            //   onTopOfChunkCenter(T): (middleX, getFirstOccupiedHeight(T), middleZ)
+            //     T = OCEAN_FLOOR_WG for ocean_ruin / buried_treasure / shipwreck
+            //         (ocean); WORLD_SURFACE_WG for shipwreck_beached.
+            //   mineshaft: (middleX, 50 + yOffset, minBlockZ) — needs assembly first.
+            // The gate consumes no RNG and each candidate gets a fresh seeded
+            // random, so gating after assembly is draw-for-draw identical to Java.
+            const int midX = active.x * 16 + 8, midZ = active.z * 16 + 8;
+            auto occupiedOceanFloor = [&](int x, int z) {
+                return oceanFloorHeightAt ? oceanFloorHeightAt(x, z)
+                     : (world.heightAt ? world.heightAt(x, z) : 62);
+            };
+            auto occupiedWorldSurface = [&](int x, int z) {
+                return worldSurfaceHeightAt ? worldSurfaceHeightAt(x, z)
+                     : (world.heightAt ? world.heightAt(x, z) : 62);
+            };
 
             DumpStart ds;
             ds.structureId = sid;
@@ -3167,8 +3338,18 @@ std::vector<DumpStart> dumpStructureStarts(
 
             // Per-structure assembly
             if (cfg.structureType == "minecraft:mineshaft") {
+                if (cfg.mineshaftMesa) {
+                    // MESA vertical adjust (WORLD_SURFACE_WG at the aggregate-BB
+                    // centre + randomBetweenInclusive) is not ported — hard no-op
+                    // (RULE #0). Normal mineshafts are unaffected; mineshaft_mesa
+                    // only gates in badlands.
+                    return false;
+                }
+                int32_t yOffset = 0;
                 auto msPieces = mc::levelgen::structure::structures::assembleMineshaftNormal(
-                    static_cast<int64_t>(worldSeed), active.x, active.z);
+                    static_cast<int64_t>(worldSeed), active.x, active.z, &yOffset);
+                BlockPos stubPos{midX, 50 + yOffset, active.z * 16};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
                 for (const auto& p : msPieces) {
                     DumpPiece dp;
                     using mk = mc::levelgen::structure::structures::MsKind;
@@ -3191,29 +3372,19 @@ std::vector<DumpStart> dumpStructureStarts(
                 // template sizes via structureGetBoundingBox (the 1:1 port of
                 // StructureTemplate.getBoundingBox).
                 //
-                // Y adjustment: onTopOfChunkCenter(context, OCEAN_FLOOR_WG, ...)
-                // projects the start to the OCEAN_FLOOR_WG heightmap. The Java
-                // code creates the piece at Y=90 (generatePieces), but the
-                // StructureStart.adjustBoundingBox or the piece's postProcess
-                // moves it to the heightmap Y. The NBT stores the FINAL Y
-                // (post-adjustment), which is the OCEAN_FLOOR_WG height at the
-                // chunk center.
+                // ASSEMBLY-TIME semantics: generatePieces creates every piece at
+                // (minBlockX, 90, minBlockZ) — Y stays 90 in the StructureStart.
+                // The OCEAN_FLOOR_WG projection happens later, in the piece's
+                // postProcess (block placement), NOT here. onTopOfChunkCenter's
+                // heightmap only fixes the STUB position the biome gate samples.
+                BlockPos stubPos{midX, occupiedOceanFloor(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
                 auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
                     std::make_shared<mc::levelgen::LegacyRandomSource>(0));
                 random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
                 const int rotIdx = random->nextInt(4);
                 const Rotation rot = static_cast<Rotation>(rotIdx);
-                // Y adjustment — first step of OceanRuinPiece.postProcess:
-                //   height = level.getHeight(OCEAN_FLOOR_WG, templatePosition.x, templatePosition.z)
-                //   templatePosition.y = height
-                // The templatePosition is (chunkX*16, 90, chunkZ*16) — the chunk CORNER,
-                // not the center. The OCEAN_FLOOR_WG heightmap at that column gives the
-                // initial Y. (The second getHeight() step that scans the footprint is
-                // not yet replicated — it needs actual terrain blocks.)
-                const int tplX = active.x * 16;
-                const int tplZ = active.z * 16;
-                const int placeY = world.heightAt ? world.heightAt(tplX, tplZ) + 1 : 90;
-                const BlockPos offset{ tplX, placeY, tplZ };
+                const BlockPos offset{ active.x * 16, 90, active.z * 16 };
                 const bool isLarge = random->nextFloat() <= cfg.largeProbability;
                 const float baseIntegrity = isLarge ? 0.9f : 0.8f;
                 const bool warm = cfg.oceanRuinWarm;
@@ -3325,56 +3496,40 @@ std::vector<DumpStart> dumpStructureStarts(
                     }
                 }
             }
-            // TODO: add assembly for swamp_hut, desert_pyramid, jungle_temple,
-            // igloo, ruined_portal, nether_fossil. These need either terrain
-            // height or piece-specific BB computation.
             else if (cfg.structureType == "minecraft:buried_treasure") {
-                // BuriedTreasureStructure.generatePieces:
-                //   offset = new BlockPos(chunkPos.getBlockX(9), 90, chunkPos.getBlockZ(9))
-                //   builder.addPiece(new BuriedTreasurePiece(offset))
-                //
-                // The piece's INITIAL BB is 1×1×1 at (x, 90, z). But the NBT
-                // stores the FINAL BB after postProcess, which updates
-                // this.boundingBox to the Y where the chest is placed.
-                //
-                // BuriedTreasurePiece.postProcess:
-                //   y = level.getHeight(OCEAN_FLOOR_WG, x, z)
-                //   scan downward from y, find first anchor block (sandstone/
-                //   stone/andesite/granite/diorite), set this.boundingBox =
-                //   new BoundingBox(pos) at that Y.
-                //
-                // For the dump, we use the OCEAN_FLOOR_WG height as the Y.
-                // This matches the server when the first solid block below the
-                // ocean floor IS an anchor block (common case). Mismatches
-                // occur when the block below is dirt/other (the scan continues
-                // deeper).
+                // BuriedTreasureStructure: onTopOfChunkCenter(OCEAN_FLOOR_WG) fixes
+                // the STUB the biome gate samples; generatePieces adds ONE piece at
+                // (chunkPos.getBlockX(9), 90, chunkPos.getBlockZ(9)) — the
+                // StructureStart keeps Y=90. The downward anchor-block scan happens
+                // in postProcess (block placement), not at assembly.
+                BlockPos stubPos{midX, occupiedOceanFloor(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
                 const int offsetX = active.x * 16 + 9;
                 const int offsetZ = active.z * 16 + 9;
-                int placeY = 90;
-                if (world.heightAt) {
-                    placeY = world.heightAt(offsetX, offsetZ) + 1;  // OCEAN_FLOOR_WG
-                }
                 DumpPiece dp;
                 dp.id = "minecraft:btp";
-                dp.minX = offsetX; dp.minY = placeY; dp.minZ = offsetZ;
-                dp.maxX = offsetX; dp.maxY = placeY; dp.maxZ = offsetZ;
+                dp.minX = offsetX; dp.minY = 90; dp.minZ = offsetZ;
+                dp.maxX = offsetX; dp.maxY = 90; dp.maxZ = offsetZ;
                 dp.orientation = -1;  // BuriedTreasurePiece has no orientation
                 dp.genDepth = 0;
                 ds.pieces.push_back(std::move(dp));
             }
             else if (cfg.structureType == "minecraft:shipwreck") {
                 // ShipwreckStructure.findGenerationPoint + ShipwreckPieces.addPieces.
-                // Replicates the RNG and computes the piece BB from the template size.
                 //
-                // Y adjustment (ShipwreckPieces.ShipwreckPiece.postProcess):
-                //   isBeached: Y = minY - templateH/2 - nextInt(3)
-                //     where minY = min heightmap over the footprint
-                //   ocean: Y = mean ocean floor height over the footprint
-                //
-                // For the dump, we approximate Y using the chunk-center heightmap.
-                // The server samples the FULL footprint (templateW × templateD
-                // columns), which needs the real terrain. This approximation
-                // matches when the terrain is flat over the footprint.
+                // ASSEMBLY-TIME semantics: the piece is created at
+                // (minBlockX, 90, minBlockZ). Its Y is adjusted AT ASSEMBLY only
+                // when the template is too big to fit a worldgen region
+                // (size.x > 32 || size.y > 32 — no vanilla shipwreck template is);
+                // otherwise the footprint-mean projection happens in postProcess.
+                // onTopOfChunkCenter(isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG)
+                // fixes the STUB the biome gate samples.
+                {
+                    const int stubY = cfg.isBeached ? occupiedWorldSurface(midX, midZ)
+                                                    : occupiedOceanFloor(midX, midZ);
+                    BlockPos stubPos{midX, stubY, midZ};
+                    if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                }
                 auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
                     std::make_shared<mc::levelgen::LegacyRandomSource>(0));
                 random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
@@ -3409,50 +3564,38 @@ std::vector<DumpStart> dumpStructureStarts(
                 const int baseX = active.x * 16;
                 const int baseZ = active.z * 16;
 
-                // Y adjustment — EXACT replication of ShipwreckPiece.postProcess:
-                //   heightmapType = isBeached ? WORLD_SURFACE_WG : OCEAN_FLOOR_WG
-                //   footprint = [templatePosition, templatePosition + (sizeX-1, 0, sizeZ-1)]
-                //   for each column in footprint: mean += getHeight(heightmapType, x, z)
-                //   mean /= (sizeX * sizeZ)
-                //   isBeached: Y = minY - templateH/2 - nextInt(3)
-                //   ocean: Y = mean
-                //
-                // The footprint uses templatePosition (= the original position, NOT rotated).
-                // The heightmap is sampled at each (x, z) column via world.heightAt.
-                // Our world.heightAt returns OCEAN_FLOOR_WG-1 (the dump tool passes
-                // getOceanFloorHeight-1). For beached we need WORLD_SURFACE_WG, but
-                // getBaseHeight returns WORLD_SURFACE_WG-1, so we can't distinguish
-                // here. For now, use the same heightAt for both (ocean floor ≈ world
-                // surface on land).
-                int placeY;
-                const int baseSize = templateSize.x * templateSize.z;
-                if (baseSize == 0 || !world.heightAt) {
-                    placeY = 90;  // fallback
-                } else {
-                    int mean = 0;
-                    int minY = 999999;
-                    // Footprint: [baseX, baseZ] to [baseX + sizeX-1, baseZ + sizeZ-1]
-                    for (int dx = 0; dx < templateSize.x; ++dx) {
-                        for (int dz = 0; dz < templateSize.z; ++dz) {
-                            int h = world.heightAt(baseX + dx, baseZ + dz) + 1;
-                            mean += h;
-                            if (h < minY) minY = h;
-                        }
-                    }
-                    mean /= baseSize;
-                    if (cfg.isBeached) {
-                        placeY = minY - templateSize.y / 2 - random->nextInt(3);
-                    } else {
-                        placeY = mean;
-                    }
-                }
-                placeY = std::max(0, std::min(placeY, 255 - templateSize.y));
-
+                // The StructureStart keeps Y=90 unless the piece is too big to fit
+                // a worldgen region (ShipwreckStructure.generatePieces):
+                //   isTooBigToFitInWorldGenRegion() = size.x > 32 || size.y > 32
+                //   beached: Y = getLowestY(4 corners, WORLD_SURFACE_WG occupied)
+                //                - size.y/2 - nextInt(3)
+                //   ocean:   Y = mean of the SAME 4 corner heights
+                // (Structure.getCornerHeights samples getFirstOccupiedHeight at the
+                // BB's 4 corners with WORLD_SURFACE_WG for BOTH variants.)
+                int placeY = 90;
                 // ShipwreckPiece uses a custom rotation pivot: PIVOT = BlockPos(4, 0, 15)
                 // (ShipwreckPieces.java:16). The BB is computed with this pivot, NOT
                 // BlockPos.ZERO. This is critical for the X/Z coordinates of the BB.
-                BlockPos pos{ baseX, placeY, baseZ };
                 BlockPos pivot{ 4, 0, 15 };
+                if (templateSize.x > 32 || templateSize.y > 32) {
+                    BoundingBox bb90 = mc::levelgen::structure::structureGetBoundingBox(
+                        BlockPos{ baseX, 90, baseZ }, rot, pivot,
+                        mc::levelgen::structure::Mirror::NONE, templateSize);
+                    const int sizeX = bb90.maxX - bb90.minX + 1;
+                    const int sizeZ = bb90.maxZ - bb90.minZ + 1;
+                    const int h0 = occupiedWorldSurface(bb90.minX, bb90.minZ);
+                    const int h1 = occupiedWorldSurface(bb90.minX, bb90.minZ + sizeZ);
+                    const int h2 = occupiedWorldSurface(bb90.minX + sizeX, bb90.minZ);
+                    const int h3 = occupiedWorldSurface(bb90.minX + sizeX, bb90.minZ + sizeZ);
+                    if (cfg.isBeached) {
+                        const int lowest = std::min(std::min(h0, h1), std::min(h2, h3));
+                        placeY = lowest - templateSize.y / 2 - random->nextInt(3);
+                    } else {
+                        placeY = (h0 + h1 + h2 + h3) / 4;
+                    }
+                }
+
+                BlockPos pos{ baseX, placeY, baseZ };
                 BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
                     pos, rot, pivot,
                     mc::levelgen::structure::Mirror::NONE, templateSize);
@@ -3461,6 +3604,255 @@ std::vector<DumpStart> dumpStructureStarts(
                 dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
                 dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
                 dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:ruined_portal") {
+                // RuinedPortalStructure.findGenerationPoint, 1:1 draw order:
+                //   setup pick (nextFloat if >1 setup) → airPocket sample →
+                //   giant gate (nextFloat) → template (nextInt) → rotation
+                //   (nextInt 4) → mirror (nextFloat) → findSuitableY draws.
+                if (cfg.ruinedPortalSetups.empty() || !baseColumnAt) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+
+                const JigsawConfig::RuinedPortalSetup* setup = &cfg.ruinedPortalSetups[0];
+                if (cfg.ruinedPortalSetups.size() > 1) {
+                    float total = 0.0f;
+                    for (const auto& s : cfg.ruinedPortalSetups) total += s.weight;
+                    float pick = random->nextFloat();
+                    for (const auto& s : cfg.ruinedPortalSetups) {
+                        pick -= s.weight / total;
+                        if (pick < 0.0f) { setup = &s; break; }
+                    }
+                }
+                // sample(random, p): p==0 → false, p==1 → true (no draw), else nextFloat()<p
+                bool airPocket = false;
+                if (setup->airPocketProbability == 1.0f) airPocket = true;
+                else if (setup->airPocketProbability != 0.0f) airPocket = random->nextFloat() < setup->airPocketProbability;
+
+                static const char* RP_PORTALS[] = {
+                    "ruined_portal/portal_1", "ruined_portal/portal_2", "ruined_portal/portal_3",
+                    "ruined_portal/portal_4", "ruined_portal/portal_5", "ruined_portal/portal_6",
+                    "ruined_portal/portal_7", "ruined_portal/portal_8", "ruined_portal/portal_9",
+                    "ruined_portal/portal_10"
+                };
+                static const char* RP_GIANT[] = {
+                    "ruined_portal/giant_portal_1", "ruined_portal/giant_portal_2", "ruined_portal/giant_portal_3"
+                };
+                std::string templateLocation;
+                if (random->nextFloat() < 0.05f) {
+                    templateLocation = std::string("minecraft:") + RP_GIANT[random->nextInt(3)];
+                } else {
+                    templateLocation = std::string("minecraft:") + RP_PORTALS[random->nextInt(10)];
+                }
+                const Rotation rot = static_cast<Rotation>(random->nextInt(4));
+                const Mirror mirror = (random->nextFloat() < 0.5f) ? Mirror::NONE : Mirror::FRONT_BACK;
+                const Vec3i size = runtime->sizeOf(templateLocation);
+                const BlockPos pivot{ size.x / 2, 0, size.z / 2 };
+                const BlockPos basePos{ active.x * 16, 0, active.z * 16 };
+                const BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
+                    basePos, rot, pivot, mirror, size);
+                // BoundingBox.getCenter()
+                const int centerX = bb.minX + (bb.maxX - bb.minX + 1) / 2;
+                const int centerZ = bb.minZ + (bb.maxZ - bb.minZ + 1) / 2;
+                // RuinedPortalPiece.getHeightMapType: OCEAN_FLOOR_WG only for
+                // on_ocean_floor placement; WORLD_SURFACE_WG otherwise.
+                const std::string& placement = setup->placement;
+                const int surfaceY = (placement == "on_ocean_floor")
+                    ? occupiedOceanFloor(centerX, centerZ)
+                    : occupiedWorldSurface(centerX, centerZ);
+                // findSuitableY — 1:1 including the 4-corner noise-column scan.
+                auto randBetween = [&random](int lo, int hi) {  // Mth.randomBetweenInclusive
+                    return lo + random->nextInt(hi - lo + 1);
+                };
+                auto randWithinInterval = [&](int minPreferred, int max) {
+                    return minPreferred < max ? randBetween(minPreferred, max) : max;
+                };
+                const int scanMinY = kMinBuildY + 15;  // heightAccessor.getMinY() + MIN_Y_INDEX
+                const int ySpan = bb.maxY - bb.minY + 1;
+                int newY;
+                if (placement == "in_nether") {
+                    if (airPocket) newY = randBetween(32, 100);
+                    else if (random->nextFloat() < 0.5f) newY = randBetween(27, 29);
+                    else newY = randBetween(29, 100);
+                } else if (placement == "in_mountain") {
+                    newY = randWithinInterval(70, surfaceY - ySpan);
+                } else if (placement == "underground") {
+                    newY = randWithinInterval(scanMinY, surfaceY - ySpan);
+                } else if (placement == "partly_buried") {
+                    newY = surfaceY - ySpan + randBetween(2, 8);
+                } else {
+                    newY = surfaceY;
+                }
+                const std::vector<uint32_t> columns[4] = {
+                    baseColumnAt(bb.minX, bb.minZ),
+                    baseColumnAt(bb.maxX, bb.minZ),
+                    baseColumnAt(bb.minX, bb.maxZ),
+                    baseColumnAt(bb.maxX, bb.maxZ),
+                };
+                const uint32_t air   = mc::getDefaultBlockStateId("air", 0);
+                const uint32_t water = mc::getDefaultBlockStateId("water", UINT32_MAX);
+                const uint32_t lava  = mc::getDefaultBlockStateId("lava", UINT32_MAX);
+                const bool oceanFloorPred = (placement == "on_ocean_floor");
+                auto opaque = [&](uint32_t state) {
+                    return oceanFloorPred ? (state != air && state != water && state != lava)
+                                          : (state != air);
+                };
+                int projectedY = newY;
+                bool found = false;
+                for (; projectedY > scanMinY; --projectedY) {
+                    int cornersOnSolidGround = 0;
+                    for (const auto& column : columns) {
+                        const std::size_t idx = static_cast<std::size_t>(projectedY - kMinBuildY);
+                        if (idx >= column.size()) continue;
+                        if (opaque(column[idx]) && ++cornersOnSolidGround == 3) { found = true; break; }
+                    }
+                    if (found) break;
+                }
+                const BlockPos origin{ basePos.x, projectedY, basePos.z };
+                if (!runtime->validBiome(cfg, origin, biomeGetter)) return false;
+                const BoundingBox pieceBB = mc::levelgen::structure::structureGetBoundingBox(
+                    origin, rot, pivot, mirror, size);
+                DumpPiece dp;
+                dp.id = "minecraft:rupo";
+                dp.minX = pieceBB.minX; dp.minY = pieceBB.minY; dp.minZ = pieceBB.minZ;
+                dp.maxX = pieceBB.maxX; dp.maxY = pieceBB.maxY; dp.maxZ = pieceBB.maxZ;
+                dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:ocean_monument") {
+                // OceanMonumentStructure.findGenerationPoint:
+                //   1. every noise biome within radius 29 (3D quart box) of
+                //      (minBlockX+9, seaLevel, minBlockZ+9) must be in
+                //      #required_ocean_monument_surrounding (is_ocean + is_river);
+                //   2. onTopOfChunkCenter(OCEAN_FLOOR_WG) stub → biome gate;
+                //   3. generatePieces: ONE MonumentBuilding at
+                //      (minBlockX-29, 39, minBlockZ-29), 58×23×58, orientation =
+                //      Direction.Plane.HORIZONTAL.getRandomDirection(random).
+                static std::set<std::string> surrounding;  // resolved once
+                if (surrounding.empty()) {
+                    runtime->resolveBiomeTag("minecraft:required_ocean_monument_surrounding", surrounding);
+                    if (surrounding.empty()) return false;  // tag missing — refuse, no guessing
+                }
+                const int offX = active.x * 16 + 9, offZ = active.z * 16 + 9;
+                const int seaLevel = 63;
+                const int q0x = (offX - 29) >> 2, q1x = (offX + 29) >> 2;
+                const int q0y = (seaLevel - 29) >> 2, q1y = (seaLevel + 29) >> 2;
+                const int q0z = (offZ - 29) >> 2, q1z = (offZ + 29) >> 2;
+                for (int qz = q0z; qz <= q1z; ++qz)
+                    for (int qx = q0x; qx <= q1x; ++qx)
+                        for (int qy = q0y; qy <= q1y; ++qy) {
+                            // biomeGetter takes block coords and quart-resolves.
+                            std::string b = normalizeId(biomeGetter(qx << 2, qy << 2, qz << 2));
+                            if (surrounding.count(b) == 0) return false;
+                        }
+                BlockPos stubPos{midX, occupiedOceanFloor(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                // Direction.Plane.HORIZONTAL.faces = [NORTH, EAST, SOUTH, WEST]
+                static const Direction HORIZ[4] = { Direction::NORTH, Direction::EAST, Direction::SOUTH, Direction::WEST };
+                const Direction dir = HORIZ[random->nextInt(4)];
+                const int west = active.x * 16 - 29, north = active.z * 16 - 29;
+                // StructurePiece.makeBoundingBox(west, 39, north, dir, 58, 23, 58):
+                // width == depth so both axes give the same box.
+                DumpPiece dp;
+                dp.id = "minecraft:omb";
+                dp.minX = west; dp.minY = 39; dp.minZ = north;
+                dp.maxX = west + 57; dp.maxY = 61; dp.maxZ = north + 57;
+                dp.orientation = to2D(dir);
+                dp.genDepth = 0;
+                ds.pieces.push_back(std::move(dp));
+            }
+            else if (cfg.structureType == "minecraft:igloo") {
+                // IglooStructure: onTopOfChunkCenter(WORLD_SURFACE_WG) stub;
+                // generatePieces: startPos = (minBlockX, 90, minBlockZ), rotation =
+                // Rotation.getRandom; IglooPieces.addPieces:
+                //   nextDouble() < 0.5 → depth = nextInt(8)+4; add laboratory at
+                //   startPos+OFFSET(lab)-(0,depth*3,0), then depth-1 ladders at
+                //   startPos+OFFSET(ladder)-(0,i*3,0); always add top at startPos.
+                // Piece BB = template.getBoundingBox(pos, rotation, PIVOT[loc], NONE).
+                BlockPos stubPos{midX, occupiedWorldSurface(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                const BlockPos startPos{ active.x * 16, 90, active.z * 16 };
+                const Rotation rot = static_cast<Rotation>(random->nextInt(4));
+                struct IglooTpl { const char* loc; BlockPos pivot; BlockPos offset; };
+                static const IglooTpl TOP    = { "minecraft:igloo/top",    {3, 5, 5}, {0, 0, 0} };
+                static const IglooTpl LADDER = { "minecraft:igloo/middle", {1, 3, 1}, {2, -3, 4} };
+                static const IglooTpl LAB    = { "minecraft:igloo/bottom", {3, 6, 7}, {0, -3, -2} };
+                auto addIglooPiece = [&](const IglooTpl& tpl, int below) {
+                    const BlockPos pos{ startPos.x + tpl.offset.x,
+                                        startPos.y + tpl.offset.y - below,
+                                        startPos.z + tpl.offset.z };
+                    const Vec3i size = runtime->sizeOf(tpl.loc);
+                    const BoundingBox bb = mc::levelgen::structure::structureGetBoundingBox(
+                        pos, rot, tpl.pivot, Mirror::NONE, size);
+                    DumpPiece dp;
+                    dp.id = "minecraft:iglu";
+                    dp.minX = bb.minX; dp.minY = bb.minY; dp.minZ = bb.minZ;
+                    dp.maxX = bb.maxX; dp.maxY = bb.maxY; dp.maxZ = bb.maxZ;
+                    dp.orientation = 2;  // TemplateStructurePiece sets NORTH
+                    dp.genDepth = 0;
+                    ds.pieces.push_back(std::move(dp));
+                };
+                if (random->nextDouble() < 0.5) {
+                    const int depth = random->nextInt(8) + 4;
+                    addIglooPiece(LAB, depth * 3);
+                    for (int i = 0; i < depth - 1; ++i) addIglooPiece(LADDER, i * 3);
+                }
+                addIglooPiece(TOP, 0);
+            }
+            else if (cfg.structureType == "minecraft:jungle_temple"
+                     || cfg.structureType == "minecraft:desert_pyramid"
+                     || cfg.structureType == "minecraft:swamp_hut") {
+                // SinglePieceStructure (jungle_temple 12×10×15, desert_pyramid
+                // 21×15×21) and SwampHutStructure (7×7×9). The SinglePieceStructure
+                // subclasses first require getLowestY(width, depth) >= seaLevel
+                // (4 WORLD_SURFACE_WG corner heights at the chunk origin); swamp_hut
+                // has no such gate. Then onTopOfChunkCenter(WORLD_SURFACE_WG) stub →
+                // biome gate → ONE ScatteredFeaturePiece at (minBlockX, 64,
+                // minBlockZ) with a random horizontal direction.
+                int width, height, depth;
+                const char* pieceId;
+                if (cfg.structureType == "minecraft:jungle_temple") {
+                    width = 12; height = 10; depth = 15; pieceId = "minecraft:tejp";
+                } else if (cfg.structureType == "minecraft:desert_pyramid") {
+                    width = 21; height = 15; depth = 21; pieceId = "minecraft:tedp";
+                } else {
+                    width = 7; height = 7; depth = 9; pieceId = "minecraft:tesh";
+                }
+                const int baseX = active.x * 16, baseZ = active.z * 16;
+                if (cfg.structureType != "minecraft:swamp_hut") {
+                    const int h0 = occupiedWorldSurface(baseX, baseZ);
+                    const int h1 = occupiedWorldSurface(baseX, baseZ + depth);
+                    const int h2 = occupiedWorldSurface(baseX + width, baseZ);
+                    const int h3 = occupiedWorldSurface(baseX + width, baseZ + depth);
+                    const int lowest = std::min(std::min(h0, h1), std::min(h2, h3));
+                    if (lowest < 63) return false;  // getLowestY < seaLevel → empty
+                }
+                BlockPos stubPos{midX, occupiedWorldSurface(midX, midZ), midZ};
+                if (!runtime->validBiome(cfg, stubPos, biomeGetter)) return false;
+                auto random = std::make_shared<mc::levelgen::WorldgenRandom>(
+                    std::make_shared<mc::levelgen::LegacyRandomSource>(0));
+                random->setLargeFeatureSeed(static_cast<int64_t>(worldSeed), active.x, active.z);
+                static const Direction HORIZ[4] = { Direction::NORTH, Direction::EAST, Direction::SOUTH, Direction::WEST };
+                const Direction dir = HORIZ[random->nextInt(4)];
+                // StructurePiece.makeBoundingBox: Z axis keeps (width, depth); X axis swaps.
+                const bool axisZ = (dir == Direction::NORTH || dir == Direction::SOUTH);
+                const int dx = axisZ ? width : depth;
+                const int dz = axisZ ? depth : width;
+                DumpPiece dp;
+                dp.id = pieceId;
+                dp.minX = baseX; dp.minY = 64; dp.minZ = baseZ;
+                dp.maxX = baseX + dx - 1; dp.maxY = 64 + height - 1; dp.maxZ = baseZ + dz - 1;
+                dp.orientation = to2D(dir);
                 dp.genDepth = 0;
                 ds.pieces.push_back(std::move(dp));
             }

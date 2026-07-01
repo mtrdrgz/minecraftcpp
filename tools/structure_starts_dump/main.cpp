@@ -123,8 +123,12 @@ int main(int argc, char** argv) {
     // matches the server exactly. This is critical for structures that only
     // spawn in specific biomes (e.g. swamp_hut requires swamp).
     mc::levelgen::NoiseBasedChunkGenerator gen(static_cast<uint64_t>(seed));
+    // Structure.isValidBiome samples the NOISE biome at quart resolution
+    // (biomeSource.getNoiseBiome(QuartPos.fromBlock(...))) — NOT the block-
+    // resolution BiomeManager zoomer (getBiome), whose seed-fuzzed offsets
+    // would move the gate across biome borders.
     auto biomeGetter = [&gen](int x, int y, int z) -> std::string {
-        return gen.getBiome(x, y, z);
+        return gen.getNoiseBiome(x >> 2, y >> 2, z >> 2);
     };
     // Two heightmaps: OCEAN_FLOOR_WG for ocean structures (buried_treasure,
     // shipwreck, ocean_ruin) and WORLD_SURFACE_WG for jigsaw structures with
@@ -134,6 +138,11 @@ int main(int argc, char** argv) {
     };
     auto worldSurfaceHeightAt = [&gen](int x, int z) -> int {
         return gen.getBaseHeight(x, z) - 1;  // WORLD_SURFACE_WG - 1
+    };
+    // Noise-only block column (getBaseColumn) — ruined_portal's findSuitableY
+    // scans the 4 corner columns downward for solid ground.
+    auto baseColumnAt = [&gen](int x, int z) {
+        return gen.getBaseColumn(x, z);
     };
 
     int startsDumped = 0;
@@ -157,7 +166,7 @@ int main(int argc, char** argv) {
         }
 
         for (const auto& [cx, cz] : chunks) {
-            auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, oceanFloorHeightAt, worldSurfaceHeightAt, data);
+            auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, oceanFloorHeightAt, worldSurfaceHeightAt, baseColumnAt, data);
             // Filter to only structures the server reported at this chunk
             std::set<std::string> serverIdsAtChunk;
             for (const auto& s : serverStarts)
@@ -177,7 +186,7 @@ int main(int argc, char** argv) {
         // Scan mode: find structure chunks and dump.
         for (int cz = fz; cz <= tz; ++cz) {
             for (int cx = fx; cx <= tx; ++cx) {
-                auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, oceanFloorHeightAt, worldSurfaceHeightAt, data);
+                auto starts = dumpStructureStarts({cx, cz}, static_cast<uint64_t>(seed), biomeGetter, oceanFloorHeightAt, worldSurfaceHeightAt, baseColumnAt, data);
                 for (const auto& s : starts) {
                     perType[s.structureId]++;
                     startsDumped++;

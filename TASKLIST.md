@@ -154,15 +154,23 @@
 
 ## Estructuras
 
-> AUDITORÍA 2026-06-21: estado real del subsistema certificado en
-> `docs/STRUCTURES_STATUS.md` (ledger por estructura + 3 huecos arquitectónicos
-> de raíz: orden de generación, Beardifier/terrain_adaptation, y procesadores).
-> Resumen: solo se colocan de verdad swamp_hut, desert_pyramid, jungle_pyramid,
-> igloo, shipwreck y nether_fossil (piezas hand-port); la familia jigsaw (aldeas,
-> outpost, ancient_city, bastion, trail_ruins, trial_chambers) se ensambla pero
-> SIN procesadores ni adaptación de terreno (por eso las aldeas no se ven / se
-> exponen); ocean_ruin, ruined_portal, buried_treasure, ocean_monument, mansion,
-> mineshaft, stronghold, fortress y end_city NO se colocan (solo helpers).
+> **CERTIFICACIÓN 2026-07-01 (sustituye a las auditorías anteriores):** con el
+> nuevo oráculo in-process (`tools/StructureStartsGenParity.java` = el
+> `createStructures` REAL de Java, ejecutado por chunk) el ensamblaje C++ es
+> **byte-exacto en 285/285 starts** de todas las familias implementadas sobre
+> seed 1, región (-60,-60)..(120,120): mineshaft(145), ocean_ruin(38),
+> trial_chambers(31), shipwreck(30), ruined_portal(17), buried_treasure(13),
+> monument(5), **aldeas 3/3 con todas sus piezas**, trail_ruins(2), igloo,
+> jungle_pyramid. Causas raíz arregladas: `getBaseHeight` no era el
+> `iterateNoiseColumn` de Java (heightmap por celdas + aquifer + fluidos), el
+> gate de bioma muestreaba el zoomer en vez del noise biome quart, la Y de
+> ensamblaje (90) estaba confundida con la de colocación (postProcess), y
+> `placeTemplate` ignoraba Mirror + pivote. Las "aldeas en medio del mar" y las
+> estructuras flotando venían de ahí y están corregidas también en el path
+> in-game (gates por heightmap correcto + proyección de Y en colocación).
+> Falta por portar (no-ops honestos): ensamblaje de **stronghold** y
+> **woodland_mansion**, y el gate bloque-a-bloque de colocación contra el .mca
+> del server. Ver `docs/STRUCTURES_STATUS.md` § 2026-07-01.
 
 - [x] RULE #0: dejar de marcar `ocean_ruin`/`ruined_portal`/`buried_treasure` como
       "supported" cuando en realidad hacían no-op (assembly jigsaw con start_pool
@@ -177,7 +185,7 @@
       `tools/structure_gen_probe/`): ejecuta el generador real contra los datos
       reales y reporta qué se coloca. Permite verificar estructuras en Linux/CI sin
       Windows. Aldeas confirmadas: ensamblan 12/120² con ~100 piezas y ~12k bloques.
-- [ ] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente. (Estado real: NO portados — solo `RuinedPortalYSelector`. Falta `RuinedPortalPiece` + procesador de envejecimiento/lava + placement por tipo. Ver roadmap #6.)
+- [x] Los portales arruinados no tienen la lógica de generación del juego original, o a veces spawnean en medio del mar totalmente. (RESUELTO 2026-07-01: `findGenerationPoint` portado 1:1 — pick de setup ponderado, air pocket, plantilla gigante, rotación + espejo FRONT_BACK, Y por tipo de placement con el escaneo de columnas de ruido en las 4 esquinas — certificado byte-exacto contra el oráculo en los 17 starts de la región de prueba. En colocación: pivote+mirror reales, spreadNetherrack con el centro/anchura del BB real y heightmap por placement.)
 - [ ] La estructura de los portales arruinados no coincide con la original: lava/magma, cofre. (Bloqueado por lo anterior + soporte de block-entity/loot para el cofre.)
 - [ ] Adaptación de terreno (Beardifier): `terrain_adaptation` (beard_thin/beard_box/bury/encapsulate) no está portado; causa que las estructuras jigsaw se expongan/floten. Ver roadmap #3–#4.
 - [~] Procesadores de estructura (incremento #1 de aldeas HECHO): portado el pipeline

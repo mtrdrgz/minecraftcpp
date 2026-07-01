@@ -461,47 +461,113 @@ int NoiseBasedChunkGenerator::samplePreliminarySurfaceLevel(int blockX, int bloc
         m_router.preliminarySurfaceLevel->compute(DensityFunctionContext{ quantizedX, 0, quantizedZ })));
 }
 
-int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
-    for (int y = m_settings.noiseSettings.minY + m_settings.noiseSettings.height - 1; y >= m_settings.noiseSettings.minY; --y) {
-        if (sampleFinalDensity(blockX, y, blockZ) > 0.0) {
-            return y + 1;
+std::optional<int> NoiseBasedChunkGenerator::iterateNoiseColumn(
+    int blockX, int blockZ,
+    const std::function<bool(uint32_t)>* tester,
+    std::vector<uint32_t>* column) const {
+    // NoiseBasedChunkGenerator.iterateNoiseColumn: a single-cell-wide NoiseChunk at
+    // the CELL-quantized origin. Every step below mirrors the Java method line by
+    // line; the density evaluation goes through the same CellInterpolationResolver
+    // fillFromNoise uses (certified byte-exact by full_chunk_parity).
+    const uint32_t air = stateIdFor("air", 0);
+    const uint32_t solid = m_settings.defaultBlock ? m_settings.defaultBlock : stateIdFor("stone", air);
+
+    const NoiseSettings& noiseSettings = m_settings.noiseSettings;
+    const int minY = noiseSettings.minY;
+    const int cellHeight = noiseSettings.getCellHeight();
+    const int cellWidth = noiseSettings.getCellWidth();
+    const int cellMinY = floorDiv(minY, cellHeight);
+    const int cellCountY = floorDiv(noiseSettings.height, cellHeight);
+    if (cellCountY <= 0) return std::nullopt;
+
+    if (column) column->assign(static_cast<std::size_t>(noiseSettings.height), air);
+
+    const int firstBlockX = floorDiv(blockX, cellWidth) * cellWidth;
+    const int firstBlockZ = floorDiv(blockZ, cellWidth) * cellWidth;
+
+    // Java NoiseChunk ctor: the aquifer is anchored at the CHUNK containing the
+    // cell origin (ChunkPos(SectionPos.blockToSectionCoord(firstNoiseX), ...)),
+    // NOT at the cell origin itself.
+    const int chunkMinBlockX = (firstBlockX >> 4) << 4;
+    const int chunkMinBlockZ = (firstBlockZ >> 4) << 4;
+    auto fluidPicker = Aquifer::createFluidPicker(m_settings);
+    auto preliminarySurface = [this](int bx, int bz) {
+        return samplePreliminarySurfaceLevel(bx, bz);
+    };
+    std::unique_ptr<Aquifer> aquifer = m_settings.isAquifersEnabled()
+        ? Aquifer::create(
+            std::move(preliminarySurface),
+            chunkMinBlockX,
+            chunkMinBlockZ,
+            m_router,
+            m_aquiferRandom,
+            minY,
+            noiseSettings.height,
+            std::move(fluidPicker))
+        : Aquifer::createDisabled(std::move(fluidPicker));
+    std::optional<OreVeinifier> oreVeinifier;
+    if (m_settings.areOreVeinsEnabled()) {
+        oreVeinifier.emplace(m_router.veinToggle, m_router.veinRidged, m_router.veinGap, m_oreRandom);
+    }
+    NoiseChunkSharedCache sharedCache;
+
+    for (int cellYIndex = cellCountY - 1; cellYIndex >= 0; --cellYIndex) {
+        const int y0 = (cellMinY + cellYIndex) * cellHeight;
+        CellInterpolationResolver interpolationResolver(firstBlockX, y0, firstBlockZ, cellWidth, cellHeight, &sharedCache);
+
+        for (int yInCell = cellHeight - 1; yInCell >= 0; --yInCell) {
+            const int blockY = y0 + yInCell;
+            DensityFunctionContext blockContext{ blockX, blockY, blockZ, &interpolationResolver };
+            const double density = m_router.finalDensity->compute(blockContext);
+            std::optional<uint32_t> aquiferState = aquifer->computeSubstance(blockContext, density);
+            uint32_t state = solid;
+            if (aquiferState) {
+                state = *aquiferState;
+            } else if (oreVeinifier) {
+                std::optional<uint32_t> oreState = oreVeinifier->compute(blockContext);
+                if (oreState) {
+                    state = *oreState;
+                }
+            }
+            if (column) {
+                (*column)[static_cast<std::size_t>(blockY - minY)] = state;
+            }
+            if (tester && (*tester)(state)) {
+                return blockY + 1;
+            }
         }
     }
-    return m_settings.noiseSettings.minY;
+    return std::nullopt;
+}
+
+int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
+    // Heightmap.Types.WORLD_SURFACE_WG.isOpaque(): !state.isAir(). The states this
+    // column can produce are defaultBlock / ore / water / lava / air, so the test
+    // is exactly `state != air`.
+    const uint32_t air = stateIdFor("air", 0);
+    std::function<bool(uint32_t)> tester = [air](uint32_t state) { return state != air; };
+    return iterateNoiseColumn(blockX, blockZ, &tester, nullptr)
+        .value_or(m_settings.noiseSettings.minY);
 }
 
 int NoiseBasedChunkGenerator::getOceanFloorHeight(int blockX, int blockZ) const {
-    // OCEAN_FLOOR_WG uses the MATERIAL_MOTION_BLOCKING predicate: a block is
-    // opaque iff state.blocksMotion(). Fluids (water/lava) do NOT block motion,
-    // so they are skipped — the heightmap returns the first SOLID block from
-    // the top, which is the ocean floor.
-    //
-    // In the noise-only world (pre-aquifer), finalDensity > 0 means solid
-    // terrain (stone/dirt/etc.), and finalDensity <= 0 means air OR fluid.
-    // The aquifer later replaces some air cells with water, but at this stage
-    // we can't distinguish "will be water" from "will be air" without running
-    // the full aquifer. However, vanilla's OCEAN_FLOOR_WG heightmap is
-    // computed AFTER the aquifer, so it sees the actual fluid state.
-    //
-    // Approximation: for y > seaLevel, finalDensity > 0 is always solid (land
-    // above water). For y <= seaLevel, finalDensity > 0 is solid terrain, and
-    // finalDensity <= 0 is either air or water — both are skipped by the
-    // MATERIAL_MOTION_BLOCKING predicate. So we can simply scan from top to
-    // bottom and return the first y where finalDensity > 0, which is exactly
-    // what getBaseHeight does. The difference: OCEAN_FLOOR_WG would return the
-    // SAME value as WORLD_SURFACE_WG for terrain, because solids are solids.
-    //
-    // The REAL difference shows up in the aquifer: vanilla's OCEAN_FLOOR_WG
-    // skips water cells that the aquifer placed INSIDE what would otherwise be
-    // solid terrain (rare, but happens in underwater caves). For structure
-    // placement purposes, this is a minor edge case.
-    //
-    // For now, return getBaseHeight — it matches the server for 7/8 ocean_ruin
-    // chunks (the ones where the floor is at or above sea level). The 1 mismatch
-    // (chunk 3,22 where floor=47) is a DEEP OCEAN chunk where the floor is below
-    // sea level — getBaseHeight correctly returns 47 there too, so the issue
-    // was that tryPlaceOceanRuin hardcoded Y=90 instead of calling this method.
-    return getBaseHeight(blockX, blockZ);
+    // Heightmap.Types.OCEAN_FLOOR_WG uses MATERIAL_MOTION_BLOCKING
+    // (state.blocksMotion()). Of the producible states, fluids and air do not
+    // block motion; defaultBlock and ore states do.
+    const uint32_t air = stateIdFor("air", 0);
+    const uint32_t water = stateIdFor("water", UINT32_MAX);
+    const uint32_t lava = stateIdFor("lava", UINT32_MAX);
+    std::function<bool(uint32_t)> tester = [air, water, lava](uint32_t state) {
+        return state != air && state != water && state != lava;
+    };
+    return iterateNoiseColumn(blockX, blockZ, &tester, nullptr)
+        .value_or(m_settings.noiseSettings.minY);
+}
+
+std::vector<uint32_t> NoiseBasedChunkGenerator::getBaseColumn(int blockX, int blockZ) const {
+    std::vector<uint32_t> column;
+    iterateNoiseColumn(blockX, blockZ, nullptr, &column);
+    return column;
 }
 
 void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks,
