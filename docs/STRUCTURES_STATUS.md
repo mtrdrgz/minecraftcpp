@@ -8,8 +8,101 @@
 > silent `return true` / failed-assembly that looks done. This document is the
 > single place that says, per structure, what is real and what is not.
 >
-> Last updated: 2026-06-30 (structure-starts parity gate: mineshaft + trial_chambers
-> certified byte-exact vs real server.jar — see the 2026-06-30 section).
+> Last updated: 2026-07-01 (in-process assembly oracle; ALL implemented families
+> byte-exact — see the 2026-07-01 section, which SUPERSEDES the per-family status
+> in the older sections below).
+
+---
+
+## UPDATE 2026-07-01 — in-process oracle; 285/287 starts byte-exact; engine placement fixed
+
+### The new gold standard: `tools/StructureStartsGenParity.java`
+
+Runs the REAL `ChunkGenerator.createStructures` **in-process** (real
+`NoiseBasedChunkGenerator` + overworld `MultiNoiseBiomeSource` + `RandomState`,
+jar-backed `StructureTemplateManager`, biome tags bound from the shipped JSON)
+and dumps every valid `StructureStart` through the real
+`StructureStart.createTag` — so ids/BB/O/GD encoding is byte-identical to server
+NBT. Unlike the `.mca`-based `StructureStartsDump`, it is **always
+assembly-time**: the server's saved NBT mixes assembly boxes (pre-FEATURES
+chunks) with placement-adjusted boxes (template structures move their
+`templatePosition` in `postProcess`), which had silently corrupted the previous
+gate. Validated against the dedicated server's world: 32/34 pre-features starts
+byte-exact; the other 2 are shipwrecks whose Y a neighbouring chunk's FEATURES
+pass had already projected (expected Java behaviour).
+
+Compare with `tools/compare_starts.py` (order-insensitive, per-chunk):
+
+```
+26.1.2/jdk25/bin/java -cp "26.1.2/parity_classes:26.1.2/client.jar:26.1.2/libs/*" \
+    StructureStartsGenParity 1 -60 -60 120 120 > /tmp/oracle.tsv
+MCPP_BLOCK_STATES=src/assets/block_states.json ./build-linux/structure_starts_dump \
+    --seed 1 --from -60 -60 --to 120 120 --out /tmp/cpp.tsv
+python3 tools/compare_starts.py /tmp/oracle.tsv /tmp/cpp.tsv
+```
+
+### Certified assembly (seed 1, region (-60,-60)..(120,120), 287 oracle starts)
+
+**285/285 starts of every implemented family are byte-exact** (all pieces:
+id + BB + O + GD, in builder order):
+
+| Family | Starts | Notes |
+|---|---|---|
+| mineshaft | 145 | stub = (midX, 50+yOffset, minZ); mesa = honest no-op |
+| ocean_ruin cold/warm | 33+5 | assembly Y=90 (projection is placement-stage) |
+| trial_chambers | 31 | jigsaw |
+| shipwreck (+beached) | 27+3 | assembly Y=90; too-big corner adjust ported |
+| **ruined_portal (+ocean)** | 10+7 | NEW: full findGenerationPoint incl. 4-corner noise-column scan |
+| buried_treasure | 13 | assembly Y=90 |
+| **monument** | 5 | NEW: surrounding-biome disc + MonumentBuilding BB (assembly only) |
+| village plains/snowy | 2+1 | **all pieces byte-exact** (84+148+126 pieces) |
+| trail_ruins | 2 | jigsaw |
+| **igloo** | 1 | NEW: lab + ladders + top with exact PIVOTS/OFFSETS |
+| **jungle_pyramid** | 1 | NEW: SinglePieceStructure (+ desert_pyramid, swamp_hut same path) |
+
+**Missing (only remaining unported assembly): stronghold (1 start, 13 pieces —
+recursive StrongholdPieces) and woodland mansion (1 start, 606 pieces — grid
+assembly).** Both have byte-exact certified geometry helpers; what is missing is
+the piece-recursion/assembly + placement, each a full-session port.
+
+### Root causes fixed (these were THE user-visible bugs)
+
+1. **`getBaseHeight` was not Java's.** It scanned `finalDensity` at block
+   resolution; Java's `iterateNoiseColumn` samples a single-cell NoiseChunk
+   (cell-interpolated density + real aquifer + ore veins) and tests the
+   heightmap predicate per state — WORLD_SURFACE_WG counts fluids (sea level
+   over oceans), OCEAN_FLOOR_WG skips them. Ported 1:1 (`iterateNoiseColumn`,
+   `getBaseHeight`, `getOceanFloorHeight`, `getBaseColumn`). This alone fixed
+   every village piece mismatch (mixed ±1 child Y → RNG divergence → different
+   piece lists) and, in-game, stops land structures validating on ocean chunks
+   (villages-in-the-sea).
+2. **Biome gate sampled the wrong source.** `Structure.isValidBiome` uses the
+   quart **noise biome**; the dump used the seed-fuzzed BiomeManager zoomer →
+   false positives/negatives at biome borders (shipwreck at (4,8),
+   missing buried_treasure at (36,11)).
+3. **Assembly vs placement Y conflated.** Template structures assemble at Y=90;
+   the heightmap projection happens in `postProcess`. The dump now emits
+   assembly semantics; the ENGINE now projects at placement exactly like
+   `postProcess` (ocean_ruin footprint scan through air/water/ice, shipwreck
+   footprint mean with first-AVAILABLE heights, ruined_portal 4-corner
+   noise-column scan).
+4. **placeTemplate ignored Mirror + pivot.** Shipwrecks rotate around PIVOT
+   (4,0,15) and half of all ruined portals are FRONT_BACK mirrored — both were
+   silently dropped in placement.
+
+### Still open (structure subsystem)
+
+- **Block-level placement gate**: diff engine-placed chunks against the
+  server's structures-on `.mca` (ServerChunkDump). The assembly layer is now
+  certified; placement Y logic is ported 1:1 but its inputs are the WG
+  heightmaps — post-carver heightmap differences are possible and only the
+  block gate can certify them.
+- **stronghold + mansion assembly** (see above).
+- Chest loot / block entities (chests place empty), monument/mansion/fortress
+  block placement, `concentric_rings` eager ring generation for locate.
+- `WorldGen.cpp` still carries a stale mirror of the structure Runtime used by
+  the decorate-parity harness — it does NOT have these fixes; the authoritative
+  runtime is `StructureGen.cpp` (used by the game and the dump).
 
 ---
 
