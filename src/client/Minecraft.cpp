@@ -794,6 +794,15 @@ void Minecraft::runStructures(ChunkPos active) {
         // reusing the post-Beardifier chunk heightmap shifts villages on slopes.
         return m_localGenerator ? m_localGenerator->getBaseHeight(x, z) - 1 : 0;
     };
+    world.oceanFloorAt = [this](int x, int z) -> int {
+        // OCEAN_FLOOR_WG first-occupied — gate + Y source for the ocean structures.
+        return m_localGenerator ? m_localGenerator->getOceanFloorHeight(x, z) - 1 : 0;
+    };
+    world.baseColumnAt = [this](int x, int z) {
+        // Noise-only block column — ruined_portal's 4-corner solid-ground scan.
+        return m_localGenerator ? m_localGenerator->getBaseColumn(x, z)
+                                : std::vector<uint32_t>{};
+    };
     world.placeFeature = [active](const std::string& featureId, levelgen::RandomSource& random, BlockPos origin) {
         return levelgen::feature::placeStructurePoolFeature(featureId, random, origin, active);
     };

@@ -20,7 +20,17 @@ namespace mc::levelgen::structure {
 struct StructureWorld {
     std::function<uint32_t(int, int, int)>      getBlock;
     std::function<void(int, int, int, uint32_t)> setBlock;
+    // WORLD_SURFACE_WG first-OCCUPIED height (getBaseHeight - 1). Fluids count as
+    // occupied, so this is sea level - 1 over oceans.
     std::function<int(int, int)>                 heightAt;
+    // OCEAN_FLOOR_WG first-OCCUPIED height (getOceanFloorHeight - 1). Fluids are
+    // skipped — the ocean FLOOR. Ocean structures (ocean_ruin, shipwreck,
+    // buried_treasure, monument) gate and project with this; when null they fall
+    // back to heightAt (identical on land).
+    std::function<int(int, int)>                 oceanFloorAt;
+    // NoiseBasedChunkGenerator.getBaseColumn: noise-only block-state column
+    // (index = y - minBuildY). Ruined portals scan 4 corner columns with it.
+    std::function<std::vector<uint32_t>(int, int)> baseColumnAt;
     std::function<bool(const std::string&, mc::levelgen::RandomSource&, ::mc::BlockPos)> placeFeature;
 };
 
