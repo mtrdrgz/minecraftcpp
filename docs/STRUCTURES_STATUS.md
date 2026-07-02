@@ -21,10 +21,14 @@ dedicated server (`generate-structures=true`, seed 1, `village_plains` at chunk
 (40,51)) by block-diffing 110 chunks of the server's `.mca`
 (`ServerChunkDump` → `full_chunk_decorate_parity --cases … --family all`):
 
-- The village area's plains side is **byte-exact** (61/110 chunks at 0
+- The village area's plains side is **byte-exact** (62/110 chunks at 0
   mismatches, including the entire village core): houses, TERRAIN_MATCHING
   streets, farms (farmland/crops/water), lamps, well, hay piles and the
-  village's own trees (feature_pool_element pieces).
+  village's own trees (feature_pool_element pieces). Final region tally:
+  11241 / 10 813 440 cells (0.10%), of which **only 2 cells involve village
+  blocks and both were traced (MCPP_WATCH) to an extra forest tree from the
+  decoration-order residual overwriting them** — zero genuine village bugs
+  remain.
 - Root causes fixed on the way (each grounded in Java source, see the
   "village block-placement parity" commits): Climate RTree lastResult
   use-after-free (shared thread_local seeding the next generator's search from
