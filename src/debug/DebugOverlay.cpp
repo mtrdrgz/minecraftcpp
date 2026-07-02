@@ -3,9 +3,11 @@
 
 #include "DebugOverlay.h"
 #include "../core/Log.h"
+#include "../platform/Platform.h"   // VK_* key codes on Linux (windows.h via Window.h on Windows)
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <mutex>
 
 namespace mc {
@@ -268,7 +270,7 @@ void DebugOverlay::renderInfoTab(render::GuiGraphics& g, render::Font& font, Min
     }
 
     y += 8;
-    y = drawText(g, font, "F1=Close  1/2/3=Tabs  F2=Cycle", 15, y, gray);
+    y = drawText(g, font, "F1=Close  1-4=Tabs  F2=Cycle", 15, y, gray);
 }
 
 void DebugOverlay::renderStructuresTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc, int mouseX, int mouseY, int panelW, int panelH) {
@@ -449,6 +451,138 @@ void DebugOverlay::renderBiomesTab(render::GuiGraphics& g, render::Font& font, M
     }
 }
 
+void DebugOverlay::renderTeleportTab(render::GuiGraphics& g, render::Font& font, Minecraft& mc,
+                                      Window& window, int mouseX, int mouseY, int panelW, int panelH) {
+    (void)panelW; (void)panelH;
+    int y = 44;
+    const glm::vec4 white(1, 1, 1, 1);
+    const glm::vec4 gray(0.6f, 0.6f, 0.6f, 1);
+    const glm::vec4 yellow(1, 1, 0, 1);
+
+    y = drawText(g, font, "Teleport to coordinates (Y empty = surface):", 15, y, white);
+    y += 4;
+
+    // ---- Typing: per-frame edge detection on the keys a coordinate needs.
+    // Every candidate key is polled exactly once per frame so the previous-state
+    // array stays consistent even while no field is focused.
+    auto keyEdge = [&](int k) {
+        if (k < 0 || k >= (int)tpKeyWas.size()) return false;
+        const bool down = window.isKeyDown(k);
+        const bool was = tpKeyWas[k];
+        tpKeyWas[k] = down;
+        return down && !was;
+    };
+    bool digit[10];
+    for (int d = 0; d <= 9; ++d) {
+        const bool row = keyEdge('0' + d);
+        const bool pad = keyEdge(VK_NUMPAD0 + d);
+        digit[d] = row || pad;
+    }
+    const bool minusMain = keyEdge(VK_OEM_MINUS);
+    const bool minusPad = keyEdge(VK_SUBTRACT);
+    const bool minus = minusMain || minusPad;
+    const bool backspace = keyEdge(VK_BACK);
+    const bool tabKey = keyEdge(VK_TAB);
+    bool enter = keyEdge(VK_RETURN);
+#ifndef _WIN32
+    // GLFW keeps numpad enter separate (Win32 folds both into VK_RETURN).
+    const bool kpEnter = keyEdge(GLFW_KEY_KP_ENTER);
+    enter = enter || kpEnter;
+#endif
+
+    if (tpFocus >= 0) {
+        std::string& f = tpText[tpFocus];
+        for (int d = 0; d <= 9; ++d)
+            if (digit[d] && f.size() < 9) f += char('0' + d);
+        if (minus && f.empty()) f += '-';
+        if (backspace && !f.empty()) f.pop_back();
+        if (tabKey) tpFocus = (tpFocus + 1) % 3;
+    }
+
+    // ---- Fields: label + box, click to focus, blinking caret on the focused one.
+    const bool caretOn =
+        (std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch()).count() / 500) % 2 == 0;
+    static const char* labels[3] = { "X:", "Y:", "Z:" };
+    const int fieldX = 40;
+    const int fieldW = 140;
+    const int fieldH = 18;
+    for (int i = 0; i < 3; ++i) {
+        drawText(g, font, labels[i], 15, y + 5, white);
+        const bool focused = (tpFocus == i);
+        const bool hovered = (mouseX >= fieldX && mouseX < fieldX + fieldW &&
+                              mouseY >= y && mouseY < y + fieldH);
+        if (hovered && pendingClick) tpFocus = i;
+
+        const glm::vec4 bg = focused ? glm::vec4(0.1f, 0.1f, 0.25f, 0.95f)
+                                     : glm::vec4(0.08f, 0.08f, 0.1f, 0.95f);
+        const glm::vec4 border = focused ? glm::vec4(0.3f, 0.6f, 1.0f, 1.0f)
+                                         : glm::vec4(0.5f, 0.5f, 0.6f, 1.0f);
+        g.fill(fieldX, y, fieldX + fieldW, y + fieldH, bg);
+        g.fill(fieldX, y, fieldX + fieldW, y + 1, border);
+        g.fill(fieldX, y + fieldH - 1, fieldX + fieldW, y + fieldH, border);
+        g.fill(fieldX, y, fieldX + 1, y + fieldH, border);
+        g.fill(fieldX + fieldW - 1, y, fieldX + fieldW, y + fieldH, border);
+
+        std::string shown = tpText[i];
+        if (focused && caretOn) shown += '_';
+        font.drawString(g, shown, (float)(fieldX + 4), (float)(y + 5), white, false);
+        y += fieldH + 4;
+    }
+    y += 2;
+
+    // ---- Actions.
+    auto doTeleport = [&]() {
+        auto parseInt = [](const std::string& s, long& out) {
+            if (s.empty() || s == "-") return false;
+            char* end = nullptr;
+            const long v = std::strtol(s.c_str(), &end, 10);
+            if (end == nullptr || *end != '\0') return false;
+            out = v;
+            return true;
+        };
+        long x = 0, z = 0;
+        if (!parseInt(tpText[0], x) || !parseInt(tpText[2], z)) {
+            tpStatus = "Enter a valid X and Z.";
+            return;
+        }
+        if (!tpText[1].empty()) {
+            long yv = 0;
+            if (!parseInt(tpText[1], yv)) {
+                tpStatus = "Invalid Y (leave empty for surface).";
+                return;
+            }
+            // Explicit Y: bypass teleport()'s surface resolution.
+            mc.requestTeleport((double)x + 0.5, (double)yv, (double)z + 0.5);
+            MC_LOG_INFO("[DEBUG] Teleport requested to ({}, {}, {})", x, yv, z);
+            tpStatus = "Teleported to " + std::to_string(x) + ", " +
+                       std::to_string(yv) + ", " + std::to_string(z);
+        } else {
+            teleport(mc, (double)x, 0, (double)z);
+            tpStatus = "Teleported to surface at " + std::to_string(x) + ", " + std::to_string(z);
+        }
+    };
+    if (button(g, font, fieldX, y, fieldW, 18, "Teleport", mouseX, mouseY) ||
+        (tpFocus >= 0 && enter)) {
+        doTeleport();
+    }
+    if (button(g, font, fieldX + fieldW + 6, y, fieldW, 18, "Use current position", mouseX, mouseY)) {
+        auto& state = mc.player();
+        tpText[0] = std::to_string((int)std::floor(state.x));
+        tpText[1] = std::to_string((int)std::floor(state.y));
+        tpText[2] = std::to_string((int)std::floor(state.z));
+        tpStatus.clear();
+    }
+    y += 24;
+
+    if (!tpStatus.empty()) y = drawText(g, font, tpStatus, 15, y, yellow);
+    y += 4;
+    y = drawText(g, font, "Click a field, type the numbers (minus for negatives).", 15, y, gray);
+    y = drawText(g, font, "Tab=next field  Enter=teleport  Backspace=delete", 15, y, gray);
+    if (tpFocus >= 0)
+        drawText(g, font, "(number keys type while a field is focused; F2 still switches tabs)", 15, y, gray);
+}
+
 void DebugOverlay::render(render::GuiGraphics& g, render::Font& font, Minecraft& mc,
                            Window& window, float dtSec) {
     if (!visible) return;
@@ -479,14 +613,14 @@ void DebugOverlay::render(render::GuiGraphics& g, render::Font& font, Minecraft&
 
     g.fill(panelX, panelY, panelX + panelW, panelY + panelH, glm::vec4(0.05f, 0.05f, 0.08f, 0.88f));
     g.fill(panelX, panelY, panelX + panelW, panelY + 20, glm::vec4(0.1f, 0.1f, 0.15f, 0.95f));
-    font.drawString(g, "[DEBUG] F1=Close | 1/2/3=Tabs", (float)(panelX + 8), (float)(panelY + 6),
+    font.drawString(g, "[DEBUG] F1=Close | 1-4=Tabs", (float)(panelX + 8), (float)(panelY + 6),
                     glm::vec4(1, 0.8f, 0, 1), false);
 
     // Tab bar
-    const char* tabNames[] = {"1:Info", "2:Structures", "3:Biomes"};
+    const char* tabNames[] = {"1:Info", "2:Structures", "3:Biomes", "4:Teleport"};
     int tabW = 80;
     int tabH = 18;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         int tx = panelX + 8 + i * (tabW + 4);
         int ty = panelY + 22;
         bool active = (currentTab == i);
@@ -517,6 +651,7 @@ void DebugOverlay::render(render::GuiGraphics& g, render::Font& font, Minecraft&
         case 0: renderInfoTab(g, font, mc, mouseX - panelX, mouseY - panelY); break;
         case 1: renderStructuresTab(g, font, mc, mouseX - panelX, mouseY - panelY, panelW, panelH); break;
         case 2: renderBiomesTab(g, font, mc, mouseX - panelX, mouseY - panelY, panelW, panelH); break;
+        case 3: renderTeleportTab(g, font, mc, window, mouseX - panelX, mouseY - panelY, panelW, panelH); break;
     }
 
     g.pop();
