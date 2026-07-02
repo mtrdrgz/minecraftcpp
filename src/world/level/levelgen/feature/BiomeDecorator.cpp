@@ -72,6 +72,10 @@ void beginFeatureTurn(LevelChunk& chunk) {
     engineBeginFeatureTurn(g_ctx, chunk.pos().x, chunk.pos().z);
 }
 
+void setStructureStepHook(std::function<void(int, int, int)> hook) {
+    engineSetStructureStepHook(std::move(hook));
+}
+
 bool placeStructurePoolFeature(const std::string& featureId, mc::levelgen::RandomSource& random,
                                BlockPos origin, ChunkPos decoratingChunk) {
     if (!g_ctx) return false;

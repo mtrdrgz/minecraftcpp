@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -9,6 +10,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -194,19 +196,34 @@ public:
     const T& search(const TargetPoint& target) const {
         const std::array<int64_t, 7> arr = { target.temperature, target.humidity, target.continentalness,
                                              target.erosion, target.depth, target.weirdness, 0 };
-        // Java uses a ThreadLocal<Leaf> lastResult — each thread gets its own seed.
-        // C++ must mirror this with thread_local to avoid data races when multiple
-        // worker threads call getNoiseBiome concurrently.
-        thread_local const Leaf* tl_lastResult = nullptr;
-        const Leaf* leaf = m_root->search(arr, tl_lastResult);
-        tl_lastResult = leaf;
+        // Java: `private final ThreadLocal<RTree.Leaf<T>> lastResult` — the seed
+        // leaf is per-THREAD *and per-RTREE-INSTANCE*. A single shared
+        // thread_local pointer (the previous code) leaked the previous tree's
+        // leaf into the next tree's search: a heap-use-after-free once the old
+        // generator was destroyed (crash), and before that a mispriming that
+        // could flip distance-tie biome lookups. Key the per-thread seed by a
+        // process-unique tree id so a dead tree's entry can never match a new
+        // tree, even at a recycled address.
+        thread_local std::unordered_map<uint64_t, const Leaf*> tl_lastResult;
+        const Leaf*& seed = tl_lastResult[m_treeSearchId];
+        const Leaf* leaf = m_root->search(arr, seed);
+        seed = leaf;
         return leaf->value;
     }
 
 private:
     std::shared_ptr<Node> m_root;
+    // Process-unique id shared by copies of this tree (copies share m_root, so
+    // their leaves have the same lifetime and may share the seed cache).
+    uint64_t m_treeSearchId = 0;
 
-    explicit RTree(std::shared_ptr<Node> root) : m_root(std::move(root)) {}
+    static uint64_t nextTreeSearchId() {
+        static std::atomic<uint64_t> counter{1};
+        return counter.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    explicit RTree(std::shared_ptr<Node> root)
+        : m_root(std::move(root)), m_treeSearchId(nextTreeSearchId()) {}
 
     static int64_t absl(int64_t v) { return v < 0 ? -v : v; }
     static int64_t center(const Node& n, int dim) {

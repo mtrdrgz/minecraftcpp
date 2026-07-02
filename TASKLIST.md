@@ -216,6 +216,24 @@
       `village_snowy` de 31 piezas, no como el caso plains forzado. Pendiente: gate de
       starts/piezas en el contexto real del server y despues diff bloque-a-bloque contra
       `.mca` del server.
+      **CERRADO 2026-07-02 — ALDEAS CERTIFICADAS BLOQUE-A-BLOQUE contra el server
+      real (`generate-structures=true`, seed 1, village_plains (40,51), 110 chunks
+      del .mca):** los 84 starts/piezas son byte-exactos (gate de starts) y la
+      COLOCACIÓN de la aldea entera (casas, calles TERRAIN_MATCHING, granjas con
+      cultivos, farolas, pozos, árboles/heno vía feature_pool_element) coincide
+      bloque a bloque — el lado este (llanura) da 61/110 chunks byte-exactos
+      incluida toda el área de la aldea; ver el commit "village block-placement
+      parity" para las 8 causas raíz arregladas (RTree lastResult use-after-free,
+      interleaving por step de estructuras vs features, heightAt del
+      GravityProcessor, placeFeature del harness, luz de setas =15 en worldgen,
+      updateShape de bloques de aldea, pile_hay/rotated_block_provider,
+      memoización de heightmaps). Residual conocido y cuantificado (NO de aldeas):
+      ~97% de los mismatches restantes de la región son bordes de árboles de
+      BOSQUE dependientes del ORDEN de decoración de chunks del server — el
+      oráculo Java certificado (FullChunkDecorateParity.java) da EXACTAMENTE los
+      mismos diffs (356==356 en un chunk de bosque sin aldea): es un gap
+      oráculo-vs-server preexistente y documentado en EngineDecoration.h
+      ("KNOWN DELTA"), no un bug del engine (C++ == oráculo Java byte-exacto).
 - [x] Buried treasure: portado `BuriedTreasurePiece.postProcess` 1:1 (escaneo hacia abajo
       hasta la primera columna anclada en sandstone/stone/andesite/granite/diorite, relleno
       de aire/líquido de los 6 vecinos con belowState/softState, y colocación del cofre).

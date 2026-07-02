@@ -172,6 +172,24 @@ inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = null
         // (BlockBehaviour.java:482-499) -> blocksMotion FALSE. The MOTION_BLOCKING
         // heightmap therefore sees THROUGH powder snow (freeze_top_layer relies on it).
         "minecraft:powder_snow",
+        // Village (jigsaw template) blocks, each verified in Blocks.java:
+        // torch/wall_torch (.noCollision(), Blocks.java "torch"/"wall_torch") and
+        // lantern (LanternBlock: small 6/16 box, avg size (0.375+0.4375+0.375)/3 =
+        // 0.396 < 0.7291666 and ySize < 1 -> legacySolid FALSE).
+        "minecraft:torch", "minecraft:wall_torch", "minecraft:lantern",
+        // Crops / farm plants: CropBlock wheat/carrots/potatoes/beetroots and
+        // PumpkinStemBlock/MelonStemBlock are .noCollision() registrations.
+        "minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroots",
+        "minecraft:pumpkin_stem", "minecraft:melon_stem",
+        // Rails: BaseRailBlock .noCollision() (mineshaft corridors).
+        "minecraft:rail", "minecraft:powered_rail", "minecraft:detector_rail",
+        // Pressure plates: PressurePlateBlock .noCollision().
+        "minecraft:oak_pressure_plate", "minecraft:stone_pressure_plate",
+        // iron_bars / glass_pane style pane blocks: IronBarsBlock 2/16-thin cross;
+        // default (unconnected) collision bounds avg (0.125+1+0.125)/3 = 0.4167 <
+        // 0.7291666, ySize 1.0 -> second arm getYsize() >= 1.0 is TRUE ->
+        // legacySolid TRUE. (Panes DO block motion — keep out of this set; listed
+        // here as a note so nobody "fixes" them wrong.)
     };
     static const std::set<std::string> knownMotionBlocking = {
         "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
@@ -243,6 +261,43 @@ inline bool blocksMotion(const std::string& blockOrState, bool* defaulted = null
         "minecraft:terracotta", "minecraft:white_terracotta", "minecraft:orange_terracotta",
         "minecraft:yellow_terracotta", "minecraft:brown_terracotta", "minecraft:red_terracotta",
         "minecraft:light_gray_terracotta", "minecraft:red_sandstone",
+        // Village (jigsaw template) blocks, each verified in Blocks.java:
+        //   dirt_path/farmland: full-xz 15/16 boxes -> avg (1+0.9375+1)/3 = 0.979
+        //     -> legacySolid TRUE;
+        //   planks/stripped wood/logs, tuff family, waxed copper family: full cubes;
+        //   stairs: default straight-bottom shape has ySize 1.0 on the back half ->
+        //     bounds ySize 1.0 -> legacySolid TRUE (second calculateSolid arm);
+        //   fences/walls/fence gates (closed): 1.5-tall collision -> ySize >= 1.0 ->
+        //     TRUE (an OPEN fence gate has an empty collision shape -> per-state
+        //     FALSE in Java; village templates place gates closed, and this table is
+        //     per-block — revisit if a template ships an open gate);
+        //   trapdoors: 3/16 plates, avg (1+0.1875+1)/3 = 0.7291666... which is >=
+        //     the 0.7291666666666666 threshold -> TRUE for every orientation;
+        //   glass panes / iron bars: 2/16 cross but ySize 1.0 -> TRUE;
+        //   bell: default FLOOR attachment is Block.cube(16,16,8) -> avg
+        //     (1+1+0.5)/3 = 0.833 -> TRUE. (CEILING/WALL states are sub-threshold
+        //     FALSE in Java — per-STATE; this per-block table takes the default
+        //     state. Flagged for the block gate: fix per-state if a hanging bell
+        //     ever lands under a heightmap scan that matters.)
+        "minecraft:dirt_path", "minecraft:farmland",
+        "minecraft:oak_planks", "minecraft:stripped_oak_wood", "minecraft:stripped_oak_log",
+        "minecraft:oak_stairs", "minecraft:cobblestone_stairs",
+        "minecraft:oak_fence", "minecraft:oak_fence_gate", "minecraft:cobblestone_wall",
+        "minecraft:tuff_bricks", "minecraft:chiseled_tuff_bricks", "minecraft:polished_tuff",
+        "minecraft:waxed_copper_block", "minecraft:waxed_copper_grate",
+        "minecraft:waxed_oxidized_copper", "minecraft:waxed_oxidized_copper_trapdoor",
+        "minecraft:waxed_oxidized_cut_copper", "minecraft:waxed_oxidized_cut_copper_stairs",
+        "minecraft:glass_pane", "minecraft:iron_bars",
+        "minecraft:white_bed", "minecraft:yellow_bed",  // BedBlock 9/16 slab: avg 0.854 -> TRUE
+        "minecraft:composter", "minecraft:barrel", "minecraft:smoker", "minecraft:furnace",
+        "minecraft:crafting_table", "minecraft:cartography_table", "minecraft:fletching_table",
+        "minecraft:smithing_table", "minecraft:lectern", "minecraft:grindstone",
+        "minecraft:hay_block", "minecraft:oak_door", "minecraft:oak_wood",
+        "minecraft:oak_slab", "minecraft:cobblestone_slab", "minecraft:stone_bricks",
+        "minecraft:mossy_stone_bricks", "minecraft:cracked_stone_bricks", "minecraft:bricks",
+        "minecraft:stone_brick_stairs", "minecraft:stone_stairs", "minecraft:smooth_stone",
+        "minecraft:smooth_stone_slab", "minecraft:bookshelf", "minecraft:jack_o_lantern",
+        "minecraft:carved_pumpkin", "minecraft:target", "minecraft:bell",
     };
     const std::string block = blockName(blockOrState);
     if (nonMotionBlocking.count(block) != 0) return false;

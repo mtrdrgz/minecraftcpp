@@ -224,6 +224,9 @@ std::atomic<long long> g_vegRuns{0}, g_vegPlacedOk{0};
 // init), then only read at runtime — safe to share across workers without locking.
 std::map<std::string, std::string> g_unportedType;   // featureKey -> configured type (hard no-ops)
 // g_unportedSkips is mutated per-feature during decoration — guard with a mutex.
+// Per-step structure placement hook (set per chunk case in main; invoked by
+// decorateOneChunk at the top of every generation step).
+std::function<void(int, int, int)> g_structureStepHook;
 std::map<std::string, long long> g_unportedSkips;    // configured type -> skipped RUNS
 std::mutex g_unportedSkipsMutex;
 // g_blocksMotionDefaulted / g_solidRenderDefaulted are populated by the block
@@ -241,15 +244,15 @@ std::mutex g_solidRenderDefaultedMutex;
 // under multi-threaded decoration.
 inline void recordBlocksMotionDefaulted(const std::string& name) {
     std::lock_guard<std::mutex> lk(g_blocksMotionDefaultedMutex);
-    recordBlocksMotionDefaulted(name);
+    g_blocksMotionDefaulted.insert(name);
 }
 inline void recordSolidRenderDefaulted(const std::string& name) {
     std::lock_guard<std::mutex> lk(g_solidRenderDefaultedMutex);
-    recordSolidRenderDefaulted(name);
+    g_solidRenderDefaulted.insert(name);
 }
 inline void recordUnportedSkip(const std::string& type) {
     std::lock_guard<std::mutex> lk(g_unportedSkipsMutex);
-    recordUnportedSkip(type);
+    ++g_unportedSkips[type];
 }
 
 // Thrown by the configured-feature loader for a clean "type not yet ported"
@@ -810,6 +813,17 @@ mc::levelgen::feature::DiskStateProvider loadStateProvider(const json& j) {
             return state;
         };
     }
+    // RotatedBlockProvider.getState (RotatedBlockProvider.java:31-35): ONE
+    // Direction.Axis.getRandom(random) draw (Util.getRandom over the 3 axes =
+    // nextInt(3)); the AXIS property is id-invisible in the block-name grid but
+    // the draw must be consumed (pile_hay - village hay bales).
+    if (t == "rotated_block_provider") {
+        const std::string s = stateName(j.at("state"));
+        return [s](WorldGenLevel&, RandomSource& random, BlockPos) {
+            (void)random.nextInt(3);   // Direction.Axis.getRandom
+            return std::optional<std::string>(s);
+        };
+    }
     throw std::runtime_error("unsupported state_provider: " + t);
 }
 
@@ -1297,17 +1311,17 @@ public:
             return g_tags->isInTag(mc::block::blockName(getBlockState(belowPos)), "minecraft:supports_dry_vegetation");
         }
         // MushroomBlock.canSurvive (MushroomBlock.java:84-87): below in
-        // #overrides_mushroom_light_requirement -> true; else rawBrightness(pos,0) < 13
-        // — always 0 < 13 during worldgen (the certified GT proxy returns brightness 0,
-        // FullChunkDecorateParity.java:697-699) — && mayPlaceOn(below) =
-        // below.isSolidRender (MushroomBlock.java:78-80).
+        // #overrides_mushroom_light_requirement -> true; else requires
+        // rawBrightness(pos, 0) < 13. During worldgen (FEATURES stage) NO chunk is
+        // lit yet, and SkyLightSectionStorage.getLightValue returns 15 for any
+        // column without light data (SkyLightSectionStorage.java:26-53, both the
+        // missing-layer walk-up at :38 and the unlit-column else at :52) — so the
+        // light arm is ALWAYS false and worldgen mushrooms survive ONLY on the
+        // override blocks (mycelium/podzol/...). Verified empirically: the real
+        // structures-on server world has ZERO mushrooms over 9 plains chunks.
         if (block == "minecraft:brown_mushroom" || block == "minecraft:red_mushroom") {
             const std::string below = mc::block::blockName(getBlockState(belowPos));
-            if (g_tags->isInTag(below, "minecraft:overrides_mushroom_light_requirement")) return true;
-            bool defaulted = false;
-            const bool solid = mc::block::isSolidRender(below, &defaulted);
-            if (defaulted) recordSolidRenderDefaulted(below);
-            return solid;
+            return g_tags->isInTag(below, "minecraft:overrides_mushroom_light_requirement");
         }
         // PumpkinBlock / MelonBlock extend Block: canSurvive is the Block default (true);
         // their placement gate is the placed feature's block_predicate_filter.
@@ -2137,6 +2151,181 @@ std::string updateShapeOnce(MultiChunkLevel& level, const std::string& bs, Block
             return "minecraft:air";
         }
         return bs;
+    }
+    // ---- Village (jigsaw template) blocks. Postprocess marks can sit under
+    // pieces that overwrote marked cells, so every block a village template can
+    // write needs its exact updateShape here (RULE #0: no silent identity).
+    // Identity / tick-only / id-invisible-property updateShapes, each verified
+    // against its Blocks.java registration class:
+    static const std::set<std::string> villageIdNoOp = {
+        // RotatedPillarBlock / Block defaults (full cubes, no updateShape override):
+        "minecraft:stripped_oak_log", "minecraft:stripped_oak_wood", "minecraft:oak_wood",
+        "minecraft:oak_planks", "minecraft:bookshelf", "minecraft:hay_block",
+        "minecraft:smooth_stone", "minecraft:stone_bricks", "minecraft:mossy_stone_bricks",
+        "minecraft:cracked_stone_bricks", "minecraft:bricks", "minecraft:polished_tuff",
+        "minecraft:chiseled_tuff_bricks", "minecraft:glass", "minecraft:white_terracotta",
+        "minecraft:carved_pumpkin", "minecraft:jack_o_lantern", "minecraft:target",
+        // WeatheringCopperFullBlock / Block (no updateShape override):
+        "minecraft:waxed_copper_block", "minecraft:waxed_oxidized_copper",
+        "minecraft:waxed_oxidized_cut_copper",
+        // Waterlog-tick-only updateShapes (id unchanged): WaterloggedTransparentBlock
+        // (grate), TrapDoorBlock, SlabBlock:
+        "minecraft:waxed_copper_grate", "minecraft:waxed_oxidized_copper_trapdoor",
+        "minecraft:oak_trapdoor", "minecraft:oak_slab", "minecraft:cobblestone_slab",
+        "minecraft:smooth_stone_slab",
+        // FarmBlock.updateShape (FarmBlock.java:71-82): UP && solid above only
+        // SCHEDULES the turn-to-dirt tick — id unchanged during worldgen:
+        "minecraft:farmland",
+        // CrossCollisionBlock (fence/pane/bars), FenceGateBlock, WallBlock:
+        // connection-property updates + waterlog ticks only (id unchanged):
+        "minecraft:oak_fence", "minecraft:oak_fence_gate", "minecraft:cobblestone_wall",
+        "minecraft:glass_pane", "minecraft:iron_bars",
+        // Containers / workstations with no updateShape override (Block /
+        // BaseEntityBlock / FurnaceBlock / ComposterBlock / LecternBlock):
+        "minecraft:composter", "minecraft:barrel", "minecraft:furnace", "minecraft:smoker",
+        "minecraft:blast_furnace", "minecraft:crafting_table", "minecraft:cartography_table",
+        "minecraft:fletching_table", "minecraft:smithing_table", "minecraft:lectern",
+        // GrindstoneBlock: FaceAttachedHorizontalDirectionalBlock.updateShape but
+        // canSurvive is overridden to always-true (GrindstoneBlock.java) -> identity.
+        "minecraft:grindstone",
+    };
+    if (villageIdNoOp.count(bs) != 0) return bs;
+    // Block.canSupportCenter (Block.java:342-346): isFaceSturdy(dir, SupportType.
+    // CENTER) — full faces pass, and centred posts (fences / walls / panes / bars /
+    // chain / hopper) provide the centre square; DOWN is vetoed for
+    // #unstable_bottom_center (fence gates).
+    const auto canSupportCenterAt = [&](const BlockPos& p, int face) -> bool {
+        const std::string s = level.getBlockState(p);
+        const std::string sname = mc::block::blockName(s);
+        if (face == 0 && sname.size() > 11 && sname.find("fence_gate") != std::string::npos) {
+            return false;  // BlockTags.UNSTABLE_BOTTOM_CENTER = the fence gates
+        }
+        bool defaulted = false;
+        if (mc::block::isFaceSturdyFull(s, face, &defaulted)) return true;
+        if (defaulted) recordBlocksMotionDefaulted(sname);
+        static const std::set<std::string> centerPosts = {
+            "minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence",
+            "minecraft:jungle_fence", "minecraft:acacia_fence", "minecraft:dark_oak_fence",
+            "minecraft:cobblestone_wall", "minecraft:glass_pane", "minecraft:iron_bars",
+            "minecraft:chain", "minecraft:hopper",
+        };
+        return centerPosts.count(sname) != 0;
+    };
+    // WallTorchBlock.updateShape (WallTorchBlock.java:83-95) and LadderBlock
+    // .updateShape (LadderBlock.java:73-88) share the shape: direction.getOpposite()
+    // == FACING && !canSurvive -> AIR; canSurvive = the attached block
+    // isFaceSturdy(FACING) at pos.relative(FACING.getOpposite()).
+    if (bs == "minecraft:wall_torch" || bs == "minecraft:soul_wall_torch"
+        || bs == "minecraft:ladder") {
+        static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+        const mc::BlockState* st = mc::getBlockState(level.stateIdAt(pos));
+        const int facing = st ? horizontalDirFromName(st->getProperty("facing")) : 2;
+        if (OPP[direction] == facing) {
+            const BlockPos attachedPos = mc::levelgen::feature::treeRelative(pos, OPP[facing]);
+            const std::string rel = level.getBlockState(attachedPos);
+            bool defaulted = false;
+            const bool sturdy = mc::block::isFaceSturdyFull(rel, facing, &defaulted);
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(rel));
+            if (!sturdy) return "minecraft:air";
+        }
+        return bs;
+    }
+    // BasePressurePlateBlock.updateShape (BasePressurePlateBlock.java:54-73):
+    // DOWN && !canSurvive -> AIR; canSurvive = canSupportRigidBlock(below) ||
+    // canSupportCenter(below, UP). Full-cube floors satisfy RIGID (full sturdy).
+    if (bs == "minecraft:oak_pressure_plate" || bs == "minecraft:stone_pressure_plate") {
+        if (direction == 0
+            && !canSupportCenterAt(BlockPos{ pos.x, pos.y - 1, pos.z }, 1)) {
+            return "minecraft:air";
+        }
+        return bs;
+    }
+    // LanternBlock.updateShape (LanternBlock.java:78-94): trigger direction is
+    // getConnectedDirection(state).getOpposite() (HANGING -> UP, standing -> DOWN);
+    // !canSurvive -> AIR with canSurvive = canSupportCenter at the support block
+    // (LanternBlock.java:68-75).
+    if (bs == "minecraft:lantern" || bs == "minecraft:soul_lantern") {
+        const mc::BlockState* st = mc::getBlockState(level.stateIdAt(pos));
+        const bool hanging = st && st->getProperty("hanging") == "true";
+        const int trigger = hanging ? 1 : 0;   // UP : DOWN
+        if (direction == trigger) {
+            const BlockPos supportPos{ pos.x, hanging ? pos.y + 1 : pos.y - 1, pos.z };
+            const int supportFace = hanging ? 0 : 1;   // DOWN face above : UP face below
+            if (!canSupportCenterAt(supportPos, supportFace)) return "minecraft:air";
+        }
+        return bs;
+    }
+    // DoorBlock.updateShape (DoorBlock.java:88-108): toward the other half, a
+    // same-door neighbour with the opposite HALF keeps the state (property copy —
+    // id-invisible here); anything else -> AIR. LOWER && DOWN && !canSurvive
+    // (below isFaceSturdy UP, DoorBlock.java:214-217) -> AIR.
+    if (bs == "minecraft:oak_door") {
+        const mc::BlockState* st = mc::getBlockState(level.stateIdAt(pos));
+        const bool lower = st && st->getProperty("half") == "lower";
+        const bool dirIsY = direction == 0 || direction == 1;
+        if (dirIsY && (lower == (direction == 1))) {
+            const std::string nstate = level.getBlockState(neighborPos);
+            if (nstate == bs) {
+                const mc::BlockState* nst = mc::getBlockState(level.stateIdAt(neighborPos));
+                if (nst && (nst->getProperty("half") == "lower") != lower) return bs;
+            }
+            return "minecraft:air";
+        }
+        if (lower && direction == 0) {
+            const std::string below = level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z });
+            bool defaulted = false;
+            const bool sturdy = mc::block::isFaceSturdyFull(below, 1, &defaulted);
+            if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(below));
+            if (!sturdy) return "minecraft:air";
+        }
+        return bs;
+    }
+    // BellBlock.updateShape (BellBlock.java:225-254): the attach direction
+    // (getConnectedDirection(state).getOpposite(): FLOOR -> DOWN, CEILING -> UP,
+    // walls -> FACING) unsupported -> AIR unless DOUBLE_WALL; the FACING-axis
+    // branch only rewrites ATTACHMENT/FACING properties (id-invisible).
+    if (bs == "minecraft:bell") {
+        static constexpr int OPP[6] = { 1, 0, 3, 2, 5, 4 };
+        const mc::BlockState* st = mc::getBlockState(level.stateIdAt(pos));
+        const std::string attachment = st ? st->getProperty("attachment") : "floor";
+        const int facing = st ? horizontalDirFromName(st->getProperty("facing")) : 2;
+        int trigger;   // getConnectedDirection(state).getOpposite()
+        if (attachment == "floor") trigger = 0;
+        else if (attachment == "ceiling") trigger = 1;
+        else trigger = facing;
+        if (direction == trigger && attachment != "double_wall") {
+            bool survives;
+            if (attachment == "floor") {
+                // canAttach(level, pos, DOWN): below isFaceSturdy(UP)
+                const std::string below = level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z });
+                bool defaulted = false;
+                survives = mc::block::isFaceSturdyFull(below, 1, &defaulted);
+                if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(below));
+            } else if (attachment == "ceiling") {
+                // canSupportCenter(pos.above(), DOWN)
+                survives = canSupportCenterAt(BlockPos{ pos.x, pos.y + 1, pos.z }, 0);
+            } else {
+                // canAttach(level, pos, FACING): attached block isFaceSturdy(opposite)
+                const BlockPos attachedPos = mc::levelgen::feature::treeRelative(pos, facing);
+                const std::string rel = level.getBlockState(attachedPos);
+                bool defaulted = false;
+                survives = mc::block::isFaceSturdyFull(rel, OPP[facing], &defaulted);
+                if (defaulted) recordBlocksMotionDefaulted(mc::block::blockName(rel));
+            }
+            if (!survives) return "minecraft:air";
+        }
+        return bs;
+    }
+    // CropBlock (wheat/carrots/potatoes/beetroots — village farm plots):
+    // VegetationBlock.updateShape (!canSurvive -> AIR) with CropBlock.canSurvive =
+    // hasSufficientLight && mayPlaceOn(below) where mayPlaceOn is
+    // `state.is(Blocks.FARMLAND)` (CropBlock.java:49-51,145-147). Farm crops sit
+    // under open sky (canSeeSky -> hasSufficientLight true during worldgen), so
+    // the survivable condition reduces to farmland below.
+    if (bs == "minecraft:wheat" || bs == "minecraft:carrots"
+        || bs == "minecraft:potatoes" || bs == "minecraft:beetroots") {
+        const std::string below = level.getBlockState(BlockPos{ pos.x, pos.y - 1, pos.z });
+        return below == "minecraft:farmland" ? bs : "minecraft:air";
     }
     throw std::logic_error("updateShape not ported for " + bs);
 }
@@ -3603,38 +3792,38 @@ struct DecorationResolver {
                     if (origin.y < level.getMinY() + 5) return false;
                     const int xr = 2 + random.nextInt(2);
                     const int zr = 2 + random.nextInt(2);
-                    for (int y = 0; y <= 1; ++y) {
-                        for (int x = -xr; x <= xr; ++x) {
-                            for (int z = -zr; z <= zr; ++z) {
+                    // tryPlaceBlock (BlockPileFeature.java:45-56): isEmptyBlock &&
+                    // mayPlaceOn, where mayPlaceOn on a DIRT_PATH below is decided
+                    // by nextBoolean ALONE (no sturdy fallback — the ternary), else
+                    // below.isFaceSturdy(UP). The state-provider draw (rotated axis)
+                    // only happens when the block actually places.
+                    auto tryPlaceBlock = [&](const BlockPos& pos) {
+                        if (!level.isEmptyBlock(pos)) return;
+                        BlockPos below{ pos.x, pos.y - 1, pos.z };
+                        const std::string belowState = level.getBlockState(below);
+                        const bool mayPlace = (belowState == "minecraft:dirt_path")
+                            ? random.nextBoolean()
+                            : mc::block::isFaceSturdyFull(belowState, 1);
+                        if (mayPlace) {
+                            auto s = stateProvider(level, random, pos);
+                            if (s) level.setBlock(pos, *s, 260);
+                        }
+                    };
+                    // BlockPos.betweenClosed iteration order (BlockPos.java:405-425):
+                    // x fastest, then y, then z — the two nextFloats per cell (and the
+                    // 0.031 rescue draw) must be consumed in exactly this order.
+                    for (int z = -zr; z <= zr; ++z) {
+                        for (int y = 0; y <= 1; ++y) {
+                            for (int x = -xr; x <= xr; ++x) {
                                 BlockPos pos{ origin.x + x, origin.y + y, origin.z + z };
                                 const int xd = origin.x - pos.x;
                                 const int zd = origin.z - pos.z;
-                                // Draw order: nextFloat for distance, nextFloat for offset.
                                 const float df1 = random.nextFloat();
                                 const float df2 = random.nextFloat();
-                                if (xd * xd + zd * zd <= df1 * 10.0f - df2 * 6.0f) {
-                                    // tryPlaceBlock
-                                    if (level.isEmptyBlock(pos)) {
-                                        BlockPos below{ pos.x, pos.y - 1, pos.z };
-                                        const std::string belowState = level.getBlockState(below);
-                                        bool mayPlace = (belowState == "minecraft:dirt_path" && random.nextBoolean()) ||
-                                                        mc::block::isFaceSturdyFull(belowState, 1);
-                                        if (mayPlace) {
-                                            auto s = stateProvider(level, random, pos);
-                                            if (s) level.setBlock(pos, *s, 260);
-                                        }
-                                    }
+                                if (static_cast<float>(xd * xd + zd * zd) <= df1 * 10.0f - df2 * 6.0f) {
+                                    tryPlaceBlock(pos);
                                 } else if (random.nextFloat() < 0.031f) {
-                                    if (level.isEmptyBlock(pos)) {
-                                        BlockPos below{ pos.x, pos.y - 1, pos.z };
-                                        const std::string belowState = level.getBlockState(below);
-                                        bool mayPlace = (belowState == "minecraft:dirt_path" && random.nextBoolean()) ||
-                                                        mc::block::isFaceSturdyFull(belowState, 1);
-                                        if (mayPlace) {
-                                            auto s = stateProvider(level, random, pos);
-                                            if (s) level.setBlock(pos, *s, 260);
-                                        }
-                                    }
+                                    tryPlaceBlock(pos);
                                 }
                             }
                         }
@@ -3757,6 +3946,11 @@ void decorateOneChunk(MultiChunkLevel& level, int nx, int nz, long long seed,
     const auto& stepData = resolver.stepData;
     const int genSteps = std::max(static_cast<int>(stepData.size()), (int)GenerationStep::COUNT);
     for (int step = 0; step < genSteps && step < static_cast<int>(stepData.size()); ++step) {
+        // Java applyBiomeDecoration: the structures registered at this step place
+        // FIRST, then the step's features (their RNG seeds are independent —
+        // structures seed setFeatureSeed(deco, structureIndexInStep, step), the
+        // features their FeatureSorter global index).
+        if (g_structureStepHook) g_structureStepHook(nx, nz, step);
         const std::vector<int> indices = FeatureSorter::selectFeatureIndicesForStep(possibleBiomes, resolver.biomeFeatures, stepData[step], step);
         for (int index : indices) {
             const std::string& featureKey = stepData[step].features[static_cast<std::size_t>(index)];
@@ -3938,35 +4132,62 @@ int main(int argc, char** argv) {
         // values for the whole FEATURES phase (ChunkStatus.java:18,27).
         level.freezeHeights();
 
-        // ---- STRUCTURES: run non-jigsaw structure placement (mineshaft, swamp_hut,
-        // desert_pyramid, etc.) on the inner 3×3, matching Java's FEATURES turn
-        // which calls runStructures before applyBiomeDecoration. Jigsaw structures
-        // (villages, outposts) are placed via FeaturePoolElement during decoration;
-        // this call handles the hand-built non-jigsaw families.
+        // ---- STRUCTURES: placed PER GENERATION STEP inside decorateOneChunk
+        // (Java applyBiomeDecoration: structures of step k place before step k's
+        // features and after step k-1's — an amethyst geode (LOCAL_MODIFICATIONS)
+        // must underlie a trial chamber (UNDERGROUND_STRUCTURES), never overwrite
+        // it). decorateOneChunk invokes this hook at the top of every step.
         {
-            mc::levelgen::structure::StructureWorld structWorld;
-            structWorld.getBlock = [&level](int x, int y, int z) -> std::uint32_t {
+            auto structWorld = std::make_shared<mc::levelgen::structure::StructureWorld>();
+            structWorld->getBlock = [&level](int x, int y, int z) -> std::uint32_t {
                 mc::LevelChunk* c = level.chunkAt(x >> 4, z >> 4);
                 return c ? c->getBlock(x, y, z) : 0u;
             };
-            structWorld.setBlock = [&level](int x, int y, int z, std::uint32_t id) {
+            structWorld->setBlock = [&level](int x, int y, int z, std::uint32_t id) {
                 mc::LevelChunk* c = level.chunkAt(x >> 4, z >> 4);
                 if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
             };
-            structWorld.heightAt = [&level](int x, int z) -> int {
-                // Java's StructurePiece.isInterior uses OCEAN_FLOOR_WG heightmap.
-                return level.getHeight(mc::levelgen::Heightmap::Types::OCEAN_FLOOR_WG, x, z);
+            structWorld->heightAt = [&level](int x, int z) -> int {
+                // StructureWorld.heightAt convention: WORLD_SURFACE_WG first-
+                // OCCUPIED (level.getHeight returns first-available, so -1).
+                // TERRAIN_MATCHING placement (GravityProcessor(WORLD_SURFACE_WG,-1))
+                // computes newY = getHeight + (-1) + localY == heightAt + localY.
+                return level.getHeight(mc::levelgen::Heightmap::Types::WORLD_SURFACE_WG, x, z) - 1;
+            };
+            structWorld->oceanFloorAt = [&level](int x, int z) -> int {
+                // OCEAN_FLOOR_WG first-occupied — ocean structures' gate/Y source.
+                return level.getHeight(mc::levelgen::Heightmap::Types::OCEAN_FLOOR_WG, x, z) - 1;
+            };
+            structWorld->baseColumnAt = [&gen](int x, int z) {
+                return gen.getBaseColumn(x, z);
             };
             auto structBiomeGetter = [&storeNoiseBiome](int x, int y, int z) -> std::string {
                 return storeNoiseBiome(x >> 2, y >> 2, z >> 2);
             };
-            for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
+            // FeaturePoolElement pieces (village trees / lamps / decorations):
+            // Java's FeaturePoolElement.place runs the referenced PLACED FEATURE
+            // with the structure pass's already-seeded random at the piece origin
+            // (FeaturePoolElement.java) — never reseeded.
+            structWorld->placeFeature = [&resolver, &level, minY, maxY](
+                const std::string& featureId, mc::levelgen::RandomSource& random,
+                mc::BlockPos origin) -> bool {
+                const std::string normKey = "minecraft:" + stripNs(featureId);
+                std::shared_ptr<PlacedFeature> placed = resolver.resolveFeature(normKey);
+                if (!placed) {
+                    auto ut = g_unportedType.find(normKey);
+                    recordUnportedSkip(ut != g_unportedType.end() ? ut->second : "load-failed");
+                    return false;
+                }
+                g_curFeatureKey = normKey;
+                return placed->place(level, random, BlockPos{ origin.x, origin.y, origin.z }, minY, maxY - minY);
+            };
+            g_structureStepHook = [structWorld, structBiomeGetter, seed, dataDirStr](int cx, int cz, int step) {
                 try {
                     mc::levelgen::structure::generateStructures(
-                        mc::ChunkPos{ Cx + dx, Cz + dz }, static_cast<std::uint64_t>(seed),
-                        structWorld, structBiomeGetter, dataDirStr);
+                        mc::ChunkPos{ cx, cz }, static_cast<std::uint64_t>(seed),
+                        *structWorld, structBiomeGetter, dataDirStr, step);
                 } catch (...) { /* structure gen failure is non-fatal */ }
-            }
+            };
         }
 
         // The biome filter's level.getBiome goes through the chunk-cached biomes
@@ -4024,7 +4245,7 @@ int main(int argc, char** argv) {
                 if (mine != srv) {
                     ++allMism; ++pc.allMism;
                     ++transitions[{ mine, srv }];
-                    if (family == "all" && shown++ < 200)
+                    if (family == "all" && shown++ < 50000)
                         std::cerr << "ALL-MISMATCH seed=" << seed << " (" << bx << "," << y << "," << bz
                                   << ") got=" << mine << " server=" << srv << "\n";
                 }

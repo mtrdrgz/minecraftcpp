@@ -36,6 +36,7 @@
 #include "../../../../core/Math.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -67,6 +68,12 @@ void engineDecorateChunk(EngineDecorationContext* ctx, int cx, int cz);
 // ChunkStatusTasks.generateFeatures heightmap priming before ChunkGenerator places
 // structures for each step. Safe to call more than once for the same chunk.
 void engineBeginFeatureTurn(EngineDecorationContext* ctx, int cx, int cz);
+
+// Install the per-step structure placement hook: decorateOneChunk invokes it at
+// the top of every generation step as hook(chunkX, chunkZ, stepOrdinal) — the
+// Java applyBiomeDecoration interleaving (structures of step k place before step
+// k's features). Pass an empty function to uninstall.
+void engineSetStructureStepHook(std::function<void(int, int, int)> hook);
 
 // FeaturePoolElement.place: run one placed_feature at the exact jigsaw position
 // using the caller's already-seeded structure FEATURES random.

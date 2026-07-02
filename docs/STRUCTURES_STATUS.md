@@ -14,6 +14,44 @@
 
 ---
 
+## UPDATE 2026-07-02 — VILLAGES CERTIFIED AT BLOCK LEVEL vs the structures-on server
+
+The whole village block-placement pipeline is now verified against the REAL
+dedicated server (`generate-structures=true`, seed 1, `village_plains` at chunk
+(40,51)) by block-diffing 110 chunks of the server's `.mca`
+(`ServerChunkDump` → `full_chunk_decorate_parity --cases … --family all`):
+
+- The village area's plains side is **byte-exact** (62/110 chunks at 0
+  mismatches, including the entire village core): houses, TERRAIN_MATCHING
+  streets, farms (farmland/crops/water), lamps, well, hay piles and the
+  village's own trees (feature_pool_element pieces). Final region tally:
+  11241 / 10 813 440 cells (0.10%), of which **only 2 cells involve village
+  blocks and both were traced (MCPP_WATCH) to an extra forest tree from the
+  decoration-order residual overwriting them** — zero genuine village bugs
+  remain.
+- Root causes fixed on the way (each grounded in Java source, see the
+  "village block-placement parity" commits): Climate RTree lastResult
+  use-after-free (shared thread_local seeding the next generator's search from
+  freed leaves), self-recursive record* diagnostic helpers (deadlock),
+  per-generation-step structure/feature interleaving (geode vs trial chamber),
+  GravityProcessor heightAt convention (streets one block high),
+  FeaturePoolElement wiring in the parity harness (village oaks silently
+  skipped), worldgen light model for MushroomBlock (raw brightness is 15 in
+  unlit chunks — mushrooms only on #overrides_mushroom_light_requirement),
+  exact updateShape for every village-template block that can sit on a
+  postprocess mark, `rotated_block_provider` (pile_hay), and memoized
+  `columnHeights` (one NoiseChunk column pass for both WG heightmaps).
+- **Known residual (quantified, NOT village-related): ~97% of the remaining
+  region mismatches are FOREST tree borders that depend on the server's chunk
+  decoration ORDER.** The certified in-process Java oracle
+  (FullChunkDecorateParity.java) produces EXACTLY the same diffs (356==356 on a
+  village-free forest chunk (34,45)) — C++ matches the Java oracle byte-exact;
+  the delta is oracle-model-vs-server (the "KNOWN DELTA" documented in
+  EngineDecoration.h), pre-existing and out of the villages' scope. Neither xz,
+  zx nor a 5×5 xz decoration window reproduces the server's order.
+
+---
+
 ## UPDATE 2026-07-01 — in-process oracle; 285/287 starts byte-exact; engine placement fixed
 
 ### The new gold standard: `tools/StructureStartsGenParity.java`
