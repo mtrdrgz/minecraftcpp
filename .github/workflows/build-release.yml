@@ -152,6 +152,9 @@ jobs:
 
       - name: Build mcpp
         run: |
+          # pipefail: without it the step's exit code is tee's (always 0) and a
+          # failed build only surfaces later as a cryptic Package-step error.
+          set -o pipefail
           cmake --build build --target mcpp --parallel "$(nproc)" 2>&1 | tee build-output.log
 
       - name: Upload failure log
@@ -242,6 +245,9 @@ jobs:
 
       - name: Build mcpp
         run: |
+          # pipefail: without it the step's exit code is tee's (always 0) and a
+          # failed build only surfaces later as a cryptic Package-step error.
+          set -o pipefail
           cmake --build build --target mcpp --parallel "$(nproc)" 2>&1 | tee build-output.log
 
       - name: Upload failure log

@@ -7551,13 +7551,147 @@ int NoiseBasedChunkGenerator::samplePreliminarySurfaceLevel(int blockX, int bloc
         m_router.preliminarySurfaceLevel->compute(DensityFunctionContext{ quantizedX, 0, quantizedZ })));
 }
 
-int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
-    for (int y = m_settings.noiseSettings.minY + m_settings.noiseSettings.height - 1; y >= m_settings.noiseSettings.minY; --y) {
-        if (sampleFinalDensity(blockX, y, blockZ) > 0.0) {
-            return y + 1;
+std::optional<int> NoiseBasedChunkGenerator::iterateNoiseColumn(
+    int blockX, int blockZ,
+    const std::function<bool(uint32_t)>* tester,
+    std::vector<uint32_t>* column) const {
+    // NoiseBasedChunkGenerator.iterateNoiseColumn: a single-cell-wide NoiseChunk at
+    // the CELL-quantized origin. Every step below mirrors the Java method line by
+    // line; the density evaluation goes through the same CellInterpolationResolver
+    // fillFromNoise uses (certified byte-exact by full_chunk_parity).
+    const uint32_t air = stateIdFor("air", 0);
+    const uint32_t solid = m_settings.defaultBlock ? m_settings.defaultBlock : stateIdFor("stone", air);
+
+    const NoiseSettings& noiseSettings = m_settings.noiseSettings;
+    const int minY = noiseSettings.minY;
+    const int cellHeight = noiseSettings.getCellHeight();
+    const int cellWidth = noiseSettings.getCellWidth();
+    const int cellMinY = nbcg_floorDiv(minY, cellHeight);
+    const int cellCountY = nbcg_floorDiv(noiseSettings.height, cellHeight);
+    if (cellCountY <= 0) return std::nullopt;
+
+    if (column) column->assign(static_cast<std::size_t>(noiseSettings.height), air);
+
+    const int firstBlockX = nbcg_floorDiv(blockX, cellWidth) * cellWidth;
+    const int firstBlockZ = nbcg_floorDiv(blockZ, cellWidth) * cellWidth;
+
+    // Java NoiseChunk ctor: the aquifer is anchored at the CHUNK containing the
+    // cell origin (ChunkPos(SectionPos.blockToSectionCoord(firstNoiseX), ...)),
+    // NOT at the cell origin itself.
+    const int chunkMinBlockX = (firstBlockX >> 4) << 4;
+    const int chunkMinBlockZ = (firstBlockZ >> 4) << 4;
+    auto fluidPicker = Aquifer::createFluidPicker(m_settings);
+    auto preliminarySurface = [this](int bx, int bz) {
+        return samplePreliminarySurfaceLevel(bx, bz);
+    };
+    std::unique_ptr<Aquifer> aquifer = m_settings.isAquifersEnabled()
+        ? Aquifer::create(
+            std::move(preliminarySurface),
+            chunkMinBlockX,
+            chunkMinBlockZ,
+            m_router,
+            m_aquiferRandom,
+            minY,
+            noiseSettings.height,
+            std::move(fluidPicker))
+        : Aquifer::createDisabled(std::move(fluidPicker));
+    std::optional<OreVeinifier> oreVeinifier;
+    if (m_settings.areOreVeinsEnabled()) {
+        oreVeinifier.emplace(m_router.veinToggle, m_router.veinRidged, m_router.veinGap, m_oreRandom);
+    }
+    NoiseChunkSharedCache sharedCache;
+
+    for (int cellYIndex = cellCountY - 1; cellYIndex >= 0; --cellYIndex) {
+        const int y0 = (cellMinY + cellYIndex) * cellHeight;
+        CellInterpolationResolver interpolationResolver(firstBlockX, y0, firstBlockZ, cellWidth, cellHeight, &sharedCache);
+
+        for (int yInCell = cellHeight - 1; yInCell >= 0; --yInCell) {
+            const int blockY = y0 + yInCell;
+            DensityFunctionContext blockContext{ blockX, blockY, blockZ, &interpolationResolver };
+            const double density = m_router.finalDensity->compute(blockContext);
+            std::optional<uint32_t> aquiferState = aquifer->computeSubstance(blockContext, density);
+            uint32_t state = solid;
+            if (aquiferState) {
+                state = *aquiferState;
+            } else if (oreVeinifier) {
+                std::optional<uint32_t> oreState = oreVeinifier->compute(blockContext);
+                if (oreState) {
+                    state = *oreState;
+                }
+            }
+            if (column) {
+                (*column)[static_cast<std::size_t>(blockY - minY)] = state;
+            }
+            if (tester && (*tester)(state)) {
+                return blockY + 1;
+            }
         }
     }
-    return m_settings.noiseSettings.minY;
+    return std::nullopt;
+}
+
+std::pair<int, int> NoiseBasedChunkGenerator::columnHeights(int blockX, int blockZ) const {
+    const int64_t key = (static_cast<int64_t>(static_cast<uint32_t>(blockX)) << 32)
+                      | static_cast<uint32_t>(blockZ);
+    {
+        std::lock_guard<std::mutex> lk(m_heightCacheMutex);
+        auto it = m_heightCache.find(key);
+        if (it != m_heightCache.end()) return it->second;
+    }
+    // ONE column walk resolving BOTH predicates. Per-cell states are pure
+    // functions of position (interpolated density, aquifer, ore veins are all
+    // position-seeded), so scanning a fully-materialized column top-down yields
+    // exactly what the two independent early-stopping Java iterateNoiseColumn
+    // calls would:
+    //  - WORLD_SURFACE_WG isOpaque: !state.isAir()      → state != air
+    //  - OCEAN_FLOOR_WG  isOpaque: state.blocksMotion() → not air/water/lava
+    const uint32_t air = stateIdFor("air", 0);
+    const uint32_t water = stateIdFor("water", UINT32_MAX);
+    const uint32_t lava = stateIdFor("lava", UINT32_MAX);
+    const int minY = m_settings.noiseSettings.minY;
+    std::vector<uint32_t> column;
+    iterateNoiseColumn(blockX, blockZ, nullptr, &column);
+    int surfaceY = minY;
+    int oceanFloor = minY;
+    bool haveWorldSurface = false;
+    for (int idx = static_cast<int>(column.size()) - 1; idx >= 0; --idx) {
+        const uint32_t state = column[static_cast<std::size_t>(idx)];
+        const int y = minY + idx;
+        if (!haveWorldSurface && state != air) {
+            surfaceY = y + 1;
+            haveWorldSurface = true;
+        }
+        if (state != air && state != water && state != lava) {
+            oceanFloor = y + 1;
+            break;
+        }
+    }
+    const std::pair<int, int> result{surfaceY, oceanFloor};
+    {
+        std::lock_guard<std::mutex> lk(m_heightCacheMutex);
+        m_heightCache.emplace(key, result);
+    }
+    return result;
+}
+
+int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
+    // Heightmap.Types.WORLD_SURFACE_WG.isOpaque(): !state.isAir(). The states this
+    // column can produce are defaultBlock / ore / water / lava / air, so the test
+    // is exactly `state != air`.
+    return columnHeights(blockX, blockZ).first;
+}
+
+int NoiseBasedChunkGenerator::getOceanFloorHeight(int blockX, int blockZ) const {
+    // Heightmap.Types.OCEAN_FLOOR_WG uses MATERIAL_MOTION_BLOCKING
+    // (state.blocksMotion()). Of the producible states, fluids and air do not
+    // block motion; defaultBlock and ore states do.
+    return columnHeights(blockX, blockZ).second;
+}
+
+std::vector<uint32_t> NoiseBasedChunkGenerator::getBaseColumn(int blockX, int blockZ) const {
+    std::vector<uint32_t> column;
+    iterateNoiseColumn(blockX, blockZ, nullptr, &column);
+    return column;
 }
 
 void NoiseBasedChunkGenerator::fillFromNoise(LevelChunk& chunk, std::vector<mc::BlockPos>* fluidUpdateMarks,
@@ -7942,6 +8076,10 @@ void applyBiomeDecoration(LevelChunk& chunk) {
 void beginFeatureTurn(LevelChunk& chunk) {
     if (!g_ctx) return;
     engineBeginFeatureTurn(g_ctx, chunk.pos().x, chunk.pos().z);
+}
+
+void setStructureStepHook(std::function<void(int, int, int)> hook) {
+    engineSetStructureStepHook(std::move(hook));
 }
 
 bool placeStructurePoolFeature(const std::string& featureId, mc::levelgen::RandomSource& random,
@@ -12057,35 +12195,62 @@ int main(int argc, char** argv) {
         // values for the whole FEATURES phase (ChunkStatus.java:18,27).
         level.freezeHeights();
 
-        // ---- STRUCTURES: run non-jigsaw structure placement (mineshaft, swamp_hut,
-        // desert_pyramid, etc.) on the inner 3×3, matching Java's FEATURES turn
-        // which calls runStructures before applyBiomeDecoration. Jigsaw structures
-        // (villages, outposts) are placed via FeaturePoolElement during decoration;
-        // this call handles the hand-built non-jigsaw families.
+        // ---- STRUCTURES: placed PER GENERATION STEP inside decorateOneChunk
+        // (Java applyBiomeDecoration: structures of step k place before step k's
+        // features and after step k-1's — an amethyst geode (LOCAL_MODIFICATIONS)
+        // must underlie a trial chamber (UNDERGROUND_STRUCTURES), never overwrite
+        // it). decorateOneChunk invokes this hook at the top of every step.
         {
-            mc::levelgen::structure::StructureWorld structWorld;
-            structWorld.getBlock = [&level](int x, int y, int z) -> std::uint32_t {
+            auto structWorld = std::make_shared<mc::levelgen::structure::StructureWorld>();
+            structWorld->getBlock = [&level](int x, int y, int z) -> std::uint32_t {
                 mc::LevelChunk* c = level.chunkAt(x >> 4, z >> 4);
                 return c ? c->getBlock(x, y, z) : 0u;
             };
-            structWorld.setBlock = [&level](int x, int y, int z, std::uint32_t id) {
+            structWorld->setBlock = [&level](int x, int y, int z, std::uint32_t id) {
                 mc::LevelChunk* c = level.chunkAt(x >> 4, z >> 4);
                 if (c) { c->setBlock(x, y, z, id); c->meshDirty = true; }
             };
-            structWorld.heightAt = [&level](int x, int z) -> int {
-                // Java's StructurePiece.isInterior uses OCEAN_FLOOR_WG heightmap.
-                return level.getHeight(mc::levelgen::Heightmap::Types::OCEAN_FLOOR_WG, x, z);
+            structWorld->heightAt = [&level](int x, int z) -> int {
+                // StructureWorld.heightAt convention: WORLD_SURFACE_WG first-
+                // OCCUPIED (level.getHeight returns first-available, so -1).
+                // TERRAIN_MATCHING placement (GravityProcessor(WORLD_SURFACE_WG,-1))
+                // computes newY = getHeight + (-1) + localY == heightAt + localY.
+                return level.getHeight(mc::levelgen::Heightmap::Types::WORLD_SURFACE_WG, x, z) - 1;
+            };
+            structWorld->oceanFloorAt = [&level](int x, int z) -> int {
+                // OCEAN_FLOOR_WG first-occupied — ocean structures' gate/Y source.
+                return level.getHeight(mc::levelgen::Heightmap::Types::OCEAN_FLOOR_WG, x, z) - 1;
+            };
+            structWorld->baseColumnAt = [&gen](int x, int z) {
+                return gen.getBaseColumn(x, z);
             };
             auto structBiomeGetter = [&storeNoiseBiome](int x, int y, int z) -> std::string {
                 return storeNoiseBiome(x >> 2, y >> 2, z >> 2);
             };
-            for (int dx = -1; dx <= 1; ++dx) for (int dz = -1; dz <= 1; ++dz) {
+            // FeaturePoolElement pieces (village trees / lamps / decorations):
+            // Java's FeaturePoolElement.place runs the referenced PLACED FEATURE
+            // with the structure pass's already-seeded random at the piece origin
+            // (FeaturePoolElement.java) — never reseeded.
+            structWorld->placeFeature = [&resolver, &level, minY, maxY](
+                const std::string& featureId, mc::levelgen::RandomSource& random,
+                mc::BlockPos origin) -> bool {
+                const std::string normKey = "minecraft:" + stripNs(featureId);
+                std::shared_ptr<PlacedFeature> placed = resolver.resolveFeature(normKey);
+                if (!placed) {
+                    auto ut = g_unportedType.find(normKey);
+                    recordUnportedSkip(ut != g_unportedType.end() ? ut->second : "load-failed");
+                    return false;
+                }
+                g_curFeatureKey = normKey;
+                return placed->place(level, random, BlockPos{ origin.x, origin.y, origin.z }, minY, maxY - minY);
+            };
+            g_structureStepHook = [structWorld, structBiomeGetter, seed, dataDirStr](int cx, int cz, int step) {
                 try {
                     mc::levelgen::structure::generateStructures(
-                        mc::ChunkPos{ Cx + dx, Cz + dz }, static_cast<std::uint64_t>(seed),
-                        structWorld, structBiomeGetter, dataDirStr);
+                        mc::ChunkPos{ cx, cz }, static_cast<std::uint64_t>(seed),
+                        *structWorld, structBiomeGetter, dataDirStr, step);
                 } catch (...) { /* structure gen failure is non-fatal */ }
-            }
+            };
         }
 
         // The biome filter's level.getBiome goes through the chunk-cached biomes
@@ -13110,7 +13275,8 @@ struct Runtime {
     bool tryPlaceStronghold(ChunkPos active, const StructureWorld& world);
     bool tryPlaceEndCity(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
-                  const std::function<std::string(int, int, int)>& biomeGetter);
+                  const std::function<std::string(int, int, int)>& biomeGetter,
+                  int stepFilter = -1);
 
     // Beardifier integration: assemble (cached) the terrain-adapting structures whose
     // pieces reach `active`, then collect their RIGID pieces + junctions per
@@ -15015,7 +15181,8 @@ static bool isNonOverworldStructureSet(const std::string& setId) {
 }
 
 void Runtime::generate(ChunkPos active, const StructureWorld& world,
-                       const std::function<std::string(int, int, int)>& biomeGetter) {
+                       const std::function<std::string(int, int, int)>& biomeGetter,
+                       int stepFilter) {
     // Phase 3: lock the entire generate() call. This serializes structure
     // generation across threads, but the lazily-loaded caches (jigsawTemplates,
     // placeTemplates, etc.) are populated during generate(), so we need
@@ -15039,6 +15206,18 @@ void Runtime::generate(ChunkPos active, const StructureWorld& world,
         if (pit == placementState.sets.end()) continue;
         const StructurePlacement& placement = pit->second;
         if (!StructureState::isSupported(placement)) continue;
+
+        // Per-step interleaving (applyBiomeDecoration): only structures whose
+        // GenerationStep matches place in this pass. Every vanilla structure_set
+        // is step-homogeneous, so gating the whole set is exact.
+        if (stepFilter >= 0) {
+            bool anyAtStep = false;
+            for (const StructureSelection& s : set.structures) {
+                auto sit = structures.find(s.structureId);
+                if (sit != structures.end() && sit->second.stepIndex == stepFilter) { anyAtStep = true; break; }
+            }
+            if (!anyAtStep) continue;
+        }
 
         bool anyJigsaw = false;
         int maxDistH = 0;
@@ -15280,12 +15459,12 @@ Runtime* runtimeFor(const std::string& dataMinecraftDir, int64_t seed) {
 void generateStructures(ChunkPos active, uint64_t worldSeed,
                         const StructureWorld& world,
                         const std::function<std::string(int, int, int)>& biomeGetter,
-                        const std::string& dataMinecraftDir) {
+                        const std::string& dataMinecraftDir, int stepFilter) {
     if (dataMinecraftDir.empty()) return;
     fs::path dataDir(dataMinecraftDir);
     if (!fs::exists(dataDir / "worldgen" / "structure_set")) return;
     Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
-    runtime->generate(active, world, biomeGetter);
+    runtime->generate(active, world, biomeGetter, stepFilter);
 }
 
 mc::levelgen::Beardifier generateBeardifier(
