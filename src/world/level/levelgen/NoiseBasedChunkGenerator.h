@@ -13,7 +13,9 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace mc::levelgen {
@@ -102,6 +104,14 @@ private:
     std::optional<int> iterateNoiseColumn(int blockX, int blockZ,
                                           const std::function<bool(uint32_t)>* tester,
                                           std::vector<uint32_t>* column) const;
+
+    // Both WG heightmaps for a column in ONE iterateNoiseColumn pass, memoized:
+    // the heightmaps are pure functions of (x, z) and structure work (beardifier
+    // assembly, TERRAIN_MATCHING placement) queries thousands of columns.
+    // Values are the Java getBaseHeight (first-free) for each predicate.
+    std::pair<int, int> columnHeights(int blockX, int blockZ) const;
+    mutable std::unordered_map<int64_t, std::pair<int, int>> m_heightCache;
+    mutable std::mutex m_heightCacheMutex;
     uint32_t stateIdFor(const char* blockName, uint32_t fallback = 0) const;
     double   sampleFinalDensity(int blockX, int blockY, int blockZ) const;
     int      samplePreliminarySurfaceLevel(int blockX, int blockZ) const;

@@ -67,4 +67,9 @@ void beginFeatureTurn(LevelChunk& chunk);
 bool placeStructurePoolFeature(const std::string& featureId, mc::levelgen::RandomSource& random,
                                BlockPos origin, ChunkPos decoratingChunk);
 
+// Install the per-step structure placement hook (Java applyBiomeDecoration:
+// structures of generation step k place before step k's features). The engine's
+// runStructures installs it; applyBiomeDecoration invokes it per step.
+void setStructureStepHook(std::function<void(int, int, int)> hook);
+
 } // namespace mc::levelgen::feature

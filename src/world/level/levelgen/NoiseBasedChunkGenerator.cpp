@@ -540,28 +540,62 @@ std::optional<int> NoiseBasedChunkGenerator::iterateNoiseColumn(
     return std::nullopt;
 }
 
+std::pair<int, int> NoiseBasedChunkGenerator::columnHeights(int blockX, int blockZ) const {
+    const int64_t key = (static_cast<int64_t>(static_cast<uint32_t>(blockX)) << 32)
+                      | static_cast<uint32_t>(blockZ);
+    {
+        std::lock_guard<std::mutex> lk(m_heightCacheMutex);
+        auto it = m_heightCache.find(key);
+        if (it != m_heightCache.end()) return it->second;
+    }
+    // ONE column walk resolving BOTH predicates. Per-cell states are pure
+    // functions of position (interpolated density, aquifer, ore veins are all
+    // position-seeded), so scanning a fully-materialized column top-down yields
+    // exactly what the two independent early-stopping Java iterateNoiseColumn
+    // calls would:
+    //  - WORLD_SURFACE_WG isOpaque: !state.isAir()      → state != air
+    //  - OCEAN_FLOOR_WG  isOpaque: state.blocksMotion() → not air/water/lava
+    const uint32_t air = stateIdFor("air", 0);
+    const uint32_t water = stateIdFor("water", UINT32_MAX);
+    const uint32_t lava = stateIdFor("lava", UINT32_MAX);
+    const int minY = m_settings.noiseSettings.minY;
+    std::vector<uint32_t> column;
+    iterateNoiseColumn(blockX, blockZ, nullptr, &column);
+    int surfaceY = minY;
+    int oceanFloor = minY;
+    bool haveWorldSurface = false;
+    for (int idx = static_cast<int>(column.size()) - 1; idx >= 0; --idx) {
+        const uint32_t state = column[static_cast<std::size_t>(idx)];
+        const int y = minY + idx;
+        if (!haveWorldSurface && state != air) {
+            surfaceY = y + 1;
+            haveWorldSurface = true;
+        }
+        if (state != air && state != water && state != lava) {
+            oceanFloor = y + 1;
+            break;
+        }
+    }
+    const std::pair<int, int> result{surfaceY, oceanFloor};
+    {
+        std::lock_guard<std::mutex> lk(m_heightCacheMutex);
+        m_heightCache.emplace(key, result);
+    }
+    return result;
+}
+
 int NoiseBasedChunkGenerator::getBaseHeight(int blockX, int blockZ) const {
     // Heightmap.Types.WORLD_SURFACE_WG.isOpaque(): !state.isAir(). The states this
     // column can produce are defaultBlock / ore / water / lava / air, so the test
     // is exactly `state != air`.
-    const uint32_t air = stateIdFor("air", 0);
-    std::function<bool(uint32_t)> tester = [air](uint32_t state) { return state != air; };
-    return iterateNoiseColumn(blockX, blockZ, &tester, nullptr)
-        .value_or(m_settings.noiseSettings.minY);
+    return columnHeights(blockX, blockZ).first;
 }
 
 int NoiseBasedChunkGenerator::getOceanFloorHeight(int blockX, int blockZ) const {
     // Heightmap.Types.OCEAN_FLOOR_WG uses MATERIAL_MOTION_BLOCKING
     // (state.blocksMotion()). Of the producible states, fluids and air do not
     // block motion; defaultBlock and ore states do.
-    const uint32_t air = stateIdFor("air", 0);
-    const uint32_t water = stateIdFor("water", UINT32_MAX);
-    const uint32_t lava = stateIdFor("lava", UINT32_MAX);
-    std::function<bool(uint32_t)> tester = [air, water, lava](uint32_t state) {
-        return state != air && state != water && state != lava;
-    };
-    return iterateNoiseColumn(blockX, blockZ, &tester, nullptr)
-        .value_or(m_settings.noiseSettings.minY);
+    return columnHeights(blockX, blockZ).second;
 }
 
 std::vector<uint32_t> NoiseBasedChunkGenerator::getBaseColumn(int blockX, int blockZ) const {

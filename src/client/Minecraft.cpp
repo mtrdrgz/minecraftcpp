@@ -809,11 +809,22 @@ void Minecraft::runStructures(ChunkPos active) {
     auto biomeGetter = [this](int x, int y, int z) {
         return m_localGenerator->getNoiseBiome(x >> 2, y >> 2, z >> 2);
     };
-    try {
-        levelgen::structure::generateStructures(active, m_worldSeed, world, biomeGetter, m_dataMinecraftDir);
-    } catch (const std::exception& e) {
-        MC_LOG_WARN("runStructures failed at ({},{}): {}", active.x, active.z, e.what());
-    }
+    // Java applyBiomeDecoration interleaves per generation step: the structures
+    // registered at step k place BEFORE step k's features and AFTER step k-1's
+    // (an amethyst geode — LOCAL_MODIFICATIONS — must underlie a trial chamber —
+    // UNDERGROUND_STRUCTURES — never overwrite it). Install the per-step hook the
+    // decoration step loop invokes; structures no longer place as a monolithic
+    // pre-pass here.
+    (void)active;
+    levelgen::feature::setStructureStepHook(
+        [world, biomeGetter, this](int cx, int cz, int step) {
+            try {
+                levelgen::structure::generateStructures(ChunkPos{cx, cz}, m_worldSeed, world,
+                                                        biomeGetter, m_dataMinecraftDir, step);
+            } catch (const std::exception& e) {
+                MC_LOG_WARN("structure step {} failed at ({},{}): {}", step, cx, cz, e.what());
+            }
+        });
 }
 
 std::string Minecraft::getNoiseBiomeName(int quartX, int quartY, int quartZ) const {

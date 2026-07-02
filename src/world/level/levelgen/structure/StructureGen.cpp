@@ -729,7 +729,8 @@ struct Runtime {
     bool tryPlaceStronghold(ChunkPos active, const StructureWorld& world);
     bool tryPlaceEndCity(ChunkPos active, const StructureWorld& world);
     void generate(ChunkPos active, const StructureWorld& world,
-                  const std::function<std::string(int, int, int)>& biomeGetter);
+                  const std::function<std::string(int, int, int)>& biomeGetter,
+                  int stepFilter = -1);
 
     // Beardifier integration: assemble (cached) the terrain-adapting structures whose
     // pieces reach `active`, then collect their RIGID pieces + junctions per
@@ -2844,7 +2845,8 @@ static bool isNonOverworldStructureSet(const std::string& setId) {
 }
 
 void Runtime::generate(ChunkPos active, const StructureWorld& world,
-                       const std::function<std::string(int, int, int)>& biomeGetter) {
+                       const std::function<std::string(int, int, int)>& biomeGetter,
+                       int stepFilter) {
     // Phase 3: lock the entire generate() call. This serializes structure
     // generation across threads, but the lazily-loaded caches (jigsawTemplates,
     // placeTemplates, etc.) are populated during generate(), so we need
@@ -2868,6 +2870,18 @@ void Runtime::generate(ChunkPos active, const StructureWorld& world,
         if (pit == placementState.sets.end()) continue;
         const StructurePlacement& placement = pit->second;
         if (!StructureState::isSupported(placement)) continue;
+
+        // Per-step interleaving (applyBiomeDecoration): only structures whose
+        // GenerationStep matches place in this pass. Every vanilla structure_set
+        // is step-homogeneous, so gating the whole set is exact.
+        if (stepFilter >= 0) {
+            bool anyAtStep = false;
+            for (const StructureSelection& s : set.structures) {
+                auto sit = structures.find(s.structureId);
+                if (sit != structures.end() && sit->second.stepIndex == stepFilter) { anyAtStep = true; break; }
+            }
+            if (!anyAtStep) continue;
+        }
 
         bool anyJigsaw = false;
         int maxDistH = 0;
@@ -3106,12 +3120,12 @@ Runtime* runtimeFor(const std::string& dataMinecraftDir, int64_t seed) {
 void generateStructures(ChunkPos active, uint64_t worldSeed,
                         const StructureWorld& world,
                         const std::function<std::string(int, int, int)>& biomeGetter,
-                        const std::string& dataMinecraftDir) {
+                        const std::string& dataMinecraftDir, int stepFilter) {
     if (dataMinecraftDir.empty()) return;
     fs::path dataDir(dataMinecraftDir);
     if (!fs::exists(dataDir / "worldgen" / "structure_set")) return;
     Runtime* runtime = runtimeFor(dataMinecraftDir, static_cast<int64_t>(worldSeed));
-    runtime->generate(active, world, biomeGetter);
+    runtime->generate(active, world, biomeGetter, stepFilter);
 }
 
 mc::levelgen::Beardifier generateBeardifier(

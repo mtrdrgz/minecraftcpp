@@ -37,10 +37,17 @@ struct StructureWorld {
 // Generates vanilla data-driven jigsaw structures whose structure_set grid resolves
 // to `active`. Unsupported structure families deliberately no-op rather than
 // placing hand-built approximations.
+// `stepFilter`: -1 places every structure (legacy behaviour); otherwise only
+// structures whose GenerationStep.Decoration ordinal equals it. Java's
+// applyBiomeDecoration interleaves per step (structures of step k place BEFORE
+// step k's features and AFTER step k-1's) — e.g. an amethyst geode
+// (LOCAL_MODIFICATIONS, 2) must underlie a trial chamber
+// (UNDERGROUND_STRUCTURES, 3), not overwrite it.
 void generateStructures(ChunkPos active, uint64_t worldSeed,
                         const StructureWorld& world,
                         const std::function<std::string(int, int, int)>& biomeGetter,
-                        const std::string& dataMinecraftDir = {});
+                        const std::string& dataMinecraftDir = {},
+                        int stepFilter = -1);
 
 // Build the per-chunk Beardifier (Beardifier.forStructuresInChunk): assembles the
 // terrain-adapting structures whose RIGID pieces/junctions reach `active` and returns
