@@ -30,6 +30,9 @@
 #define VK_RETURN       GLFW_KEY_ENTER
 #define VK_TAB          GLFW_KEY_TAB
 #define VK_BACK         GLFW_KEY_BACKSPACE
+#define VK_OEM_MINUS    GLFW_KEY_MINUS
+#define VK_NUMPAD0      GLFW_KEY_KP_0
+#define VK_SUBTRACT     GLFW_KEY_KP_SUBTRACT
 #define VK_OEM_2       GLFW_KEY_SLASH
 #define VK_UP           GLFW_KEY_UP
 #define VK_DOWN         GLFW_KEY_DOWN

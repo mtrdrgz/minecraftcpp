@@ -191,12 +191,17 @@ int main(int argc, char** argv) {
         f1WasDown = f1Down;
 
         if (debugOverlay.visible) {
-            if (window.isKeyDown('1')) debugOverlay.currentTab = 0;
-            else if (window.isKeyDown('2')) debugOverlay.currentTab = 1;
-            else if (window.isKeyDown('3')) debugOverlay.currentTab = 2;
+            // While a Teleport-tab coordinate field is focused, number keys type
+            // into the field instead of switching tabs (F2 still cycles).
+            if (!debugOverlay.typingActive()) {
+                if (window.isKeyDown('1')) debugOverlay.currentTab = 0;
+                else if (window.isKeyDown('2')) debugOverlay.currentTab = 1;
+                else if (window.isKeyDown('3')) debugOverlay.currentTab = 2;
+                else if (window.isKeyDown('4')) debugOverlay.currentTab = 3;
+            }
             const bool f2Down = window.isKeyDown(VK_F2);
             if (f2Down && !f2WasDown) {
-                debugOverlay.currentTab = (debugOverlay.currentTab + 1) % 3;
+                debugOverlay.currentTab = (debugOverlay.currentTab + 1) % 4;
             }
             f2WasDown = f2Down;
         }
