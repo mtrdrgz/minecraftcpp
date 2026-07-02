@@ -335,6 +335,10 @@ set_target_properties(structure_gen_probe PROPERTIES
 # box + orientation + genDepth) in the same TSV format as StructureStartsDump.java,
 # so the C++ engine's structure starts can be byte-diffed against the real server.
 # See tools/structure_starts_dump/main.cpp.
+# Dev-only parity tool: CI sparse-checkouts only src/ + a few tool dirs, so this
+# target must not exist when its sources are absent (add_executable validates
+# source paths at configure time).
+if(EXISTS ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/main.cpp)
 add_executable(structure_starts_dump
     ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/main.cpp
     world/level/levelgen/structure/StructureGen.cpp
@@ -382,6 +386,7 @@ set_target_properties(structure_starts_dump PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+endif()
 
 # Structure TRANSFORM parity vs the real Rotation/Mirror/BoundingBox +
 # StructureTemplate static transforms (the pure math under all template/jigsaw
@@ -7180,6 +7185,8 @@ set_target_properties(terrain_engine_perf PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+# Dev-only height-probe tool; same sparse-checkout guard as structure_starts_dump.
+if(EXISTS ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/test_height.cpp)
 add_executable(test_height ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/test_height.cpp
     world/level/levelgen/NoiseBasedChunkGenerator.cpp
     world/level/levelgen/Aquifer.cpp
@@ -7218,3 +7225,4 @@ add_executable(test_height ${CMAKE_SOURCE_DIR}/tools/structure_starts_dump/test_
 target_include_directories(test_height PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(test_height PRIVATE glm nlohmann_json miniz)
 set_target_properties(test_height PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
