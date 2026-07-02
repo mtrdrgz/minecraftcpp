@@ -8711,6 +8711,17 @@ mc::levelgen::feature::DiskStateProvider loadStateProvider(const json& j) {
             return state;
         };
     }
+    // RotatedBlockProvider.getState (RotatedBlockProvider.java:31-35): ONE
+    // Direction.Axis.getRandom(random) draw (Util.getRandom over the 3 axes =
+    // nextInt(3)); the AXIS property is id-invisible in the block-name grid but
+    // the draw must be consumed (pile_hay - village hay bales).
+    if (t == "rotated_block_provider") {
+        const std::string s = stateName(j.at("state"));
+        return [s](WorldGenLevel&, RandomSource& random, BlockPos) {
+            (void)random.nextInt(3);   // Direction.Axis.getRandom
+            return std::optional<std::string>(s);
+        };
+    }
     throw std::runtime_error("unsupported state_provider: " + t);
 }
 
@@ -11679,38 +11690,38 @@ struct DecorationResolver {
                     if (origin.y < level.getMinY() + 5) return false;
                     const int xr = 2 + random.nextInt(2);
                     const int zr = 2 + random.nextInt(2);
-                    for (int y = 0; y <= 1; ++y) {
-                        for (int x = -xr; x <= xr; ++x) {
-                            for (int z = -zr; z <= zr; ++z) {
+                    // tryPlaceBlock (BlockPileFeature.java:45-56): isEmptyBlock &&
+                    // mayPlaceOn, where mayPlaceOn on a DIRT_PATH below is decided
+                    // by nextBoolean ALONE (no sturdy fallback — the ternary), else
+                    // below.isFaceSturdy(UP). The state-provider draw (rotated axis)
+                    // only happens when the block actually places.
+                    auto tryPlaceBlock = [&](const BlockPos& pos) {
+                        if (!level.isEmptyBlock(pos)) return;
+                        BlockPos below{ pos.x, pos.y - 1, pos.z };
+                        const std::string belowState = level.getBlockState(below);
+                        const bool mayPlace = (belowState == "minecraft:dirt_path")
+                            ? random.nextBoolean()
+                            : mc::block::isFaceSturdyFull(belowState, 1);
+                        if (mayPlace) {
+                            auto s = stateProvider(level, random, pos);
+                            if (s) level.setBlock(pos, *s, 260);
+                        }
+                    };
+                    // BlockPos.betweenClosed iteration order (BlockPos.java:405-425):
+                    // x fastest, then y, then z — the two nextFloats per cell (and the
+                    // 0.031 rescue draw) must be consumed in exactly this order.
+                    for (int z = -zr; z <= zr; ++z) {
+                        for (int y = 0; y <= 1; ++y) {
+                            for (int x = -xr; x <= xr; ++x) {
                                 BlockPos pos{ origin.x + x, origin.y + y, origin.z + z };
                                 const int xd = origin.x - pos.x;
                                 const int zd = origin.z - pos.z;
-                                // Draw order: nextFloat for distance, nextFloat for offset.
                                 const float df1 = random.nextFloat();
                                 const float df2 = random.nextFloat();
-                                if (xd * xd + zd * zd <= df1 * 10.0f - df2 * 6.0f) {
-                                    // tryPlaceBlock
-                                    if (level.isEmptyBlock(pos)) {
-                                        BlockPos below{ pos.x, pos.y - 1, pos.z };
-                                        const std::string belowState = level.getBlockState(below);
-                                        bool mayPlace = (belowState == "minecraft:dirt_path" && random.nextBoolean()) ||
-                                                        mc::block::isFaceSturdyFull(belowState, 1);
-                                        if (mayPlace) {
-                                            auto s = stateProvider(level, random, pos);
-                                            if (s) level.setBlock(pos, *s, 260);
-                                        }
-                                    }
+                                if (static_cast<float>(xd * xd + zd * zd) <= df1 * 10.0f - df2 * 6.0f) {
+                                    tryPlaceBlock(pos);
                                 } else if (random.nextFloat() < 0.031f) {
-                                    if (level.isEmptyBlock(pos)) {
-                                        BlockPos below{ pos.x, pos.y - 1, pos.z };
-                                        const std::string belowState = level.getBlockState(below);
-                                        bool mayPlace = (belowState == "minecraft:dirt_path" && random.nextBoolean()) ||
-                                                        mc::block::isFaceSturdyFull(belowState, 1);
-                                        if (mayPlace) {
-                                            auto s = stateProvider(level, random, pos);
-                                            if (s) level.setBlock(pos, *s, 260);
-                                        }
-                                    }
+                                    tryPlaceBlock(pos);
                                 }
                             }
                         }
